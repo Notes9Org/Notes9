@@ -92,13 +92,24 @@ export function useAiLiteratureSearch({
   const lastRunQueryRef = useRef<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const activeRequestIdRef = useRef(0)
+  const requestedRef = useRef('')
 
   const stop = useCallback(() => {
     activeRequestIdRef.current += 1
     abortRef.current?.abort()
     abortRef.current = null
     setIsStreaming(false)
+    // Force inSync (activeQuery === requested) so the derived `isStreaming`
+    // (which is `isStreaming || (!!requested && !inSync)`) can't stay true after
+    // an abort — otherwise onLoadingChange re-sets isSearching and the bar
+    // re-locks, making Stop look broken.
+    setActiveQuery(requestedRef.current)
     setPhase(null)
+    // Clear the dedupe guard so the SAME query can run again after an abort.
+    // Without this, an unmount-abort (incl. React StrictMode's mount-time
+    // setup→cleanup→setup) leaves the guard set and the remount's run() is
+    // blocked — the search silently never fires. Also enables manual re-search.
+    lastRunQueryRef.current = null
   }, [])
 
   const applyPaperSummary = useCallback((id: string, text: string) => {
@@ -145,9 +156,10 @@ export function useAiLiteratureSearch({
         const res = await fetch('/api/literature/ai-search', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          // One deeper relevance-ranked fetch; the UI reveals it client-side
-          // (no network "Load more"). Backend rerank pool is 60, so this is cheap.
-          body: JSON.stringify({ query: q, limit: 28 }),
+          // Cap at 10 results — the backend summarizes each paper, so a smaller
+          // set keeps token cost low. 10 is enough for a relevance-ranked answer
+          // and fills the first client-side page (PAGE_SIZE=10), so no "Load more".
+          body: JSON.stringify({ query: q, limit: 10 }),
           signal: controller.signal,
         })
         if (!res.ok || !res.body) {
@@ -187,7 +199,14 @@ export function useAiLiteratureSearch({
                 )
               }
             } else if (event === 'overall_summary') {
-              overall = String((data as { text?: string }).text ?? '')
+              // Try all field names the Python backend may use. Treat empty/
+              // whitespace as absent so a blank `text` doesn't win over a real
+              // `content`/`summary` (`??` would keep the empty string).
+              const raw = data as { text?: string; content?: string; summary?: string }
+              const firstNonEmpty = [raw.text, raw.content, raw.summary].find(
+                (v) => typeof v === 'string' && v.trim().length > 0,
+              )
+              overall = String(firstNonEmpty ?? '')
               if (isActiveRequest()) setSummary(overall)
             } else if (event === 'error') {
               if (isActiveRequest())
@@ -205,9 +224,12 @@ export function useAiLiteratureSearch({
           aiSearchCache.set(q, { summary: overall, papers: receivedPapers })
         }
       } catch (e) {
-        if ((e as Error)?.name !== 'AbortError') {
-          if (activeRequestIdRef.current === requestId)
-            setError(e instanceof Error ? e.message : 'The AI search failed. Please try again.')
+        // Only the still-active request may touch shared state — a superseded
+        // request must not clear the newer one's retry guard or set its error.
+        if ((e as Error)?.name !== 'AbortError' && activeRequestIdRef.current === requestId) {
+          // Clear the guard so the user can retry the same query.
+          lastRunQueryRef.current = null
+          setError(e instanceof Error ? e.message : 'The AI search failed. Please try again.')
         }
       } finally {
         if (abortRef.current === controller) abortRef.current = null
@@ -233,8 +255,13 @@ export function useAiLiteratureSearch({
     })
   }, [papers, isStreaming])
 
+  // Abort any in-flight stream when the host component unmounts (e.g. tab switch).
+  useEffect(() => () => stop(), [stop])
+
   const requested = (query ?? '').trim()
   const inSync = !requested || activeQuery === requested
+  // Keep the latest requested query available to stop() (which has [] deps).
+  requestedRef.current = requested
 
   return {
     run,

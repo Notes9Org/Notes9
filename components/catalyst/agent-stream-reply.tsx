@@ -111,8 +111,14 @@ export function AgentStreamReply({
   liveCitationCount = 0,
   onRetry,
 }: AgentStreamReplyProps) {
+  // Prefer the done payload, but fall back to the streamed tokens when the
+  // payload's text is EMPTY (not just null) — an empty-string `content`/`answer`
+  // must not blank out an answer the user already watched stream in. `??` alone
+  // would keep the empty string, so treat blank/whitespace as absent.
   const displayAnswer =
-    donePayload?.content ?? donePayload?.answer ?? streamedAnswer;
+    (donePayload?.content && donePayload.content.trim() ? donePayload.content : null) ??
+    (donePayload?.answer && donePayload.answer.trim() ? donePayload.answer : null) ??
+    streamedAnswer;
   const rawGrounding =
     donePayload?.resources?.length
       ? donePayload.resources
@@ -197,8 +203,8 @@ export function AgentStreamReply({
             settles. Cancellation lives on the composer Stop button (a single
             Stop control), so no Stop button is rendered here. ── */}
       {isStreaming && !donePayload && liveCitationCount > 0 && (
-        <div className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/[0.06] px-2 py-0.5 font-medium text-foreground/80">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5">
             <span className="size-1.5 rounded-full bg-primary animate-pulse" aria-hidden />
             Gathering sources… {liveCitationCount}
           </span>
@@ -270,7 +276,7 @@ export function AgentStreamReply({
             return (
               <div
                 key={isThinkingStreaming ? `${step.node}-${step.status}-${step.message}` : i}
-                className="flex items-start gap-2 px-1 py-1"
+                className="flex items-start gap-2 py-1"
               >
                 <span
                   className={cn(
@@ -306,7 +312,7 @@ export function AgentStreamReply({
             their horizontal scroll only (long lines still need it). ── */}
       {(displayAnswer || (!donePayload && streamedAnswer === '')) && (
         <div className="space-y-2">
-          <div className="px-1 text-sm text-foreground min-w-0 max-w-full">
+          <div className="text-sm text-foreground min-w-0 max-w-full">
             {(() => {
               let effectiveManifest = citationsManifest;
               if (!effectiveManifest && rawGrounding.length > 0) {
@@ -353,17 +359,17 @@ export function AgentStreamReply({
               {donePayload.confidence != null && (
                 <span
                   className={cn(
-                    'rounded-full border px-2 py-0.5 font-medium',
+                    'rounded-md px-2 py-0.5 font-medium',
                     donePayload.confidence < 0.5
-                      ? 'border-amber-500/30 bg-amber-500/15 text-amber-700 dark:text-amber-400/90'
-                      : 'border-border/60 bg-muted/50'
+                      ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400/90'
+                      : 'bg-muted/50'
                   )}
                 >
                   Confidence: {(donePayload.confidence * 100).toFixed(0)}%
                 </span>
               )}
               {donePayload.tool_used && (
-                <span className="rounded-full border border-border/60 bg-muted/50 px-2 py-0.5 font-medium">
+                <span className="rounded-md bg-muted/50 px-2 py-0.5 font-medium">
                   {TOOL_LABELS[donePayload.tool_used] ?? donePayload.tool_used}
                 </span>
               )}
@@ -371,7 +377,7 @@ export function AgentStreamReply({
                   uncited answer is never silently presented as fully grounded. */}
               {(donePayload.citations_health === 'degraded' ||
                 donePayload.citations_health === 'failed') && (
-                <span className="rounded-full border border-amber-500/30 bg-amber-500/15 px-2 py-0.5 font-medium text-amber-700 dark:text-amber-400/90">
+                <span className="rounded-md bg-amber-500/15 px-2 py-0.5 font-medium text-amber-700 dark:text-amber-400/90">
                   {donePayload.citations_health === 'failed'
                     ? 'Citations unavailable'
                     : `Partial citations${

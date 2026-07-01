@@ -1,7 +1,8 @@
 'use client'
 
-import { useMemo, useState, useEffect, useRef } from 'react'
+import { useMemo, useState, useEffect, useRef, useCallback, memo } from 'react'
 import { useRouter } from 'next/navigation'
+import { motion, useReducedMotion } from "@/components/literature-reviews/motion"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -71,7 +72,30 @@ interface RepoTabProps {
   onSearchPapers?: (query: string) => void;
 }
 
-function PaperTabContent({ id, onRefresh, initialTab }: { id: string; onRefresh: () => void; initialTab?: "overview" | "pdf" | "citation" | "linked" }) {
+/** Snappy, no-bounce spring for the shared-layout tab pill. */
+const INDICATOR_SPRING = { type: "spring", stiffness: 500, damping: 40, mass: 0.7 } as const
+
+/**
+ * Shared-layout active-tab pill. Only the active trigger renders it; framer's
+ * `layoutId` glides the single pill between triggers on switch. Reduced-motion
+ * users get a static span. Decorative — pointer-events-none, sits behind content.
+ */
+function TabPill({ reduce }: { reduce: boolean | null }) {
+  if (reduce) {
+    return (
+      <span className="pointer-events-none absolute inset-0 rounded-md border border-border/50 bg-background shadow-sm" />
+    )
+  }
+  return (
+    <motion.span
+      layoutId="repo-tab-pill"
+      className="pointer-events-none absolute inset-0 rounded-md border border-border/50 bg-background shadow-sm"
+      transition={INDICATOR_SPRING}
+    />
+  )
+}
+
+const PaperTabContent = memo(function PaperTabContent({ id, onRefresh, initialTab }: { id: string; onRefresh: () => void; initialTab?: "overview" | "pdf" | "citation" | "linked" }) {
   const [literature, setLiterature] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -133,7 +157,7 @@ function PaperTabContent({ id, onRefresh, initialTab }: { id: string; onRefresh:
       }}
     />
   );
-}
+});
 
 export function RepoTab({
   literatureReviews,
@@ -144,6 +168,8 @@ export function RepoTab({
   onSearchPapers,
 }: RepoTabProps) {
   const router = useRouter();
+  const reduce = useReducedMotion();
+  const refreshRepo = useCallback(() => router.refresh(), [router]);
   const { projectName: scopedProjectName } = useProjectScope();
   const [activeTab, setActiveTab] = useState<string>("list");
   const [openTabs, setOpenTabs] = useState<string[]>([]);
@@ -504,44 +530,50 @@ export function RepoTab({
           >
             <TabsList className="bg-transparent h-auto px-1 pt-0 pb-1.5 flex items-center justify-start gap-1.5 border-none bg-muted/15 rounded-lg w-max flex-nowrap min-w-full relative">
               <div className="w-2 flex-shrink-0" />
-              <TabsTrigger 
-                value="list" 
+              <TabsTrigger
+                value="list"
                 data-value="list"
-                className="px-4 py-2 rounded-md data-[state=active]:bg-background data-[state=active]:text-[var(--n9-accent)] data-[state=active]:shadow-sm transition-all border border-transparent data-[state=active]:border-border/50 font-semibold"
+                className="relative px-4 py-2 rounded-md data-[state=active]:text-[var(--n9-accent)] transition-all border border-transparent font-semibold"
               >
-                <BookOpen className="h-4 w-4 mr-2" />
-                All References
+                {activeTab === "list" && <TabPill reduce={reduce} />}
+                <span className="relative z-10 inline-flex items-center">
+                  <BookOpen className="h-4 w-4 mr-2" />
+                  All References
+                </span>
               </TabsTrigger>
               {openTabs.map(id => {
                 const lit = literatureReviews?.find(l => l.id === id)
                 return (
-                  <TabsTrigger 
-                    key={id} 
+                  <TabsTrigger
+                    key={id}
                     value={id}
                     data-value={id}
-                    className="group px-3 py-2 rounded-md data-[state=active]:bg-background data-[state=active]:text-[var(--n9-accent)] data-[state=active]:shadow-sm transition-all flex items-center gap-2 max-w-[240px] border border-transparent data-[state=active]:border-border/50"
+                    className="group relative px-3 py-2 rounded-md data-[state=active]:text-[var(--n9-accent)] transition-all flex items-center gap-2 max-w-[240px] border border-transparent"
                   >
-                    <FileText className="h-4 w-4 opacity-50 flex-shrink-0" />
-                    <span className="truncate text-xs font-semibold">{lit?.title ? decodeHtmlEntities(lit.title) : "Paper"}</span>
-                    {/* role="button" span (not <button>) — a TabsTrigger is itself a
-                        <button>, and nesting <button> inside it is invalid HTML and
-                        causes a hydration error. stopPropagation on pointer-down keeps
-                        the close click from also activating/switching the tab. */}
-                    <span
-                      role="button"
-                      tabIndex={0}
-                      aria-label="Close tab"
-                      className="flex-shrink-0 p-1 rounded-md hover:bg-muted text-muted-foreground/60 hover:text-rose-500 transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
-                      onPointerDown={(e) => e.stopPropagation()}
-                      onClick={(e) => handleCloseTab(id, e)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          handleCloseTab(id, e);
-                        }
-                      }}
-                    >
-                      <X className="h-3 w-3" />
+                    {activeTab === id && <TabPill reduce={reduce} />}
+                    <span className="relative z-10 flex min-w-0 items-center gap-2">
+                      <FileText className="h-4 w-4 opacity-50 flex-shrink-0" />
+                      <span className="truncate text-xs font-semibold">{lit?.title ? decodeHtmlEntities(lit.title) : "Paper"}</span>
+                      {/* role="button" span (not <button>) — a TabsTrigger is itself a
+                          <button>, and nesting <button> inside it is invalid HTML and
+                          causes a hydration error. stopPropagation on pointer-down keeps
+                          the close click from also activating/switching the tab. */}
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        aria-label="Close tab"
+                        className="flex-shrink-0 p-1 rounded-md hover:bg-muted text-muted-foreground/60 hover:text-rose-500 transition-all opacity-0 group-hover:opacity-100 focus:opacity-100 hover:scale-110 active:scale-90"
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => handleCloseTab(id, e)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            handleCloseTab(id, e);
+                          }
+                        }}
+                      >
+                        <X className="h-3 w-3" />
+                      </span>
                     </span>
                   </TabsTrigger>
                 )
@@ -834,11 +866,17 @@ export function RepoTab({
 
         {openTabs.map(id => (
           <TabsContent key={id} value={id} className="m-0 border-none p-0 outline-none">
-            <PaperTabContent 
-              id={id} 
-              onRefresh={() => router.refresh()} 
-              initialTab={tabPreferences[id]}
-            />
+            <motion.div
+              initial={reduce ? false : { opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: reduce ? 0 : 0.22, ease: "easeOut" }}
+            >
+              <PaperTabContent
+                id={id}
+                onRefresh={refreshRepo}
+                initialTab={tabPreferences[id]}
+              />
+            </motion.div>
           </TabsContent>
         ))}
       </Tabs>

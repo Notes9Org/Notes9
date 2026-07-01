@@ -1,17 +1,18 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
-import { Telescope, Loader2, AlertCircle } from 'lucide-react'
+import { Telescope, Loader2, AlertCircle, RotateCcw } from 'lucide-react'
 import { useAiLiteratureSearch } from '@/hooks/use-ai-literature-search'
 import { AiPaperCard } from './ai-paper-card'
 import { AiSearchFilters } from './ai-search-filters'
+import { AnimatePresence, MotionResultCard } from './motion'
 import { openCatalystPanel } from '@/lib/catalyst-launch'
 import { setCatalystLiterature, type LiteratureRef } from '@/lib/catalyst-literature'
 import { papersToGrounding, buildLiteratureSessionContext } from '@/lib/literature-citations'
 import { renumberCitations } from '@/lib/citation-renumber'
 import { applyAiFilters, DEFAULT_AI_FILTERS, journalOptions, yearBounds, type AiResultFilters } from '@/lib/ai-search-filters'
-import { decodeHtmlEntities } from '@/lib/literature-abstract-display'
+import { stripHtmlToText } from '@/lib/literature-abstract-display'
 import type { SearchPaper } from '@/types/paper-search'
 import type { AiSearchResult } from '@/types/ai-search'
 
@@ -41,8 +42,8 @@ function savedKeyForResult(r: AiSearchResult): string {
 
 function refMeta(r: AiSearchResult): string {
   const authors = r.paper?.authors ?? []
-  const lead = authors[0] ? `${decodeHtmlEntities(authors[0])}${authors.length > 1 ? ' et al.' : ''}` : ''
-  const journal = r.paper?.journal ? decodeHtmlEntities(r.paper.journal) : ''
+  const lead = authors[0] ? `${stripHtmlToText(authors[0])}${authors.length > 1 ? ' et al.' : ''}` : ''
+  const journal = r.paper?.journal ? stripHtmlToText(r.paper.journal) : ''
   const year = r.paper?.year || null
   return [lead, journal, year].filter(Boolean).join(' · ')
 }
@@ -74,6 +75,7 @@ export function AiSearchView({
   isPaperStaging,
   onResults,
   onLoadingChange,
+  registerStop,
 }: {
   query: string
   projectId?: string | null
@@ -90,6 +92,8 @@ export function AiSearchView({
   onResults?: (papers: SearchPaper[]) => void
   /** Report search loading to the host so the search bar spinner stays in sync. */
   onLoadingChange?: (loading: boolean) => void
+  /** Hand the host a `stop()` so the search bar can offer a Stop button. */
+  registerStop?: (fn: () => void) => void
 }) {
   // The dedicated catalyst orchestrator (/api/literature/ai-search) returns the
   // papers AND streams the overall + per-paper summaries. The overall summary is
@@ -102,6 +106,7 @@ export function AiSearchView({
     isStreaming,
     papersLoading,
     error,
+    stop,
   } = useAiLiteratureSearch({ query })
 
   // Track saved papers by identity (id|doi|pmid|title) across re-renders so cards
@@ -129,7 +134,11 @@ export function AiSearchView({
   }, [resultPapers, onResults])
   useEffect(() => {
     onLoadingChange?.(isStreaming || papersLoading)
+    return () => onLoadingChange?.(false)
   }, [isStreaming, papersLoading, onLoadingChange])
+  useEffect(() => {
+    registerStop?.(stop)
+  }, [registerStop, stop])
 
   // Listen for citation-chip clicks from the Catalyst summary panel and scroll
   // the matching paper card into view.
@@ -148,15 +157,16 @@ export function AiSearchView({
   const showSkeletons = loading && results.length === 0
   // Relevance order comes from the backend reranker (best-first). Keep it; only
   // re-sort when the user explicitly picks a sort mode (e.g. "Open access").
-  const displayed = applyAiFilters(results, filters)
-  const visible = displayed.slice(0, visibleCount)
+  // Memoized so streaming ticks that only change the summary don't re-filter.
+  const displayed = useMemo(() => applyAiFilters(results, filters), [results, filters])
+  const visible = useMemo(() => displayed.slice(0, visibleCount), [displayed, visibleCount])
   // "Load more" is a pure client-side reveal of the already-fetched, deeply
   // ranked set — no network page-2 (that path caused duplicates/latency).
   const showLoadMore = visibleCount < displayed.length
-  const onLoadMore = () => setVisibleCount((c) => c + PAGE_SIZE)
+  const onLoadMore = useCallback(() => setVisibleCount((c) => c + PAGE_SIZE), [])
   // Filter options grounded in the actual result set (not hardcoded).
-  const journalChoices = journalOptions(results)
-  const yearHint = yearBounds(results)
+  const journalChoices = useMemo(() => journalOptions(results), [results])
+  const yearHint = useMemo(() => yearBounds(results), [results])
   // True until the search settles: summary still streaming, DB match running, or
   // any shown card's abstract still resolving.
   const processing = loading || displayed.some((r) => r.abstractPending)
@@ -198,7 +208,7 @@ export function AiSearchView({
 
     const references: LiteratureRef[] = groundingInput.map((r) => ({
       n: r.citeLabel,
-      title: decodeHtmlEntities(r.paper?.title || r.aiTitle || 'Untitled'),
+      title: stripHtmlToText(r.paper?.title || r.aiTitle || 'Untitled'),
       meta: refMeta(r),
       href: refHref(r),
     }))
@@ -213,9 +223,19 @@ export function AiSearchView({
   return (
     <div className="space-y-4">
       {error && (
-        <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-          <AlertCircle className="size-4 shrink-0" />
-          {error}
+        <div className="flex items-start justify-between gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          <span className="flex items-center gap-2">
+            <AlertCircle className="size-4 shrink-0 mt-0.5" />
+            {error}
+          </span>
+          <button
+            type="button"
+            onClick={() => void run(query ?? '')}
+            className="flex shrink-0 items-center gap-1 rounded px-2 py-0.5 text-xs font-medium hover:bg-destructive/10 transition-colors"
+          >
+            <RotateCcw className="size-3" />
+            Try again
+          </button>
         </div>
       )}
 
@@ -264,11 +284,11 @@ export function AiSearchView({
 
       {(() => {
         const renderCard = (r: (typeof displayed)[number], i: number) => (
-          <div
-            key={`${r.citeLabel}-${r.paper?.id ?? r.sourceUrl ?? r.aiTitle ?? ''}`}
+          <MotionResultCard
+            key={`${r.paper?.id ?? r.sourceUrl ?? r.aiTitle ?? r.citeLabel}`}
             data-cite-label={r.citeLabel}
-            className="rounded-xl duration-500 animate-in fade-in slide-in-from-bottom-3 fill-mode-both"
-            style={{ animationDelay: `${Math.min(i, 8) * 60}ms` }}
+            className="rounded-xl"
+            delay={Math.min(i, 8) * 0.05}
           >
             <AiPaperCard
               result={{ ...r, citeLabel: String(i + 1) }}
@@ -288,13 +308,15 @@ export function AiSearchView({
               isStaged={r.paper ? (isPaperStaged?.(r.paper.id) ?? false) : false}
               isStaging={r.paper ? (isPaperStaging?.(r.paper.id) ?? false) : false}
             />
-          </div>
+          </MotionResultCard>
         )
 
         // Group by reranker tier when present ("related" is explicit; everything else
         // is treated as directly relevant). Falls back to a flat list when untiered.
         const hasTiers = visible.some((r) => r.paper?.relevanceTier)
-        if (!hasTiers) return visible.map(renderCard)
+        if (!hasTiers) {
+          return <AnimatePresence initial={false}>{visible.map(renderCard)}</AnimatePresence>
+        }
 
         const related = visible.filter((r) => r.paper?.relevanceTier === 'related')
         const primary = visible.filter((r) => r.paper?.relevanceTier !== 'related')
@@ -307,12 +329,12 @@ export function AiSearchView({
           </p>
         )
         return (
-          <>
+          <AnimatePresence initial={false}>
             {primary.length > 0 && header('Directly relevant')}
             {primary.map((r, i) => renderCard(r, i))}
             {related.length > 0 && header('Related work')}
             {related.map((r, i) => renderCard(r, primary.length + i))}
-          </>
+          </AnimatePresence>
         )
       })()}
 

@@ -36,6 +36,8 @@ interface UploadLiteraturePdfDialogProps {
   experiments?: { id: string; name: string; project_id: string }[]
   currentLiterature?: LiteratureRecordSummary | null
   triggerLabel?: string
+  /** Tooltip/aria-label for an icon-only trigger (when triggerLabel is empty). */
+  triggerTitle?: string
   triggerClassName?: string
   triggerSize?: "default" | "sm" | "lg" | "icon"
   initialProjectId?: string | null
@@ -63,6 +65,7 @@ export function UploadLiteraturePdfDialog({
   experiments = [],
   currentLiterature = null,
   triggerLabel = "Upload PDF",
+  triggerTitle,
   triggerClassName,
   triggerSize,
   initialProjectId = null,
@@ -429,7 +432,7 @@ export function UploadLiteraturePdfDialog({
       }}
     >
       <DialogTrigger asChild>
-        <Button variant="outline" size={triggerSize} data-tour="upload-pdf" className={triggerClassName}>
+        <Button variant="outline" size={triggerSize} data-tour="upload-pdf" className={triggerClassName} title={triggerTitle} aria-label={triggerTitle ?? triggerLabel}>
           <Upload className={cn("h-4 w-4", triggerLabel ? "mr-2" : "")} />
           {triggerLabel}
         </Button>

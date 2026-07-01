@@ -223,9 +223,10 @@ export function StagedPaperView({
                 pdf_storage_path: lit.pdf_storage_path,
                 pdf_file_name: lit.pdf_file_name,
               }}
-              triggerLabel="Replace"
-              triggerSize="sm"
-              triggerClassName="h-8 px-2.5 text-xs"
+              triggerLabel=""
+              triggerTitle="Replace PDF"
+              triggerSize="icon"
+              triggerClassName="h-8 w-8 sm:h-9 sm:w-9"
             />
           }
         />

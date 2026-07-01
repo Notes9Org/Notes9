@@ -17,7 +17,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import {
   Tooltip,
@@ -40,14 +40,6 @@ import {
   NotebookPen,
   PenBox,
   MoreHorizontal,
-  Pin,
-  PinOff,
-  Pencil,
-  Search,
-  Check,
-  FolderPlus,
-  FolderMinus,
-  ChevronRight,
   Trash2,
   ChevronDown,
   X,
@@ -87,7 +79,7 @@ import { usePinnedAutoScroll } from '@/hooks/use-pinned-auto-scroll';
 import { deleteTrailingMessages } from '@/app/(app)/catalyst/actions';
 import { MessageEditor } from '@/components/catalyst/message-editor';
 import { AgentStreamReply } from '@/components/catalyst/agent-stream-reply';
-import { useChatSessions, ChatSession, ChatFolder } from '@/hooks/use-chat-sessions';
+import { useChatSessions, ChatSession } from '@/hooks/use-chat-sessions';
 import { MarkdownRenderer } from '@/components/catalyst/markdown-renderer';
 import { Notes9ChatLoader, toolCardsProgress } from '@/components/catalyst/notes9-chat-loader';
 import { PreviewAttachment, type Attachment } from '@/components/catalyst/preview-attachment';
@@ -101,16 +93,11 @@ import { ResizeHandle } from '@/components/ui/resize-handle';
 import { useSidebar } from '@/components/ui/sidebar';
 import { useTheme } from 'next-themes';
 import { requestPageHelp } from '@/components/tour/app-tour';
-import { ReportIssueDialog } from '@/components/layout/report-issue-dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Switch } from '@/components/ui/switch';
@@ -118,7 +105,6 @@ import {
   Popover,
   PopoverAnchor,
   PopoverContent,
-  PopoverTrigger,
 } from '@/components/ui/popover';
 import { usePaperAI } from '@/contexts/paper-ai-context';
 import { PaperAIPanel } from '@/components/text-editor/paper-ai-panel';
@@ -151,7 +137,8 @@ import {
   type CoPilotContext,
 } from '@/lib/catalyst-copilot';
 import { useCatalystLiterature, setCatalystLiterature, type CatalystLiterature } from '@/lib/catalyst-literature';
-import { MotionReveal } from '@/components/literature-reviews/motion';
+import { literatureContextToSystemMessage, type LiteratureSessionContext } from '@/lib/literature-citations';
+import { MotionReveal, MotionList, MotionItem } from '@/components/literature-reviews/motion';
 import { useLiteratureMentionCandidates } from '@/contexts/literature-mention-context';
 import { useLiteratureAgentStream } from '@/hooks/use-literature-agent-stream';
 import type { LiteratureAgentDonePayload } from '@/lib/literature-agent-types';
@@ -739,10 +726,10 @@ const SidebarChatMessageItem = memo(function SidebarChatMessageItem({
 
   return (
     <div
-      className={cn('group/message flex gap-4 w-full motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-300', message.role === 'user' ? 'justify-end' : 'justify-start')}
+      className={cn('group/message flex gap-4 w-full', message.role === 'user' ? 'justify-end' : 'justify-start')}
     >
       {message.role === 'assistant' && (
-        <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border border-[color:color-mix(in_srgb,var(--n9-accent)_22%,var(--border))] bg-[color:color-mix(in_srgb,var(--n9-accent)_8%,var(--card))] n9-elev-1 dark:border-border dark:bg-background">
+        <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border border-border/60 bg-[rgba(124,82,52,0.05)] shadow-sm dark:bg-background dark:border-border">
           <div className="relative size-[18px] shrink-0" aria-hidden>
             <Image
               src="/notes9-logo-mark-transparent.png"
@@ -792,7 +779,7 @@ const SidebarChatMessageItem = memo(function SidebarChatMessageItem({
               className={cn(
                 'text-sm leading-[1.45] break-words',
                 message.role === 'user'
-                  ? 'whitespace-pre-wrap border border-[color:color-mix(in_srgb,var(--n9-accent)_16%,var(--border))] bg-[color:color-mix(in_srgb,var(--n9-accent)_7%,var(--card))] text-foreground px-4 py-2.5 rounded-2xl rounded-tr-sm n9-elev-1'
+                  ? 'whitespace-pre-wrap bg-primary/5 text-foreground px-4 py-2.5 rounded-2xl rounded-tr-sm'
                   : 'min-w-0 text-foreground whitespace-normal'
               )}
             >
@@ -827,7 +814,7 @@ const SidebarChatMessageItem = memo(function SidebarChatMessageItem({
                   groundingResourceToPanelItem(c, i)
                 )}
                 triggerLabel="Sources"
-                className="mt-2 self-start"
+                className="mt-3 w-full"
               />
             )}
             {messageGraphs.length > 0 && (
@@ -1213,6 +1200,7 @@ export function RightSidebar({
 
   const {
     sessions,
+    loading: sessionsLoading,
     createSession,
     loadMessages,
     loadSessions,
@@ -1220,141 +1208,8 @@ export function RightSidebar({
     currentSessionId,
     setCurrentSessionId,
     updateSessionTitle,
-    updateSessionMetadata,
     deleteSession,
-    folders,
-    foldersAvailable,
-    createFolder,
-    renameFolder,
-    deleteFolder,
-    moveSessionToFolder,
   } = useChatSessions();
-
-  // ── Chat-history utility: search, pin, inline rename ─────────────────
-  const [historyQuery, setHistoryQuery] = useState('');
-  const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
-  const [renameDraft, setRenameDraft] = useState('');
-
-  const sessionIsPinned = (s: ChatSession) =>
-    Boolean((s.metadata as Record<string, unknown> | null | undefined)?.pinned);
-
-  const commitRenameSession = useCallback(() => {
-    setRenamingSessionId((id) => {
-      if (id) {
-        const t = renameDraft.trim();
-        if (t) void updateSessionTitle(id, t);
-      }
-      return null;
-    });
-    setRenameDraft('');
-  }, [renameDraft, updateSessionTitle]);
-  const cancelRenameSession = useCallback(() => {
-    setRenamingSessionId(null);
-    setRenameDraft('');
-  }, []);
-
-  // ── Folders: collapse + inline rename ────────────────────────────────
-  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
-  const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
-  const [folderRenameDraft, setFolderRenameDraft] = useState('');
-
-  const toggleFolderCollapse = useCallback((id: string) => {
-    setCollapsedFolders((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
-
-  const handleNewFolder = useCallback(
-    async (moveSessionId?: string) => {
-      const palette = ['#d4845a', '#5b8def', '#3fa66a', '#c65b8a', '#b07cd6', '#c9a13b'];
-      const color = palette[folders.length % palette.length];
-      const folder = await createFolder('New folder', color);
-      if (!folder) return;
-      if (moveSessionId) void moveSessionToFolder(moveSessionId, folder.id);
-      // Open the new folder inline so the user names it immediately.
-      setRenamingFolderId(folder.id);
-      setFolderRenameDraft(folder.name);
-    },
-    [createFolder, moveSessionToFolder, folders.length],
-  );
-
-  const beginFolderRename = useCallback((e: React.MouseEvent, f: ChatFolder) => {
-    e.stopPropagation();
-    setRenamingFolderId(f.id);
-    setFolderRenameDraft(f.name);
-  }, []);
-  const commitFolderRename = useCallback(() => {
-    setRenamingFolderId((id) => {
-      if (id) {
-        const t = folderRenameDraft.trim();
-        if (t) void renameFolder(id, t);
-      }
-      return null;
-    });
-    setFolderRenameDraft('');
-  }, [folderRenameDraft, renameFolder]);
-  const cancelFolderRename = useCallback(() => {
-    setRenamingFolderId(null);
-    setFolderRenameDraft('');
-  }, []);
-
-  // Filter by query → pinned float to the top → user folders (in order) → the
-  // ungrouped remainder bucketed by recency. Folders show even when empty (so
-  // they're manageable), except while searching where only matches show.
-  const historyGroups = useMemo(() => {
-    type Group =
-      | { kind: 'pinned' | 'date'; key: string; label: string; items: ChatSession[] }
-      | { kind: 'folder'; key: string; label: string; items: ChatSession[]; folder: ChatFolder };
-    const q = historyQuery.trim().toLowerCase();
-    const filtered = q
-      ? sessions.filter((s) => (s.title || 'new conversation').toLowerCase().includes(q))
-      : sessions;
-    const isPinned = (s: ChatSession) =>
-      Boolean((s.metadata as Record<string, unknown> | null | undefined)?.pinned);
-    const folderIds = new Set(folders.map((f) => f.id));
-    const pinned = filtered.filter(isPinned);
-    const unpinned = filtered.filter((s) => !isPinned(s));
-    const inFolder = (fid: string) => unpinned.filter((s) => s.folder_id === fid);
-    const ungrouped = unpinned.filter((s) => !s.folder_id || !folderIds.has(s.folder_id));
-
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-    const t0 = startOfToday.getTime();
-    const DAY = 86_400_000;
-    const bucketOf = (s: ChatSession) => {
-      const t = new Date(s.updated_at).getTime();
-      if (t >= t0) return 'Today';
-      if (t >= t0 - DAY) return 'Yesterday';
-      if (t >= t0 - 7 * DAY) return 'Previous 7 days';
-      if (t >= t0 - 30 * DAY) return 'Previous 30 days';
-      return 'Older';
-    };
-    const order = ['Today', 'Yesterday', 'Previous 7 days', 'Previous 30 days', 'Older'];
-    const byBucket = new Map<string, ChatSession[]>();
-    for (const s of ungrouped) {
-      const b = bucketOf(s);
-      const arr = byBucket.get(b);
-      if (arr) arr.push(s);
-      else byBucket.set(b, [s]);
-    }
-
-    const groups: Group[] = [];
-    if (pinned.length) groups.push({ kind: 'pinned', key: 'Pinned', label: 'Pinned', items: pinned });
-    for (const f of folders) {
-      const items = inFolder(f.id);
-      // Hide empty folders only while actively searching.
-      if (q && items.length === 0) continue;
-      groups.push({ kind: 'folder', key: `folder:${f.id}`, label: f.name, items, folder: f });
-    }
-    for (const label of order) {
-      const items = byBucket.get(label);
-      if (items?.length) groups.push({ kind: 'date', key: label, label, items });
-    }
-    return groups;
-  }, [sessions, historyQuery, folders]);
 
   const currentSessionRef = useRef<string | null>(null);
 
@@ -2393,12 +2248,27 @@ export function RightSidebar({
           content_type: a.contentType,
           size: a.size ?? 0,
         }));
-      // Co-pilot: prepend the active literature search (papers + abstracts +
+      // Literature grounding: prepend the search context (papers + abstracts +
       // summary) to the MODEL query only — the user's visible message stays the
-      // clean question. Lets them ask about any paper without attaching one.
-      const coPilotPreamble = coPilotRef.current ? buildCoPilotPreamble(coPilotRef.current) : '';
-      const notes9ModelQuery = coPilotPreamble
-        ? `${coPilotPreamble}\n\n## User question\n${text}`
+      // clean question. Prefer the DURABLE context persisted on the session
+      // (metadata.literature) so a reopened/continued literature chat still
+      // grounds follow-ups; fall back to the volatile live co-pilot bridge for
+      // the window before the session is persisted. Fixes: follow-ups lost the
+      // summary because the co-pilot is cleared on session load and
+      // /api/agent/stream never read metadata.literature (endpoint mismatch —
+      // only the unused /api/chat path read it).
+      const activeLitSession = sessions.find((s) => s.id === sessionId);
+      const persistedLitCtx =
+        activeLitSession?.kind === 'literature'
+          ? ((activeLitSession.metadata as { literature?: LiteratureSessionContext } | null)?.literature ?? null)
+          : null;
+      const litPreamble = persistedLitCtx
+        ? literatureContextToSystemMessage(persistedLitCtx)
+        : coPilotRef.current
+          ? buildCoPilotPreamble(coPilotRef.current)
+          : '';
+      const notes9ModelQuery = litPreamble
+        ? `${litPreamble}\n\n## User question\n${text}`
         : text;
       const { donePayload, error, artifacts: streamArtifacts, citationsManifest: streamManifest, graphs: streamGraphs } = await agentStream.runStream(
         {
@@ -3287,6 +3157,14 @@ export function RightSidebar({
 
   // --- Render Components ---
 
+  const catalystHeroComposerShell = cn(
+    'rounded-2xl border border-white/70 bg-white/75 backdrop-blur-xl supports-[backdrop-filter]:bg-white/60',
+    'shadow-[0_1px_2px_rgba(44,36,24,0.05),0_16px_44px_-18px_rgba(44,36,24,0.22)]',
+    'transition-[border-color,box-shadow] duration-200',
+    'focus-within:border-[color:color-mix(in_srgb,var(--n9-accent)_35%,var(--border))]',
+    'focus-within:shadow-[0_1px_2px_rgba(44,36,24,0.05),0_12px_32px_-8px_rgba(44,36,24,0.14),0_0_0_3px_color-mix(in_srgb,var(--n9-accent)_12%,transparent)]',
+  );
+
   const renderCursorInput = (opts?: { heroStyle?: boolean }) => {
     const heroStyle = opts?.heroStyle ?? false;
     const canSendLiterature =
@@ -3395,8 +3273,8 @@ export function RightSidebar({
     return (
     <>
     {coPilot && messages.length === 0 && (
-      <div className="n9-glass n9-elev-1 mb-2 flex items-start gap-2 rounded-xl border-[color:color-mix(in_srgb,var(--n9-accent)_22%,var(--glass-border))] px-3 py-2 text-xs motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 motion-safe:duration-300">
-        <Telescope className="mt-0.5 size-3.5 shrink-0 text-[color:var(--n9-accent)]" aria-hidden />
+      <div className="mb-2 flex items-start gap-2 rounded-xl border border-primary/25 bg-primary/[0.05] px-3 py-2 text-xs">
+        <Telescope className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden />
         <div className="min-w-0 flex-1 leading-snug">
           <span className="font-medium text-foreground">Co-pilot is reading your search</span>
           <span className="text-muted-foreground">
@@ -3409,7 +3287,7 @@ export function RightSidebar({
           onClick={() => clearCatalystCoPilot()}
           title="Dismiss search context"
           aria-label="Dismiss search context"
-          className="n9-press -mr-1 -mt-0.5 shrink-0 rounded-md p-0.5 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+          className="-mr-1 -mt-0.5 shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
         >
           <X className="size-3.5" />
         </button>
@@ -3418,8 +3296,11 @@ export function RightSidebar({
     <div className="group/input relative flex flex-col w-full">
       <div
         className={cn(
-          'n9-composer overflow-hidden',
-          isDraggingContext && '!border-primary bg-primary/5 ring-2 ring-primary',
+          'overflow-hidden transition-all',
+          heroStyle
+            ? catalystHeroComposerShell
+            : 'rounded-2xl border border-border/35 bg-card/70 backdrop-blur-md shadow-[0_2px_8px_rgba(44,36,24,0.06),0_14px_38px_-16px_rgba(44,36,24,0.30)] dark:shadow-[0_2px_10px_rgba(0,0,0,0.35),0_18px_44px_-16px_rgba(0,0,0,0.65)] transition-shadow focus-within:border-ring/50 focus-within:ring-1 focus-within:ring-ring/40 focus-within:shadow-[0_2px_10px_rgba(44,36,24,0.08),0_18px_46px_-14px_rgba(44,36,24,0.34)]',
+          isDraggingContext && 'border-primary bg-primary/5 ring-2 ring-primary',
         )}
         id="tour-ai-chat"
       >
@@ -3470,7 +3351,7 @@ export function RightSidebar({
                 : 'Ask Catalyst anything. Use @ to tag notes, experiments, projects, protocols, and literature.'
             }
             className={cn(
-              'w-full resize-none bg-transparent caret-[color:var(--n9-accent)] focus-visible:outline-none scrollbar-hide empty:before:pointer-events-none empty:before:text-muted-foreground/55 empty:before:content-[attr(data-placeholder)]',
+              'w-full resize-none bg-transparent focus-visible:outline-2 focus-visible:outline-ring/40 focus-visible:outline-offset-2 scrollbar-hide empty:before:pointer-events-none empty:before:text-muted-foreground/60 empty:before:content-[attr(data-placeholder)]',
               heroStyle
                 ? 'min-h-[120px] px-5 py-4 text-[15px] leading-relaxed'
                 : 'min-h-[68px] px-4 py-2.5 text-sm',
@@ -3478,25 +3359,23 @@ export function RightSidebar({
           />
         </FileDropzone>
         {mentionOpenForInput && filteredGlobalMentions.length > 0 && (
-          <div className="n9-glass n9-elev-2 mx-2 mb-1 max-h-52 overflow-y-auto rounded-xl p-1 motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-150">
+          <div className="mx-2 mb-1 max-h-52 overflow-y-auto rounded-md border border-border bg-popover p-1">
             {filteredGlobalMentions.map((item, idx) => (
               <button
                 key={`${item.kind}:${item.id}`}
                 type="button"
                 className={cn(
-                  'n9-press flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs',
-                  idx === mentionSelectIndex
-                    ? 'bg-[color:color-mix(in_srgb,var(--n9-accent)_14%,transparent)] text-foreground'
-                    : 'hover:bg-muted/60'
+                  'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs',
+                  idx === mentionSelectIndex ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50'
                 )}
                 onMouseDown={(e) => {
                   e.preventDefault();
                   appendMentionToInput(item);
                 }}
               >
-                <AtSign className={cn('size-3.5 shrink-0', idx === mentionSelectIndex ? 'text-[color:var(--n9-accent)]' : 'text-muted-foreground')} />
+                <AtSign className="size-3.5 shrink-0" />
                 <span className="truncate">{item.title}</span>
-                <span className="ml-auto shrink-0 rounded bg-muted/70 px-1.5 py-px text-2xs uppercase tracking-wide text-muted-foreground">
+                <span className="ml-auto shrink-0 text-2xs uppercase text-muted-foreground">
                   {item.kind.replace('_', ' ')}
                 </span>
               </button>
@@ -3504,8 +3383,29 @@ export function RightSidebar({
           </div>
         )}
 
-        <div className="mt-1 flex min-h-9 items-center justify-between gap-2 px-2 pb-2">
+        <div className="mt-1 flex min-h-9 items-center justify-between gap-2 px-4 pb-2">
           <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-1.5 overflow-x-auto">
+            {/* Attach — anchored bottom-left (Claude-style leading action) */}
+            <TooltipProvider delayDuration={400}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="size-7 shrink-0 rounded-lg text-muted-foreground/70 transition-colors duration-150 hover:text-foreground"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isLoading || isUploading}
+                    aria-label="Attach file"
+                  >
+                    <Paperclip className="size-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  Attach a file (image, PDF, DOCX, XLSX, CSV)
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             {agentMode !== 'literature' && (
               <TooltipProvider delayDuration={300}>
                 <Tooltip>
@@ -3513,9 +3413,9 @@ export function RightSidebar({
                     <span
                       id="tour-ai-web-search"
                       className={cn(
-                        'inline-flex h-6 shrink-0 cursor-default select-none items-center gap-1 rounded-full border px-2 transition-[background-color,border-color,color,box-shadow] duration-200',
+                        'inline-flex h-7 shrink-0 cursor-default select-none items-center gap-1 rounded-full border px-2 transition-colors duration-150',
                         webSearchEnabled
-                          ? 'border-[color:color-mix(in_srgb,var(--n9-accent)_34%,var(--border))] bg-[color:color-mix(in_srgb,var(--n9-accent)_10%,transparent)] text-foreground shadow-[0_1px_6px_-2px_var(--n9-accent-glow)]'
+                          ? 'border-[color:color-mix(in_srgb,var(--n9-accent)_30%,var(--border))] bg-[color:color-mix(in_srgb,var(--n9-accent)_8%,transparent)] text-foreground'
                           : 'border-border/40 bg-muted/20 text-muted-foreground'
                       )}
                     >
@@ -3558,10 +3458,10 @@ export function RightSidebar({
                       size="icon"
                       variant="ghost"
                       className={cn(
-                        "n9-press size-7 rounded-lg",
+                        "size-7 rounded-lg transition-colors duration-150",
                         micListening
-                          ? "bg-red-500/10 text-red-500 ring-2 ring-red-500/30 shadow-[0_0_0_3px_rgba(239,68,68,0.10)] hover:text-red-600"
-                          : "text-muted-foreground/70 hover:bg-muted/60 hover:text-foreground"
+                          ? "text-red-500 hover:bg-red-500/10 hover:text-red-600"
+                          : "text-muted-foreground/70 hover:text-foreground"
                       )}
                       onClick={() => micListening ? stopMic() : startMic()}
                       aria-label={micListening ? "Stop dictation" : "Start dictation"}
@@ -3577,33 +3477,12 @@ export function RightSidebar({
               {micListening && <VoiceWaveform getWaveformData={getWaveformData} />}
             </div>
 
-            <TooltipProvider delayDuration={400}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    className="n9-press size-7 rounded-lg text-muted-foreground/70 hover:bg-muted/60 hover:text-foreground"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isLoading || isUploading}
-                    aria-label="Attach file"
-                  >
-                    <Paperclip className="size-3.5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="text-xs">
-                  Attach a file (image, PDF, DOCX, XLSX, CSV)
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-
             {isLoading ? (
               <Button
                 type="button"
                 size="icon"
                 variant="ghost"
-                className="n9-press size-7 rounded-lg text-muted-foreground/70 hover:bg-muted/60 hover:text-foreground motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-150"
+                className="size-7 rounded-lg text-muted-foreground/70 transition-colors duration-150 hover:text-foreground"
                 aria-label="Stop generating"
                 title="Stop generating"
                 onClick={handleStopRequest}
@@ -3616,9 +3495,9 @@ export function RightSidebar({
                 size="icon"
                 variant="ghost"
                 className={cn(
-                  "n9-press size-7 rounded-lg motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-150",
+                  "size-7 rounded-lg transition-all duration-150",
                   canSend
-                    ? "n9-accent-surface n9-glow hover:brightness-105"
+                    ? "bg-[color:var(--n9-accent)] text-white hover:bg-[color:color-mix(in_srgb,var(--n9-accent)_85%,black)]"
                     : "text-muted-foreground/40 hover:text-muted-foreground/60"
                 )}
                 onClick={(e) => void handleSubmit(e as React.FormEvent)}
@@ -3631,6 +3510,9 @@ export function RightSidebar({
         </div>
       </div>
     </div>
+    <p className="mt-1.5 text-center text-2xs text-muted-foreground/50 select-none">
+      Catalyst can make mistakes — verify important information and cited sources.
+    </p>
     </>
     );
   };
@@ -3649,249 +3531,35 @@ export function RightSidebar({
     return diffDays <= 9 ? `${diffDays}d` : '9d';
   };
 
-  // Search box shared by both history surfaces.
-  const renderHistorySearch = () => (
-    <div className="relative">
-      <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/55" aria-hidden />
-      <input
-        value={historyQuery}
-        onChange={(e) => setHistoryQuery(e.target.value)}
-        placeholder="Search chats…"
-        aria-label="Search chat history"
-        className="h-8 w-full rounded-lg border border-border/50 bg-background/60 pl-8 pr-2.5 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-[color:color-mix(in_srgb,var(--n9-accent)_40%,var(--border))]"
-      />
+  const SessionItem = ({ session }: { session: ChatSession }) => (
+    <div className="group/item grid grid-cols-[1fr_28px] gap-1 w-full min-w-0 items-center rounded-lg">
+      <button
+        type="button"
+        onClick={() => loadSession(session.id)}
+        className={cn(
+          "min-w-0 flex items-center justify-between gap-2 px-3 py-2 text-left text-sm rounded-lg transition-colors overflow-hidden",
+          currentSessionId === session.id
+            ? "bg-accent text-accent-foreground"
+            : "hover:bg-muted/50 text-muted-foreground hover:text-foreground"
+        )}
+      >
+        <span className="text-2xs shrink-0 opacity-70 whitespace-nowrap opacity-0 transition-opacity group-hover/item:opacity-70 mr-2">
+          {formatSessionTime(session.updated_at)}
+        </span>
+        <span className="truncate min-w-0 flex-1">{session.title || 'New conversation'}</span>
+      </button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7 shrink-0 col-start-2 text-muted-foreground hover:text-destructive opacity-0 transition-opacity group-hover/item:opacity-100"
+        onClick={(e) => handleDeleteSession(e, session.id)}
+        aria-label="Delete chat"
+      >
+        <Trash2 className="size-3.5" />
+      </Button>
     </div>
   );
-
-  // One row — kind icon, title (inline-editable), pin/time, hover actions.
-  const renderHistoryRow = (session: ChatSession) => {
-    const isActive = currentSessionId === session.id;
-    const pinned = sessionIsPinned(session);
-    const isRenaming = renamingSessionId === session.id;
-    const KindIcon = session.kind === 'literature' ? BookOpen : MessageSquare;
-    const md = (session.metadata as Record<string, unknown> | null | undefined) ?? {};
-    return (
-      <li key={session.id} className="group/row relative">
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={() => { if (!isRenaming) loadSession(session.id); }}
-          onKeyDown={(e) => {
-            if (isRenaming) return;
-            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); loadSession(session.id); }
-          }}
-          title={session.title || 'New conversation'}
-          className={cn(
-            'relative flex min-h-9 min-w-0 items-center gap-2 rounded-lg py-1.5 pl-2.5 pr-8 text-left text-sm outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-[color:color-mix(in_srgb,var(--n9-accent)_35%,transparent)]',
-            isActive
-              ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
-              : 'text-sidebar-foreground/75 hover:bg-sidebar-accent/55 hover:text-sidebar-foreground',
-          )}
-        >
-          {isActive && (
-            <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-[color:var(--n9-accent)]" aria-hidden />
-          )}
-          <KindIcon
-            className={cn('size-3.5 shrink-0', isActive ? 'text-[color:var(--n9-accent)]' : 'text-sidebar-foreground/40')}
-            aria-hidden
-          />
-          {isRenaming ? (
-            <input
-              autoFocus
-              value={renameDraft}
-              onChange={(e) => setRenameDraft(e.target.value)}
-              onClick={(e) => e.stopPropagation()}
-              onKeyDown={(e) => {
-                e.stopPropagation();
-                if (e.key === 'Enter') { e.preventDefault(); commitRenameSession(); }
-                else if (e.key === 'Escape') { e.preventDefault(); cancelRenameSession(); }
-              }}
-              onBlur={commitRenameSession}
-              className="min-w-0 flex-1 rounded border border-[color:color-mix(in_srgb,var(--n9-accent)_45%,var(--border))] bg-background px-1.5 py-0.5 text-sm outline-none"
-            />
-          ) : (
-            <span className="min-w-0 flex-1 truncate">{session.title || 'New conversation'}</span>
-          )}
-          {!isRenaming && (
-            <span className="ml-1 flex shrink-0 items-center text-2xs tabular-nums text-sidebar-foreground/40" aria-hidden>
-              {pinned ? <Pin className="size-3 fill-current text-[color:var(--n9-accent)]" /> : formatSessionTime(session.updated_at)}
-            </span>
-          )}
-        </div>
-        {!isRenaming && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                aria-label="Chat options"
-                onClick={(e) => e.stopPropagation()}
-                className="n9-press absolute right-1 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-sidebar-foreground/60 hover:bg-background/70 hover:text-foreground data-[state=open]:bg-background/70 data-[state=open]:text-foreground"
-              >
-                <MoreHorizontal className="size-4" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" sideOffset={4} className="w-48">
-              <DropdownMenuItem onSelect={() => void updateSessionMetadata(session.id, { ...md, pinned: !pinned })}>
-                {pinned ? <PinOff className="mr-2 size-4" /> : <Pin className="mr-2 size-4" />}
-                {pinned ? 'Unpin' : 'Pin'}
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => { setRenamingSessionId(session.id); setRenameDraft(session.title || ''); }}>
-                <Pencil className="mr-2 size-4" /> Rename
-              </DropdownMenuItem>
-              {foldersAvailable && (
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>
-                    <FolderOpen className="mr-2 size-4" /> Move to folder
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="max-h-64 w-52 overflow-y-auto">
-                    {folders.map((f) => (
-                      <DropdownMenuItem
-                        key={f.id}
-                        disabled={session.folder_id === f.id}
-                        onSelect={() => void moveSessionToFolder(session.id, f.id)}
-                      >
-                        <span className="mr-2 size-2.5 shrink-0 rounded-full" style={{ backgroundColor: f.color || 'var(--n9-accent)' }} aria-hidden />
-                        <span className="min-w-0 truncate">{f.name}</span>
-                        {session.folder_id === f.id && <Check className="ml-auto size-3.5 shrink-0" />}
-                      </DropdownMenuItem>
-                    ))}
-                    {session.folder_id && (
-                      <DropdownMenuItem onSelect={() => void moveSessionToFolder(session.id, null)}>
-                        <FolderMinus className="mr-2 size-4" /> Remove from folder
-                      </DropdownMenuItem>
-                    )}
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onSelect={() => void handleNewFolder(session.id)}>
-                      <FolderPlus className="mr-2 size-4" /> New folder…
-                    </DropdownMenuItem>
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-              )}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-destructive focus:text-destructive"
-                onSelect={() => {
-                  if (currentSessionId === session.id) { setMessages([]); currentSessionRef.current = null; }
-                  void deleteSession(session.id);
-                  toast.success('Chat deleted');
-                }}
-              >
-                <Trash2 className="mr-2 size-4" /> Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      </li>
-    );
-  };
-
-  // Grouped, searchable body shared by the aside and the compact popover.
-  const renderHistoryGroups = () => {
-    if (sessions.length === 0) {
-      return (
-        <div className="px-3 py-8 text-center text-xs leading-relaxed text-sidebar-foreground/55">
-          No conversations yet.
-          <br />
-          Start a new chat to see it here.
-        </div>
-      );
-    }
-    if (historyGroups.length === 0) {
-      return (
-        <div className="px-3 py-8 text-center text-xs text-sidebar-foreground/55">
-          No chats match “{historyQuery.trim()}”.
-        </div>
-      );
-    }
-    return historyGroups.map((g) => {
-      if (g.kind === 'folder') {
-        const collapsed = collapsedFolders.has(g.folder.id);
-        const isRenamingF = renamingFolderId === g.folder.id;
-        return (
-          <div key={g.key} className="mb-1">
-            <div className="group/folder flex items-center gap-1 rounded-md px-1.5 py-1 hover:bg-sidebar-accent/40">
-              <button
-                type="button"
-                onClick={() => toggleFolderCollapse(g.folder.id)}
-                aria-expanded={!collapsed}
-                className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
-              >
-                {collapsed ? (
-                  <ChevronRight className="size-3 shrink-0 text-sidebar-foreground/40" aria-hidden />
-                ) : (
-                  <ChevronDown className="size-3 shrink-0 text-sidebar-foreground/40" aria-hidden />
-                )}
-                <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: g.folder.color || 'var(--n9-accent)' }} aria-hidden />
-                {isRenamingF ? (
-                  <input
-                    autoFocus
-                    value={folderRenameDraft}
-                    onChange={(e) => setFolderRenameDraft(e.target.value)}
-                    onClick={(e) => e.stopPropagation()}
-                    onKeyDown={(e) => {
-                      e.stopPropagation();
-                      if (e.key === 'Enter') { e.preventDefault(); commitFolderRename(); }
-                      else if (e.key === 'Escape') { e.preventDefault(); cancelFolderRename(); }
-                    }}
-                    onBlur={commitFolderRename}
-                    className="min-w-0 flex-1 rounded border border-[color:color-mix(in_srgb,var(--n9-accent)_45%,var(--border))] bg-background px-1 py-0.5 text-2xs font-semibold uppercase tracking-wider outline-none"
-                  />
-                ) : (
-                  <span className="min-w-0 flex-1 truncate text-2xs font-semibold uppercase tracking-wider text-sidebar-foreground/55">
-                    {g.folder.name}
-                  </span>
-                )}
-                {!isRenamingF && (
-                  <span className="shrink-0 text-2xs tabular-nums text-sidebar-foreground/35">{g.items.length}</span>
-                )}
-              </button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    aria-label="Folder options"
-                    className="n9-press flex size-5 shrink-0 items-center justify-center rounded text-sidebar-foreground/45 hover:bg-background/70 hover:text-foreground"
-                  >
-                    <MoreHorizontal className="size-3.5" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-44">
-                  <DropdownMenuItem onSelect={() => { setRenamingFolderId(g.folder.id); setFolderRenameDraft(g.folder.name); }}>
-                    <Pencil className="mr-2 size-4" /> Rename folder
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    className="text-destructive focus:text-destructive"
-                    onSelect={() => { void deleteFolder(g.folder.id); toast.success('Folder deleted'); }}
-                  >
-                    <Trash2 className="mr-2 size-4" /> Delete folder
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-            {!collapsed && (
-              <ul className="flex min-w-0 flex-col gap-0.5 border-l border-border/40 pl-2 ml-2.5">
-                {g.items.length === 0 ? (
-                  <li className="px-2 py-1 text-2xs italic text-sidebar-foreground/35">Empty — move chats here</li>
-                ) : (
-                  g.items.map((s) => renderHistoryRow(s))
-                )}
-              </ul>
-            )}
-          </div>
-        );
-      }
-      return (
-        <div key={g.key} className="mb-1">
-          <div className="flex items-center gap-1 px-2.5 pb-1 pt-2 text-2xs font-semibold uppercase tracking-wider text-sidebar-foreground/45">
-            {g.kind === 'pinned' && <Pin className="size-2.5 fill-current text-[color:var(--n9-accent)]" aria-hidden />}
-            {g.label}
-          </div>
-          <ul className="flex min-w-0 flex-col gap-0.5">{g.items.map((s) => renderHistoryRow(s))}</ul>
-        </div>
-      );
-    });
-  };
 
   const showLiteratureEmptyState = agentMode === 'literature' && isLiteratureRoute;
   const emptyStateSubheading = showLiteratureEmptyState ? 'For Literature' : null;
@@ -3916,13 +3584,16 @@ export function RightSidebar({
 
   return (
     <div className={cn(
-      "flex flex-col bg-background min-h-0 overflow-hidden transition-none",
+      "flex flex-col bg-background min-h-0 overflow-hidden",
       isPageVariant
         ? "h-full w-full min-w-0"
         : cn(
             "border-l border-border/45 shadow-[-2px_0_18px_-16px_rgba(44,36,24,0.22)] dark:shadow-[-2px_0_18px_-16px_rgba(0,0,0,0.45)]",
             isExpanded
-              ? "fixed top-0 right-0 bottom-0 left-[var(--sidebar-width,0px)] z-[120] w-auto h-full"
+              // In-place fullscreen overlay, attached edge-to-edge from the app
+              // sidebar to the right edge (no detached/floating box). animate-in
+              // gives a smooth grow-in; honors reduced-motion.
+              ? "fixed top-0 right-0 bottom-0 left-[var(--sidebar-width,0px)] z-[120] w-auto h-full animate-in fade-in zoom-in-95 duration-300 ease-out motion-reduce:animate-none"
               : "h-full w-full min-w-0"
           )
     )}>
@@ -3954,7 +3625,7 @@ export function RightSidebar({
       ) : (
         <>
           {/* Header: page route uses app chrome; panel uses compact history controls */}
-            <header className="h-12 sm:h-14 flex items-center justify-between px-2 sm:px-4 border-b border-border/40 shrink-0 bg-[color:var(--n9-header-bg)]/80 backdrop-blur-md z-10 text-xs select-none">
+            <header className="h-12 sm:h-14 flex items-center justify-between px-2 sm:px-4 border-b border-[color:var(--glass-border)] shrink-0 bg-[color:var(--n9-header-bg)]/70 backdrop-blur-xl saturate-[1.4] z-10 text-xs select-none">
             <div className="flex items-center gap-1 overflow-hidden min-w-0">
               {isPageVariant && isMobile ? (
                 <Button
@@ -3974,88 +3645,105 @@ export function RightSidebar({
                 <>
                   <ScrollArea className="w-full whitespace-nowrap scrollbar-hide">
                     <div className="flex items-center gap-1">
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-8 sm:size-9 text-muted-foreground shrink-0"
-                            aria-label="Show chat history"
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-8 sm:size-9 text-muted-foreground shrink-0"
+                              aria-label="Show chat history"
                           >
-                            <History className="size-4" />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent
-                          align="start"
-                          sideOffset={4}
-                          className="flex w-[300px] max-w-[min(300px,calc(100vw-2rem))] flex-col gap-1.5 rounded-xl p-1.5"
-                        >
-                          <div className="flex items-center justify-between gap-2 px-1">
-                            <span className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground/80">History</span>
-                            <div className="flex items-center gap-0.5">
-                              {foldersAvailable && (
-                                <button
-                                  type="button"
-                                  onClick={() => void handleNewFolder()}
-                                  title="New folder"
-                                  aria-label="New folder"
-                                  className="n9-press inline-flex items-center justify-center rounded-md p-1 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                                >
-                                  <FolderPlus className="size-3.5" />
-                                </button>
+                              <History className="size-4" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="flex w-[290px] max-w-[min(290px,calc(100vw-2rem))] flex-col p-0 overflow-hidden" sideOffset={4}>
+                          <div className="p-2 text-xs font-semibold text-muted-foreground/80 uppercase tracking-wider border-b shrink-0">
+                            History
+                          </div>
+                          <ScrollArea className="h-[280px] w-full overflow-hidden">
+                            <div className="min-w-max p-1">
+                              {sessions.length === 0 ? (
+                                <div className="py-6 text-center text-muted-foreground text-xs">No history yet.</div>
+                              ) : (
+                                sessions.map(session => (
+                                  <div
+                                    key={session.id}
+                                    className="group/row relative"
+                                  >
+                                    <button
+                                      type="button"
+                                      onClick={() => loadSession(session.id)}
+                                      className={cn(
+                                        "flex min-w-max max-w-full items-center justify-between gap-2 overflow-hidden rounded-md px-2 py-1.5 pr-12 text-left text-sm transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90",
+                                        currentSessionId === session.id
+                                          ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                                          : "text-sidebar-foreground/70"
+                                      )}
+                                    >
+                                      <span
+                                        className={cn(
+                                          "block truncate whitespace-nowrap font-medium",
+                                          currentSessionId === session.id
+                                            ? "text-sidebar-accent-foreground"
+                                            : "text-inherit"
+                                        )}
+                                        title={session.title || 'New conversation'}
+                                      >
+                                        {session.title || 'New conversation'}
+                                      </span>
+                                      <span className="shrink-0 text-2xs text-sidebar-foreground/70 opacity-70">
+                                        {new Date(session.updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                      </span>
+                                    </button>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      className={cn(
+                                        "absolute right-1 top-1/2 z-10 h-7 w-7 -translate-y-1/2 rounded-full border border-border/35 bg-background/82 text-sidebar-foreground/70 shadow-sm backdrop-blur-md transition-[opacity,transform,background-color,color] duration-200 ease-out hover:bg-background hover:text-destructive",
+                                        currentSessionId === session.id ? "opacity-100" : "pointer-events-none translate-x-1 opacity-0 group-hover/row:pointer-events-auto group-hover/row:translate-x-0 group-hover/row:opacity-100"
+                                      )}
+                                      onClick={(e) => handleDeleteSession(e, session.id)}
+                                      aria-label="Delete chat"
+                                    >
+                                      <Trash2 className="size-3.5" />
+                                    </Button>
+                                  </div>
+                                ))
                               )}
-                              <button
-                                type="button"
-                                onClick={handleNewChat}
-                                className="n9-press inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-2xs font-medium text-[color:var(--n9-accent)] hover:bg-[color:color-mix(in_srgb,var(--n9-accent)_12%,transparent)]"
-                              >
-                                <Plus className="size-3" /> New chat
-                              </button>
                             </div>
-                          </div>
-                          {renderHistorySearch()}
-                          <div className="h-[320px] w-full overflow-y-auto overflow-x-hidden pr-1">
-                            {renderHistoryGroups()}
-                          </div>
-                        </PopoverContent>
-                      </Popover>
+                            <ScrollBar orientation="horizontal" />
+                          </ScrollArea>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
 
-                      <Button
-                        variant="ghost"
-                        className="h-8 gap-1.5 rounded-full border border-[color:color-mix(in_srgb,var(--n9-accent)_28%,var(--border))] bg-[color:color-mix(in_srgb,var(--n9-accent)_8%,transparent)] px-3 font-medium text-[color:var(--n9-accent)] transition-colors hover:bg-[color:color-mix(in_srgb,var(--n9-accent)_14%,transparent)] hover:text-[color:var(--n9-accent)] sm:h-9"
-                        onClick={handleNewChat}
-                        aria-label="New chat"
-                      >
-                        <Plus className="size-4" />
-                        <span>New Chat</span>
-                      </Button>
+                      {/* Title kept here so the left cluster reads the same as the
+                          page header; the "New chat" action lives in the right
+                          cluster in BOTH modes so it never jumps between sides. */}
+                      <span className="truncate px-1 text-sm font-semibold text-foreground">Catalyst</span>
                     </div>
                   </ScrollArea>
                 </>
               )}
             </div>
 
+            {/* Unified action bar: ONE fixed order in both page and panel modes so
+                nothing reorders on minimize/maximize. New chat · Help · Theme ·
+                resize toggle (Minimize in page / Maximize in panel, same slot) ·
+                Close (panel only, LAST so it never shifts the shared buttons). */}
             <div className="flex items-center gap-1 pl-2 shrink-0">
-              {isPageVariant ? (
+              <Button
+                variant="secondary"
+                className="h-8 text-muted-foreground sm:h-9"
+                onClick={handleNewChat}
+                aria-label="New chat"
+                title="New chat"
+              >
+                <Plus className="size-4" />
+                <span className="hidden sm:inline">New chat</span>
+              </Button>
+              {isPageVariant && (
                 <>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-8 text-muted-foreground sm:size-9"
-                    title="Minimize to sidebar"
-                    aria-label="Minimize Catalyst to the sidebar"
-                    onClick={() => {
-                      // Dock the full page back into the side panel (NOT close it),
-                      // carrying the conversation, and return to the page it was
-                      // opened from.
-                      const sid = currentSessionRef.current;
-                      openCatalystPanel({ dock: true, ...(sid ? { sessionId: sid } : {}) });
-                      router.push(getCatalystOrigin() ?? '/');
-                    }}
-                  >
-                    <Minimize className="size-4" />
-                  </Button>
                   <Button
                     type="button"
                     variant="ghost"
@@ -4067,7 +3755,6 @@ export function RightSidebar({
                   >
                     <CircleHelp className="size-4" />
                   </Button>
-                  <ReportIssueDialog />
                   <Button
                     id="tour-theme-toggle"
                     variant="ghost"
@@ -4079,6 +3766,7 @@ export function RightSidebar({
                         ? 'Switch to light mode'
                         : 'Switch to dark mode'
                     }
+                    title="Toggle theme"
                   >
                     {!themeMounted ? (
                       <Moon className="size-4" />
@@ -4089,30 +3777,70 @@ export function RightSidebar({
                     )}
                   </Button>
                 </>
+              )}
+              {/* Resize toggle — single fixed slot; only the glyph + handler change
+                  by mode, so it never appears to move. */}
+              {isPageVariant ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 text-muted-foreground sm:size-9"
+                  title="Minimize to sidebar"
+                  aria-label="Minimize Catalyst to the sidebar"
+                  onClick={() => {
+                    // Dock the full page back into the side panel (NOT close it),
+                    // carrying the conversation, and return to the page it was
+                    // opened from.
+                    const sid = currentSessionRef.current;
+                    openCatalystPanel({ dock: true, ...(sid ? { sessionId: sid } : {}) });
+                    router.push(getCatalystOrigin() ?? '/');
+                  }}
+                >
+                  <Minimize className="size-4" />
+                </Button>
+              ) : isExpanded ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 text-muted-foreground sm:size-9"
+                  title="Minimize"
+                  aria-label="Minimize Catalyst chat"
+                  onClick={() => setIsExpanded(false)}
+                >
+                  <Minimize className="size-4" />
+                </Button>
               ) : (
-                <>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-8 sm:size-9 text-muted-foreground"
-                    title="Open full page"
-                    aria-label="Open Catalyst full page"
-                    onClick={() => {
-                      // Maximize → open the dedicated /catalyst route, carrying the
-                      // active session so the conversation continues full-page.
-                      // Remember this page so minimizing returns here.
-                      setCatalystOrigin(pathname ?? '/');
-                      const sid = currentSessionRef.current;
-                      router.push(sid ? `/catalyst?session=${encodeURIComponent(sid)}` : '/catalyst');
-                      onClose?.();
-                    }}
-                  >
-                    <Maximize className="size-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="size-8 sm:size-9 text-muted-foreground" title="Close" aria-label="Close Catalyst" onClick={() => onClose?.()}>
-                    <X className="size-4" />
-                  </Button>
-                </>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 sm:size-9 text-muted-foreground"
+                  title="Expand to full screen"
+                  aria-label="Expand Catalyst chat to full screen"
+                  onClick={() => {
+                    // In-place expand: grow the SAME chat instance to a fullscreen
+                    // overlay (isExpanded) instead of router.push('/catalyst').
+                    // No route change → no remount/flash, and scroll, streaming,
+                    // and composer state are all preserved.
+                    setIsExpanded(true);
+                  }}
+                >
+                  <Maximize className="size-4" />
+                </Button>
+              )}
+              {!isPageVariant && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 sm:size-9 text-muted-foreground"
+                  title="Close"
+                  aria-label="Close Catalyst"
+                  onClick={() => onClose?.()}
+                >
+                  <X className="size-4" />
+                </Button>
               )}
             </div>
           </header>
@@ -4126,9 +3854,9 @@ export function RightSidebar({
               <>
                 <aside
                   className={cn(
-                    'relative z-10 flex-shrink-0 flex flex-col overflow-hidden border-r border-border bg-sidebar min-h-0',
+                    'relative z-10 flex-shrink-0 flex flex-col overflow-hidden bg-transparent min-h-0',
                     expandedHistoryOpen &&
-                      'shadow-[6px_0_22px_-14px_rgba(20,14,8,0.28)] dark:shadow-[6px_0_26px_-12px_rgba(0,0,0,0.55)]',
+                      '',
                   )}
                   style={{
                     // Open → full width; collapsed → fully gone (width 0, no rail).
@@ -4142,54 +3870,95 @@ export function RightSidebar({
                 {/* Fixed-width inner content so it's clipped (not reflowed) while
                     the panel collapses to 0. */}
                 <div
-                  className="flex h-full min-h-0 flex-col gap-1 p-2"
+                  className="m-2 flex h-[calc(100%-1rem)] min-h-0 flex-col gap-1 rounded-2xl border border-[color:var(--glass-border)] bg-sidebar/80 p-2 shadow-[0_10px_34px_-18px_rgba(20,14,8,0.4)] backdrop-blur-md dark:bg-sidebar/60 dark:shadow-[0_12px_38px_-16px_rgba(0,0,0,0.6)]"
                   style={{ width: historySidebar.width }}
                 >
-                  {/* Header row — hide-history toggle + section label on the left,
+                  {/* Header row — close button + "Chats" label on the top-left,
                       new chat on the right. */}
-                  <div className="flex h-9 shrink-0 items-center gap-1 px-1">
+                  <div className="flex h-8 shrink-0 items-center gap-1 rounded-md px-1 text-xs font-medium text-sidebar-foreground/70">
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-7 w-7 shrink-0 text-sidebar-foreground/70 hover:text-sidebar-foreground"
+                      className="h-7 w-7 shrink-0"
                       onClick={() => setExpandedHistoryOpen(false)}
                       title="Hide chat history"
                       aria-label="Hide chat history"
                     >
                       <PanelLeft className="h-4 w-4" />
                     </Button>
-                    <span className="flex-1 truncate text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/55">
-                      Chats
-                    </span>
-                    {foldersAvailable && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 shrink-0 text-sidebar-foreground/70 transition-colors hover:bg-[color:color-mix(in_srgb,var(--n9-accent)_12%,transparent)] hover:text-[color:var(--n9-accent)]"
-                        onClick={() => void handleNewFolder()}
-                        title="New folder"
-                        aria-label="New folder"
-                      >
-                        <FolderPlus className="h-4 w-4" />
-                      </Button>
-                    )}
+                    <span className="flex-1 truncate text-[0.7rem] font-semibold uppercase tracking-wider">Chats</span>
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-7 w-7 shrink-0 text-sidebar-foreground/70 transition-colors hover:bg-[color:color-mix(in_srgb,var(--n9-accent)_12%,transparent)] hover:text-[color:var(--n9-accent)]"
+                      className="h-7 w-7 shrink-0"
                       onClick={handleNewChat}
-                      title="New chat"
                       aria-label="New chat"
                     >
                       <PenBox className="h-4 w-4" />
                     </Button>
                   </div>
-                  {/* Search + grouped (pinned / Today / Yesterday / …), with
-                      inline rename, pin and delete per row. */}
-                  <div className="px-1 pb-1.5">{renderHistorySearch()}</div>
-                  <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-1">
-                    {renderHistoryGroups()}
-                  </div>
+                  {/* List - same structure as lab notes */}
+                  <ScrollArea className="min-h-0 flex-1 overflow-hidden">
+                    {sessionsLoading && sessions.length === 0 ? (
+                      <div className="flex flex-col gap-0.5 pr-1" aria-hidden aria-label="Loading conversations">
+                        {[...Array(5)].map((_, i) => (
+                          <div key={i} className="grid min-h-9 grid-cols-[auto_1fr_auto] items-center gap-2 rounded-md px-2 py-1.5">
+                            <div className="n9-skeleton-shimmer size-8 rounded" />
+                            <div className="n9-skeleton-shimmer h-3.5 w-full rounded" />
+                            <div className="size-8" />
+                          </div>
+                        ))}
+                      </div>
+                    ) : sessions.length === 0 ? (
+                    <div className="px-2 py-6 text-center text-sidebar-foreground/70 text-xs">No previous conversations.</div>
+                    ) : (
+                      <MotionList className="flex min-w-0 flex-col gap-0.5 pr-1" role="list">
+                        {sessions.map((session) => (
+                          <MotionItem
+                            key={session.id}
+                            className="group/row relative"
+                            role="listitem"
+                          >
+                            <div
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => loadSession(session.id)}
+                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); loadSession(session.id); } }}
+                              className={cn(
+                                "relative grid min-h-9 min-w-0 grid-cols-[1fr_auto] items-center gap-2 rounded-lg px-3 py-2 text-left text-sm outline-none transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90",
+                                currentSessionId === session.id && "bg-sidebar-accent font-medium text-sidebar-accent-foreground before:absolute before:left-0.5 before:top-1/2 before:h-5 before:w-1 before:-translate-y-1/2 before:rounded-full before:bg-primary before:content-['']"
+                              )}
+                            >
+                              <span
+                                className={cn(
+                                  "block truncate font-medium",
+                                  currentSessionId === session.id
+                                    ? "text-sidebar-accent-foreground"
+                                    : "text-inherit"
+                                )}
+                                title={session.title || 'New conversation'}
+                              >
+                                {session.title || 'New conversation'}
+                              </span>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className={cn(
+                                  "size-8 shrink-0 text-sidebar-foreground/70 transition-[opacity,transform,color] duration-200 ease-out hover:text-destructive",
+                                  currentSessionId === session.id ? "opacity-100" : "pointer-events-none translate-x-1 opacity-0 group-hover/row:pointer-events-auto group-hover/row:translate-x-0 group-hover/row:opacity-100"
+                                )}
+                                onClick={(e) => handleDeleteSession(e, session.id)}
+                                aria-label="Delete chat"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </MotionItem>
+                        ))}
+                      </MotionList>
+                    )}
+                    <ScrollBar orientation="horizontal" />
+                  </ScrollArea>
                 </div>
               </aside>
               {expandedHistoryOpen && (
@@ -4209,28 +3978,16 @@ export function RightSidebar({
                   history panel is collapsed (no rail), at the same vertical spot
                   as the "Chats" header so reopening feels anchored. */}
               {layoutExpanded && !expandedHistoryOpen && (
-                <div className="absolute left-2 top-2 z-20 flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 rounded-md bg-background/80 text-foreground/70 shadow-sm backdrop-blur-sm hover:bg-accent hover:text-foreground"
-                    onClick={() => setExpandedHistoryOpen(true)}
-                    title="Show chat history"
-                    aria-label="Show chat history"
-                  >
-                    <PanelLeft className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 rounded-md bg-background/80 text-foreground/70 shadow-sm backdrop-blur-sm hover:bg-accent hover:text-foreground"
-                    onClick={handleNewChat}
-                    title="New chat"
-                    aria-label="New chat"
-                  >
-                    <PenBox className="h-4 w-4" />
-                  </Button>
-                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute left-2 top-2 z-20 h-7 w-7 rounded-md bg-background/80 text-foreground/70 shadow-sm backdrop-blur-sm hover:bg-accent hover:text-foreground"
+                  onClick={() => setExpandedHistoryOpen(true)}
+                  title="Show chat history"
+                  aria-label="Show chat history"
+                >
+                  <PanelLeft className="h-4 w-4" />
+                </Button>
               )}
               {messages.length === 0 && !literature ? (
                 isPageVariant ? (
@@ -4278,7 +4035,7 @@ export function RightSidebar({
                         {emptyStateDescription}
                       </p>
                     </div>
-                    <div className="flex-shrink-0 border-t border-[color:var(--glass-border)] bg-background/80 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-xl">
+                    <div className="flex-shrink-0 bg-gradient-to-t from-background via-background/95 to-transparent px-4 pb-4 pt-6">
                       <div className="mx-auto min-w-0 max-w-3xl">{renderCursorInput()}</div>
                     </div>
                   </div>
@@ -4307,11 +4064,14 @@ export function RightSidebar({
                         return (
                           <Fragment key={message.id}>
                             {showLitHere && literature && (
-                              <LiteratureSummaryInline
-                                lit={literature}
-                                sessionId={literature.sessionId ?? literatureSessionId}
-                                onContinue={loadSession}
-                              />
+                              <div className="flex w-full gap-4">
+                                <div className="size-6 shrink-0" aria-hidden />
+                                <LiteratureSummaryInline
+                                  lit={literature}
+                                  sessionId={literature.sessionId ?? literatureSessionId}
+                                  onContinue={loadSession}
+                                />
+                              </div>
                             )}
                             <SidebarChatMessageItem
                               message={message as UIMessage}
@@ -4333,17 +4093,20 @@ export function RightSidebar({
                       })}
                       {/* Anchor at/after the end (newest action, or empty chat) → render below all messages. */}
                       {literature && (litAnchorIndex == null || litAnchorIndex >= messages.length) && (
-                        <LiteratureSummaryInline
-                          lit={literature}
-                          sessionId={literature.sessionId ?? literatureSessionId}
-                          onContinue={loadSession}
-                        />
+                        <div className="flex w-full gap-4">
+                          <div className="size-6 shrink-0" aria-hidden />
+                          <LiteratureSummaryInline
+                            lit={literature}
+                            sessionId={literature.sessionId ?? literatureSessionId}
+                            onContinue={loadSession}
+                          />
+                        </div>
                       )}
                       {agentMode === 'literature' &&
                         literatureAgentStream.isStreaming &&
                         messages.at(-1)?.role === 'user' && (
                         <div className="flex w-full gap-4 justify-start">
-                          <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border border-[color:color-mix(in_srgb,var(--n9-accent)_22%,var(--border))] bg-[color:color-mix(in_srgb,var(--n9-accent)_8%,var(--card))] n9-elev-1 dark:border-border dark:bg-background">
+                          <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border border-border/60 bg-[rgba(124,82,52,0.05)] shadow-sm dark:bg-background dark:border-border">
                             <div className="relative size-[18px] shrink-0" aria-hidden>
                               <Image
                                 src="/notes9-logo-mark-transparent.png"
@@ -4404,7 +4167,7 @@ export function RightSidebar({
                       {literatureAwaitingClarify &&
                         messages.at(-1)?.role === 'user' &&
                         literatureAgentStream.clarify && (
-                        <div className="flex w-full justify-start pl-10 sm:pl-14">
+                        <div className="flex w-full justify-start pl-10">
                           <ClarifyCard
                             question={literatureAgentStream.clarify.question}
                             options={literatureAgentStream.clarify.options}
@@ -4421,8 +4184,8 @@ export function RightSidebar({
                           agentStream.donePayload != null) && (
                         <div className="flex gap-4 w-full justify-start">
                           <Notes9ChatLoader
-                            size={28}
-                            className="mt-1 -translate-y-[5px]"
+                            size={24}
+                            className="mt-1"
                             progress={toolCardsProgress(agentStream.toolCards)}
                             error={agentStream.error != null}
                           />
@@ -4431,7 +4194,7 @@ export function RightSidebar({
                               !agentStream.streamedAnswer &&
                               !agentStream.donePayload &&
                               !agentStream.error ? (
-                              <div className="px-1 py-2.5 text-sm">
+                              <div className="py-2.5 text-sm">
                                 <span
                                   className="inline-block w-[3px] h-[1em] bg-foreground/70 rounded-sm animate-cursor-blink translate-y-[2px]"
                                   aria-hidden
@@ -4470,8 +4233,8 @@ export function RightSidebar({
                         !literatureAwaitingClarify &&
                         messages.at(-1)?.role === 'user' && (
                         <div className="flex gap-4 w-full justify-start">
-                          <Notes9ChatLoader size={28} className="mt-1" />
-                          <div className="px-1 py-2.5 text-sm">
+                          <Notes9ChatLoader size={24} className="mt-1" />
+                          <div className="py-2.5 text-sm">
                             <span
                               className="inline-block w-[3px] h-[1em] bg-foreground/70 rounded-sm animate-cursor-blink translate-y-[2px]"
                               aria-hidden
@@ -4488,16 +4251,16 @@ export function RightSidebar({
                     {chatShowJumpBottom ? (
                       <Button
                         type="button"
-                        variant="ghost"
+                        variant="secondary"
                         size="icon"
-                        className="n9-glass n9-elev-2 n9-press absolute bottom-full left-1/2 z-30 mb-2 h-8 w-8 -translate-x-1/2 rounded-full text-foreground/70 hover:text-foreground motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:slide-in-from-bottom-1 motion-safe:duration-200"
+                        className="absolute bottom-full left-1/2 z-30 mb-2 h-8 w-8 -translate-x-1/2 rounded-full border border-border/50 bg-background/95 shadow-md backdrop-blur-sm hover:bg-muted"
                         onClick={scrollChatToBottom}
                         aria-label="Scroll to latest message"
                       >
                         <ChevronDown className="size-3.5" />
                       </Button>
                     ) : null}
-                    <div className="border-t border-[color:var(--glass-border)] bg-background/80 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-xl">
+                    <div className="bg-gradient-to-t from-background via-background/95 to-transparent px-4 pb-4 pt-6">
                       <div className="max-w-3xl mx-auto min-w-0">
                         {renderCursorInput()}
                       </div>

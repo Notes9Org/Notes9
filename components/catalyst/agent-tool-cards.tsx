@@ -107,22 +107,21 @@ function ToolCardItem({ card }: ToolCardItemProps) {
   return (
     <div
       className={cn(
-        'rounded-lg border bg-card/50 overflow-hidden backdrop-blur-sm transition-all duration-200',
+        'rounded-md border bg-card/40 overflow-hidden transition-colors min-h-[40px]',
         // Running: the shared brand "working" sweep (.ai-shimmer) replaces the
         // scattered per-card spinner-only signal so every busy block speaks one
         // motion vocabulary. Reduced-motion drops the sweep (handled in globals).
-        // A soft accent ring + glow makes the active tool unmistakable.
-        isRunning && 'ai-shimmer border-primary/35 bg-primary/[0.04] ring-1 ring-primary/15 shadow-[0_2px_14px_-8px_var(--n9-accent-glow)]',
+        isRunning && 'ai-shimmer border-primary/40 bg-primary/[0.03]',
         // Failed tool: muted amber, not an alarming full-red — the label
         // text ("Couldn't …") already conveys failure.
         isError && 'border-amber-500/40 bg-amber-500/[0.05]',
-        !isRunning && !isError && 'border-border/55 hover:border-border',
+        !isRunning && !isError && 'border-border/60',
       )}
     >
       <button
         type="button"
         className={cn(
-          'flex w-full items-center gap-2.5 px-2.5 py-2 text-left',
+          'flex w-full items-center gap-2 px-2.5 py-1.5 text-left',
           hasDetail && 'cursor-pointer hover:bg-muted/40',
           (isRunning || !hasDetail) && 'cursor-default',
         )}
@@ -137,23 +136,14 @@ function ToolCardItem({ card }: ToolCardItemProps) {
               : `${card.label}${hasDetail ? ' — click to expand' : ''}`
         }
       >
-        <span
-          className={cn(
-            'shrink-0 inline-flex items-center justify-center size-5 rounded-md ring-1 transition-colors',
-            isRunning
-              ? 'bg-primary/10 ring-primary/25'
-              : isError
-                ? 'bg-amber-500/10 ring-amber-500/25'
-                : 'bg-emerald-500/10 ring-emerald-500/20',
-          )}
-        >
+        <span className="shrink-0 inline-flex items-center justify-center size-3.5">
           {isRunning ? (
-            <Loader2 className="size-3 animate-spin text-primary" aria-hidden />
+            <Loader2 className="size-3.5 animate-spin text-primary" aria-hidden />
           ) : isError ? (
             // Failed tool — distinct amber alert, never the green success check.
-            <AlertCircle className="size-3 text-amber-600 dark:text-amber-500" aria-hidden />
+            <AlertCircle className="size-3.5 text-amber-600 dark:text-amber-500" aria-hidden />
           ) : (
-            <CheckCircle2 className="size-3 text-emerald-600 dark:text-emerald-500" aria-hidden />
+            <CheckCircle2 className="size-3.5 text-emerald-600 dark:text-emerald-500" aria-hidden />
           )}
         </span>
 
@@ -190,19 +180,19 @@ function ToolCardItem({ card }: ToolCardItemProps) {
           {card.label}
         </span>
 
-        <div className="shrink-0 flex items-center gap-1.5">
+        <div className="shrink-0 flex items-center gap-2">
           {!isRunning && sourceCount > 0 && (
-            <span className="rounded-full bg-muted/60 px-1.5 py-0.5 text-2xs font-medium tabular-nums text-muted-foreground/80">
+            <span className="text-2xs tabular-nums text-muted-foreground/70">
               {sourceCount} {sourceCount === 1 ? 'source' : 'sources'}
             </span>
           )}
           {!isRunning && card.row_count != null && !hasSourceNames && (
-            <span className="rounded-full bg-muted/60 px-1.5 py-0.5 text-2xs font-medium tabular-nums text-muted-foreground/80">
+            <span className="text-2xs tabular-nums text-muted-foreground/70">
               {card.row_count} {card.row_count === 1 ? 'record' : 'records'}
             </span>
           )}
           {card.latency_ms != null && (
-            <span className="text-2xs tabular-nums text-muted-foreground/50">
+            <span className="text-2xs tabular-nums text-muted-foreground/60">
               {(card.latency_ms / 1000).toFixed(1)}s
             </span>
           )}
@@ -290,20 +280,19 @@ export function AgentToolCards({ cards, collapsible = false, className }: AgentT
       <div className={cn('flex flex-col gap-1', className)}>
         <button
           type="button"
-          className="inline-flex items-center gap-1.5 self-start rounded-full border border-border/55 bg-card/50 px-2.5 py-1 text-xs font-medium text-muted-foreground/80 backdrop-blur-sm transition-colors hover:border-border hover:bg-muted/50 hover:text-foreground"
+          className="flex items-center gap-1.5 px-1 py-1 text-xs text-muted-foreground/70 hover:text-foreground transition-colors self-start"
           onClick={() => setShowAll((v) => !v)}
           aria-expanded={showAll}
           aria-label={showAll ? 'Hide tool calls' : `Show ${cards.length} tool call${cards.length > 1 ? 's' : ''}`}
         >
-          <Wrench className="size-3 text-muted-foreground/60" aria-hidden />
+          {showAll
+            ? <ChevronDown className="size-3" aria-hidden />
+            : <ChevronRight className="size-3" aria-hidden />}
           <span>
             {showAll
-              ? `Hide tools (${cards.length})`
+              ? `Hide tool calls (${cards.length})`
               : `Used ${cards.length} tool${cards.length > 1 ? 's' : ''}`}
           </span>
-          {showAll
-            ? <ChevronDown className="size-3 text-muted-foreground/50" aria-hidden />
-            : <ChevronRight className="size-3 text-muted-foreground/50" aria-hidden />}
         </button>
         {showAll && (
           <div className="flex flex-col gap-1.5">

@@ -2,6 +2,7 @@
 
 import {
   forwardRef,
+  memo,
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -55,6 +56,21 @@ const SCROLL_NUDGE_RATIO = 0.15
 const HIGHLIGHT_HEIGHT_FONT_MULTIPLE = 1.3
 
 /**
+ * Stable empty-array singletons for the per-page props. Passing the same
+ * reference when a page has no annotations / no RAG highlight lets `React.memo`
+ * on `LiteraturePdfPageBlock` skip re-rendering that page on unrelated state
+ * changes (selection, focus). Purely a referential-identity optimization —
+ * contents are identical to a fresh `[]`.
+ */
+const EMPTY_ANNOTATIONS: LiteraturePdfAnnotation[] = []
+const EMPTY_RAG_RECTS: Array<{ top: number; left: number; width: number; height: number }> = []
+
+/** GPU-only press feedback for toolbar icon buttons (transform + colors preserved, reduced-motion aware). */
+const TOOLBAR_BTN_MOTION =
+  "transition-[transform,color,background-color,border-color] duration-150 ease-out " +
+  "active:scale-95 motion-reduce:transition-none motion-reduce:active:scale-100"
+
+/**
  * Annotation anchors are persisted as `Record<string, unknown>`. Normalize to a
  * `{ x?, y? }` shape, keeping only finite numeric coordinates so callers can
  * safely read positions without an unchecked structural cast.
@@ -87,6 +103,9 @@ interface LiteraturePdfViewerProps {
     anchor?: Record<string, unknown> | null
   }) => Promise<void>
   onAskCatalyst?: (selectedText: string) => void
+  /** Extra controls (Replace / Export / Highlights) rendered inline in the
+   *  single toolbar row, so the reader has one toolbar line instead of two. */
+  toolbarExtras?: React.ReactNode
 }
 
 type PdfSelectionState = {
@@ -107,7 +126,7 @@ type ComposerState = {
   content: string
 }
 
-function LiteraturePdfPageBlock({
+const LiteraturePdfPageBlock = memo(function LiteraturePdfPageBlock({
   pageNumber,
   pdfDocument,
   fitScale,
@@ -432,7 +451,7 @@ function LiteraturePdfPageBlock({
       </div>
     </div>
   )
-}
+})
 
 /** Top edge of `element` within `scrollContainer`'s scrollable content (matches scrollTop coordinates). */
 function elementTopInScrollContent(element: HTMLElement, scrollContainer: HTMLElement): number {
@@ -465,7 +484,7 @@ function highlightCenterYWithinPage(
 }
 
 export const LiteraturePdfViewer = forwardRef<LiteraturePdfViewerHandle, LiteraturePdfViewerProps>(
-  function LiteraturePdfViewer({ pdfUrl, externalOpenUrl, annotations, onCreateAnnotation, onAskCatalyst }, ref) {
+  function LiteraturePdfViewer({ pdfUrl, externalOpenUrl, annotations, onCreateAnnotation, onAskCatalyst, toolbarExtras }, ref) {
   const { toast } = useToast()
   const viewportFrameRef = useRef<HTMLDivElement | null>(null)
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null)
@@ -760,6 +779,7 @@ export const LiteraturePdfViewer = forwardRef<LiteraturePdfViewerHandle, Literat
 
     let cancelled = false
     let resizeObserver: ResizeObserver | null = null
+    let resizeRaf = 0
 
     const updateFitScale = async () => {
       if (!pdfDocument || !viewportFrameRef.current) return
@@ -775,13 +795,21 @@ export const LiteraturePdfViewer = forwardRef<LiteraturePdfViewerHandle, Literat
 
     updateFitScale().catch(console.error)
 
+    // Coalesce bursts of resize notifications (e.g. during a window drag) into a
+    // single rAF-scheduled recompute. The final size still produces the final
+    // fitScale, so behavior is unchanged — only intermediate churn is dropped.
     resizeObserver = new ResizeObserver(() => {
-      updateFitScale().catch(console.error)
+      if (resizeRaf) cancelAnimationFrame(resizeRaf)
+      resizeRaf = requestAnimationFrame(() => {
+        resizeRaf = 0
+        updateFitScale().catch(console.error)
+      })
     })
     resizeObserver.observe(viewportFrameRef.current)
 
     return () => {
       cancelled = true
+      if (resizeRaf) cancelAnimationFrame(resizeRaf)
       resizeObserver?.disconnect()
     }
   }, [pdfDocument])
@@ -970,7 +998,33 @@ export const LiteraturePdfViewer = forwardRef<LiteraturePdfViewerHandle, Literat
     setLastPointer({ pageNumber, ...relative })
   }, [])
 
-  const pageNumbers = Array.from({ length: Math.min(renderedEndPage, pageCount) }, (_, i) => i + 1)
+  // Stable per-selection callbacks so memoized page blocks don't re-render when
+  // the parent re-renders (identity was previously a fresh arrow each render).
+  const handleHighlightSelection = useCallback(
+    () => createSelectionAnnotation("highlight"),
+    [createSelectionAnnotation]
+  )
+  const handleNoteSelection = useCallback(
+    () => createSelectionAnnotation("note"),
+    [createSelectionAnnotation]
+  )
+
+  // Group annotations by page once per `annotations` change instead of running
+  // `annotations.filter(...)` for every page on every render.
+  const annotationsByPage = useMemo(() => {
+    const map = new Map<number, LiteraturePdfAnnotation[]>()
+    for (const a of annotations) {
+      const arr = map.get(a.page_number)
+      if (arr) arr.push(a)
+      else map.set(a.page_number, [a])
+    }
+    return map
+  }, [annotations])
+
+  const pageNumbers = useMemo(
+    () => Array.from({ length: Math.min(renderedEndPage, pageCount) }, (_, i) => i + 1),
+    [renderedEndPage, pageCount]
+  )
 
   return (
     <div className="space-y-4">
@@ -986,20 +1040,20 @@ export const LiteraturePdfViewer = forwardRef<LiteraturePdfViewerHandle, Literat
           )}
         </div>
         <div className="flex w-full items-center justify-end gap-2 sm:ml-auto sm:w-auto">
-          <Button variant="outline" size="icon" className="h-8 w-8 sm:h-9 sm:w-9" onClick={() => setZoom((current) => Math.max(0.75, current - 0.1))}>
+          <Button variant="outline" size="icon" className={`h-8 w-8 sm:h-9 sm:w-9 ${TOOLBAR_BTN_MOTION}`} onClick={() => setZoom((current) => Math.max(0.75, current - 0.1))} title="Zoom out" aria-label="Zoom out">
             <ZoomOut className="h-4 w-4" />
           </Button>
           <div className="w-14 text-center text-xs text-muted-foreground sm:w-16 sm:text-sm">{Math.round(fitScale * zoom * 100)}%</div>
-          <Button variant="outline" size="icon" className="h-8 w-8 sm:h-9 sm:w-9" onClick={() => setZoom((current) => Math.min(3, current + 0.1))}>
+          <Button variant="outline" size="icon" className={`h-8 w-8 sm:h-9 sm:w-9 ${TOOLBAR_BTN_MOTION}`} onClick={() => setZoom((current) => Math.min(3, current + 0.1))} title="Zoom in" aria-label="Zoom in">
             <ZoomIn className="h-4 w-4" />
           </Button>
-          <Button variant="outline" size="icon" className="h-8 w-8 sm:h-9 sm:w-9" onClick={openNoteComposerFromPage} title="Add note">
+          <Button variant="outline" size="icon" className={`h-8 w-8 sm:h-9 sm:w-9 ${TOOLBAR_BTN_MOTION}`} onClick={openNoteComposerFromPage} title="Add note" aria-label="Add note">
             <StickyNote className="h-4 w-4" />
           </Button>
-          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs sm:h-9 sm:px-3 sm:text-sm" asChild>
+          {toolbarExtras}
+          <Button variant="outline" size="icon" className={`h-8 w-8 sm:h-9 sm:w-9 ${TOOLBAR_BTN_MOTION}`} title="Open in new tab" aria-label="Open in new tab" asChild>
             <a href={externalOpenUrl ?? pdfUrl} target="_blank" rel="noopener noreferrer">
-              <ExternalLink className="mr-2 h-4 w-4" />
-              Open
+              <ExternalLink className="h-4 w-4" />
             </a>
           </Button>
         </div>
@@ -1025,26 +1079,35 @@ export const LiteraturePdfViewer = forwardRef<LiteraturePdfViewerHandle, Literat
           </div>
         )}
         <div className={`${isLoading || error ? "hidden" : "block"} relative mx-auto w-fit max-w-full`}>
-          {pageNumbers.map((num) => (
-            <LiteraturePdfPageBlock
-              key={num}
-              pageNumber={num}
-              pdfDocument={pdfDocument}
-              fitScale={fitScale}
-              zoom={zoom}
-              pageAnnotations={annotations.filter((a) => a.page_number === num)}
-              ragHighlightRects={ragHighlightRects.find((r) => r.pageNumber === num)?.rects ?? []}
-              selectionState={selectionState}
-              onSelectionChangeRef={onSelectionChangeRef}
-              onPagePointerDown={onPagePointerDown}
-              onCopySelection={copySelection}
-              onHighlightSelection={() => createSelectionAnnotation("highlight")}
-              onNoteSelection={() => createSelectionAnnotation("note")}
-              onAskCatalyst={onAskCatalyst}
-              focusedAnnotationId={focusedAnnotationId}
-              linkService={linkService}
-            />
-          ))}
+          {pageNumbers.map((num) => {
+            const pageAnns = annotationsByPage.get(num) ?? EMPTY_ANNOTATIONS
+            const ragRects = ragHighlightRects.find((r) => r.pageNumber === num)?.rects ?? EMPTY_RAG_RECTS
+            return (
+              <LiteraturePdfPageBlock
+                key={num}
+                pageNumber={num}
+                pdfDocument={pdfDocument}
+                fitScale={fitScale}
+                zoom={zoom}
+                pageAnnotations={pageAnns}
+                ragHighlightRects={ragRects}
+                // Narrow to this page: non-active pages get a stable `null`, so a
+                // selection change only re-renders the previously/newly active page.
+                selectionState={selectionState?.pageNumber === num ? selectionState : null}
+                onSelectionChangeRef={onSelectionChangeRef}
+                onPagePointerDown={onPagePointerDown}
+                onCopySelection={copySelection}
+                onHighlightSelection={handleHighlightSelection}
+                onNoteSelection={handleNoteSelection}
+                onAskCatalyst={onAskCatalyst}
+                // Only the page owning the focused annotation receives the id;
+                // others get a stable `null`. Identical render (the block only
+                // compares this against its own annotations' ids).
+                focusedAnnotationId={pageAnns.some((a) => a.id === focusedAnnotationId) ? focusedAnnotationId : null}
+                linkService={linkService}
+              />
+            )
+          })}
           {pageCount > 0 && renderedEndPage < pageCount && (
             <div ref={loadMoreSentinelRef} className="h-8 w-full shrink-0" aria-hidden />
           )}

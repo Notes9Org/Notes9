@@ -1,16 +1,17 @@
 'use client'
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { memo, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { BookOpen, BookmarkCheck, BookmarkPlus, ExternalLink, FileText, Loader2, MessageCircle, Quote, ScrollText, Unlock } from 'lucide-react'
-import { decodeHtmlEntities, formatLiteratureAbstractPlain } from '@/lib/literature-abstract-display'
+import { stripHtmlToText, formatLiteratureAbstractPlain } from '@/lib/literature-abstract-display'
 import { cn } from '@/lib/utils'
 import { savePaperToLibrary } from '@/app/(app)/literature-reviews/actions'
 import { openCatalystPanel, attachToCatalyst } from '@/lib/catalyst-launch'
 import { flyToCatalyst } from '@/lib/fly-to-catalyst'
 import { citationToSearchPaper } from '@/lib/ai-search-match'
+import { MotionTabPanel } from './motion'
 import type { AiSearchResult } from '@/types/ai-search'
 import type { SearchPaper } from '@/types/paper-search'
 import { toast } from 'sonner'
@@ -147,7 +148,7 @@ function highlightTerms(text: string, query: string): ReactNode {
   )
 }
 
-export function AiPaperCard({
+function AiPaperCardImpl({
   result,
   projectId,
   query = '',
@@ -225,11 +226,11 @@ export function AiPaperCard({
     result.paper ??
     citationToSearchPaper({ title: result.aiTitle, url: result.sourceUrl, snippet: result.snippet })
 
-  const title = decodeHtmlEntities(result.paper?.title || result.aiTitle || 'Untitled result')
+  const title = stripHtmlToText(result.paper?.title || result.aiTitle || 'Untitled result')
   const authors = result.paper?.authors?.length
-    ? result.paper.authors.map(decodeHtmlEntities).join(', ')
+    ? result.paper.authors.map(stripHtmlToText).join(', ')
     : null
-  const journalYear = [result.paper?.journal && decodeHtmlEntities(result.paper.journal), result.paper?.year || null]
+  const journalYear = [result.paper?.journal && stripHtmlToText(result.paper.journal), result.paper?.year || null]
     .filter(Boolean)
     .join(' • ')
   const href = readUrl(result)
@@ -347,7 +348,7 @@ export function AiPaperCard({
   }
 
   return (
-    <Card className="glass-panel group/card overflow-hidden rounded-2xl shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-[0_16px_40px_-20px_var(--n9-accent-glow)]">
+    <Card className="glass-panel group/card overflow-hidden rounded-2xl shadow-sm transition-all duration-300 hover:border-primary/30 hover:shadow-[0_16px_40px_-20px_var(--n9-accent-glow)]">
       <CardContent className="p-4 sm:p-5">
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <Badge className="gap-1 rounded-full border-primary/20 bg-primary/10 font-mono text-xs tabular-nums text-primary">
@@ -425,8 +426,9 @@ export function AiPaperCard({
           </button>
         </div>
 
-        {tab === 'ai' ? (
-          <div className="mb-3 space-y-3 duration-300 animate-in fade-in">
+        <MotionTabPanel motionKey={tab} className="mb-3">
+          {tab === 'ai' ? (
+          <div className="space-y-3">
             {exactPassage ? (
               <div>
                 <p className="mb-1 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -479,8 +481,8 @@ export function AiPaperCard({
               </p>
             )}
           </div>
-        ) : (
-          <div className="mb-3 duration-300 animate-in fade-in">
+          ) : (
+          <div>
             {abstractPlain ? (
               <>
                 {showAbstract ? (
@@ -520,7 +522,8 @@ export function AiPaperCard({
               </p>
             )}
           </div>
-        )}
+          )}
+        </MotionTabPanel>
 
         <div className="flex flex-wrap items-center gap-2 border-t border-border/50 pt-3">
           {href && (
@@ -575,3 +578,38 @@ export function AiPaperCard({
     </Card>
   )
 }
+
+type AiPaperCardProps = Parameters<typeof AiPaperCardImpl>[0]
+
+/**
+ * Value-based re-render guard. The result list re-renders on every summary
+ * streaming tick; without this, all cards re-render even though only the one
+ * whose own data changed needs to. We compare the display-affecting fields
+ * (result content + presentation flags) and ignore callback identity — the
+ * handlers are behaviourally stable (onSaved just writes a ref, onStage is a
+ * host callback), so their reference churn shouldn't force a repaint.
+ */
+function areEqual(prev: AiPaperCardProps, next: AiPaperCardProps): boolean {
+  const a = prev.result
+  const b = next.result
+  return (
+    prev.query === next.query &&
+    prev.projectId === next.projectId &&
+    prev.summaryLoading === next.summaryLoading &&
+    prev.relevanceSummary === next.relevanceSummary &&
+    prev.initialSaved === next.initialSaved &&
+    prev.isStaged === next.isStaged &&
+    prev.isStaging === next.isStaging &&
+    a.citeLabel === b.citeLabel &&
+    a.paper === b.paper &&
+    a.aiSummary === b.aiSummary &&
+    a.aiTitle === b.aiTitle &&
+    a.snippet === b.snippet &&
+    a.abstract === b.abstract &&
+    a.sourceUrl === b.sourceUrl &&
+    a.abstractPending === b.abstractPending &&
+    a.summaryPending === b.summaryPending
+  )
+}
+
+export const AiPaperCard = memo(AiPaperCardImpl, areEqual)

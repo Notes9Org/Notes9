@@ -1,9 +1,16 @@
 "use client"
 
-import { useMemo } from "react"
+import { useState, useMemo } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { DashboardCalendar } from "./dashboard-calendar"
-import { TodoPanel, type DashboardTask } from "./todo-panel"
+import { TodoPanel, SORT_OPTIONS, type DashboardTask, type TaskSortKey } from "./todo-panel"
 
 type CalendarRow = {
   id: string
@@ -27,6 +34,8 @@ export function DashboardScheduleTasks({
   initialEvents: CalendarRow[]
   initialTasks: DashboardTask[]
 }) {
+  const [tab, setTab] = useState("schedule")
+  const [taskSort, setTaskSort] = useState<TaskSortKey>("due_date")
   const openTaskCount = useMemo(
     () => initialTasks.filter((t) => !t.completed).length,
     [initialTasks],
@@ -34,8 +43,8 @@ export function DashboardScheduleTasks({
 
   return (
     <article data-tour="dash-schedule" className="flex h-full min-h-0 flex-col overflow-hidden rounded-[calc(var(--radius)+4px)] border border-border bg-card">
-      <Tabs defaultValue="schedule" className="flex h-full min-h-0 flex-col">
-        <header className="flex items-center justify-between gap-2 px-4 py-3 border-b border-border">
+      <Tabs value={tab} onValueChange={setTab} className="flex h-full min-h-0 flex-col">
+        <header className="flex items-center justify-between gap-2 px-4 py-3">
           <TabsList className="h-8 bg-muted/60">
             <TabsTrigger value="schedule" className="text-[13px] px-3">
               Schedule
@@ -49,6 +58,23 @@ export function DashboardScheduleTasks({
               ) : null}
             </TabsTrigger>
           </TabsList>
+          {tab === "tasks" ? (
+            <Select
+              value={taskSort}
+              onValueChange={(v) => setTaskSort(v as TaskSortKey)}
+            >
+              <SelectTrigger size="sm" className="w-[130px]">
+                <SelectValue placeholder="Sort by" />
+              </SelectTrigger>
+              <SelectContent>
+                {SORT_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : null}
         </header>
 
         <TabsContent
@@ -60,9 +86,14 @@ export function DashboardScheduleTasks({
 
         <TabsContent
           value="tasks"
-          className="mt-0 flex flex-col focus-visible:outline-none focus-visible:ring-0"
+          className="mt-0 flex min-h-0 flex-1 flex-col focus-visible:outline-none focus-visible:ring-0"
         >
-          <TodoPanel initialTasks={initialTasks} variant="embedded" />
+          <TodoPanel
+            initialTasks={initialTasks}
+            variant="embedded"
+            sort={taskSort}
+            onSortChange={setTaskSort}
+          />
         </TabsContent>
       </Tabs>
     </article>

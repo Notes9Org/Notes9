@@ -356,10 +356,12 @@ export function AppSidebar() {
 
   return (
     <Sidebar
+      // Standard docked variant. The "floated, not boxy" look comes from a soft
+      // right-edge shadow on the wrapper (app-layout) + no hard border-r seam —
+      // the shadcn `floating` variant's fixed-position internals conflict with
+      // this custom resizable container (leftover gap element + odd collapsed).
       variant="sidebar"
       collapsible="icon"
-      // Border is drawn by the resize divider + main inset; skip the primitive's
-      // `border-r` so we don't get a double seam / gap before the handle.
       className="border-r-0 transition-all duration-200 ease-in-out [&_[data-slot=sidebar-container]]:border-r-0"
     >
       {/* Header with Workspace Dropdown */}

@@ -1,30 +1,31 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { PaperSearchSortMode, SearchPaper } from '@/types/paper-search'
 import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
 import {
-  Search,
-  Loader2,
+  X,
+  Square,
+  Sparkles,
   Database,
   Unlock,
+  Mic,
   Telescope,
   ScrollText,
   MessageCircle,
   Highlighter,
-  Mic,
   NotebookPen,
   ArrowRight,
   type LucideIcon,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { AiSearchView } from './ai-search-view'
 import { AiSearchFilters } from './ai-search-filters'
+import { MotionList, MotionItem } from './motion'
 import { DEFAULT_AI_FILTERS, type AiResultFilters } from '@/lib/ai-search-filters'
 import { useAwsTranscribe } from '@/hooks/use-aws-transcribe'
 import { VoiceWaveform } from '@/components/text-editor/voice-waveform'
-import { toast } from 'sonner'
 
 /** What the AI literature search offers — shown on the empty (pre-search) state. */
 const SEARCH_FEATURES: { Icon: LucideIcon; title: string; desc: string }[] = [
@@ -60,11 +61,65 @@ const SEARCH_FEATURES: { Icon: LucideIcon; title: string; desc: string }[] = [
   },
 ]
 
+/** Rotating example questions typed into the empty bar — signals that this is
+ *  a natural-language AI search, not a keyword box. */
+const AI_PROMPTS = [
+  'Find ASO kidney and plasma PK data across species',
+  'Summarize the evidence on GalNAc-siRNA liver delivery',
+  'Compare knockdown efficiency of gapmer vs siRNA designs',
+  'Papers measuring tissue half-life of 2′-MOE oligonucleotides',
+]
+
+/** Types the prompts in and out, one character at a time, and cycles them.
+ *  Pauses while the field is focused or has a value; static under
+ *  prefers-reduced-motion. Returns the placeholder string to show. */
+function useTypewriterPlaceholder(active: boolean): string {
+  const [text, setText] = useState(AI_PROMPTS[0])
+
+  useEffect(() => {
+    if (!active) return
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    if (reduce) {
+      setText(AI_PROMPTS[0])
+      return
+    }
+
+    let prompt = 0
+    let chars = 0
+    let deleting = false
+    let timer: ReturnType<typeof setTimeout>
+
+    const tick = () => {
+      const full = AI_PROMPTS[prompt]
+      chars += deleting ? -1 : 1
+      setText(full.slice(0, chars))
+
+      if (!deleting && chars >= full.length) {
+        deleting = true
+        timer = setTimeout(tick, 2000) // hold the finished line
+      } else if (deleting && chars <= 0) {
+        deleting = false
+        prompt = (prompt + 1) % AI_PROMPTS.length
+        timer = setTimeout(tick, 320)
+      } else {
+        timer = setTimeout(tick, deleting ? 22 : 42)
+      }
+    }
+
+    timer = setTimeout(tick, 900)
+    return () => clearTimeout(timer)
+  }, [active])
+
+  return text
+}
+
 interface LiteratureSearchFormProps {
   query: string
   setQuery: (query: string) => void
   isSearching: boolean
   onSearch: () => void
+  /** When set, the busy button becomes a Stop button that aborts the search. */
+  onStop?: () => void
   /** When provided, a Filters control is shown inside the search bar. */
   filters?: AiResultFilters
   onFiltersChange?: (next: AiResultFilters) => void
@@ -75,28 +130,43 @@ export function LiteratureSearchForm({
   setQuery,
   isSearching,
   onSearch,
+  onStop,
   filters,
   onFiltersChange,
 }: LiteratureSearchFormProps) {
   const showFilters = !!(filters && onFiltersChange)
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!query.trim()) return
-    onSearch()
-  }
+  const [focused, setFocused] = useState(false)
 
-  // Voice dictation for the search query. A ref keeps the latest query so the
-  // async onFinal callback appends to current text rather than a stale closure.
-  const queryRef = useRef(query)
-  queryRef.current = query
+  // Animate example prompts only when the bar is idle (empty + unfocused).
+  const isEmptyIdle = !focused && !query && !isSearching
+  const typedPlaceholder = useTypewriterPlaceholder(isEmptyIdle)
+  const placeholder = isEmptyIdle
+    ? typedPlaceholder
+    : 'Ask a research question, or search papers…'
+
   const { start: startMic, stop: stopMic, isListening, getWaveformData } = useAwsTranscribe({
     onFinal: (text) => {
-      const cur = queryRef.current ?? ''
-      setQuery((cur ? `${cur} ${text}` : text).trimStart())
+      setQuery((query ? `${query} ${text}` : text).trimStart())
     },
     onInterim: () => {},
     onError: (err) => toast.error(err),
   })
+
+  const submit = () => {
+    if (!query.trim()) return
+    if (isSearching) onStop?.() // cancel the in-flight search before restarting
+    onSearch()
+  }
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault()
+    submit()
+  }
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+      e.preventDefault()
+      submit()
+    }
+  }
 
   return (
     <form onSubmit={handleSearch} className="mx-auto w-full max-w-3xl">
@@ -107,40 +177,41 @@ export function LiteratureSearchForm({
           'focus-within:border-primary/45 focus-within:bg-card focus-within:shadow-[0_12px_40px_-16px_var(--n9-accent-glow)]',
         )}
       >
-        <Telescope className="size-[18px] shrink-0 text-primary/70 transition-colors group-focus-within:text-primary" aria-hidden />
+        {/* Voice-to-text mic (same AWS Transcribe dictation as Catalyst chat).
+            The mic anchors the left of the bar and never shifts; the waveform
+            renders inline right after it while listening, so the stream stays
+            contained inside the bar (it does not float into the margin). */}
+        <button
+          type="button"
+          onClick={() => (isListening ? stopMic() : startMic())}
+          aria-label={isListening ? 'Stop dictation' : 'Dictate search query'}
+          title={isListening ? 'Stop dictation' : 'Dictate search query'}
+          className={cn(
+            'flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors',
+            'hover:text-foreground disabled:pointer-events-none disabled:opacity-50',
+            isListening && 'text-red-500 hover:text-red-600',
+          )}
+        >
+          <Mic className="size-4" />
+        </button>
+        {isListening && (
+          <VoiceWaveform getWaveformData={getWaveformData} className="shrink-0" />
+        )}
         <Input
-          type="search"
-          placeholder="Ask a research question, or search papers…"
+          /* type="text" (not "search") so the browser's native clear "×" never
+             appears — we render our own below. Placeholder cycles example
+             research questions to signal natural-language AI search. */
+          type="text"
+          placeholder={placeholder}
           className="h-12 flex-1 border-0 bg-transparent px-0 text-base shadow-none placeholder:text-muted-foreground/70 focus-visible:ring-0 focus-visible:ring-offset-0"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          disabled={isSearching}
+          onKeyDown={handleKeyDown}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           enterKeyHint="search"
           aria-label="Literature search query"
         />
-        {/* Voice dictation — speak your research question instead of typing. */}
-        <div className="relative flex shrink-0 items-center">
-          {isListening && (
-            <div className="pointer-events-none absolute right-full pr-1">
-              <VoiceWaveform getWaveformData={getWaveformData} />
-            </div>
-          )}
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className={cn(
-              'size-9 rounded-xl text-muted-foreground hover:text-foreground',
-              isListening && 'text-red-500 hover:text-red-600',
-            )}
-            disabled={isSearching}
-            onClick={() => (isListening ? stopMic() : startMic())}
-            aria-label={isListening ? 'Stop dictation' : 'Start dictation'}
-            title={isListening ? 'Stop dictation' : 'Dictate your search'}
-          >
-            <Mic className="h-4 w-4" />
-          </Button>
-        </div>
         {showFilters && (
           <div className="shrink-0">
             <AiSearchFilters
@@ -150,25 +221,46 @@ export function LiteratureSearchForm({
             />
           </div>
         )}
-        <button
-          type="submit"
-          disabled={isSearching || !query.trim()}
-          aria-label="Search"
-          title="Search"
-          className={cn(
-            'flex h-11 shrink-0 items-center gap-1.5 rounded-xl px-4 text-sm font-medium',
-            'bg-primary text-primary-foreground shadow-sm',
-            'transition-all duration-200 hover:bg-[var(--n9-accent-hover)] hover:shadow-[0_6px_18px_-8px_var(--n9-accent-glow)]',
-            'disabled:pointer-events-none disabled:opacity-50',
-          )}
-        >
-          {isSearching ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Search className="h-4 w-4" />
-          )}
-          <span className="hidden sm:inline">Search</span>
-        </button>
+        {/* Right control. Searching → Stop. Has text → Clear (×). Empty → a
+            faint AI sparkle mark, so the bar reads as AI search. Press Enter to
+            search; there is no dedicated Search button. */}
+        {isSearching && onStop ? (
+          <button
+            type="button"
+            onClick={onStop}
+            aria-label="Stop search"
+            title="Stop search"
+            className={cn(
+              'flex size-9 shrink-0 items-center justify-center rounded-full',
+              'bg-primary text-primary-foreground shadow-sm',
+              'transition-colors duration-200 hover:bg-[var(--n9-accent-hover)]',
+            )}
+          >
+            <Square className="size-3.5 fill-current" />
+          </button>
+        ) : query.trim() ? (
+          <button
+            type="button"
+            // Keep focus in the input while clearing.
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => setQuery('')}
+            aria-label="Clear search"
+            title="Clear"
+            className={cn(
+              'flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground',
+              'transition-colors duration-200 hover:bg-muted hover:text-foreground',
+            )}
+          >
+            <X className="size-4" />
+          </button>
+        ) : (
+          <div
+            aria-hidden
+            className="flex size-9 shrink-0 items-center justify-center text-primary/55"
+          >
+            <Sparkles className="n9-ai-twinkle size-[18px]" />
+          </div>
+        )}
       </div>
     </form>
   )
@@ -206,6 +298,8 @@ interface SearchTabProps {
   onResults?: (papers: SearchPaper[]) => void
   /** Report AI-search loading so the host's search-bar spinner stays in sync. */
   onLoadingChange?: (loading: boolean) => void
+  /** Hand the host a `stop()` so the search bar can offer a Stop button. */
+  registerStop?: (fn: () => void) => void
 }
 
 export function SearchTab({
@@ -230,6 +324,7 @@ export function SearchTab({
   aiQuery,
   onResults,
   onLoadingChange,
+  registerStop,
 }: SearchTabProps) {
   // The AI runs on the submitted query (falls back to the live query).
   const effectiveAiQuery = aiQuery ?? query
@@ -274,6 +369,7 @@ export function SearchTab({
           isPaperStaging={isPaperStaging}
           onResults={onResults}
           onLoadingChange={onLoadingChange}
+          registerStop={registerStop}
         />
       )}
 
@@ -291,42 +387,41 @@ export function SearchTab({
           </p>
 
           {/* Feature highlights */}
-          <div className="mb-9 grid w-full grid-cols-1 gap-3 text-left sm:grid-cols-2">
-            {SEARCH_FEATURES.map((f, i) => (
-              <div
-                key={f.title}
-                style={{ animationDelay: `${i * 60}ms` }}
-                className="group flex items-start gap-3 rounded-2xl border border-border/60 bg-card/50 p-3.5 shadow-sm backdrop-blur-sm transition-all duration-300 fill-mode-both hover:-translate-y-0.5 hover:border-primary/30 hover:bg-card hover:shadow-[0_10px_28px_-16px_var(--n9-accent-glow)] animate-in fade-in slide-in-from-bottom-2"
-              >
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
-                  <f.Icon className="size-[18px]" aria-hidden />
+          <MotionList className="mb-9 grid w-full grid-cols-1 gap-3 text-left sm:grid-cols-2">
+            {SEARCH_FEATURES.map((f) => (
+              <MotionItem key={f.title}>
+                <div className="group flex h-full items-start gap-3 rounded-2xl border border-border/60 bg-card/50 p-3.5 shadow-sm backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-card hover:shadow-[0_10px_28px_-16px_var(--n9-accent-glow)]">
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                    <f.Icon className="size-[18px]" aria-hidden />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground">{f.title}</p>
+                    <p className="text-xs leading-snug text-muted-foreground">{f.desc}</p>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-foreground">{f.title}</p>
-                  <p className="text-xs leading-snug text-muted-foreground">{f.desc}</p>
-                </div>
-              </div>
+              </MotionItem>
             ))}
-          </div>
+          </MotionList>
 
           {/* Example queries */}
           <div className="w-full">
             <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Try an example
             </p>
-            <div className="flex flex-wrap justify-center gap-2">
+            <MotionList className="flex flex-wrap justify-center gap-2">
               {exampleSearches.map((example) => (
-                <button
-                  key={example}
-                  type="button"
-                  onClick={() => setQuery(example)}
-                  className="group inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-card/60 px-3.5 py-1.5 text-sm text-foreground/80 shadow-sm backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:text-primary hover:shadow-[0_6px_16px_-8px_var(--n9-accent-glow)]"
-                >
-                  {example}
-                  <ArrowRight className="size-3.5 -translate-x-1 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100" aria-hidden />
-                </button>
+                <MotionItem key={example}>
+                  <button
+                    type="button"
+                    onClick={() => setQuery(example)}
+                    className="group inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-card/60 px-3.5 py-1.5 text-sm text-foreground/80 shadow-sm backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:text-primary hover:shadow-[0_6px_16px_-8px_var(--n9-accent-glow)]"
+                  >
+                    {example}
+                    <ArrowRight className="size-3.5 -translate-x-1 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100" aria-hidden />
+                  </button>
+                </MotionItem>
               ))}
-            </div>
+            </MotionList>
           </div>
         </div>
       )}

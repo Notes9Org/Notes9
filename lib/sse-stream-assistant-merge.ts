@@ -23,6 +23,33 @@ export function maskCiteTokensForStream(text: string): string {
   return text.replace(CITE_TOKEN_STREAM_RE, ' ');
 }
 
+/**
+ * Stateful masker that handles cite tokens split across SSE delta boundaries.
+ * Create one instance per stream run; call the returned function for each delta.
+ * A trailing fragment that looks like the opening of a cite token is held back
+ * until the next delta confirms or disproves it.
+ */
+// A complete cite token is "[" + 3 letters + "_" + up to 8 hex = 13 chars.
+// Any trailing "[..." fragment longer than this cannot become a cite token,
+// so we stop holding it back (guards against pinning huge non-cite brackets).
+const MAX_CITE_TOKEN_LEN = 13;
+
+export function createStreamCiteMasker(): (delta: string) => string {
+  let tail = '';
+  return (delta: string): string => {
+    const input = tail + delta;
+    // Look for a trailing fragment that COULD be the start of a cite token but
+    // is incomplete (no closing "]" yet). If found, hold it for the next call.
+    const partial = input.match(/\[[a-z]{0,3}(?:_[0-9a-f]{0,8})?$/i);
+    if (partial && partial[0].length <= MAX_CITE_TOKEN_LEN) {
+      tail = partial[0];
+      return input.slice(0, input.length - tail.length).replace(CITE_TOKEN_STREAM_RE, ' ');
+    }
+    tail = '';
+    return input.replace(CITE_TOKEN_STREAM_RE, ' ');
+  };
+}
+
 export function extractSseTokenPiece(payload: Record<string, unknown> | null): string {
   if (!payload) return '';
   // Support every shape any backend has ever emitted for a streamed text
