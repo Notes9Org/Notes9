@@ -107,7 +107,7 @@ function ToolCardItem({ card }: ToolCardItemProps) {
   return (
     <div
       className={cn(
-        'rounded-md border bg-card/40 overflow-hidden transition-colors',
+        'rounded-md border bg-card/40 overflow-hidden transition-colors min-h-[40px]',
         // Running: the shared brand "working" sweep (.ai-shimmer) replaces the
         // scattered per-card spinner-only signal so every busy block speaks one
         // motion vocabulary. Reduced-motion drops the sweep (handled in globals).

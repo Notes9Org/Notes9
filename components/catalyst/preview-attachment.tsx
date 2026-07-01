@@ -57,12 +57,20 @@ export function PreviewAttachment({
         <div
           className={cn(
             'flex items-center gap-2 rounded-lg border bg-muted/50 py-1.5',
-            showThumb ? 'pl-1.5 pr-2' : 'px-2',
+            (showThumb || (isImage && isUploading)) ? 'pl-1.5 pr-2' : 'px-2',
             isUploading && 'opacity-60'
           )}
         >
           {isUploading ? (
-            <Loader2 className="size-3 animate-spin text-muted-foreground" />
+            isImage ? (
+              /* Reserve the 28px thumbnail slot during upload so the chip width
+                 stays stable when the upload settles and the real thumbnail appears. */
+              <div className="size-7 shrink-0 rounded-md bg-muted/50 flex items-center justify-center">
+                <Loader2 className="size-3 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <Loader2 className="size-3 animate-spin text-muted-foreground" />
+            )
           ) : showThumb ? (
             <img
               src={attachment.url}
