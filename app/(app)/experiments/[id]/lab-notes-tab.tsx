@@ -517,8 +517,8 @@ export function LabNotesTab({
       // Auto-select preferred note (from query) or first available when not creating
       if (data && data.length > 0 && !isCreatingRef.current) {
         const next =
-          (preferredNoteId && data.find((n) => n.id === preferredNoteId)) ||
-          data.find((n) => n.id === selectedNoteIdRef.current) ||
+          (preferredNoteId && data.find((n: LabNote) => n.id === preferredNoteId)) ||
+          data.find((n: LabNote) => n.id === selectedNoteIdRef.current) ||
           data[0];
 
         // Skip the state writes when the resolved note is already the one
@@ -967,7 +967,7 @@ export function LabNotesTab({
       .from("lab_notes")
       .select("title")
       .eq("experiment_id", experimentId);
-    const existing = (data || []).map((r) => (r as { title: string }).title);
+    const existing = (data || []).map((r: { title: string }) => r.title);
     if (!existing.includes("New Lab Note")) return "New Lab Note";
     let n = 2;
     while (existing.includes(`New Lab Note (${n})`)) n++;

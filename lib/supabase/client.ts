@@ -48,7 +48,18 @@ function clearStaleAuthStorage() {
   }
 }
 
+// Single shared browser client. `createClient()` is called from 200+ component
+// sites, and each createBrowserClient instance installs its own
+// autoRefreshToken timer + GoTrue client. Without memoization, one stale token
+// or a transient network blip multiplies a single "Failed to fetch" into a
+// flood of identical console errors (and N× refresh traffic). We cache the
+// instance in the browser only — on the server (no window) we never cache, so
+// SSR of client components can't leak a client across requests/users.
+let browserClient: ReturnType<typeof createBrowserClient> | undefined
+
 export function createClient() {
+  if (browserClient && typeof window !== "undefined") return browserClient
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
@@ -60,7 +71,7 @@ export function createClient() {
     )
   }
 
-  return createBrowserClient(supabaseUrl, supabaseAnonKey, {
+  const client = createBrowserClient(supabaseUrl, supabaseAnonKey, {
     global: {
       // Wrap fetch so a dead refresh token self-heals: when the refresh endpoint
       // rejects the token, purge the stale sb-*-auth-token so the SDK stops
@@ -96,4 +107,7 @@ export function createClient() {
       },
     },
   })
+
+  if (typeof window !== "undefined") browserClient = client
+  return client
 }

@@ -9,6 +9,7 @@ import {
 } from "react"
 import type { Editor } from "@tiptap/react"
 import { createClient } from "@/lib/supabase/client"
+import type { PostgrestError } from "@supabase/supabase-js"
 import { useAuthUser } from "@/components/auth/auth-provider"
 import { useToast } from "@/hooks/use-toast"
 import { useContentDiffs } from "@/hooks/use-content-diffs"
@@ -292,7 +293,7 @@ export function ProtocolDesignMode({
           document_template_id: draftDocumentTemplateId,
         },
         user_id: user.id,
-      }).then(({ error }) => { if (error) console.warn("[audit_log]", error.message) })
+      }).then(({ error }: { error: PostgrestError | null }) => { if (error) console.warn("[audit_log]", error.message) })
 
       onSaved()
       setSavedContent(newContent)

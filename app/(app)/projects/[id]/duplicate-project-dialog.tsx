@@ -103,7 +103,7 @@ export function DuplicateProjectDialog({ project, asMenuItem = false, open: cont
           .eq("project_id", project.id)
 
         if (members && members.length > 0) {
-          const newMembers = members.map(member => ({
+          const newMembers = members.map((member: { user_id: string; role: string }) => ({
             project_id: newProject.id,
             user_id: member.user_id,
             role: member.role,

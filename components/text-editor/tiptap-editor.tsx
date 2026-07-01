@@ -3033,11 +3033,11 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
         }
         return { row, score }
       })
-      .filter((s) => s.score > 0)
-      .sort((a, b) => b.score - a.score)
+      .filter((s: { row: any; score: number }) => s.score > 0)
+      .sort((a: { row: any; score: number }, b: { row: any; score: number }) => b.score - a.score)
       .slice(0, 10)
 
-    return scored.map(({ row }) => {
+    return scored.map(({ row }: { row: any }) => {
       const bareDoi = row.doi ? String(row.doi).replace(/^https?:\/\/(dx\.)?doi\.org\//i, "").trim() : ""
       const sourceUrl =
         (row.url ? String(row.url) : "") ||

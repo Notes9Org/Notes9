@@ -111,7 +111,7 @@ export function DuplicateExperimentDialog({
           .eq("experiment_id", experiment.id)
 
         if (protocols && protocols.length > 0) {
-          const newProtocols = protocols.map(p => ({
+          const newProtocols = protocols.map((p: { protocol_id: string }) => ({
             experiment_id: newExperiment.id,
             protocol_id: p.protocol_id,
           }))

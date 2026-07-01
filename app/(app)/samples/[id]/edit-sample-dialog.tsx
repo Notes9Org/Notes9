@@ -96,14 +96,14 @@ async function fetchSampleLinkOptions(): Promise<SampleLinkOptions> {
       .limit(200),
   ])
   return {
-    projects: (projectsRes.data ?? []).map((p) => ({ id: p.id, label: p.name })),
+    projects: (projectsRes.data ?? []).map((p: { id: string; name: string }) => ({ id: p.id, label: p.name })),
     experiments: (experimentsRes.data ?? []).map((e: any) => ({
       id: e.id,
       label: e.name,
       detail: e.project?.name ?? null,
       project_id: e.project_id,
     })),
-    labNotes: (labNotesRes.data ?? []).map((n) => ({
+    labNotes: (labNotesRes.data ?? []).map((n: { id: string; title: string; experiment_id: string | null; project_id: string | null }) => ({
       id: n.id,
       label: n.title,
       detail: n.experiment_id ? "Experiment note" : n.project_id ? "Project note" : "Lab note",
