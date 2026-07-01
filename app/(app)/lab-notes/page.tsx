@@ -92,12 +92,12 @@ export default function LabNotesPage() {
       if (notesRes.error) throw notesRes.error
       if (projectsRes.data) {
         setProjectOptions(
-          projectsRes.data.map((p) => ({ value: p.id, label: p.name }))
+          projectsRes.data.map((p: { id: string; name: string }) => ({ value: p.id, label: p.name }))
         )
       }
       if (experimentsRes.data) {
         setExperimentOptions(
-          experimentsRes.data.map((e) => ({
+          experimentsRes.data.map((e: { id: string; name: string; project_id: string }) => ({
             value: e.id,
             label: e.name,
             project_id: e.project_id,

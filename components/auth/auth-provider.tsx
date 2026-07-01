@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from "react"
-import type { User } from "@supabase/supabase-js"
+import type { AuthChangeEvent, Session, User } from "@supabase/supabase-js"
 import { createClient } from "@/lib/supabase/client"
 
 // Browser-side mirror of the server-verified user.
@@ -46,7 +46,7 @@ export function AuthProvider({
 
   useEffect(() => {
     const supabase = createClient()
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
       const nextUser = session?.user ?? null
       const nextId = nextUser?.id ?? null
       if (nextId !== lastIdRef.current) {

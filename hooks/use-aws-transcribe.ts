@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import {
   decodeEventStreamMessage,
   encodeAudioEvent,
@@ -11,9 +12,15 @@ export interface UseAwsTranscribeOptions {
   onInterim?: (text: string) => void;
   onFinal?: (text: string) => void;
   onError?: (error: string) => void;
+  /**
+   * Auto-stop the mic after this many milliseconds with no speech (no transcript
+   * results). Defaults to 5000ms. Pass 0 to disable the idle auto-stop.
+   */
+  silenceTimeoutMs?: number;
 }
 
 const SEND_INTERVAL_MS = 100; // Send audio every ~100ms for low latency
+const DEFAULT_SILENCE_TIMEOUT_MS = 5000; // Auto-deactivate after 5s of silence
 
 function float32ToInt16(float32Array: Float32Array): ArrayBuffer {
   const int16Array = new Int16Array(float32Array.length);
@@ -25,7 +32,7 @@ function float32ToInt16(float32Array: Float32Array): ArrayBuffer {
 }
 
 export function useAwsTranscribe(options: UseAwsTranscribeOptions = {}) {
-  const { onInterim, onFinal, onError } = options;
+  const { onInterim, onFinal, onError, silenceTimeoutMs } = options;
   const [isListening, setIsListening] = useState(false);
 
   const supabase = useMemo(() => createClient(), []);
@@ -40,20 +47,25 @@ export function useAwsTranscribe(options: UseAwsTranscribeOptions = {}) {
   const chunksRef = useRef<Uint8Array[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   const stoppedRef = useRef(false);
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session } }: { data: { session: Session | null } }) => {
       supabaseTokenRef.current = session?.access_token ?? null;
     });
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
       supabaseTokenRef.current = session?.access_token ?? null;
     });
     return () => subscription.unsubscribe();
   }, [supabase]);
 
   const cleanupAudio = useCallback(() => {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
@@ -138,6 +150,20 @@ export function useAwsTranscribe(options: UseAwsTranscribeOptions = {}) {
     cleanupConnection();
     setIsListening(false);
   }, [cleanupAudio, cleanupConnection, sendAudioChunks]);
+
+  // Restart the idle countdown. Called when recording opens and on every speech
+  // result; if no result arrives for `silenceTimeoutMs` the mic auto-stops.
+  const bumpSilenceTimer = useCallback(() => {
+    const timeout = silenceTimeoutMs ?? DEFAULT_SILENCE_TIMEOUT_MS;
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+    if (timeout <= 0) return; // 0 disables the idle auto-stop
+    silenceTimerRef.current = setTimeout(() => {
+      stop();
+    }, timeout);
+  }, [silenceTimeoutMs, stop]);
 
   const start = useCallback(async () => {
     try {
@@ -250,6 +276,9 @@ export function useAwsTranscribe(options: UseAwsTranscribeOptions = {}) {
           );
 
           setIsListening(true);
+          // Arm the idle timeout so the mic also auto-stops if the user never
+          // speaks at all after opening it.
+          bumpSilenceTimer();
         } catch (err) {
           if (stoppedRef.current) return;
           const message =
@@ -288,6 +317,8 @@ export function useAwsTranscribe(options: UseAwsTranscribeOptions = {}) {
             for (const result of results) {
               const text = result.Alternatives?.[0]?.Transcript ?? "";
               if (!text) continue;
+              // Speech detected — restart the idle countdown.
+              bumpSilenceTimer();
               if (result.IsPartial) {
                 onInterim?.(text);
               } else {
@@ -328,6 +359,7 @@ export function useAwsTranscribe(options: UseAwsTranscribeOptions = {}) {
       stop();
     }
   }, [
+    bumpSilenceTimer,
     cleanupAudio,
     cleanupConnection,
     onInterim,

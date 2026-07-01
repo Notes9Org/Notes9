@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { SearchPaper } from '@/types/paper-search'
 import type { AiSearchMatchKind, AiSearchResult } from '@/types/ai-search'
+import type { CitationsManifest } from '@/hooks/use-agent-stream'
 
 /**
  * AI literature search — backed by the DEDICATED catalyst orchestrator via
@@ -18,7 +19,7 @@ import type { AiSearchMatchKind, AiSearchResult } from '@/types/ai-search'
  *   papers → paper_summary* → overall_summary → done   (or error)
  */
 
-type CachedAi = { summary: string; papers: SearchPaper[] }
+type CachedAi = { summary: string; papers: SearchPaper[]; manifest?: CitationsManifest | null }
 /** Completed answers cached per query so results survive unmounts (tab switches)
  *  and aren't re-fetched until a different query runs. Module-level on purpose. */
 const aiSearchCache = new Map<string, CachedAi>()
@@ -84,6 +85,10 @@ export function useAiLiteratureSearch({
 }: { papers?: SearchPaper[]; query?: string } = {}) {
   const [papers, setPapers] = useState<SearchPaper[]>([])
   const [summary, setSummary] = useState('')
+  // Server-authoritative citation manifest (parity with the main Catalyst agent).
+  // When present, ai-search-view uses it directly instead of fabricating one from
+  // paper positions — this is what makes inline [N] chips resolve reliably.
+  const [manifest, setManifest] = useState<CitationsManifest | null>(null)
   const [isStreaming, setIsStreaming] = useState(false)
   const [phase, setPhase] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -137,6 +142,7 @@ export function useAiLiteratureSearch({
       if (cached) {
         setPapers(cached.papers)
         setSummary(cached.summary)
+        setManifest(cached.manifest ?? null)
         setIsStreaming(false)
         return
       }
@@ -146,11 +152,13 @@ export function useAiLiteratureSearch({
 
       setPapers([])
       setSummary('')
+      setManifest(null)
       setPhase('searching')
       setIsStreaming(true)
 
       let receivedPapers: SearchPaper[] = []
       let overall = ''
+      let receivedManifest: CitationsManifest | null = null
 
       try {
         const res = await fetch('/api/literature/ai-search', {
@@ -208,6 +216,15 @@ export function useAiLiteratureSearch({
               )
               overall = String(firstNonEmpty ?? '')
               if (isActiveRequest()) setSummary(overall)
+            } else if (event === 'citations_manifest') {
+              // Server-authoritative manifest (same wire shape as the main agent:
+              // { manifest: { "1": {...} } }). Chips resolve against this instead
+              // of a client-fabricated one.
+              const m = (data as { manifest?: CitationsManifest['manifest'] }).manifest
+              if (m && typeof m === 'object') {
+                receivedManifest = { manifest: m }
+                if (isActiveRequest()) setManifest(receivedManifest)
+              }
             } else if (event === 'error') {
               if (isActiveRequest())
                 setError(
@@ -221,7 +238,7 @@ export function useAiLiteratureSearch({
         // Stop any lingering per-card shimmers and cache the completed answer.
         if (isActiveRequest()) setPapers((prev) => prev.map((p) => ({ ...p })))
         if (receivedPapers.length > 0) {
-          aiSearchCache.set(q, { summary: overall, papers: receivedPapers })
+          aiSearchCache.set(q, { summary: overall, papers: receivedPapers, manifest: receivedManifest })
         }
       } catch (e) {
         // Only the still-active request may touch shared state — a superseded
@@ -267,6 +284,8 @@ export function useAiLiteratureSearch({
     run,
     /** Overall AI synthesis (streamed) — rendered in the Catalyst sidebar. */
     summary: inSync ? summary : '',
+    /** Server-authoritative citation manifest (null until emitted / on stale). */
+    manifest: inSync ? manifest : null,
     /** Per-paper result cards. */
     results: inSync ? results : [],
     /** Underlying structured papers (lifted to the host for staging/count). */

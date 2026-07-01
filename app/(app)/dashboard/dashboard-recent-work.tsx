@@ -86,7 +86,7 @@ export function DashboardRecentWork({
 
       if (cancelled) return
 
-      const byId = new Map((data ?? []).map((p) => [p.id, p]))
+      const byId = new Map<string, { id: string; name: string }>((data ?? []).map((p: { id: string; name: string }) => [p.id, p]))
       const resolved = entries
         .map((entry) => {
           const row = byId.get(entry.id)

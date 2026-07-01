@@ -2,16 +2,18 @@
 
 import * as React from 'react';
 import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
+import { Streamdown, defaultRehypePlugins } from 'streamdown';
+import type { PluggableList } from 'unified';
+import { createMathPlugin } from '@streamdown/math';
+import { code as codePlugin } from '@streamdown/code';
 import { cn } from '@/lib/utils';
-import { markdownToHtml } from '@/lib/markdown-to-html';
-import { sanitizeHtml } from '@/lib/sanitize-html';
+import rehypeCitations from '@/lib/rehype-citations';
 import { parseCitationMeta, correctAcademicType } from '@/lib/citation-meta';
 import { resolveTitleFromId, isPlaceholderTitle } from '@/lib/citation-title';
-import { CITATION_GROUP_RE } from '@/lib/citation-renumber';
 import { useSourceNavigation } from '@/hooks/use-source-navigation';
 import { Calendar, User } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import type { CitationsManifest, CitationsManifestEntry } from '@/hooks/use-agent-stream';
+import type { CitationsManifest } from '@/hooks/use-agent-stream';
 import {
   buildHighlightUrl,
   dispatchDocumentHighlight,
@@ -26,6 +28,15 @@ import {
   type CitationSourceViewerSource,
 } from './citation-source-viewer';
 import '@/styles/html-content.css';
+
+// Stable across renders (no props/state dependency) — defined once at module
+// scope so Streamdown doesn't see a new `plugins` object identity every
+// render. `singleDollarTextMath: true` lets AI answers use `$E=mc^2$` inline
+// math, not just `$$...$$` block math (the common case in chat answers).
+const STREAMDOWN_PLUGINS = {
+  math: createMathPlugin({ singleDollarTextMath: true }),
+  code: codePlugin,
+};
 
 /** Citation chip metadata read off the clicked/hovered DOM element's data-*. */
 interface ChipData {
@@ -170,24 +181,6 @@ function provenanceLabel(chip: ChipData): string {
   return chip.sourceType.replace(/_/g, ' ');
 }
 
-const PROSE_CSS_VARS = {
-  '--tw-prose-body': 'var(--foreground)',
-  '--tw-prose-headings': 'var(--foreground)',
-  '--tw-prose-links': 'var(--primary)',
-  '--tw-prose-bold': 'var(--foreground)',
-  '--tw-prose-counters': 'var(--muted-foreground)',
-  '--tw-prose-bullets': 'var(--muted-foreground)',
-  '--tw-prose-hr': 'var(--border)',
-  '--tw-prose-quotes': 'var(--muted-foreground)',
-  '--tw-prose-quote-borders': 'var(--border)',
-  '--tw-prose-captions': 'var(--muted-foreground)',
-  '--tw-prose-code': 'var(--foreground)',
-  '--tw-prose-pre-code': 'var(--foreground)',
-  '--tw-prose-pre-bg': 'var(--muted)',
-  '--tw-prose-th-borders': 'var(--border)',
-  '--tw-prose-td-borders': 'var(--border)',
-} as React.CSSProperties;
-
 interface MarkdownRendererProps {
   content: string;
   className?: string;
@@ -209,209 +202,6 @@ interface MarkdownRendererProps {
    * the literature search to scroll the matching result card into view.
    */
   onCitationClick?: (label: string) => boolean | void;
-}
-
-// `[N]` matcher used by the citation chip post-processor. Limited to 1-3 digit
-// numerics so it does not eat bracketed text like [optional] or [Note]. Also
-// matches hierarchical sub-citations `[3.2]` (ADR-0006): distinct statements of
-// the same source. The chip displays the full label but resolves the manifest
-// by its BASE (`3.2` -> source `3`).
-const CITATION_BRACKET_RE = /\[(\d{1,3}(?:\.\d{1,3})?)\]/g;
-
-function escapeHtmlAttr(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
-
-/** Title key for detecting the SAME paper surfaced by different providers
- * (PubMed/PMC/publisher) — mirrors the citations panel's dedupe so inline chips
- * and the sources list agree. Returns null for non-paper/web entries or titles
- * too short/generic to be a reliable identity. */
-function manifestSourceKey(entry: CitationsManifestEntry): string | null {
-  const isWeb = !!entry.source_url && /^https?:\/\//i.test(entry.source_url);
-  const isPaper = normalizeAgentSourceType(entry.source_type) === 'literature_review';
-  if (!isPaper && !isWeb) return null;
-  const norm = (entry.source_name || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-  if (norm.length < 12 || norm.split(' ').length < 3) return null;
-  return norm;
-}
-
-/** Map of duplicate citation labels → the canonical (lowest-numbered) label for
- * the SAME underlying paper, so a PubMed [5] that is the same article as PMC [2]
- * renders as [2] everywhere. Sub-citation labels ("3.2") are excluded so
- * multi-span groups are preserved. Purely presentational. */
-function buildCanonicalLabelMap(manifest: CitationsManifest): Record<string, string> {
-  const groups = new Map<string, string[]>();
-  for (const [label, entry] of Object.entries(manifest.manifest)) {
-    if (label.includes('.')) continue;
-    const key = manifestSourceKey(entry);
-    if (!key) continue;
-    const arr = groups.get(key);
-    if (arr) arr.push(label);
-    else groups.set(key, [label]);
-  }
-  const map: Record<string, string> = {};
-  for (const labels of groups.values()) {
-    if (labels.length < 2) continue;
-    const canonical = labels.slice().sort((a, b) => parseFloat(a) - parseFloat(b))[0];
-    for (const l of labels) if (l !== canonical) map[l] = canonical;
-  }
-  return map;
-}
-
-/**
- * Post-process rendered HTML:
- * - Add target="_blank" rel="noopener noreferrer" to all <a> tags
- * - Wrap <table> elements in a scrollable container
- * - Wrap `[N]` markers as `<sup class="notes9-cite" data-cite-...>` chips so
- *   the AgentCitationsPanel can scroll-into-view / highlight on click and
- *   show source metadata on hover.
- */
-function postProcessHtml(html: string, manifest?: CitationsManifest | null): string {
-  // Alias label → canonical label for cross-provider duplicate papers, so the
-  // same paper always renders with the same number.
-  const canonicalMap = manifest?.manifest ? buildCanonicalLabelMap(manifest) : {};
-  // Links: open in new tab
-  let processed = html.replace(
-    /<a\s/g,
-    '<a target="_blank" rel="noopener noreferrer" '
-  );
-  // Tables are already wrapped in a scrollable container by
-  // ``markdownToHtml`` (``wrapTablesForScroll`` in lib/markdown-to-html.ts).
-  // Don't double-wrap here — the previous duplicate replacement injected a
-  // second <div> around each table, breaking direct-child CSS selectors
-  // and adding spurious DOM nodes.
-  // Citations: wrap [N] in a styleable chip. Only match brackets that sit
-  // in TEXT nodes — never inside an HTML attribute value or a tag itself.
-  // The earlier naive global replace could rewrite a `title="See [1]"` into
-  // `title="See <sup ...>[1]</sup>"`, breaking the attribute. Splitting on
-  // tag boundaries and only transforming text segments is the safe move.
-  const segments = processed.split(/(<[^>]+>)/g);
-  for (let i = 0; i < segments.length; i++) {
-    // Even indices are text between tags; odd indices are the tags themselves.
-    if (i % 2 !== 0) continue;
-    segments[i] = segments[i].replace(CITATION_GROUP_RE, (_full, inner: string) =>
-      // A marker may be a single label `[5]` or a group `[4, 5, 6]`; render one
-      // chip per label so grouped citations are clickable, not plain text.
-      inner
-        .split(',')
-        .map((tok) => tok.trim())
-        .filter(Boolean)
-        .map((nStr: string) => {
-      // Remap cross-provider duplicates to their canonical label so the SAME
-      // paper always renders as the same number (a PubMed [5] that is the same
-      // article as PMC [2] shows as [2]). Sub-citations ("3.2") are untouched.
-      const n = canonicalMap[nStr] ?? nStr;
-      // The manifest is keyed by the full display label ("3" or "3.2", ADR-0006),
-      // so a sub-citation resolves directly. Fall back to the base ("3.2"→"3")
-      // for safety if only the document-level key is present.
-      const entry =
-        manifest && manifest.manifest
-          ? manifest.manifest[n] ?? manifest.manifest[n.split('.')[0]]
-          : undefined;
-      const name = entry?.source_name || '';
-      const token = entry?.token || '';
-      const sType = entry?.source_type || '';
-      const url = entry?.source_url || '';
-      const sourceId = entry?.source_id || '';
-      const matchKind = entry?.match_kind || '';
-      const excerpt = entry?.excerpt || '';
-      // Exact per-claim span (span-level grounding). Falls back to excerpt so
-      // older manifests without cited_text still show a meaningful preview.
-      const citedText = entry?.cited_text || excerpt || '';
-      const supportStatus =
-        entry?.support_status === 'supported' ||
-        entry?.support_status === 'partial' ||
-        entry?.support_status === 'unsupported'
-          ? entry.support_status
-          : entry?.grounding === 'none'
-            ? 'unsupported'
-            : null;
-      // Span provenance: how the supporting span was located (native exact vs
-      // heuristic approximate vs none). Drives the provenance badge (G5).
-      const grounding =
-        entry?.grounding === 'native' ||
-        entry?.grounding === 'heuristic' ||
-        entry?.grounding === 'none'
-          ? entry.grounding
-          : '';
-      // Advisory char offsets for the cited span (G3 highlight precision).
-      const charStart =
-        typeof entry?.char_start === 'number' && Number.isFinite(entry.char_start)
-          ? String(entry.char_start)
-          : '';
-      const charEnd =
-        typeof entry?.char_end === 'number' && Number.isFinite(entry.char_end)
-          ? String(entry.char_end)
-          : '';
-      const relevance =
-        typeof entry?.relevance === 'number' && Number.isFinite(entry.relevance)
-          ? String(entry.relevance)
-          : '';
-      // Provenance drives the subtle chip color-coding (web vs direct record
-      // vs semantic match). Web wins when a URL is present.
-      const provenance = url
-        ? 'web'
-        : matchKind === 'exact'
-          ? 'exact'
-          : matchKind
-            ? 'semantic'
-            : '';
-      // Show the URL in the tooltip when present so the user can preview
-      // where the chip points without opening it. Falls back to the source
-      // name / type if there's no URL (workspace records).
-      const tip = url || name || sType || '';
-      // Screen-reader label so the chip announces its citation context.
-      const ariaLabel = `Citation ${n}${name ? `: ${name}` : ''}`;
-      // Shared data-* payload — read by the renderer's click + hover delegation.
-      const dataAttrs =
-        `data-cite-n="${escapeHtmlAttr(n)}" `
-        + `data-cite-label="${escapeHtmlAttr(n)}" `
-        + (token ? `data-cite-token="${escapeHtmlAttr(token)}" ` : '')
-        + (sType ? `data-cite-type="${escapeHtmlAttr(sType)}" ` : '')
-        + (name ? `data-cite-name="${escapeHtmlAttr(name)}" ` : '')
-        + (sourceId ? `data-cite-id="${escapeHtmlAttr(sourceId)}" ` : '')
-        + (matchKind ? `data-cite-match="${escapeHtmlAttr(matchKind)}" ` : '')
-        + (relevance ? `data-cite-relevance="${escapeHtmlAttr(relevance)}" ` : '')
-        + (excerpt ? `data-cite-excerpt="${escapeHtmlAttr(excerpt.slice(0, 500))}" ` : '')
-        + (citedText ? `data-cite-snippet="${escapeHtmlAttr(citedText.slice(0, 500))}" ` : '')
-        + (supportStatus != null ? `data-cite-support="${escapeHtmlAttr(supportStatus)}" ` : '')
-        + (grounding ? `data-cite-grounding="${escapeHtmlAttr(grounding)}" ` : '')
-        + (charStart ? `data-cite-char-start="${escapeHtmlAttr(charStart)}" ` : '')
-        + (charEnd ? `data-cite-char-end="${escapeHtmlAttr(charEnd)}" ` : '')
-        + (provenance ? `data-cite-provenance="${escapeHtmlAttr(provenance)}" ` : '');
-      // External URL → render as a real anchor so clicking the chip opens
-      // the source in a new tab. No URL → styleable <sup> chip; its click +
-      // hover behavior is wired by the renderer container via delegation.
-      if (url && /^https?:\/\//i.test(url)) {
-        return (
-          `<a class="notes9-cite notes9-cite--link" `
-          + `href="${escapeHtmlAttr(url)}" `
-          + `target="_blank" rel="noopener noreferrer" `
-          + dataAttrs
-          + `data-cite-url="${escapeHtmlAttr(url)}" `
-          + `aria-label="${escapeHtmlAttr(ariaLabel)}" `
-          + `title="${escapeHtmlAttr(tip)}"`
-          + `>${n}</a>`
-        );
-      }
-      return (
-        `<sup class="notes9-cite" `
-        + `role="button" tabindex="0" `
-        + `aria-label="${escapeHtmlAttr(ariaLabel)}" `
-        + dataAttrs
-        + (tip ? `title="${escapeHtmlAttr(tip)}"` : '')
-        + `>${n}</sup>`
-      );
-        })
-        .join(''),
-    );
-  }
-  processed = segments.join('');
-  return processed;
 }
 
 /** Hover preview card anchored to a citation chip. */
@@ -592,50 +382,6 @@ function chipToViewerSource(chip: ChipData): CitationSourceViewerSource {
     supportStatus: chip.supportStatus,
   };
 }
-/**
- * Auto-close the dangling markdown constructs that streaming inevitably leaves
- * open mid-flight, so a partial answer renders correctly token-by-token instead
- * of turning everything after an unclosed `**` bold (and eating spaces). Only
- * used while `showCursor` is true; the final answer is already well-formed.
- */
-function completePartialMarkdown(src: string): string {
-  let s = src;
-  // Block code fences (```): if one is open, close it and stop — markers inside
-  // a fence are literal, so balancing inline tokens below would be wrong.
-  const fences = (s.match(/^```/gm) ?? []).length;
-  if (fences % 2 === 1) return `${s}\n\`\`\``;
-  // Inline code (`): close a dangling span.
-  const ticks = (s.match(/`/g) ?? []).length;
-  if (ticks % 2 === 1) s += '`';
-  // Bold (**): the usual culprit behind a runaway-bold streaming answer.
-  const bold = (s.match(/\*\*/g) ?? []).length;
-  if (bold % 2 === 1) s += '**';
-  // Italic (single * / _) — close a dangling pair so it doesn't italicise the
-  // rest. Count only standalone markers (not the `**` handled above / list `* `).
-  const stars = (s.replace(/\*\*/g, '').match(/(?<=\S)\*(?=\S)|(?<=\s)\*(?=\S)/g) ?? []).length;
-  if (stars % 2 === 1) s += '*';
-  return s;
-}
-
-/**
- * Models often write section headings as a whole-line **bold** instead of a real
- * `##` heading, so the answer reads as one wall of bold text. Promote a line
- * that is ENTIRELY a single bold span (optionally ending in a colon) into an h3,
- * giving the answer a real heading / body-text hierarchy. Conservative: skips
- * long lines and sentence-like text so genuine emphasis is left alone.
- */
-function promoteBoldHeadings(src: string): string {
-  return src.replace(
-    /^[ \t]*\*\*([^\n*][^\n]*?)\*\*[ \t]*(:?)[ \t]*$/gm,
-    (full, inner: string) => {
-      const text = inner.trim();
-      if (!text || text.length > 80) return full;
-      if (/[.!?]$/.test(text)) return full; // a sentence, not a heading
-      return `### ${text}`;
-    },
-  );
-}
-
 function MarkdownRendererImpl({
   content,
   className,
@@ -667,26 +413,31 @@ function MarkdownRendererImpl({
     citationsManifest?.manifest && Object.keys(citationsManifest.manifest).length > 0
   );
 
-  const html = useMemo(() => {
-    // While streaming, the markdown is partial — an opened `**` / `` ` `` / code
-    // fence whose closer hasn't streamed yet makes `marked` render ALL following
-    // text bold/mono and collapses spacing. Auto-close dangling constructs so the
-    // live answer paints cleanly token-by-token (the "everything went bold" fix).
-    const balanced = showCursor ? completePartialMarkdown(content) : content;
-    const source = promoteBoldHeadings(balanced);
-    // Chat opts into `breaks` so every line break in the model's answer renders
-    // as its own line (paired with a small `<br>` gap below for breathing room).
-    const raw = markdownToHtml(source, { breaks: true });
-    if (!raw) return '';
-    // `marked` v15+ ships without a built-in sanitizer, so raw HTML inside the
-    // model's markdown response (e.g. <script>, <iframe>, onerror handlers
-    // smuggled in via a malicious literature abstract or RAG chunk) would
-    // execute verbatim under the user's session. Run DOMPurify before the
-    // dangerouslySetInnerHTML sink. sanitizeHtml is a no-op on SSR; the
-    // client useMemo re-runs on hydration so the live render is always safe.
-    const processed = postProcessHtml(raw, citationsManifest);
-    return sanitizeHtml(processed);
-  }, [content, citationsManifest, showCursor]);
+  // Streamdown's own `parseIncompleteMarkdown` handles the "everything went
+  // bold" streaming problem (auto-closing dangling `**`/`` ` ``/fences) that
+  // `completePartialMarkdown` used to paper over by hand — see the
+  // `parseIncompleteMarkdown={showCursor}` prop below.
+  //
+  // Security: providing a custom `rehypePlugins` array REPLACES Streamdown's
+  // default pipeline rather than extending it, so `raw`/`sanitize`/`harden`
+  // must be re-included explicitly (in this order) or model-supplied HTML
+  // would render unsanitized. `rehypeCitations` runs LAST, after `harden` —
+  // it creates the `.notes9-cite` chip nodes on the ALREADY-sanitized tree,
+  // so sanitize/harden never see (and thus never strip) their `data-cite-*`
+  // attributes. `harden` is also what adds target="_blank" +
+  // rel="noopener noreferrer" to markdown-authored links (matching the old
+  // `postProcessHtml`'s `<a target="_blank">` rewrite); the citation plugin
+  // sets those explicitly on its own `<a class="notes9-cite--link">` nodes
+  // since they're created after harden runs.
+  const rehypePlugins = useMemo<PluggableList>(
+    () => [
+      defaultRehypePlugins.raw,
+      defaultRehypePlugins.sanitize,
+      defaultRehypePlugins.harden,
+      [rehypeCitations, { manifest: citationsManifest }],
+    ],
+    [citationsManifest],
+  );
 
   /** Open the source a chip points at: web → new tab; workspace → highlight
    * deep-link via dispatchDocumentHighlight (no fragile title lookup — the
@@ -790,51 +541,41 @@ function MarkdownRendererImpl({
   // Clear the preview when the content changes (e.g. live streaming updates).
   useEffect(() => {
     setHover(null);
-  }, [html]);
+  }, [content]);
 
   // Leak-free: drop any pending dismiss timer on unmount.
   useEffect(() => () => cancelHoverClose(), [cancelHoverClose]);
 
-  if (!html) return null;
+  if (!content) return null;
 
   return (
     <div className={cn('relative min-w-0', hasManifest && 'min-w-0')}>
       <div
         ref={containerRef}
         className={cn(
-          'prose dark:prose-invert max-w-none html-content text-[17px] leading-[1.7] text-foreground overflow-x-hidden break-words',
-          '[&_p]:mb-6 first:[&_p]:mt-0 last:[&_p]:mb-0',
-          '[&_h1]:!text-3xl [&_h1]:!font-semibold [&_h1]:!leading-snug [&_h1]:!mt-10 [&_h1]:!mb-6 first:[&_h1]:!mt-0',
-          '[&_h2]:!text-2xl [&_h2]:!font-semibold [&_h2]:!leading-snug [&_h2]:!mt-10 [&_h2]:!mb-6 first:[&_h2]:!mt-0',
-          '[&_h3]:!text-xl [&_h3]:!font-semibold [&_h3]:!leading-snug [&_h3]:!mt-8 [&_h3]:!mb-4',
-          '[&_h4]:!text-lg [&_h4]:!font-medium [&_h4]:!text-muted-foreground [&_h4]:mt-8 [&_h4]:mb-4',
-          '[&_pre]:overflow-x-auto [&_pre]:max-w-full',
-          '[&_code]:break-words',
-          '[&_a]:break-words [&_a]:overflow-wrap-anywhere',
-          '[&_table]:table-fixed [&_table]:w-full',
-          '[&_img]:max-w-full [&_img]:h-auto [&_img]:rounded-lg',
-          '[&_p]:break-words [&_p]:overflow-wrap-anywhere',
-          // Each line break gets a small gap below it so multi-line answers
-          // breathe instead of stacking flush.
-          '[&_br]:block [&_br]:content-[""] [&_br]:mb-[0.5em]',
-          // Lists, quotes, rules and tables — consistent, readable rhythm.
-          '[&_ul]:my-4 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-4 [&_ol]:list-decimal [&_ol]:pl-6',
-          '[&_li]:my-1.5 [&_li]:leading-[1.65] [&_li]:marker:text-muted-foreground/70',
-          '[&_li>ul]:my-1.5 [&_li>ol]:my-1.5',
-          '[&_blockquote]:my-5 [&_blockquote]:border-l-2 [&_blockquote]:border-primary/30 [&_blockquote]:pl-4 [&_blockquote]:text-muted-foreground',
-          '[&_hr]:my-8 [&_hr]:border-border/60',
-          '[&_thead_th]:px-3 [&_thead_th]:py-2 [&_thead_th]:text-left [&_tbody_td]:px-3 [&_tbody_td]:py-2',
+          // Pure Streamdown defaults for typography, spacing and tables — no
+          // custom [&_...] overrides and no `.html-content` !important rules.
+          // Keep only theme text color, wrapping safety in the narrow sidebar,
+          // the streaming cursor, and the caller's passthrough className.
+          'text-foreground min-w-0 overflow-x-hidden break-words',
           showCursor && 'notes9-md--streaming',
           className
         )}
-        style={PROSE_CSS_VARS}
         onClick={hasManifest ? onClick : undefined}
         onMouseOver={hasManifest ? onMouseOver : undefined}
         onMouseLeave={hasManifest ? scheduleHoverClose : undefined}
         onScroll={hasManifest ? onScroll : undefined}
         onKeyDown={hasManifest ? onKeyDown : undefined}
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
+      >
+        <Streamdown
+          parseIncompleteMarkdown={showCursor}
+          mode={showCursor ? 'streaming' : 'static'}
+          rehypePlugins={rehypePlugins}
+          plugins={STREAMDOWN_PLUGINS}
+        >
+          {content}
+        </Streamdown>
+      </div>
       {hover && containerRef.current && (
         <CitationHoverCard
           chip={hover.chip}

@@ -20,6 +20,7 @@ import { ChatMessage } from './chat-message';
 import { Notes9ThinkingIndicator } from './notes9-thinking-indicator';
 import { PreviewAttachment, type Attachment } from './preview-attachment';
 import { createClient } from '@/lib/supabase/client';
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { useAuthUser } from "@/components/auth/auth-provider"
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -167,11 +168,11 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
   const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session } }: { data: { session: Session | null } }) => {
       supabaseTokenRef.current = session?.access_token ?? null;
       prevUserIdRef.current = session?.user?.id ?? null;
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
       const nextToken = session?.access_token ?? null;
       const nextUserId = session?.user?.id ?? null;
       const userChanged = prevUserIdRef.current !== null && nextUserId !== prevUserIdRef.current;

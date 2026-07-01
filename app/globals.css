@@ -2,6 +2,13 @@
 @import "tw-animate-css";
 @import "../styles/tiptap.css";
 
+/* Streamdown ships its own Tailwind utility classes pre-baked into its
+   compiled JSX (dist/*.js) - Tailwind v4 has no config file to add a
+   `content` glob to, so `@source` is how we tell the scanner to also
+   generate classes referenced there. Without this, Streamdown's table /
+   code-block / callout styling silently has no CSS behind it. */
+@source "../node_modules/streamdown/dist/*.js";
+
 @custom-variant dark (&:is(.dark *));
 
 :root {
@@ -1636,5 +1643,135 @@ body > [data-radix-popper-content-wrapper] {
   .n9-ai-twinkle {
     animation: none;
     opacity: 0.6;
+  }
+}
+
+/* Indeterminate "search in progress" bar — a segment that fills and sweeps
+   left→right across the bottom of the search field while an AI search streams. */
+@keyframes n9-search-progress {
+  0% {
+    transform: translateX(-110%) scaleX(0.6);
+  }
+  50% {
+    transform: translateX(120%) scaleX(1);
+  }
+  100% {
+    transform: translateX(360%) scaleX(0.6);
+  }
+}
+
+.n9-search-progress {
+  animation: n9-search-progress 1.15s ease-in-out infinite;
+  transform-origin: left center;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .n9-search-progress {
+    animation: none;
+    transform: translateX(0) scaleX(1);
+    opacity: 0.7;
+  }
+}
+
+/* ============================================================================
+   Streamdown "expand" (fullscreen) → clean centered modal, blurred backdrop
+   ----------------------------------------------------------------------------
+   Streamdown renders the table + mermaid "expand" affordance as a portaled
+   `position: fixed; inset: 0` overlay on <body>. Out of the box the TABLE
+   overlay is fully OPAQUE (`bg-background`, no blur) and fills the entire
+   viewport, so expanding a table reads like the app navigated to a blank page.
+   The mermaid overlay is blurred but still edge-to-edge.
+
+   These rules restyle both overlays — keyed on Streamdown's PUBLIC
+   `data-streamdown` hook for the table, and on the mermaid overlay's shape via
+   `:has()` — into a centered card floating over a dimmed, blurred backdrop:
+   a real in-place popup, same screen, no navigation. This is purely
+   presentational: Streamdown still wires backdrop-click + Esc to close and the
+   copy/download/exit buttons + citation pipeline are untouched.
+
+   Selector safety:
+     • The table rule matches the exact `table-fullscreen` attribute.
+     • The mermaid rule requires a fixed, inset-0 overlay that CONTAINS a
+       `[data-streamdown="mermaid"]` diagram but is NOT itself a
+       `[data-streamdown]` node — which excludes both the inline mermaid block
+       (not fixed/inset-0) and the table-fullscreen + link-safety-modal
+       overlays (they carry their own `data-streamdown`).
+   ============================================================================ */
+
+/* Backdrop: dim + blur what's behind instead of hiding it, and inset the card. */
+[data-streamdown="table-fullscreen"],
+.fixed.inset-0:has([data-streamdown="mermaid"]):not([data-streamdown]) {
+  background: color-mix(in oklab, var(--background) 62%, transparent) !important;
+  -webkit-backdrop-filter: blur(10px) saturate(1.05);
+  backdrop-filter: blur(10px) saturate(1.05);
+  padding: clamp(1rem, 5vh, 4rem) clamp(1rem, 5vw, 6rem) !important;
+  align-items: center !important;
+  justify-content: center !important;
+  animation: n9-sd-overlay-in 0.16s ease-out;
+}
+
+/* The overlay's single content wrapper becomes the floating modal card.
+   table-fullscreen: `> div` is the toolbar+scroll-body column.
+   mermaid overlay:  `> div` is the chart wrapper (the exit control is a
+   <button>, so `> div` never selects it). */
+[data-streamdown="table-fullscreen"] > div,
+.fixed.inset-0:has([data-streamdown="mermaid"]):not([data-streamdown]) > div {
+  width: 100%;
+  max-width: min(1120px, 100%);
+  height: auto !important;
+  max-height: 88vh;
+  background: var(--card);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  box-shadow:
+    0 32px 64px -16px rgb(0 0 0 / 0.45),
+    0 0 0 1px rgb(0 0 0 / 0.03);
+  overflow: hidden;
+  animation: n9-sd-card-in 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Mermaid card: give the diagram breathing room and scroll if it's huge. */
+.fixed.inset-0:has([data-streamdown="mermaid"]):not([data-streamdown]) > div {
+  min-height: min(56vh, 400px);
+  padding: 1.5rem !important;
+  overflow: auto;
+}
+
+/* Anchor Streamdown's absolute exit button to the card corner, not the raw
+   viewport corner (it's positioned against the fixed overlay). */
+.fixed.inset-0:has([data-streamdown="mermaid"]):not([data-streamdown]) > button {
+  top: clamp(1.25rem, 5.5vh, 4.25rem) !important;
+  right: clamp(1.25rem, 5.5vw, 6.25rem) !important;
+  z-index: 60;
+}
+
+@keyframes n9-sd-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes n9-sd-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-streamdown="table-fullscreen"],
+  .fixed.inset-0:has([data-streamdown="mermaid"]):not([data-streamdown]),
+  [data-streamdown="table-fullscreen"] > div,
+  .fixed.inset-0:has([data-streamdown="mermaid"]):not([data-streamdown]) > div {
+    animation: none !important;
   }
 }

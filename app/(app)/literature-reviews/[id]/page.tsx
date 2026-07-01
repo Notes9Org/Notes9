@@ -19,21 +19,28 @@ export default async function LiteratureReviewDetailPage({
   const resolvedSearch = searchParams ? await searchParams : {}
   const user = await requireUser()
   const supabase = await createClient()
-  // Fetch literature review details
-  const { data: literature, error } = await supabase
-    .from("literature_reviews")
-    .select(`
-      *,
-      created_by_profile:profiles!literature_reviews_created_by_fkey(
-        first_name,
-        last_name,
-        email
-      ),
-      project:projects(id, name),
-      experiment:experiments(id, name)
-    `)
-    .eq("id", id)
-    .single()
+  // Fetch the literature row and the caller's profile in parallel — they're
+  // independent, so the page waits on the slower of the two, not their sum.
+  const [
+    { data: literature, error },
+    { data: profile },
+  ] = await Promise.all([
+    supabase
+      .from("literature_reviews")
+      .select(`
+        *,
+        created_by_profile:profiles!literature_reviews_created_by_fkey(
+          first_name,
+          last_name,
+          email
+        ),
+        project:projects(id, name),
+        experiment:experiments(id, name)
+      `)
+      .eq("id", id)
+      .single(),
+    supabase.from("profiles").select("organization_id").eq("id", user.id).single(),
+  ])
 
   if (error || !literature) {
     notFound()
@@ -51,11 +58,6 @@ export default async function LiteratureReviewDetailPage({
         ? "pdf"
         : "overview"
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("organization_id")
-    .eq("id", user.id)
-    .single()
   const { data: orgProjects = [] } = profile?.organization_id
     ? await supabase.from("projects").select("id").eq("organization_id", profile.organization_id)
     : { data: [] as { id: string }[] }

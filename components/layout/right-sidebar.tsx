@@ -97,6 +97,7 @@ import { MessageActions } from '@/components/catalyst/message-actions';
 import { IceMascot } from '@/components/ui/ice-mascot';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase/client';
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { useAuthUser } from "@/components/auth/auth-provider"
 import { useResizable } from '@/hooks/use-resizable';
 import { ResizeHandle } from '@/components/ui/resize-handle';
@@ -1129,11 +1130,11 @@ export function RightSidebar({
             supabase.from('protocols').select('id,name').order('created_at', { ascending: false }).limit(120),
           ]);
           const merged: MentionItem[] = [
-            ...(lit ?? []).map((r) => ({ kind: 'literature_review' as const, id: r.id, title: r.title ?? 'Untitled literature' })),
-            ...(notes ?? []).map((r) => ({ kind: 'lab_note' as const, id: r.id, title: r.title ?? 'Untitled note' })),
-            ...(experiments ?? []).map((r) => ({ kind: 'experiment' as const, id: r.id, title: r.name ?? 'Untitled experiment' })),
-            ...(projects ?? []).map((r) => ({ kind: 'project' as const, id: r.id, title: r.name ?? 'Untitled project' })),
-            ...(protocols ?? []).map((r) => ({ kind: 'protocol' as const, id: r.id, title: r.name ?? 'Untitled protocol' })),
+            ...(lit ?? []).map((r: { id: string; title: string | null }) => ({ kind: 'literature_review' as const, id: r.id, title: r.title ?? 'Untitled literature' })),
+            ...(notes ?? []).map((r: { id: string; title: string | null }) => ({ kind: 'lab_note' as const, id: r.id, title: r.title ?? 'Untitled note' })),
+            ...(experiments ?? []).map((r: { id: string; name: string | null }) => ({ kind: 'experiment' as const, id: r.id, title: r.name ?? 'Untitled experiment' })),
+            ...(projects ?? []).map((r: { id: string; name: string | null }) => ({ kind: 'project' as const, id: r.id, title: r.name ?? 'Untitled project' })),
+            ...(protocols ?? []).map((r: { id: string; name: string | null }) => ({ kind: 'protocol' as const, id: r.id, title: r.name ?? 'Untitled protocol' })),
           ];
           mentionItemsCache = { fetchedAt: Date.now(), items: merged };
           return merged;
@@ -1161,10 +1162,10 @@ export function RightSidebar({
   }, [supabase]);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session } }: { data: { session: Session | null } }) => {
       supabaseTokenRef.current = session?.access_token ?? null;
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
       supabaseTokenRef.current = session?.access_token ?? null;
     });
     return () => subscription.unsubscribe();
@@ -1628,7 +1629,7 @@ export function RightSidebar({
       }
       if (cancelled || error || !data) return;
       setFallbackMentionCandidates(
-        data.map((row) => ({
+        data.map((row: { id: string; title: string | null; authors: string | null; catalog_placement: string | null }) => ({
           id: row.id,
           title: row.title ?? '',
           authors: row.authors,
@@ -3079,12 +3080,13 @@ export function RightSidebar({
           .select('name')
           .eq('id', projectId)
           .maybeSingle()
-          .then(({ data }) => {
+          .then(({ data }: { data: { name: string | null } | null }) => {
             if (!data?.name) return;
+            const projectName = data.name;
             setSelectedMentions((prev) =>
               prev.some((m) => m.kind === 'project' && m.id === projectId)
                 ? prev
-                : [...prev, { kind: 'project', id: projectId, title: data.name }],
+                : [...prev, { kind: 'project', id: projectId, title: projectName }],
             );
           });
       }

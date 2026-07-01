@@ -109,7 +109,7 @@ export async function listCalendarEventsForDay(opts: {
   }
   const { data, error } = await q
   if (error) throw error
-  return (data ?? []).map((r) => fromRow(r as Row))
+  return (data ?? []).map((r: Row) => fromRow(r))
 }
 
 export async function createCalendarEvent(raw: unknown): Promise<CalendarEvent> {

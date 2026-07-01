@@ -328,7 +328,7 @@ function NewProtocolForm() {
       .select("id, name, project_id")
       .eq("project_id", formData.project_id)
       .order("name")
-      .then(({ data }) => {
+      .then(({ data }: { data: Experiment[] | null }) => {
         setExperiments((data as Experiment[]) ?? [])
         setIsLoadingExperiments(false)
       })
