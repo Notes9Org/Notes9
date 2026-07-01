@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
-import { Telescope, Loader2, AlertCircle } from 'lucide-react'
+import { Telescope, Loader2, AlertCircle, RotateCcw } from 'lucide-react'
 import { useAiLiteratureSearch } from '@/hooks/use-ai-literature-search'
 import { AiPaperCard } from './ai-paper-card'
 import { AiSearchFilters } from './ai-search-filters'
@@ -11,7 +11,7 @@ import { setCatalystLiterature, type LiteratureRef } from '@/lib/catalyst-litera
 import { papersToGrounding, buildLiteratureSessionContext } from '@/lib/literature-citations'
 import { renumberCitations } from '@/lib/citation-renumber'
 import { applyAiFilters, DEFAULT_AI_FILTERS, journalOptions, yearBounds, type AiResultFilters } from '@/lib/ai-search-filters'
-import { decodeHtmlEntities } from '@/lib/literature-abstract-display'
+import { stripHtmlToText } from '@/lib/literature-abstract-display'
 import type { SearchPaper } from '@/types/paper-search'
 import type { AiSearchResult } from '@/types/ai-search'
 
@@ -41,8 +41,8 @@ function savedKeyForResult(r: AiSearchResult): string {
 
 function refMeta(r: AiSearchResult): string {
   const authors = r.paper?.authors ?? []
-  const lead = authors[0] ? `${decodeHtmlEntities(authors[0])}${authors.length > 1 ? ' et al.' : ''}` : ''
-  const journal = r.paper?.journal ? decodeHtmlEntities(r.paper.journal) : ''
+  const lead = authors[0] ? `${stripHtmlToText(authors[0])}${authors.length > 1 ? ' et al.' : ''}` : ''
+  const journal = r.paper?.journal ? stripHtmlToText(r.paper.journal) : ''
   const year = r.paper?.year || null
   return [lead, journal, year].filter(Boolean).join(' · ')
 }
@@ -74,6 +74,7 @@ export function AiSearchView({
   isPaperStaging,
   onResults,
   onLoadingChange,
+  registerStop,
 }: {
   query: string
   projectId?: string | null
@@ -90,6 +91,8 @@ export function AiSearchView({
   onResults?: (papers: SearchPaper[]) => void
   /** Report search loading to the host so the search bar spinner stays in sync. */
   onLoadingChange?: (loading: boolean) => void
+  /** Hand the host a `stop()` so the search bar can offer a Stop button. */
+  registerStop?: (fn: () => void) => void
 }) {
   // The dedicated catalyst orchestrator (/api/literature/ai-search) returns the
   // papers AND streams the overall + per-paper summaries. The overall summary is
@@ -102,6 +105,7 @@ export function AiSearchView({
     isStreaming,
     papersLoading,
     error,
+    stop,
   } = useAiLiteratureSearch({ query })
 
   // Track saved papers by identity (id|doi|pmid|title) across re-renders so cards
@@ -129,7 +133,11 @@ export function AiSearchView({
   }, [resultPapers, onResults])
   useEffect(() => {
     onLoadingChange?.(isStreaming || papersLoading)
+    return () => onLoadingChange?.(false)
   }, [isStreaming, papersLoading, onLoadingChange])
+  useEffect(() => {
+    registerStop?.(stop)
+  }, [registerStop, stop])
 
   // Listen for citation-chip clicks from the Catalyst summary panel and scroll
   // the matching paper card into view.
@@ -198,7 +206,7 @@ export function AiSearchView({
 
     const references: LiteratureRef[] = groundingInput.map((r) => ({
       n: r.citeLabel,
-      title: decodeHtmlEntities(r.paper?.title || r.aiTitle || 'Untitled'),
+      title: stripHtmlToText(r.paper?.title || r.aiTitle || 'Untitled'),
       meta: refMeta(r),
       href: refHref(r),
     }))
@@ -213,9 +221,19 @@ export function AiSearchView({
   return (
     <div className="space-y-4">
       {error && (
-        <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-          <AlertCircle className="size-4 shrink-0" />
-          {error}
+        <div className="flex items-start justify-between gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          <span className="flex items-center gap-2">
+            <AlertCircle className="size-4 shrink-0 mt-0.5" />
+            {error}
+          </span>
+          <button
+            type="button"
+            onClick={() => void run(query ?? '')}
+            className="flex shrink-0 items-center gap-1 rounded px-2 py-0.5 text-xs font-medium hover:bg-destructive/10 transition-colors"
+          >
+            <RotateCcw className="size-3" />
+            Try again
+          </button>
         </div>
       )}
 

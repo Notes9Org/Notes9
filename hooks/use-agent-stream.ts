@@ -14,6 +14,7 @@ import { recordRumEvent } from '@/lib/rum';
 import {
   extractSseTokenPiece,
   maskCiteTokensForStream,
+  createStreamCiteMasker,
   mergeTokenBufferIntoAssistantRaw,
 } from '@/lib/sse-stream-assistant-merge';
 import {
@@ -495,6 +496,8 @@ export function useAgentStream() {
       // and after the read loop so no streamed text is lost.
       let pendingMasked = '';
       let flushTimer: ReturnType<typeof setTimeout> | null = null;
+      // One stateful masker per stream run — handles cite tokens split across deltas.
+      const maskDelta = createStreamCiteMasker();
       const flushTokens = () => {
         if (flushTimer) {
           clearTimeout(flushTimer);
@@ -950,7 +953,7 @@ export function useAgentStream() {
                 const t = extractSseTokenPiece(payload);
                 if (t) {
                   tokenBuffer += t;
-                  pendingMasked += maskCiteTokensForStream(t);
+                  pendingMasked += maskDelta(t);
                   scheduleFlush();
                 }
                 break;
@@ -975,7 +978,7 @@ export function useAgentStream() {
                   ? (payload as { delta: string }).delta
                   : '';
                 if (delta) {
-                  const maskedDelta = maskCiteTokensForStream(delta);
+                  const maskedDelta = maskDelta(delta);
                   setState((s) => ({ ...s, thinkingTokenBuffer: s.thinkingTokenBuffer + maskedDelta }));
                 }
                 break;
