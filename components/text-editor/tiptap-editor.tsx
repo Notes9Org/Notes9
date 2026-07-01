@@ -5388,20 +5388,6 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
           </TooltipTrigger>
           <TooltipContent>Comments</TooltipContent>
         </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => { setCitationModalOpen(true); showCitationLibrary(); }}
-              className={cn("h-8 w-8 rounded-lg p-0 shrink-0", citationModalOpen && "bg-accent text-foreground")}
-              aria-label="Citations and library"
-            >
-              <Quote className="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Citations &amp; repository</TooltipContent>
-        </Tooltip>
         <div className="inline-flex shrink-0 items-center gap-1">
           <Tooltip>
             <TooltipTrigger asChild>
