@@ -17,7 +17,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
 import { Button } from '@/components/ui/button';
-import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import {
   Tooltip,
@@ -40,6 +40,14 @@ import {
   NotebookPen,
   PenBox,
   MoreHorizontal,
+  Pin,
+  PinOff,
+  Pencil,
+  Search,
+  Check,
+  FolderPlus,
+  FolderMinus,
+  ChevronRight,
   Trash2,
   ChevronDown,
   X,
@@ -79,7 +87,7 @@ import { usePinnedAutoScroll } from '@/hooks/use-pinned-auto-scroll';
 import { deleteTrailingMessages } from '@/app/(app)/catalyst/actions';
 import { MessageEditor } from '@/components/catalyst/message-editor';
 import { AgentStreamReply } from '@/components/catalyst/agent-stream-reply';
-import { useChatSessions, ChatSession } from '@/hooks/use-chat-sessions';
+import { useChatSessions, ChatSession, ChatFolder } from '@/hooks/use-chat-sessions';
 import { MarkdownRenderer } from '@/components/catalyst/markdown-renderer';
 import { Notes9ChatLoader, toolCardsProgress } from '@/components/catalyst/notes9-chat-loader';
 import { PreviewAttachment, type Attachment } from '@/components/catalyst/preview-attachment';
@@ -98,7 +106,11 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Switch } from '@/components/ui/switch';
@@ -106,6 +118,7 @@ import {
   Popover,
   PopoverAnchor,
   PopoverContent,
+  PopoverTrigger,
 } from '@/components/ui/popover';
 import { usePaperAI } from '@/contexts/paper-ai-context';
 import { PaperAIPanel } from '@/components/text-editor/paper-ai-panel';
@@ -726,10 +739,10 @@ const SidebarChatMessageItem = memo(function SidebarChatMessageItem({
 
   return (
     <div
-      className={cn('group/message flex gap-4 w-full', message.role === 'user' ? 'justify-end' : 'justify-start')}
+      className={cn('group/message flex gap-4 w-full motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-300', message.role === 'user' ? 'justify-end' : 'justify-start')}
     >
       {message.role === 'assistant' && (
-        <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border border-border/60 bg-[rgba(124,82,52,0.05)] shadow-sm dark:bg-background dark:border-border">
+        <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border border-[color:color-mix(in_srgb,var(--n9-accent)_22%,var(--border))] bg-[color:color-mix(in_srgb,var(--n9-accent)_8%,var(--card))] n9-elev-1 dark:border-border dark:bg-background">
           <div className="relative size-[18px] shrink-0" aria-hidden>
             <Image
               src="/notes9-logo-mark-transparent.png"
@@ -779,7 +792,7 @@ const SidebarChatMessageItem = memo(function SidebarChatMessageItem({
               className={cn(
                 'text-sm leading-[1.45] break-words',
                 message.role === 'user'
-                  ? 'whitespace-pre-wrap bg-primary/5 text-foreground px-4 py-2.5 rounded-2xl rounded-tr-sm'
+                  ? 'whitespace-pre-wrap border border-[color:color-mix(in_srgb,var(--n9-accent)_16%,var(--border))] bg-[color:color-mix(in_srgb,var(--n9-accent)_7%,var(--card))] text-foreground px-4 py-2.5 rounded-2xl rounded-tr-sm n9-elev-1'
                   : 'min-w-0 text-foreground whitespace-normal'
               )}
             >
@@ -1207,8 +1220,141 @@ export function RightSidebar({
     currentSessionId,
     setCurrentSessionId,
     updateSessionTitle,
+    updateSessionMetadata,
     deleteSession,
+    folders,
+    foldersAvailable,
+    createFolder,
+    renameFolder,
+    deleteFolder,
+    moveSessionToFolder,
   } = useChatSessions();
+
+  // ── Chat-history utility: search, pin, inline rename ─────────────────
+  const [historyQuery, setHistoryQuery] = useState('');
+  const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
+
+  const sessionIsPinned = (s: ChatSession) =>
+    Boolean((s.metadata as Record<string, unknown> | null | undefined)?.pinned);
+
+  const commitRenameSession = useCallback(() => {
+    setRenamingSessionId((id) => {
+      if (id) {
+        const t = renameDraft.trim();
+        if (t) void updateSessionTitle(id, t);
+      }
+      return null;
+    });
+    setRenameDraft('');
+  }, [renameDraft, updateSessionTitle]);
+  const cancelRenameSession = useCallback(() => {
+    setRenamingSessionId(null);
+    setRenameDraft('');
+  }, []);
+
+  // ── Folders: collapse + inline rename ────────────────────────────────
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
+  const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
+  const [folderRenameDraft, setFolderRenameDraft] = useState('');
+
+  const toggleFolderCollapse = useCallback((id: string) => {
+    setCollapsedFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const handleNewFolder = useCallback(
+    async (moveSessionId?: string) => {
+      const palette = ['#d4845a', '#5b8def', '#3fa66a', '#c65b8a', '#b07cd6', '#c9a13b'];
+      const color = palette[folders.length % palette.length];
+      const folder = await createFolder('New folder', color);
+      if (!folder) return;
+      if (moveSessionId) void moveSessionToFolder(moveSessionId, folder.id);
+      // Open the new folder inline so the user names it immediately.
+      setRenamingFolderId(folder.id);
+      setFolderRenameDraft(folder.name);
+    },
+    [createFolder, moveSessionToFolder, folders.length],
+  );
+
+  const beginFolderRename = useCallback((e: React.MouseEvent, f: ChatFolder) => {
+    e.stopPropagation();
+    setRenamingFolderId(f.id);
+    setFolderRenameDraft(f.name);
+  }, []);
+  const commitFolderRename = useCallback(() => {
+    setRenamingFolderId((id) => {
+      if (id) {
+        const t = folderRenameDraft.trim();
+        if (t) void renameFolder(id, t);
+      }
+      return null;
+    });
+    setFolderRenameDraft('');
+  }, [folderRenameDraft, renameFolder]);
+  const cancelFolderRename = useCallback(() => {
+    setRenamingFolderId(null);
+    setFolderRenameDraft('');
+  }, []);
+
+  // Filter by query → pinned float to the top → user folders (in order) → the
+  // ungrouped remainder bucketed by recency. Folders show even when empty (so
+  // they're manageable), except while searching where only matches show.
+  const historyGroups = useMemo(() => {
+    type Group =
+      | { kind: 'pinned' | 'date'; key: string; label: string; items: ChatSession[] }
+      | { kind: 'folder'; key: string; label: string; items: ChatSession[]; folder: ChatFolder };
+    const q = historyQuery.trim().toLowerCase();
+    const filtered = q
+      ? sessions.filter((s) => (s.title || 'new conversation').toLowerCase().includes(q))
+      : sessions;
+    const isPinned = (s: ChatSession) =>
+      Boolean((s.metadata as Record<string, unknown> | null | undefined)?.pinned);
+    const folderIds = new Set(folders.map((f) => f.id));
+    const pinned = filtered.filter(isPinned);
+    const unpinned = filtered.filter((s) => !isPinned(s));
+    const inFolder = (fid: string) => unpinned.filter((s) => s.folder_id === fid);
+    const ungrouped = unpinned.filter((s) => !s.folder_id || !folderIds.has(s.folder_id));
+
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const t0 = startOfToday.getTime();
+    const DAY = 86_400_000;
+    const bucketOf = (s: ChatSession) => {
+      const t = new Date(s.updated_at).getTime();
+      if (t >= t0) return 'Today';
+      if (t >= t0 - DAY) return 'Yesterday';
+      if (t >= t0 - 7 * DAY) return 'Previous 7 days';
+      if (t >= t0 - 30 * DAY) return 'Previous 30 days';
+      return 'Older';
+    };
+    const order = ['Today', 'Yesterday', 'Previous 7 days', 'Previous 30 days', 'Older'];
+    const byBucket = new Map<string, ChatSession[]>();
+    for (const s of ungrouped) {
+      const b = bucketOf(s);
+      const arr = byBucket.get(b);
+      if (arr) arr.push(s);
+      else byBucket.set(b, [s]);
+    }
+
+    const groups: Group[] = [];
+    if (pinned.length) groups.push({ kind: 'pinned', key: 'Pinned', label: 'Pinned', items: pinned });
+    for (const f of folders) {
+      const items = inFolder(f.id);
+      // Hide empty folders only while actively searching.
+      if (q && items.length === 0) continue;
+      groups.push({ kind: 'folder', key: `folder:${f.id}`, label: f.name, items, folder: f });
+    }
+    for (const label of order) {
+      const items = byBucket.get(label);
+      if (items?.length) groups.push({ kind: 'date', key: label, label, items });
+    }
+    return groups;
+  }, [sessions, historyQuery, folders]);
 
   const currentSessionRef = useRef<string | null>(null);
 
@@ -3503,6 +3649,250 @@ export function RightSidebar({
     return diffDays <= 9 ? `${diffDays}d` : '9d';
   };
 
+  // Search box shared by both history surfaces.
+  const renderHistorySearch = () => (
+    <div className="relative">
+      <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/55" aria-hidden />
+      <input
+        value={historyQuery}
+        onChange={(e) => setHistoryQuery(e.target.value)}
+        placeholder="Search chats…"
+        aria-label="Search chat history"
+        className="h-8 w-full rounded-lg border border-border/50 bg-background/60 pl-8 pr-2.5 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-[color:color-mix(in_srgb,var(--n9-accent)_40%,var(--border))]"
+      />
+    </div>
+  );
+
+  // One row — kind icon, title (inline-editable), pin/time, hover actions.
+  const renderHistoryRow = (session: ChatSession) => {
+    const isActive = currentSessionId === session.id;
+    const pinned = sessionIsPinned(session);
+    const isRenaming = renamingSessionId === session.id;
+    const KindIcon = session.kind === 'literature' ? BookOpen : MessageSquare;
+    const md = (session.metadata as Record<string, unknown> | null | undefined) ?? {};
+    return (
+      <li key={session.id} className="group/row relative">
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => { if (!isRenaming) loadSession(session.id); }}
+          onKeyDown={(e) => {
+            if (isRenaming) return;
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); loadSession(session.id); }
+          }}
+          title={session.title || 'New conversation'}
+          className={cn(
+            'relative flex min-h-9 min-w-0 items-center gap-2 rounded-lg py-1.5 pl-2.5 pr-8 text-left text-sm outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-[color:color-mix(in_srgb,var(--n9-accent)_35%,transparent)]',
+            isActive
+              ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
+              : 'text-sidebar-foreground/75 hover:bg-sidebar-accent/55 hover:text-sidebar-foreground',
+          )}
+        >
+          {isActive && (
+            <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-[color:var(--n9-accent)]" aria-hidden />
+          )}
+          <KindIcon
+            className={cn('size-3.5 shrink-0', isActive ? 'text-[color:var(--n9-accent)]' : 'text-sidebar-foreground/40')}
+            aria-hidden
+          />
+          {isRenaming ? (
+            <input
+              autoFocus
+              value={renameDraft}
+              onChange={(e) => setRenameDraft(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === 'Enter') { e.preventDefault(); commitRenameSession(); }
+                else if (e.key === 'Escape') { e.preventDefault(); cancelRenameSession(); }
+              }}
+              onBlur={commitRenameSession}
+              className="min-w-0 flex-1 rounded border border-[color:color-mix(in_srgb,var(--n9-accent)_45%,var(--border))] bg-background px-1.5 py-0.5 text-sm outline-none"
+            />
+          ) : (
+            <span className="min-w-0 flex-1 truncate">{session.title || 'New conversation'}</span>
+          )}
+          {!isRenaming && (
+            <span className="ml-1 flex shrink-0 items-center text-2xs tabular-nums text-sidebar-foreground/40" aria-hidden>
+              {pinned ? <Pin className="size-3 fill-current text-[color:var(--n9-accent)]" /> : formatSessionTime(session.updated_at)}
+            </span>
+          )}
+        </div>
+        {!isRenaming && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label="Chat options"
+                onClick={(e) => e.stopPropagation()}
+                className="n9-press absolute right-1 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-sidebar-foreground/60 hover:bg-background/70 hover:text-foreground data-[state=open]:bg-background/70 data-[state=open]:text-foreground"
+              >
+                <MoreHorizontal className="size-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" sideOffset={4} className="w-48">
+              <DropdownMenuItem onSelect={() => void updateSessionMetadata(session.id, { ...md, pinned: !pinned })}>
+                {pinned ? <PinOff className="mr-2 size-4" /> : <Pin className="mr-2 size-4" />}
+                {pinned ? 'Unpin' : 'Pin'}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => { setRenamingSessionId(session.id); setRenameDraft(session.title || ''); }}>
+                <Pencil className="mr-2 size-4" /> Rename
+              </DropdownMenuItem>
+              {foldersAvailable && (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <FolderOpen className="mr-2 size-4" /> Move to folder
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="max-h-64 w-52 overflow-y-auto">
+                    {folders.map((f) => (
+                      <DropdownMenuItem
+                        key={f.id}
+                        disabled={session.folder_id === f.id}
+                        onSelect={() => void moveSessionToFolder(session.id, f.id)}
+                      >
+                        <span className="mr-2 size-2.5 shrink-0 rounded-full" style={{ backgroundColor: f.color || 'var(--n9-accent)' }} aria-hidden />
+                        <span className="min-w-0 truncate">{f.name}</span>
+                        {session.folder_id === f.id && <Check className="ml-auto size-3.5 shrink-0" />}
+                      </DropdownMenuItem>
+                    ))}
+                    {session.folder_id && (
+                      <DropdownMenuItem onSelect={() => void moveSessionToFolder(session.id, null)}>
+                        <FolderMinus className="mr-2 size-4" /> Remove from folder
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={() => void handleNewFolder(session.id)}>
+                      <FolderPlus className="mr-2 size-4" /> New folder…
+                    </DropdownMenuItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onSelect={() => {
+                  if (currentSessionId === session.id) { setMessages([]); currentSessionRef.current = null; }
+                  void deleteSession(session.id);
+                  toast.success('Chat deleted');
+                }}
+              >
+                <Trash2 className="mr-2 size-4" /> Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </li>
+    );
+  };
+
+  // Grouped, searchable body shared by the aside and the compact popover.
+  const renderHistoryGroups = () => {
+    if (sessions.length === 0) {
+      return (
+        <div className="px-3 py-8 text-center text-xs leading-relaxed text-sidebar-foreground/55">
+          No conversations yet.
+          <br />
+          Start a new chat to see it here.
+        </div>
+      );
+    }
+    if (historyGroups.length === 0) {
+      return (
+        <div className="px-3 py-8 text-center text-xs text-sidebar-foreground/55">
+          No chats match “{historyQuery.trim()}”.
+        </div>
+      );
+    }
+    return historyGroups.map((g) => {
+      if (g.kind === 'folder') {
+        const collapsed = collapsedFolders.has(g.folder.id);
+        const isRenamingF = renamingFolderId === g.folder.id;
+        return (
+          <div key={g.key} className="mb-1">
+            <div className="group/folder flex items-center gap-1 rounded-md px-1.5 py-1 hover:bg-sidebar-accent/40">
+              <button
+                type="button"
+                onClick={() => toggleFolderCollapse(g.folder.id)}
+                aria-expanded={!collapsed}
+                className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+              >
+                {collapsed ? (
+                  <ChevronRight className="size-3 shrink-0 text-sidebar-foreground/40" aria-hidden />
+                ) : (
+                  <ChevronDown className="size-3 shrink-0 text-sidebar-foreground/40" aria-hidden />
+                )}
+                <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: g.folder.color || 'var(--n9-accent)' }} aria-hidden />
+                {isRenamingF ? (
+                  <input
+                    autoFocus
+                    value={folderRenameDraft}
+                    onChange={(e) => setFolderRenameDraft(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => {
+                      e.stopPropagation();
+                      if (e.key === 'Enter') { e.preventDefault(); commitFolderRename(); }
+                      else if (e.key === 'Escape') { e.preventDefault(); cancelFolderRename(); }
+                    }}
+                    onBlur={commitFolderRename}
+                    className="min-w-0 flex-1 rounded border border-[color:color-mix(in_srgb,var(--n9-accent)_45%,var(--border))] bg-background px-1 py-0.5 text-2xs font-semibold uppercase tracking-wider outline-none"
+                  />
+                ) : (
+                  <span className="min-w-0 flex-1 truncate text-2xs font-semibold uppercase tracking-wider text-sidebar-foreground/55">
+                    {g.folder.name}
+                  </span>
+                )}
+                {!isRenamingF && (
+                  <span className="shrink-0 text-2xs tabular-nums text-sidebar-foreground/35">{g.items.length}</span>
+                )}
+              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="Folder options"
+                    className="n9-press flex size-5 shrink-0 items-center justify-center rounded text-sidebar-foreground/45 hover:bg-background/70 hover:text-foreground"
+                  >
+                    <MoreHorizontal className="size-3.5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44">
+                  <DropdownMenuItem onSelect={() => { setRenamingFolderId(g.folder.id); setFolderRenameDraft(g.folder.name); }}>
+                    <Pencil className="mr-2 size-4" /> Rename folder
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onSelect={() => { void deleteFolder(g.folder.id); toast.success('Folder deleted'); }}
+                  >
+                    <Trash2 className="mr-2 size-4" /> Delete folder
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+            {!collapsed && (
+              <ul className="flex min-w-0 flex-col gap-0.5 border-l border-border/40 pl-2 ml-2.5">
+                {g.items.length === 0 ? (
+                  <li className="px-2 py-1 text-2xs italic text-sidebar-foreground/35">Empty — move chats here</li>
+                ) : (
+                  g.items.map((s) => renderHistoryRow(s))
+                )}
+              </ul>
+            )}
+          </div>
+        );
+      }
+      return (
+        <div key={g.key} className="mb-1">
+          <div className="flex items-center gap-1 px-2.5 pb-1 pt-2 text-2xs font-semibold uppercase tracking-wider text-sidebar-foreground/45">
+            {g.kind === 'pinned' && <Pin className="size-2.5 fill-current text-[color:var(--n9-accent)]" aria-hidden />}
+            {g.label}
+          </div>
+          <ul className="flex min-w-0 flex-col gap-0.5">{g.items.map((s) => renderHistoryRow(s))}</ul>
+        </div>
+      );
+    });
+  };
+
   const showLiteratureEmptyState = agentMode === 'literature' && isLiteratureRoute;
   const emptyStateSubheading = showLiteratureEmptyState ? 'For Literature' : null;
   const emptyStateDescription = showLiteratureEmptyState
@@ -3584,77 +3974,51 @@ export function RightSidebar({
                 <>
                   <ScrollArea className="w-full whitespace-nowrap scrollbar-hide">
                     <div className="flex items-center gap-1">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-8 sm:size-9 text-muted-foreground shrink-0"
-                              aria-label="Show chat history"
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8 sm:size-9 text-muted-foreground shrink-0"
+                            aria-label="Show chat history"
                           >
-                              <History className="size-4" />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" className="flex w-[290px] max-w-[min(290px,calc(100vw-2rem))] flex-col p-0 overflow-hidden" sideOffset={4}>
-                          <div className="p-2 text-xs font-semibold text-muted-foreground/80 uppercase tracking-wider border-b shrink-0">
-                            History
-                          </div>
-                          <ScrollArea className="h-[280px] w-full overflow-hidden">
-                            <div className="min-w-max p-1">
-                              {sessions.length === 0 ? (
-                                <div className="py-6 text-center text-muted-foreground text-xs">No history yet.</div>
-                              ) : (
-                                sessions.map(session => (
-                                  <div
-                                    key={session.id}
-                                    className="group/row relative"
-                                  >
-                                    <button
-                                      type="button"
-                                      onClick={() => loadSession(session.id)}
-                                      className={cn(
-                                        "flex min-w-max max-w-full items-center justify-between gap-2 overflow-hidden rounded-md px-2 py-1.5 pr-12 text-left text-sm transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90",
-                                        currentSessionId === session.id
-                                          ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                                          : "text-sidebar-foreground/70"
-                                      )}
-                                    >
-                                      <span
-                                        className={cn(
-                                          "block truncate whitespace-nowrap font-medium",
-                                          currentSessionId === session.id
-                                            ? "text-sidebar-accent-foreground"
-                                            : "text-inherit"
-                                        )}
-                                        title={session.title || 'New conversation'}
-                                      >
-                                        {session.title || 'New conversation'}
-                                      </span>
-                                      <span className="shrink-0 text-2xs text-sidebar-foreground/70 opacity-70">
-                                        {new Date(session.updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                                      </span>
-                                    </button>
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="icon"
-                                      className={cn(
-                                        "absolute right-1 top-1/2 z-10 h-7 w-7 -translate-y-1/2 rounded-full border border-border/35 bg-background/82 text-sidebar-foreground/70 shadow-sm backdrop-blur-md transition-[opacity,transform,background-color,color] duration-200 ease-out hover:bg-background hover:text-destructive",
-                                        currentSessionId === session.id ? "opacity-100" : "pointer-events-none translate-x-1 opacity-0 group-hover/row:pointer-events-auto group-hover/row:translate-x-0 group-hover/row:opacity-100"
-                                      )}
-                                      onClick={(e) => handleDeleteSession(e, session.id)}
-                                      aria-label="Delete chat"
-                                    >
-                                      <Trash2 className="size-3.5" />
-                                    </Button>
-                                  </div>
-                                ))
+                            <History className="size-4" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent
+                          align="start"
+                          sideOffset={4}
+                          className="flex w-[300px] max-w-[min(300px,calc(100vw-2rem))] flex-col gap-1.5 rounded-xl p-1.5"
+                        >
+                          <div className="flex items-center justify-between gap-2 px-1">
+                            <span className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground/80">History</span>
+                            <div className="flex items-center gap-0.5">
+                              {foldersAvailable && (
+                                <button
+                                  type="button"
+                                  onClick={() => void handleNewFolder()}
+                                  title="New folder"
+                                  aria-label="New folder"
+                                  className="n9-press inline-flex items-center justify-center rounded-md p-1 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                                >
+                                  <FolderPlus className="size-3.5" />
+                                </button>
                               )}
+                              <button
+                                type="button"
+                                onClick={handleNewChat}
+                                className="n9-press inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-2xs font-medium text-[color:var(--n9-accent)] hover:bg-[color:color-mix(in_srgb,var(--n9-accent)_12%,transparent)]"
+                              >
+                                <Plus className="size-3" /> New chat
+                              </button>
                             </div>
-                            <ScrollBar orientation="horizontal" />
-                          </ScrollArea>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                          </div>
+                          {renderHistorySearch()}
+                          <div className="h-[320px] w-full overflow-y-auto overflow-x-hidden pr-1">
+                            {renderHistoryGroups()}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
 
                       <Button
                         variant="ghost"
@@ -3797,6 +4161,18 @@ export function RightSidebar({
                     <span className="flex-1 truncate text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/55">
                       Chats
                     </span>
+                    {foldersAvailable && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 shrink-0 text-sidebar-foreground/70 transition-colors hover:bg-[color:color-mix(in_srgb,var(--n9-accent)_12%,transparent)] hover:text-[color:var(--n9-accent)]"
+                        onClick={() => void handleNewFolder()}
+                        title="New folder"
+                        aria-label="New folder"
+                      >
+                        <FolderPlus className="h-4 w-4" />
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="icon"
@@ -3808,78 +4184,12 @@ export function RightSidebar({
                       <PenBox className="h-4 w-4" />
                     </Button>
                   </div>
-                  {/* Conversation list — clean, title-first rows with a brand
-                      accent marking the active chat, a relative time that fades
-                      on hover, and a delete affordance revealed on hover/focus. */}
-                  <ScrollArea className="min-h-0 flex-1 overflow-hidden">
-                    {sessions.length === 0 ? (
-                      <div className="px-3 py-8 text-center text-xs leading-relaxed text-sidebar-foreground/55">
-                        No conversations yet.
-                        <br />
-                        Start a new chat to see it here.
-                      </div>
-                    ) : (
-                      <ul className="flex min-w-0 flex-col gap-0.5 pr-1">
-                        {sessions.map((session) => {
-                          const isActive = currentSessionId === session.id;
-                          return (
-                          <li
-                            key={session.id}
-                            className="group/row relative"
-                          >
-                            <div
-                              role="button"
-                              tabIndex={0}
-                              onClick={() => loadSession(session.id)}
-                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); loadSession(session.id); } }}
-                              title={session.title || 'New conversation'}
-                              className={cn(
-                                "relative flex min-h-9 min-w-0 items-center rounded-lg px-2.5 py-2 pr-9 text-left text-sm outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-[color:color-mix(in_srgb,var(--n9-accent)_35%,transparent)]",
-                                isActive
-                                  ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
-                                  : "text-sidebar-foreground/75 hover:bg-sidebar-accent/55 hover:text-sidebar-foreground"
-                              )}
-                            >
-                              {isActive && (
-                                <span
-                                  className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-[color:var(--n9-accent)]"
-                                  aria-hidden
-                                />
-                              )}
-                              <span className="min-w-0 flex-1 truncate">
-                                {session.title || 'New conversation'}
-                              </span>
-                              <span
-                                className={cn(
-                                  "ml-2 shrink-0 text-2xs tabular-nums text-sidebar-foreground/40 transition-opacity duration-150 group-hover/row:opacity-0",
-                                  isActive && "opacity-0"
-                                )}
-                                aria-hidden
-                              >
-                                {formatSessionTime(session.updated_at)}
-                              </span>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className={cn(
-                                "absolute right-1 top-1/2 size-7 -translate-y-1/2 rounded-md text-sidebar-foreground/60 transition-[opacity,color] duration-150 hover:bg-background/60 hover:text-destructive",
-                                isActive
-                                  ? "opacity-100"
-                                  : "pointer-events-none opacity-0 group-hover/row:pointer-events-auto group-hover/row:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100"
-                              )}
-                              onClick={(e) => handleDeleteSession(e, session.id)}
-                              aria-label="Delete chat"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </li>
-                          );
-                        })}
-                      </ul>
-                    )}
-                    <ScrollBar orientation="horizontal" />
-                  </ScrollArea>
+                  {/* Search + grouped (pinned / Today / Yesterday / …), with
+                      inline rename, pin and delete per row. */}
+                  <div className="px-1 pb-1.5">{renderHistorySearch()}</div>
+                  <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-1">
+                    {renderHistoryGroups()}
+                  </div>
                 </div>
               </aside>
               {expandedHistoryOpen && (
@@ -4033,7 +4343,7 @@ export function RightSidebar({
                         literatureAgentStream.isStreaming &&
                         messages.at(-1)?.role === 'user' && (
                         <div className="flex w-full gap-4 justify-start">
-                          <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border border-border/60 bg-[rgba(124,82,52,0.05)] shadow-sm dark:bg-background dark:border-border">
+                          <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border border-[color:color-mix(in_srgb,var(--n9-accent)_22%,var(--border))] bg-[color:color-mix(in_srgb,var(--n9-accent)_8%,var(--card))] n9-elev-1 dark:border-border dark:bg-background">
                             <div className="relative size-[18px] shrink-0" aria-hidden>
                               <Image
                                 src="/notes9-logo-mark-transparent.png"
