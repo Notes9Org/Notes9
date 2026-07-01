@@ -17,7 +17,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
 import { Button } from '@/components/ui/button';
-import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import {
   Tooltip,
@@ -40,6 +40,9 @@ import {
   NotebookPen,
   PenBox,
   MoreHorizontal,
+  Pin,
+  PinOff,
+  Pencil,
   Trash2,
   ChevronDown,
   X,
@@ -106,6 +109,7 @@ import {
   Popover,
   PopoverAnchor,
   PopoverContent,
+  PopoverTrigger,
 } from '@/components/ui/popover';
 import { usePaperAI } from '@/contexts/paper-ai-context';
 import { PaperAIPanel } from '@/components/text-editor/paper-ai-panel';
@@ -1209,6 +1213,7 @@ export function RightSidebar({
     currentSessionId,
     setCurrentSessionId,
     updateSessionTitle,
+    updateSessionMetadata,
     deleteSession,
   } = useChatSessions();
 
@@ -3562,6 +3567,88 @@ export function RightSidebar({
     </div>
   );
 
+  // ── Chat-history row actions: pin (float to top) + inline rename ──────
+  const sessionIsPinned = (s: ChatSession) =>
+    Boolean((s.metadata as Record<string, unknown> | null | undefined)?.pinned);
+  const orderedSessions = useMemo(
+    () => [...sessions].sort((a, b) => Number(sessionIsPinned(b)) - Number(sessionIsPinned(a))),
+    [sessions],
+  );
+  const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
+  const commitSessionRename = useCallback(() => {
+    setRenamingSessionId((id) => {
+      if (id) {
+        const t = renameDraft.trim();
+        if (t) void updateSessionTitle(id, t);
+      }
+      return null;
+    });
+    setRenameDraft('');
+  }, [renameDraft, updateSessionTitle]);
+  const cancelSessionRename = useCallback(() => {
+    setRenamingSessionId(null);
+    setRenameDraft('');
+  }, []);
+
+  // The ⋯ actions menu shared by both history surfaces (absolute-positioned in
+  // the row's `group/row relative` wrapper).
+  const renderSessionMenu = (session: ChatSession) => {
+    const pinned = sessionIsPinned(session);
+    const md = (session.metadata as Record<string, unknown> | null | undefined) ?? {};
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label="Chat options"
+            onClick={(e) => e.stopPropagation()}
+            className="absolute right-1 top-1/2 z-10 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-sidebar-foreground/60 transition-colors hover:bg-background/70 hover:text-foreground data-[state=open]:bg-background/70 data-[state=open]:text-foreground"
+          >
+            <MoreHorizontal className="size-4" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" sideOffset={4} className="w-44">
+          <DropdownMenuItem onSelect={() => void updateSessionMetadata(session.id, { ...md, pinned: !pinned })}>
+            {pinned ? <PinOff className="mr-2 size-4" /> : <Pin className="mr-2 size-4" />}
+            {pinned ? 'Unpin' : 'Pin'}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => { setRenamingSessionId(session.id); setRenameDraft(session.title || ''); }}>
+            <Pencil className="mr-2 size-4" /> Rename
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            className="text-destructive focus:text-destructive"
+            onSelect={() => {
+              if (currentSessionId === session.id) { setMessages([]); currentSessionRef.current = null; }
+              void deleteSession(session.id);
+              toast.success('Chat deleted');
+            }}
+          >
+            <Trash2 className="mr-2 size-4" /> Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  };
+
+  // Inline rename input reused by both history surfaces.
+  const renderSessionRenameInput = () => (
+    <input
+      autoFocus
+      value={renameDraft}
+      onChange={(e) => setRenameDraft(e.target.value)}
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') { e.preventDefault(); commitSessionRename(); }
+        else if (e.key === 'Escape') { e.preventDefault(); cancelSessionRename(); }
+      }}
+      onBlur={commitSessionRename}
+      className="min-w-0 flex-1 rounded border border-[color:color-mix(in_srgb,var(--n9-accent)_45%,var(--border))] bg-background px-1.5 py-0.5 text-sm outline-none"
+    />
+  );
+
   const showLiteratureEmptyState = agentMode === 'literature' && isLiteratureRoute;
   const emptyStateSubheading = showLiteratureEmptyState ? 'For Literature' : null;
   const emptyStateDescription = showLiteratureEmptyState
@@ -3646,77 +3733,70 @@ export function RightSidebar({
                 <>
                   <ScrollArea className="w-full whitespace-nowrap scrollbar-hide">
                     <div className="flex items-center gap-1">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-8 sm:size-9 text-muted-foreground shrink-0"
-                              aria-label="Show chat history"
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8 sm:size-9 text-muted-foreground shrink-0"
+                            aria-label="Show chat history"
                           >
-                              <History className="size-4" />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" className="flex w-[290px] max-w-[min(290px,calc(100vw-2rem))] flex-col p-0 overflow-hidden" sideOffset={4}>
+                            <History className="size-4" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent align="start" sideOffset={4} className="flex w-[300px] max-w-[min(300px,calc(100vw-2rem))] flex-col overflow-hidden p-0">
                           <div className="p-2 text-xs font-semibold text-muted-foreground/80 uppercase tracking-wider border-b shrink-0">
                             History
                           </div>
-                          <ScrollArea className="h-[280px] w-full overflow-hidden">
-                            <div className="min-w-max p-1">
-                              {sessions.length === 0 ? (
-                                <div className="py-6 text-center text-muted-foreground text-xs">No history yet.</div>
-                              ) : (
-                                sessions.map(session => (
-                                  <div
-                                    key={session.id}
-                                    className="group/row relative"
-                                  >
-                                    <button
-                                      type="button"
-                                      onClick={() => loadSession(session.id)}
-                                      className={cn(
-                                        "flex min-w-max max-w-full items-center justify-between gap-2 overflow-hidden rounded-md px-2 py-1.5 pr-12 text-left text-sm transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90",
-                                        currentSessionId === session.id
-                                          ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                                          : "text-sidebar-foreground/70"
-                                      )}
-                                    >
-                                      <span
+                          <div className="h-[300px] w-full overflow-y-auto overflow-x-hidden p-1">
+                            {sessions.length === 0 ? (
+                              <div className="py-6 text-center text-muted-foreground text-xs">No history yet.</div>
+                            ) : (
+                              orderedSessions.map((session) => {
+                                const isActive = currentSessionId === session.id;
+                                const pinned = sessionIsPinned(session);
+                                const isRenaming = renamingSessionId === session.id;
+                                return (
+                                  <div key={session.id} className="group/row relative">
+                                    {isRenaming ? (
+                                      <div className="flex min-w-0 items-center rounded-md py-1.5 pl-2 pr-2">
+                                        {renderSessionRenameInput()}
+                                      </div>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => loadSession(session.id)}
                                         className={cn(
-                                          "block truncate whitespace-nowrap font-medium",
-                                          currentSessionId === session.id
-                                            ? "text-sidebar-accent-foreground"
-                                            : "text-inherit"
+                                          "flex w-full min-w-0 items-center justify-between gap-2 rounded-md py-1.5 pl-2 pr-9 text-left text-sm transition-colors duration-150 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
+                                          isActive ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground/70"
                                         )}
-                                        title={session.title || 'New conversation'}
                                       >
-                                        {session.title || 'New conversation'}
-                                      </span>
-                                      <span className="shrink-0 text-2xs text-sidebar-foreground/70 opacity-70">
-                                        {new Date(session.updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                                      </span>
-                                    </button>
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="icon"
-                                      className={cn(
-                                        "absolute right-1 top-1/2 z-10 h-7 w-7 -translate-y-1/2 rounded-full border border-border/35 bg-background/82 text-sidebar-foreground/70 shadow-sm backdrop-blur-md transition-[opacity,transform,background-color,color] duration-200 ease-out hover:bg-background hover:text-destructive",
-                                        currentSessionId === session.id ? "opacity-100" : "pointer-events-none translate-x-1 opacity-0 group-hover/row:pointer-events-auto group-hover/row:translate-x-0 group-hover/row:opacity-100"
-                                      )}
-                                      onClick={(e) => handleDeleteSession(e, session.id)}
-                                      aria-label="Delete chat"
-                                    >
-                                      <Trash2 className="size-3.5" />
-                                    </Button>
+                                        <span
+                                          className={cn(
+                                            "block min-w-0 flex-1 truncate font-medium",
+                                            isActive ? "text-sidebar-accent-foreground" : "text-inherit"
+                                          )}
+                                          title={session.title || 'New conversation'}
+                                        >
+                                          {session.title || 'New conversation'}
+                                        </span>
+                                        {pinned ? (
+                                          <Pin className="size-3 shrink-0 fill-current text-[color:var(--n9-accent)]" aria-label="Pinned" />
+                                        ) : (
+                                          <span className="shrink-0 text-2xs text-sidebar-foreground/60">
+                                            {new Date(session.updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                          </span>
+                                        )}
+                                      </button>
+                                    )}
+                                    {!isRenaming && renderSessionMenu(session)}
                                   </div>
-                                ))
-                              )}
-                            </div>
-                            <ScrollBar orientation="horizontal" />
-                          </ScrollArea>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                                );
+                              })
+                            )}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
 
                       {/* Title kept here so the left cluster reads the same as the
                           page header; the "New chat" action lives in the right
@@ -3900,7 +3980,7 @@ export function RightSidebar({
                     </Button>
                   </div>
                   {/* List - same structure as lab notes */}
-                  <ScrollArea className="min-h-0 flex-1 overflow-hidden">
+                  <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
                     {sessionsLoading && sessions.length === 0 ? (
                       <div className="flex flex-col gap-0.5 pr-1" aria-hidden aria-label="Loading conversations">
                         {[...Array(5)].map((_, i) => (
@@ -3915,7 +3995,11 @@ export function RightSidebar({
                     <div className="px-2 py-6 text-center text-sidebar-foreground/70 text-xs">No previous conversations.</div>
                     ) : (
                       <MotionList className="flex min-w-0 flex-col gap-0.5 pr-1" role="list">
-                        {sessions.map((session) => (
+                        {orderedSessions.map((session) => {
+                          const isActive = currentSessionId === session.id;
+                          const pinned = sessionIsPinned(session);
+                          const isRenaming = renamingSessionId === session.id;
+                          return (
                           <MotionItem
                             key={session.id}
                             className="group/row relative"
@@ -3924,43 +4008,39 @@ export function RightSidebar({
                             <div
                               role="button"
                               tabIndex={0}
-                              onClick={() => loadSession(session.id)}
-                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); loadSession(session.id); } }}
+                              onClick={() => { if (!isRenaming) loadSession(session.id); }}
+                              onKeyDown={(e) => { if (isRenaming) return; if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); loadSession(session.id); } }}
                               className={cn(
-                                "relative grid min-h-9 min-w-0 grid-cols-[1fr_auto] items-center gap-2 rounded-lg px-3 py-2 text-left text-sm outline-none transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90",
-                                currentSessionId === session.id && "bg-sidebar-accent font-medium text-sidebar-accent-foreground before:absolute before:left-0.5 before:top-1/2 before:h-5 before:w-1 before:-translate-y-1/2 before:rounded-full before:bg-primary before:content-['']"
+                                "relative flex min-h-9 min-w-0 items-center gap-2 rounded-lg py-2 pl-3 pr-9 text-left text-sm outline-none transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90",
+                                isActive && "bg-sidebar-accent font-medium text-sidebar-accent-foreground before:absolute before:left-0.5 before:top-1/2 before:h-5 before:w-1 before:-translate-y-1/2 before:rounded-full before:bg-primary before:content-['']"
                               )}
                             >
-                              <span
-                                className={cn(
-                                  "block truncate font-medium",
-                                  currentSessionId === session.id
-                                    ? "text-sidebar-accent-foreground"
-                                    : "text-inherit"
-                                )}
-                                title={session.title || 'New conversation'}
-                              >
-                                {session.title || 'New conversation'}
-                              </span>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className={cn(
-                                  "size-8 shrink-0 text-sidebar-foreground/70 transition-[opacity,transform,color] duration-200 ease-out hover:text-destructive",
-                                  currentSessionId === session.id ? "opacity-100" : "pointer-events-none translate-x-1 opacity-0 group-hover/row:pointer-events-auto group-hover/row:translate-x-0 group-hover/row:opacity-100"
-                                )}
-                                onClick={(e) => handleDeleteSession(e, session.id)}
-                                aria-label="Delete chat"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
+                              {isRenaming ? (
+                                renderSessionRenameInput()
+                              ) : (
+                                <>
+                                  <span
+                                    className={cn(
+                                      "block min-w-0 flex-1 truncate font-medium",
+                                      isActive ? "text-sidebar-accent-foreground" : "text-inherit"
+                                    )}
+                                    title={session.title || 'New conversation'}
+                                  >
+                                    {session.title || 'New conversation'}
+                                  </span>
+                                  {pinned && (
+                                    <Pin className="size-3 shrink-0 fill-current text-[color:var(--n9-accent)]" aria-label="Pinned" />
+                                  )}
+                                </>
+                              )}
                             </div>
+                            {!isRenaming && renderSessionMenu(session)}
                           </MotionItem>
-                        ))}
+                          );
+                        })}
                       </MotionList>
                     )}
-                    <ScrollBar orientation="horizontal" />
-                  </ScrollArea>
+                  </div>
                 </div>
               </aside>
               {expandedHistoryOpen && (
