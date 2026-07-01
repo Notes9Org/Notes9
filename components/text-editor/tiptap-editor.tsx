@@ -42,8 +42,10 @@ import { createClient } from "@/lib/supabase/client"
 import {
   Bold,
   Italic,
+  LayoutGrid,
   List,
   ListOrdered,
+  ExternalLink,
   ListChecks,
   Undo,
   Redo,
@@ -101,6 +103,9 @@ import { TextSelection } from "@tiptap/pm/state"
 import { Decoration, DecorationSet } from "@tiptap/pm/view"
 import { cn } from "@/lib/utils"
 import { useAwsTranscribe } from "@/hooks/use-aws-transcribe"
+import { useIsMobile } from "@/hooks/use-mobile"
+import { useResizable } from "@/hooks/use-resizable"
+import { ResizeHandle } from "@/components/ui/resize-handle"
 import {
   useCallback,
   useEffect,
@@ -239,6 +244,28 @@ interface Paper {
   journal: string
   source_url: string
   doi: string
+}
+
+/** First explicit font-family applied in the document (its body font), so an
+ *  inserted/updated bibliography matches the document rather than the editor
+ *  default. Returns undefined when the document uses the default font (in which
+ *  case the bibliography already matches with no override needed). */
+function firstDocumentFontFamily(editor: any): string | undefined {
+  if (!editor) return undefined
+  let font: string | undefined
+  editor.state.doc.descendants((node: any) => {
+    if (font) return false
+    if (node.isText && node.text && node.text.trim()) {
+      const ts = node.marks.find((m: any) => m.type.name === "textStyle")
+      const f = ts?.attrs?.fontFamily as string | undefined
+      if (f) {
+        font = f
+        return false
+      }
+    }
+    return undefined
+  })
+  return font
 }
 
 interface TiptapEditorProps {
@@ -615,60 +642,63 @@ function CommentSidebar({ editor, open, onClose }: { editor: any; open: boolean;
   if (!open) return null
 
   return (
-    <div className="absolute right-0 top-0 h-full w-72 bg-background border-l border-border z-50 shadow-xl flex flex-col animate-in slide-in-from-right duration-300">
-      <div className="p-4 border-b border-border flex justify-between items-center bg-muted/30">
-        <h3 className="font-semibold text-sm flex items-center gap-2">
-          <MessageSquare className="h-4 w-4" /> Comments
-        </h3>
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose} aria-label="Close comments panel">
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
-      <div className="flex-1 overflow-y-auto p-3 space-y-3">
-        {comments.length === 0 ? (
-          <div className="text-center py-10 text-muted-foreground text-xs italic">No comments yet</div>
-        ) : (
-          comments.map((comment) => (
-            <div
-              key={`${comment.id}-${comment.pos}`}
-              className="p-3 rounded-lg border border-border bg-card hover:border-primary/50 transition-colors cursor-pointer group"
-              onClick={() => {
-                if (comment.kind === "image") {
-                  editor.chain().focus().setNodeSelection(comment.pos).run()
-                } else {
-                  editor.commands.focus(comment.pos)
-                }
-                const dom = editor.view.nodeDOM(comment.pos)
-                if (dom) {
-                  const el = dom instanceof Element ? dom : dom.parentElement
-                  if (el) el.scrollIntoView({ behavior: "smooth", block: "center" })
-                }
-              }}
-            >
-              <div className="flex justify-between items-start mb-1">
-                <span className="text-2xs font-bold text-primary uppercase">{comment.author}</span>
-                <span className="text-3xs text-muted-foreground">
-                  {new Date(comment.createdAt).toLocaleString()}
-                </span>
+    <div className="absolute right-0 top-0 z-50 h-full w-72 max-w-full p-2 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-right-4 motion-safe:duration-300">
+      {/* Floating glass card — matches the AI chat-history sidebar. */}
+      <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-[color:var(--glass-border)] bg-sidebar shadow-[0_10px_34px_-18px_rgba(20,14,8,0.4)] dark:shadow-[0_12px_38px_-16px_rgba(0,0,0,0.6)]">
+        <div className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-[color:var(--glass-border)] px-3">
+          <span className="flex items-center gap-1.5 text-[0.7rem] font-semibold uppercase tracking-wider text-sidebar-foreground/70">
+            <MessageSquare className="h-3.5 w-3.5" /> Comments
+          </span>
+          <Button variant="ghost" size="icon" className="h-7 w-7 text-sidebar-foreground/70 hover:text-sidebar-foreground" onClick={onClose} aria-label="Close comments panel">
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto overflow-x-hidden p-2">
+          {comments.length === 0 ? (
+            <div className="px-3 py-10 text-center text-xs text-sidebar-foreground/55">No comments yet</div>
+          ) : (
+            comments.map((comment) => (
+              <div
+                key={`${comment.id}-${comment.pos}`}
+                className="group cursor-pointer rounded-lg border border-border/50 bg-card/60 p-2.5 transition-colors hover:border-primary/40 hover:bg-sidebar-accent/40"
+                onClick={() => {
+                  if (comment.kind === "image") {
+                    editor.chain().focus().setNodeSelection(comment.pos).run()
+                  } else {
+                    editor.commands.focus(comment.pos)
+                  }
+                  const dom = editor.view.nodeDOM(comment.pos)
+                  if (dom) {
+                    const el = dom instanceof Element ? dom : dom.parentElement
+                    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" })
+                  }
+                }}
+              >
+                <div className="mb-1 flex items-start justify-between gap-2">
+                  <span className="text-2xs font-bold uppercase text-[color:var(--n9-accent)]">{comment.author}</span>
+                  <span className="text-3xs text-muted-foreground">
+                    {new Date(comment.createdAt).toLocaleString()}
+                  </span>
+                </div>
+                <p className="mb-1.5 line-clamp-3 text-xs text-foreground">{comment.content}</p>
+                <div className="flex items-center justify-between opacity-0 transition-opacity group-hover:opacity-100">
+                  <span className="max-w-[140px] truncate text-2xs italic text-muted-foreground">"{comment.text}"</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      editor.commands.deleteComment(comment.id)
+                    }}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
               </div>
-              <p className="text-xs text-foreground mb-2 line-clamp-3">{comment.content}</p>
-              <div className="flex justify-between items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                <span className="text-2xs text-muted-foreground italic truncate max-w-[120px]">"{comment.text}"</span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 text-destructive hover:bg-destructive/10"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    editor.commands.deleteComment(comment.id)
-                  }}
-                >
-                  <Trash2 className="h-3 w-3" />
-                </Button>
-              </div>
-            </div>
-          ))
-        )}
+            ))
+          )}
+        </div>
       </div>
     </div>
   )
@@ -2068,6 +2098,10 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
       /* ignore quota/availability errors */
     }
   }, [ribbonTab])
+  // Phones can't usefully render the fixed-width paginated "Page view" (the 816px
+  // sheet is wider than the viewport and gets horizontally clipped, so the user
+  // can't scroll to the rest of the page). Infinite scroll is the default there.
+  const isMobile = useIsMobile()
   // Page setup for print / PDF export (orientation + margins).
   const [pageSetup, setPageSetup] = useState<{
     orientation: "portrait" | "landscape"
@@ -2114,8 +2148,9 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     setPageSetup((p) => ({
       ...p,
       orientation: l.orientation,
-      // Don't force Page view on in embedded/read-only shells that opt out of it.
-      pageView: !panelEmbed && !hideToolbar ? l.pageView : p.pageView,
+      // Don't force Page view on in embedded/read-only shells that opt out of it,
+      // and never restore it on phones where the sheet can't be scrolled.
+      pageView: !panelEmbed && !hideToolbar ? (isMobile ? false : l.pageView) : p.pageView,
       rulers: l.rulers,
       margins: { ...l.margins },
     }))
@@ -2125,7 +2160,14 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     setFooterAlign(l.footer.align)
     setShowPageNumbers(l.pageNumbers)
     setPageNumberAlign(l.pageNumberAlign)
-  }, [panelEmbed, hideToolbar])
+  }, [panelEmbed, hideToolbar, isMobile])
+
+  // When the viewport is (or becomes) phone-sized, fall back to infinite scroll.
+  // Runs only on isMobile changes, so a user can still manually opt into Page
+  // view on a larger screen without it being yanked back.
+  useEffect(() => {
+    if (isMobile) setPageSetup((p) => (p.pageView ? { ...p, pageView: false } : p))
+  }, [isMobile])
 
   // Live height of the page sheet so the vertical ruler can repeat its scale per page.
   const pageSheetRef = useRef<HTMLDivElement | null>(null)
@@ -2207,12 +2249,29 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
   const [bibliographyModalOpen, setBibliographyModalOpen] = useState(false)
   const [foundPapers, setFoundPapers] = useState<Paper[]>([])
   const [selectedPapers, setSelectedPapers] = useState<Set<number>>(new Set())
-  const [citationInsertPosition, setCitationInsertPosition] = useState<number>(0)
+  // Cite-with-AI sidebar: which list is shown (AI/web matches vs the full saved
+  // library browser), plus the lazily-loaded repository papers for that browser.
+  const [citeView, setCiteView] = useState<"results" | "library">("results")
+  const [repositoryPapers, setRepositoryPapers] = useState<Paper[]>([])
+  const [repoLoading, setRepoLoading] = useState(false)
   // Where the currently-shown citation results came from, and the query that
-  // produced them (so the modal can offer a web search when the repository
+  // produced them (so the panel can offer a web search when the repository
   // had nothing useful).
   const [citationSource, setCitationSource] = useState<"repository" | "web" | null>(null)
   const [lastCiteQuery, setLastCiteQuery] = useState<string>("")
+  const displayedCitationPapers = useMemo(
+    () => (citeView === "library" ? repositoryPapers : foundPapers),
+    [citeView, repositoryPapers, foundPapers],
+  )
+  // Compact list vs roomier cards, and a draggable, persisted panel width.
+  const [citeLayout, setCiteLayout] = useState<"cards" | "table">("cards")
+  const citationSidebar = useResizable({
+    initialWidth: 360,
+    minWidth: 300,
+    maxWidth: 620,
+    direction: "right",
+    persistKey: "n9:citation-sidebar-width",
+  })
   // Whether the user has explicitly chosen a citation style. Until they have,
   // the bibliography stays empty and references are never auto-populated. A
   // previously-saved style (or a prior choice) counts as chosen.
@@ -2696,7 +2755,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
 
       let updated = reformatInlineCitations(html, newStyle)
       if (metaMap.size > 0) {
-        updated = reformatBibliography(updated, metaMap, newStyle)
+        updated = reformatBibliography(updated, metaMap, newStyle, firstDocumentFontFamily(editor))
       }
       if (updated !== html) {
         editor.commands.setContent(updated)
@@ -3072,12 +3131,56 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     const timeoutId = setTimeout(() => controller.abort(), 120000)
     try {
       const query = rawQuery.trim().slice(0, 1000)
-      const response = await fetch(`/api/search-papers?query=${encodeURIComponent(query)}`, {
+      // Use the web-capable literature endpoint (web search first, then
+      // PubMed/Europe PMC/OpenAlex). It streams SSE: `papers` arrives first,
+      // followed by AI summaries we don't need here — so we read until the
+      // `papers` event, then stop the stream early.
+      const response = await fetch(`/api/literature/ai-search`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query, web_search: true, limit: 12 }),
         signal: controller.signal,
       })
-      if (!response.ok) throw new Error("Citation search failed")
-      const payload = (await response.json()) as { papers?: SearchPaper[] }
-      const papers = payload.papers ?? []
+      if (!response.ok || !response.body) throw new Error("Citation search failed")
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ""
+      let papers: SearchPaper[] = []
+      streamLoop: while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        // SSE events are separated by a blank line.
+        let sepIndex: number
+        while ((sepIndex = buffer.indexOf("\n\n")) !== -1) {
+          const rawEvent = buffer.slice(0, sepIndex)
+          buffer = buffer.slice(sepIndex + 2)
+          let eventName = "message"
+          const dataLines: string[] = []
+          for (const line of rawEvent.split("\n")) {
+            if (line.startsWith("event:")) eventName = line.slice(6).trim()
+            else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim())
+          }
+          if (eventName === "papers") {
+            try {
+              const parsed = JSON.parse(dataLines.join("\n")) as { papers?: SearchPaper[] }
+              papers = parsed.papers ?? []
+            } catch {
+              /* ignore a malformed papers frame — treated as no results */
+            }
+            break streamLoop
+          }
+          if (eventName === "error") throw new Error("Citation search failed")
+          if (eventName === "done") break streamLoop
+        }
+      }
+      // We have the papers we need; cancel the rest of the stream (summaries).
+      try {
+        await reader.cancel()
+      } catch {
+        /* stream already closed */
+      }
 
       const seen = new Set<string>()
       const uniqueData: Paper[] = []
@@ -3122,8 +3225,8 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     }
 
     const query = selectedText.trim().slice(0, 1000)
-    setCitationInsertPosition(to)
     setLastCiteQuery(query)
+    setCiteView("results")
 
     try {
       setIsCiteProcessing(true)
@@ -3188,6 +3291,9 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
   const handleCiteSelected = useCallback(() => {
     if (!editor || selectedPapers.size === 0) return
 
+    // Insert at the user's live cursor — the docked sidebar is non-modal, so the
+    // editor keeps its selection and the user can reposition between insertions.
+    const insertPos = editor.state.selection.to
     const html = editor.getHTML()
 
     // Determine insert position among existing citations by counting
@@ -3202,7 +3308,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     // Build new citation entries from selected papers
     const sortedIndices = Array.from(selectedPapers).sort((a, b) => a - b)
     const newEntries: CitationEntry[] = sortedIndices.map((index) => {
-      const paper = foundPapers[index]
+      const paper = displayedCitationPapers[index]
       return {
         key: paper?.id?.toString() || `new-${Date.now()}-${index}`,
         metadata: {
@@ -3233,8 +3339,8 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
       citationText += `<a href="${meta.url}" data-paper-id="${meta.paperId}" data-paper-title="${meta.title.replace(/"/g, '&quot;')}" data-paper-authors="${authorsJson}" data-paper-year="${meta.year}" data-paper-journal="${(meta.journal || '').replace(/"/g, '&quot;')}" data-paper-doi="${meta.doi || ''}" target="_blank" rel="noopener noreferrer">${inlineLabel}</a>`
     })
 
-    // Insert at cursor position
-    editor.chain().focus().setTextSelection(citationInsertPosition).insertContent(citationText).run()
+    // Insert at the live cursor position
+    editor.chain().focus().setTextSelection(insertPos).insertContent(citationText).run()
 
     // Renumber all existing citations in the document to match store order
     setTimeout(() => {
@@ -3245,11 +3351,13 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
       }
     }, 100)
 
-    // Close modal and reset
-    setCitationModalOpen(false)
-    setFoundPapers([])
+    // Keep the sidebar open so the user can keep adding citations; just clear
+    // the current selection and confirm what was inserted.
     setSelectedPapers(new Set())
-  }, [editor, selectedPapers, foundPapers, citationInsertPosition, selectedCitationStyle, citationDispatch])
+    toast.success(
+      `Inserted ${newEntries.length} citation${newEntries.length === 1 ? "" : "s"} at cursor`,
+    )
+  }, [editor, selectedPapers, displayedCitationPapers, selectedCitationStyle, citationDispatch])
 
   const togglePaperSelection = useCallback((index: number) => {
     setSelectedPapers(prev => {
@@ -3262,6 +3370,133 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
       return newSet
     })
   }, [])
+
+  // Load the user's full saved-paper library for the sidebar's "My library" view.
+  const loadRepositoryPapers = useCallback(async () => {
+    setRepoLoading(true)
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from("literature_reviews")
+        .select("id,title,authors,journal,publication_year,doi,pmid,url,abstract,catalog_placement")
+        .eq("catalog_placement", "repository")
+        .order("created_at", { ascending: false })
+        .limit(200)
+      if (error || !data) {
+        setRepositoryPapers([])
+        return
+      }
+      const mapped: Paper[] = data.map((row: any) => {
+        const bareDoi = row.doi ? String(row.doi).replace(/^https?:\/\/(dx\.)?doi\.org\//i, "").trim() : ""
+        const sourceUrl =
+          (row.url ? String(row.url) : "") ||
+          (bareDoi ? `https://doi.org/${bareDoi}` : "") ||
+          (row.pmid ? `https://pubmed.ncbi.nlm.nih.gov/${row.pmid}/` : "")
+        const authors =
+          typeof row.authors === "string" && row.authors.trim()
+            ? row.authors.split(/[;,]/).map((a: string) => a.trim()).filter(Boolean)
+            : []
+        const year =
+          typeof row.publication_year === "number"
+            ? row.publication_year
+            : row.publication_year
+              ? Number(row.publication_year) || null
+              : null
+        return {
+          id: String(row.id),
+          title: String(row.title ?? ""),
+          authors,
+          year,
+          journal: String(row.journal ?? ""),
+          source_url: sourceUrl,
+          doi: bareDoi,
+        }
+      })
+      setRepositoryPapers(mapped)
+    } catch {
+      setRepositoryPapers([])
+    } finally {
+      setRepoLoading(false)
+    }
+  }, [])
+
+  // Sidebar view switches — clear the (index-based) selection when the list changes.
+  const showCitationResults = useCallback(() => {
+    setCiteView("results")
+    setSelectedPapers(new Set())
+  }, [])
+  const showCitationLibrary = useCallback(() => {
+    setCiteView("library")
+    setSelectedPapers(new Set())
+    void loadRepositoryPapers()
+  }, [loadRepositoryPapers])
+
+  // One-click "insert bibliography at end" from the sidebar — same numbering and
+  // citation-format pipeline as the toolbar bibliography, without the preview modal.
+  // Build the store state locally so it applies immediately (the reducer dispatch
+  // below only keeps the store in sync for later edits).
+  // Right-click "Add comment": ensure a range to anchor the comment (expand to the
+  // word under the caret when nothing is selected), then open the comment input.
+  const openCommentAtCursor = useCallback(() => {
+    if (!editor) return
+    const sel = editor.state.selection
+    if (sel.empty) {
+      const $pos = sel.$from
+      const text = $pos.parent.textContent || ""
+      const offset = $pos.parentOffset
+      let start = offset
+      let end = offset
+      while (start > 0 && /\S/.test(text[start - 1])) start--
+      while (end < text.length && /\S/.test(text[end])) end++
+      if (end > start) {
+        const base = $pos.start()
+        editor.chain().focus().setTextSelection({ from: base + start, to: base + end }).run()
+      } else {
+        editor.chain().focus().run()
+      }
+    } else {
+      editor.chain().focus().run()
+    }
+    setIsCommenting(true)
+  }, [editor])
+
+  // Insert/refresh the bibliography. Works no matter how the inline citations were
+  // added (AI cite, library, or pasted [N] text); updates an existing References
+  // section in place instead of appending a duplicate; matches the document font.
+  const handleInsertBibliographyInline = useCallback(() => {
+    if (!editor) return
+    const html = editor.getHTML()
+    const parsed = parseCitationsFromHtml(html)
+    if (parsed.length === 0) {
+      toast.error('No citations to list yet', {
+        description: 'Insert some citations first, then add the bibliography.',
+        duration: 4000,
+      })
+      return
+    }
+    // Don't block on style selection — fall back to the active style so the
+    // button always produces references; remember the choice for next time.
+    if (!citationStyleChosen) markCitationStyleChosen()
+    const entries: CitationEntry[] = parsed.map((c) => ({
+      key: c.paperId || `cite-${c.number}`,
+      metadata: {
+        citationNumber: c.number,
+        url: c.url,
+        title: c.title || '',
+        authors: c.authors || [],
+        year: c.year || 0,
+        journal: c.journal || '',
+        doi: c.doi || '',
+        paperId: c.paperId,
+      },
+    }))
+    citationDispatch({ type: 'SYNC_FROM_HTML', entries })
+    const updatedHtml = applyStoreToHtml(html, { ...citationState, entries }, firstDocumentFontFamily(editor))
+    if (updatedHtml !== html) {
+      editor.commands.setContent(updatedHtml)
+    }
+    toast.success('References updated')
+  }, [editor, citationStyleChosen, markCitationStyleChosen, citationState, citationDispatch])
 
   const handleGenerateBibliography = useCallback(async () => {
     if (!editor) return
@@ -3318,7 +3553,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     if (!editor || citationState.entries.length === 0) return
 
     const currentHtml = editor.getHTML()
-    const updatedHtml = applyStoreToHtml(currentHtml, citationState)
+    const updatedHtml = applyStoreToHtml(currentHtml, citationState, firstDocumentFontFamily(editor))
 
     if (updatedHtml !== currentHtml) {
       editor.commands.setContent(updatedHtml)
@@ -4822,22 +5057,6 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
         <TooltipContent>Insert spreadsheet</TooltipContent>
       </Tooltip>
 
-      <div className="inline-flex shrink-0 items-center gap-1">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={isListening ? stopSpeechToText : startSpeechToText}
-              className={cn("h-8 w-8 rounded-lg p-0 shrink-0", isListening && "bg-accent text-red-500")}
-            >
-              <Mic className="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{isListening ? "Stop dictation" : "Start dictation"}</TooltipContent>
-        </Tooltip>
-        {isListening && <VoiceWaveform getWaveformData={getWaveformData} />}
-      </div>
       </span>
 
       {/* ── Home run: alignment ── */}
@@ -5113,8 +5332,17 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
                 <Quote className="mr-2 h-4 w-4" />
                 Cite with AI
               </DropdownMenuItem>
-              <DropdownMenuItem data-tour="editor-bibliography" onClick={handleGenerateBibliography} disabled={isCiteProcessing}>
+              <DropdownMenuItem
+                onClick={() => {
+                  setCitationModalOpen(true)
+                  showCitationLibrary()
+                }}
+              >
                 <BookOpen className="mr-2 h-4 w-4" />
+                Browse library &amp; cite
+              </DropdownMenuItem>
+              <DropdownMenuItem data-tour="editor-bibliography" onClick={handleGenerateBibliography} disabled={isCiteProcessing}>
+                <FileText className="mr-2 h-4 w-4" />
                 Generate bibliography
               </DropdownMenuItem>
               <DropdownMenuSeparator />
@@ -5146,6 +5374,41 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
           </DropdownMenu>
         </span>
       )}
+
+      {/* ── Home run: quick tools — comments, citations/library, dictation ── */}
+      <span className={rg("home")}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setCommentsSidebarOpen((o) => !o)}
+              className={cn("h-8 w-8 rounded-lg p-0 shrink-0", commentsSidebarOpen && "bg-accent text-foreground")}
+              aria-label="Comments"
+            >
+              <MessageSquare className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Comments</TooltipContent>
+        </Tooltip>
+        <div className="inline-flex shrink-0 items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={isListening ? stopSpeechToText : startSpeechToText}
+                className={cn("h-8 w-8 rounded-lg p-0 shrink-0", isListening && "bg-accent text-red-500")}
+                aria-label={isListening ? "Stop dictation" : "Start dictation"}
+              >
+                <Mic className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{isListening ? "Stop dictation" : "Dictate"}</TooltipContent>
+          </Tooltip>
+          {isListening && <VoiceWaveform getWaveformData={getWaveformData} />}
+        </div>
+      </span>
 
       {/* ── Table run: contextual table tools (only while the cursor is in a table) ── */}
       <span className={rg("table")}>
@@ -5668,12 +5931,17 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
               pageSetup.pageView ? "n9-page-backdrop px-0 pt-0 pb-8 [overflow-x:clip]" : "overflow-x-auto px-2 pb-2 pr-20",
               // shift the centred page left so the comments sidebar doesn't cover it
               commentsSidebarOpen && "pr-[312px]",
+              // while dragging the citation sidebar, follow the width instantly
+              citationModalOpen && citationSidebar.isResizing && "!transition-none",
             )}
-            style={
-              panelEmbed || fillParentHeight || editorRegionFullscreen
+            style={{
+              ...(panelEmbed || fillParentHeight || editorRegionFullscreen
                 ? { minHeight: 0, maxHeight: "100%" }
-                : { minHeight, maxHeight: "calc(100dvh - 300px)" }
-            }
+                : { minHeight, maxHeight: "calc(100dvh - 300px)" }),
+              // The citation sidebar reflows the page left by its live width (+gap)
+              // so the document is never covered, at any panel width.
+              ...(citationModalOpen ? { paddingRight: citationSidebar.width + 16 } : {}),
+            }}
             ref={(node) => setEditorContainer(node)}
           >
             {pageSetup.pageView && pageSetup.rulers && (
@@ -5782,6 +6050,8 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
                     insertImage: openImageDialog,
                     insertTable: () => growTable(tableRows || 3, tableCols || 3),
                     insertEquation: enableMath ? () => setMathEdit({ pos: -1, latex: "", block: false }) : undefined,
+                    citeFromRepository: () => { setCitationModalOpen(true); showCitationLibrary(); },
+                    addComment: () => setIsCommenting(true),
                   }}
                 >
                   <EditorContent editor={editor} />
@@ -5799,8 +6069,251 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
             )}
           </div>
           {/* TOC and Comment Sidebar positioned absolutely relative to the card */}
-          {editor && <TableOfContents editor={editor} className={cn(commentsSidebarOpen ? "right-[304px]" : "right-4")} />}
+          {editor && !citationModalOpen && <TableOfContents editor={editor} className={cn(commentsSidebarOpen ? "right-[304px]" : "right-4")} />}
           {editor && <CommentSidebar editor={editor} open={commentsSidebarOpen} onClose={() => setCommentsSidebarOpen(false)} />}
+
+          {/* Cite-with-AI: docked, resizable, width-animated sidebar (replaces the
+              old blocking modal). Always mounted so it slides smoothly both ways;
+              the document reflows by the live panel width (set above). */}
+          <div
+            className={cn(
+              "absolute bottom-2 right-2 top-2 z-50 flex max-w-full flex-col overflow-hidden rounded-2xl border border-[color:var(--glass-border)] bg-sidebar shadow-[0_10px_34px_-18px_rgba(20,14,8,0.4)] dark:shadow-[0_12px_38px_-16px_rgba(0,0,0,0.6)]",
+              !citationSidebar.isResizing && "transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+              citationModalOpen ? "translate-x-0" : "pointer-events-none translate-x-full",
+            )}
+            style={{ width: citationSidebar.width }}
+            aria-hidden={!citationModalOpen}
+          >
+            {/* Drag the left edge to resize the panel. */}
+            <ResizeHandle
+              onMouseDown={citationSidebar.handleMouseDown}
+              isResizing={citationSidebar.isResizing}
+              position="left"
+              className="absolute left-0 top-0 z-20 h-full"
+            />
+
+            <TooltipProvider delayDuration={300}>
+              {/* Header: source tabs · density toggle + close (all icon buttons) */}
+              <div className="flex items-center justify-between gap-1 border-b border-[color:var(--glass-border)] py-1.5 pl-2.5 pr-1.5">
+                <div className="flex items-center gap-0.5">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant={citeView === "results" ? "secondary" : "ghost"}
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={showCitationResults}
+                        aria-label="AI & web matches"
+                      >
+                        <Sparkles className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="text-xs">AI &amp; web matches</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant={citeView === "library" ? "secondary" : "ghost"}
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={showCitationLibrary}
+                        aria-label="My saved library"
+                      >
+                        <BookOpen className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="text-xs">Your saved library</TooltipContent>
+                  </Tooltip>
+                </div>
+                <div className="flex items-center gap-0.5">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => setCiteLayout((v) => (v === "cards" ? "table" : "cards"))}
+                        aria-label={citeLayout === "cards" ? "Compact list view" : "Card view"}
+                      >
+                        {citeLayout === "cards" ? <List className="h-4 w-4" /> : <LayoutGrid className="h-4 w-4" />}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="text-xs">
+                      {citeLayout === "cards" ? "Compact list" : "Card view"}
+                    </TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => setCitationModalOpen(false)}
+                        aria-label="Close citations panel"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="text-xs">Close</TooltipContent>
+                  </Tooltip>
+                </div>
+              </div>
+
+              {/* Results */}
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                {repoLoading && citeView === "library" ? (
+                  <div className="flex items-center justify-center gap-2 py-10 text-xs text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Loading your library…
+                  </div>
+                ) : displayedCitationPapers.length === 0 ? (
+                  <div className="px-4 py-10 text-center text-xs leading-relaxed text-muted-foreground">
+                    {citeView === "library"
+                      ? "No saved papers in your library yet."
+                      : "No matches yet. Select text in the document and choose “Cite with AI”, or search the web."}
+                  </div>
+                ) : citeLayout === "table" ? (
+                  /* Compact list — scan many citations at once. */
+                  <ul className="divide-y divide-border/50">
+                    {displayedCitationPapers.map((paper, index) => {
+                      const year = paper.year && paper.year > 0 ? paper.year : null
+                      const isSelected = selectedPapers.has(index)
+                      return (
+                        <li
+                          key={paper.id}
+                          onClick={() => togglePaperSelection(index)}
+                          title={paper.title}
+                          className={cn(
+                            "flex cursor-pointer items-center gap-2 px-2.5 py-1.5 transition-colors",
+                            isSelected ? "bg-primary/5" : "hover:bg-muted/50",
+                          )}
+                        >
+                          <div
+                            className={cn(
+                              "flex size-4 shrink-0 items-center justify-center rounded-[4px] border transition-colors",
+                              isSelected
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "border-muted-foreground/40",
+                            )}
+                          >
+                            {isSelected && <Check className="h-2.5 w-2.5" aria-hidden="true" />}
+                          </div>
+                          <span className="min-w-0 flex-1 truncate text-xs text-foreground">{paper.title}</span>
+                          {year && (
+                            <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">{year}</span>
+                          )}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                ) : (
+                  /* Compact cards. */
+                  <div className="space-y-1.5 p-2">
+                    {displayedCitationPapers.map((paper, index) => {
+                      const year = paper.year && paper.year > 0 ? paper.year : null
+                      const isSelected = selectedPapers.has(index)
+                      return (
+                        <div
+                          key={paper.id}
+                          onClick={() => togglePaperSelection(index)}
+                          className={cn(
+                            "flex cursor-pointer items-start gap-2 rounded-lg border p-2 transition-colors",
+                            isSelected
+                              ? "border-primary bg-primary/5"
+                              : "border-border hover:border-primary/50 hover:bg-muted/30",
+                          )}
+                        >
+                          <div
+                            className={cn(
+                              "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-[4px] border transition-colors",
+                              isSelected
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "border-muted-foreground/40",
+                            )}
+                          >
+                            {isSelected && <Check className="h-2.5 w-2.5" aria-hidden="true" />}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="line-clamp-2 text-xs font-medium leading-snug text-foreground">{paper.title}</p>
+                            <p className="mt-0.5 truncate text-2xs text-muted-foreground">
+                              {paper.authors?.length
+                                ? `${paper.authors[0]}${paper.authors.length > 1 ? " et al." : ""}`
+                                : "Unknown author"}
+                              {year ? ` · ${year}` : ""}
+                              {paper.journal ? ` · ${paper.journal}` : ""}
+                            </p>
+                          </div>
+                          {paper.source_url && (
+                            <a
+                              href={paper.source_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                              title="Open source"
+                              aria-label="Open source"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </a>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer: icon actions */}
+              <div className="flex items-center gap-1 border-t border-border bg-muted/20 p-2">
+                {citationSource === "repository" && citeView === "results" && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={runWebCitationSearch}
+                        disabled={isCiteProcessing}
+                        aria-label="Search the web for more"
+                      >
+                        {isCiteProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="text-xs">Search the web for more</TooltipContent>
+                  </Tooltip>
+                )}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={handleInsertBibliographyInline}
+                      aria-label="Insert bibliography at end"
+                    >
+                      <ListOrdered className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs">Insert bibliography at the end</TooltipContent>
+                </Tooltip>
+                <div className="flex-1" />
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="sm"
+                      className="h-8 gap-1.5"
+                      onClick={handleCiteSelected}
+                      disabled={selectedPapers.size === 0}
+                      aria-label="Insert selected citations at cursor"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Insert{selectedPapers.size > 0 ? ` ${selectedPapers.size}` : ""}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs">Insert selected citations at the cursor</TooltipContent>
+                </Tooltip>
+              </div>
+            </TooltipProvider>
+          </div>
 
           {editor && (
             <BubbleMenu
@@ -5819,14 +6332,15 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
               {!isCommenting ? (
                 <Button
                   size="sm"
-                  className="shadow-xl bg-background border hover:bg-accent text-foreground h-8 px-3 gap-2"
+                  variant="outline"
+                  className="h-8 gap-2 border border-border bg-popover px-3 text-popover-foreground shadow-xl hover:bg-accent hover:text-accent-foreground"
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     setIsCommenting(true);
                   }}
                 >
-                  <MessageSquarePlus className="h-4 w-4" /> Add Comment
+                  <MessageSquarePlus className="h-4 w-4 shrink-0" /> Add Comment
                 </Button>
               ) : (
                 <div className="flex items-center gap-2 p-2 bg-background border border-border rounded-md shadow-lg min-w-[300px] pointer-events-auto">
@@ -6366,98 +6880,8 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
           </DialogContent>
         </Dialog>
 
-        {/* Citation Selection Modal */}
-        <Dialog open={citationModalOpen} onOpenChange={setCitationModalOpen}>
-          <DialogContent dialogSize="md" className="max-h-[80vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Select Citations</DialogTitle>
-              <DialogDescription>
-                {citationSource === "repository"
-                  ? "Matches from your library. Click a source to select it, or search the web for more."
-                  : "Results from the web. Click a source to select/deselect it."}
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-3 py-2">
-              {foundPapers.map((paper, index) => {
-                const year = paper.year && paper.year > 0 ? paper.year : null
-                const isSelected = selectedPapers.has(index)
-
-                return (
-                  <div
-                    key={paper.id}
-                    onClick={() => togglePaperSelection(index)}
-                    className={cn(
-                      "p-4 border rounded-lg cursor-pointer transition-all hover:shadow-md",
-                      isSelected ? "border-primary bg-primary/5 shadow-sm" : "border-border hover:border-primary/50"
-                    )}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className={cn(
-                        "flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-semibold transition-colors",
-                        isSelected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/30"
-                      )}>
-                        {isSelected && <Check className="h-3.5 w-3.5" aria-hidden="true" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-medium text-sm line-clamp-2 mb-1">
-                          {paper.title}
-                        </h4>
-                        {year && (
-                          <p className="text-xs text-muted-foreground mb-2">
-                            {year}
-                          </p>
-                        )}
-                        {paper.source_url && (
-                          <a
-                            href={paper.source_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="text-xs text-primary hover:underline inline-block"
-                          >
-                            View source →
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-
-            <DialogFooter className="gap-2 sm:justify-between">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setCitationModalOpen(false)
-                  setSelectedPapers(new Set())
-                }}
-              >
-                Cancel
-              </Button>
-              <div className="flex gap-2">
-                {citationSource === "repository" && (
-                  <Button
-                    variant="ghost"
-                    onClick={runWebCitationSearch}
-                    disabled={isCiteProcessing}
-                    className="gap-1.5"
-                  >
-                    {isCiteProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}
-                    Search the web
-                  </Button>
-                )}
-                <Button
-                  onClick={handleCiteSelected}
-                  disabled={selectedPapers.size === 0}
-                >
-                  Cite Selected ({selectedPapers.size})
-                </Button>
-              </div>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        {/* Citation selection now lives in the docked Cite-with-AI sidebar above
+            (rendered inside the editor's content region), not a blocking modal. */}
 
         {/* Bibliography Generation Modal */}
         <Dialog open={bibliographyModalOpen} onOpenChange={setBibliographyModalOpen}>

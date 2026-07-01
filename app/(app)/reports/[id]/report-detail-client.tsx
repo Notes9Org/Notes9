@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
 import { useMediaQuery } from "@/hooks/use-media-query"
-import { FileText, PanelLeftClose, PanelLeftOpen, Loader2, MoreVertical, Trash2 } from "lucide-react"
+import { FileText, ChevronLeft, List, Loader2, MoreVertical, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ReportDetailView } from "./report-detail-view"
 import type { ReportRow } from "../reports-page-client"
@@ -188,16 +188,18 @@ export function ReportDetailClient({
 
   const toggleButton = (
     <Button
+      type="button"
       variant="ghost"
-      size="icon"
+      size="icon-sm"
       className="shrink-0 text-muted-foreground hover:text-foreground"
       onClick={() => setSidebarOpen((prev) => !prev)}
-      title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+      aria-label={sidebarOpen ? "Hide reports" : "Show reports"}
+      title={sidebarOpen ? "Hide reports list" : "Show reports list"}
     >
       {sidebarOpen ? (
-        <PanelLeftClose className="h-4 w-4" />
+        <ChevronLeft className="h-4 w-4" />
       ) : (
-        <PanelLeftOpen className="h-4 w-4" />
+        <List className="h-4 w-4" />
       )}
     </Button>
   )
@@ -235,12 +237,22 @@ export function ReportDetailClient({
           {/* Desktop Sidebar */}
           <aside
             className={cn(
-              "hidden sm:flex min-h-0 shrink-0 flex-col self-stretch overflow-hidden border-r border-border relative transition-[width]",
-              sidebarOpen ? "w-52 min-w-[13rem] bg-muted/20" : "w-0 border-r-0"
+              "hidden sm:flex min-h-0 shrink-0 flex-col self-stretch overflow-hidden relative",
+              sidebarOpen ? "border-r border-border bg-muted/20" : "border-r-0"
             )}
+            /* Animate the rail width (like lab notes): the fixed-width inner panel
+               stays mounted and is clipped by overflow-hidden, so it slides
+               smoothly instead of reflowing. */
+            style={{
+              width: sidebarOpen ? "13rem" : 0,
+              minWidth: 0,
+              transition: "width 0.5s cubic-bezier(0.22, 1, 0.36, 1)",
+            }}
             aria-hidden={!sidebarOpen}
           >
-            {sidebarOpen && <SidebarContent />}
+            <div className="flex h-full min-h-0 w-52 min-w-[13rem] flex-col">
+              <SidebarContent />
+            </div>
           </aside>
 
           {/* Mobile Sidebar (Sheet) */}

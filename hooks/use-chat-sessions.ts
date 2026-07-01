@@ -58,6 +58,34 @@ export interface ChatSession {
   kind?: string | null;
   /** Arbitrary session-level metadata (e.g. { literature: LiteratureSessionContext }). */
   metadata?: Record<string, unknown> | null;
+  /** Optional user folder (chat_folders.id). Undefined until 092 is applied. */
+  folder_id?: string | null;
+}
+
+/** A user-defined folder for organising chats (scripts/092_chat_folders.sql). */
+export interface ChatFolder {
+  id: string;
+  user_id: string;
+  name: string;
+  color: string | null;
+  sort: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** chat_folders table / folder_id column not migrated yet (092 not applied). */
+function isFolderSchemaError(error: unknown): boolean {
+  const s = formatSupabaseErr(error).toLowerCase();
+  return (
+    s.includes('chat_folders') ||
+    s.includes('folder_id') ||
+    s.includes('42p01') || // undefined_table
+    s.includes('42703') || // undefined_column
+    s.includes('pgrst205') || // table not found in schema cache
+    s.includes('pgrst204') || // column not found in schema cache
+    s.includes('schema cache') ||
+    s.includes('does not exist')
+  );
 }
 
 export interface ChatMessage {
@@ -80,6 +108,12 @@ export function useChatSessions(protocolId?: string) {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const supabase = useMemo(() => createClient(), []);
+
+  // User folders (Catalyst only). `foldersAvailable` flips false when the 092
+  // migration hasn't been applied, so the UI can hide folder features cleanly.
+  const [folders, setFolders] = useState<ChatFolder[]>([]);
+  const [foldersAvailable, setFoldersAvailable] = useState(true);
+  const foldersUnavailableRef = useRef(false);
 
   /** Protocol AI: persist in localStorage when `protocol_id` column is not migrated. */
   const protocolUseLocalRef = useRef(false);
@@ -404,9 +438,121 @@ export function useChatSessions(protocolId?: string) {
     }
   }, [supabase, protocolId]);
 
+  // ── Folders (Catalyst only) ──────────────────────────────────────────
+  const loadFolders = useCallback(async () => {
+    if (!user || protocolId || foldersUnavailableRef.current) return;
+    try {
+      const { data, error } = await supabase
+        .from('chat_folders')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('sort', { ascending: true })
+        .order('created_at', { ascending: true });
+      if (error) {
+        if (isFolderSchemaError(error)) {
+          foldersUnavailableRef.current = true;
+          setFoldersAvailable(false);
+          return;
+        }
+        throw error;
+      }
+      setFolders((data as ChatFolder[]) || []);
+    } catch (error) {
+      console.error('Error loading chat folders:', formatSupabaseErr(error));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supabase, protocolId]);
+
+  const createFolder = useCallback(
+    async (name: string, color?: string | null): Promise<ChatFolder | null> => {
+      if (!user || protocolId) return null;
+      try {
+        const { data, error } = await supabase
+          .from('chat_folders')
+          .insert({ user_id: user.id, name, color: color ?? null, sort: 0 })
+          .select()
+          .single();
+        if (error) {
+          if (isFolderSchemaError(error)) {
+            foldersUnavailableRef.current = true;
+            setFoldersAvailable(false);
+          }
+          throw error;
+        }
+        setFolders((prev) => [...prev, data as ChatFolder]);
+        return data as ChatFolder;
+      } catch (error) {
+        console.error('Error creating chat folder:', formatSupabaseErr(error));
+        return null;
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    },
+    [supabase, protocolId],
+  );
+
+  const renameFolder = useCallback(
+    async (folderId: string, name: string) => {
+      try {
+        const now = new Date().toISOString();
+        const { error } = await supabase
+          .from('chat_folders')
+          .update({ name, updated_at: now })
+          .eq('id', folderId);
+        if (error) throw error;
+        setFolders((prev) => prev.map((f) => (f.id === folderId ? { ...f, name, updated_at: now } : f)));
+      } catch (error) {
+        console.error('Error renaming chat folder:', formatSupabaseErr(error));
+      }
+    },
+    [supabase],
+  );
+
+  const deleteFolder = useCallback(
+    async (folderId: string) => {
+      try {
+        const { error } = await supabase.from('chat_folders').delete().eq('id', folderId);
+        if (error) throw error;
+        setFolders((prev) => prev.filter((f) => f.id !== folderId));
+        // DB sets folder_id -> NULL (ON DELETE SET NULL); mirror it locally so the
+        // chats immediately reappear as ungrouped.
+        setSessions((prev) => prev.map((s) => (s.folder_id === folderId ? { ...s, folder_id: null } : s)));
+      } catch (error) {
+        console.error('Error deleting chat folder:', formatSupabaseErr(error));
+      }
+    },
+    [supabase],
+  );
+
+  const moveSessionToFolder = useCallback(
+    async (sessionId: string, folderId: string | null) => {
+      // Optimistic — the row jumps groups immediately.
+      setSessions((prev) => prev.map((s) => (s.id === sessionId ? { ...s, folder_id: folderId } : s)));
+      try {
+        const { error } = await supabase
+          .from('chat_sessions')
+          .update({ folder_id: folderId })
+          .eq('id', sessionId);
+        if (error) {
+          if (isFolderSchemaError(error)) {
+            foldersUnavailableRef.current = true;
+            setFoldersAvailable(false);
+          }
+          throw error;
+        }
+      } catch (error) {
+        console.error('Error moving chat to folder:', formatSupabaseErr(error));
+      }
+    },
+    [supabase],
+  );
+
   useEffect(() => {
     void loadSessions();
   }, [loadSessions]);
+
+  useEffect(() => {
+    void loadFolders();
+  }, [loadFolders]);
 
   return {
     sessions,
@@ -421,5 +567,13 @@ export function useChatSessions(protocolId?: string) {
     clearSessionMessages,
     loadMessages,
     saveMessage,
+    // Folders
+    folders,
+    foldersAvailable,
+    loadFolders,
+    createFolder,
+    renameFolder,
+    deleteFolder,
+    moveSessionToFolder,
   };
 }

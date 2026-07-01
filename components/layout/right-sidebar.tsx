@@ -17,7 +17,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
 import { Button } from '@/components/ui/button';
-import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import {
   Tooltip,
@@ -40,6 +40,16 @@ import {
   NotebookPen,
   PenBox,
   MoreHorizontal,
+  Pin,
+  PinOff,
+  Pencil,
+  Check,
+  ChevronRight,
+  Folder,
+  FolderPlus,
+  FolderInput,
+  CheckSquare,
+  Search,
   Trash2,
   ChevronDown,
   X,
@@ -94,10 +104,12 @@ import { ResizeHandle } from '@/components/ui/resize-handle';
 import { useSidebar } from '@/components/ui/sidebar';
 import { useTheme } from 'next-themes';
 import { requestPageHelp } from '@/components/tour/app-tour';
+import { ReportIssueDialog } from '@/components/layout/report-issue-dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -106,6 +118,7 @@ import {
   Popover,
   PopoverAnchor,
   PopoverContent,
+  PopoverTrigger,
 } from '@/components/ui/popover';
 import { usePaperAI } from '@/contexts/paper-ai-context';
 import { PaperAIPanel } from '@/components/text-editor/paper-ai-panel';
@@ -1209,7 +1222,14 @@ export function RightSidebar({
     currentSessionId,
     setCurrentSessionId,
     updateSessionTitle,
+    updateSessionMetadata,
     deleteSession,
+    folders,
+    foldersAvailable,
+    createFolder,
+    renameFolder,
+    deleteFolder,
+    moveSessionToFolder,
   } = useChatSessions();
 
   const currentSessionRef = useRef<string | null>(null);
@@ -3563,6 +3583,261 @@ export function RightSidebar({
     </div>
   );
 
+  // ── Chat-history row actions: pin (float to top) + inline rename ──────
+  const sessionIsPinned = (s: ChatSession) =>
+    Boolean((s.metadata as Record<string, unknown> | null | undefined)?.pinned);
+  const orderedSessions = useMemo(
+    () => [...sessions].sort((a, b) => Number(sessionIsPinned(b)) - Number(sessionIsPinned(a))),
+    [sessions],
+  );
+  const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
+  const commitSessionRename = useCallback(() => {
+    setRenamingSessionId((id) => {
+      if (id) {
+        const t = renameDraft.trim();
+        if (t) void updateSessionTitle(id, t);
+      }
+      return null;
+    });
+    setRenameDraft('');
+  }, [renameDraft, updateSessionTitle]);
+  const cancelSessionRename = useCallback(() => {
+    setRenamingSessionId(null);
+    setRenameDraft('');
+  }, []);
+
+  // The ⋯ actions menu shared by both history surfaces (absolute-positioned in
+  // the row's `group/row relative` wrapper).
+  const renderSessionMenu = (session: ChatSession) => {
+    const pinned = sessionIsPinned(session);
+    const md = (session.metadata as Record<string, unknown> | null | undefined) ?? {};
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label="Chat options"
+            onClick={(e) => e.stopPropagation()}
+            className="absolute right-1 top-1/2 z-10 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-sidebar-foreground/60 transition-colors hover:bg-background/70 hover:text-foreground data-[state=open]:bg-background/70 data-[state=open]:text-foreground"
+          >
+            <MoreHorizontal className="size-4" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" sideOffset={4} className="w-44">
+          <DropdownMenuItem onSelect={() => void updateSessionMetadata(session.id, { ...md, pinned: !pinned })}>
+            {pinned ? <PinOff className="mr-2 size-4" /> : <Pin className="mr-2 size-4" />}
+            {pinned ? 'Unpin' : 'Pin'}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => { setRenamingSessionId(session.id); setRenameDraft(session.title || ''); }}>
+            <Pencil className="mr-2 size-4" /> Rename
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            className="text-destructive focus:text-destructive"
+            onSelect={() => {
+              if (currentSessionId === session.id) { setMessages([]); currentSessionRef.current = null; }
+              void deleteSession(session.id);
+              toast.success('Chat deleted');
+            }}
+          >
+            <Trash2 className="mr-2 size-4" /> Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  };
+
+  // Inline rename input reused by both history surfaces.
+  const renderSessionRenameInput = () => (
+    <input
+      autoFocus
+      value={renameDraft}
+      onChange={(e) => setRenameDraft(e.target.value)}
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') { e.preventDefault(); commitSessionRename(); }
+        else if (e.key === 'Escape') { e.preventDefault(); cancelSessionRename(); }
+      }}
+      onBlur={commitSessionRename}
+      className="min-w-0 flex-1 rounded border border-[color:color-mix(in_srgb,var(--n9-accent)_45%,var(--border))] bg-background px-1.5 py-0.5 text-sm outline-none"
+    />
+  );
+
+  // ── Multi-select + folders (full-screen chat history) ────────────────
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedChatIds, setSelectedChatIds] = useState<Set<string>>(() => new Set());
+  const [historyQuery, setHistoryQuery] = useState('');
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(() => new Set());
+  const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
+  const [folderRenameDraft, setFolderRenameDraft] = useState('');
+  const beginFolderRename = (id: string, current: string) => {
+    setRenamingFolderId(id);
+    setFolderRenameDraft(current);
+  };
+  const commitFolderRename = useCallback(() => {
+    setRenamingFolderId((id) => {
+      if (id) {
+        const t = folderRenameDraft.trim();
+        if (t) void renameFolder(id, t);
+      }
+      return null;
+    });
+    setFolderRenameDraft('');
+  }, [folderRenameDraft, renameFolder]);
+  const cancelFolderRename = useCallback(() => {
+    setRenamingFolderId(null);
+    setFolderRenameDraft('');
+  }, []);
+  const toggleChatSelected = (id: string) =>
+    setSelectedChatIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const exitSelection = useCallback(() => {
+    setSelectionMode(false);
+    setSelectedChatIds(new Set());
+  }, []);
+  const toggleFolderCollapsed = (id: string) =>
+    setCollapsedFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const bulkDeleteSelected = useCallback(() => {
+    const ids = Array.from(selectedChatIds);
+    if (ids.length === 0) return;
+    if (currentSessionId && ids.includes(currentSessionId)) {
+      setMessages([]);
+      currentSessionRef.current = null;
+    }
+    ids.forEach((id) => void deleteSession(id));
+    toast.success(`Deleted ${ids.length} chat${ids.length > 1 ? 's' : ''}`);
+    exitSelection();
+  }, [selectedChatIds, currentSessionId, deleteSession, setMessages, exitSelection]);
+  const bulkMoveSelected = useCallback(
+    async (folderId: string | null) => {
+      const ids = Array.from(selectedChatIds);
+      if (ids.length === 0) return;
+      await Promise.all(ids.map((id) => moveSessionToFolder(id, folderId)));
+      toast.success(
+        folderId
+          ? `Moved ${ids.length} chat${ids.length > 1 ? 's' : ''} to folder`
+          : `Removed ${ids.length} chat${ids.length > 1 ? 's' : ''} from folder`,
+      );
+      exitSelection();
+    },
+    [selectedChatIds, moveSessionToFolder, exitSelection],
+  );
+  const handleNewFolder = useCallback(async (): Promise<string | null> => {
+    const name = typeof window !== 'undefined' ? window.prompt('New folder name')?.trim() : '';
+    if (!name) return null;
+    const folder = await createFolder(name);
+    if (!folder) {
+      toast.error('Could not create the folder.');
+      return null;
+    }
+    return folder.id;
+  }, [createFolder]);
+  const createFolderAndMoveSelected = useCallback(async () => {
+    const id = await handleNewFolder();
+    if (id) await bulkMoveSelected(id);
+  }, [handleNewFolder, bulkMoveSelected]);
+
+  // Group sessions into user folders + an ungrouped bucket (pinned float first
+  // within the ungrouped list). Folders only appear once the 092 migration is
+  // applied (`foldersAvailable`).
+  const historyGroups = useMemo(() => {
+    const q = historyQuery.trim().toLowerCase();
+    const matches = q
+      ? orderedSessions.filter((s) => (s.title || 'New conversation').toLowerCase().includes(q))
+      : orderedSessions;
+    const usable = foldersAvailable ? folders : [];
+    const byFolder = new Map<string, ChatSession[]>();
+    const ungrouped: ChatSession[] = [];
+    for (const s of matches) {
+      const fid = s.folder_id ?? null;
+      if (fid && usable.some((f) => f.id === fid)) {
+        const arr = byFolder.get(fid) ?? [];
+        arr.push(s);
+        byFolder.set(fid, arr);
+      } else {
+        ungrouped.push(s);
+      }
+    }
+    // While searching, hide folders that have no matching chats.
+    const shownFolders = q ? usable.filter((f) => (byFolder.get(f.id)?.length ?? 0) > 0) : usable;
+    return { folders: shownFolders, byFolder, ungrouped, query: q };
+  }, [orderedSessions, folders, foldersAvailable, historyQuery]);
+
+  // One history row — supports selection checkboxes, inline rename, pin glyph,
+  // and the ⋯ actions menu.
+  const renderAsideRow = (session: ChatSession) => {
+    const isActive = currentSessionId === session.id;
+    const pinned = sessionIsPinned(session);
+    const isRenaming = renamingSessionId === session.id;
+    const isSelected = selectedChatIds.has(session.id);
+    return (
+      <MotionItem key={session.id} className="group/row relative" role="listitem">
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => {
+            if (isRenaming) return;
+            if (selectionMode) toggleChatSelected(session.id);
+            else loadSession(session.id);
+          }}
+          onKeyDown={(e) => {
+            if (isRenaming) return;
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              if (selectionMode) toggleChatSelected(session.id);
+              else loadSession(session.id);
+            }
+          }}
+          className={cn(
+            'relative flex min-h-9 min-w-0 items-center gap-2 rounded-lg py-2 pl-3 text-left text-sm outline-none transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground',
+            selectionMode ? 'pr-3' : 'pr-9',
+            isActive && !selectionMode && "bg-sidebar-accent font-medium text-sidebar-accent-foreground before:absolute before:left-0.5 before:top-1/2 before:h-5 before:w-1 before:-translate-y-1/2 before:rounded-full before:bg-primary before:content-['']",
+            isSelected && 'bg-sidebar-accent/70',
+          )}
+        >
+          {selectionMode && (
+            <span
+              className={cn(
+                'flex size-4 shrink-0 items-center justify-center rounded-[4px] border transition-colors',
+                isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-border',
+              )}
+            >
+              {isSelected && <Check className="size-3" />}
+            </span>
+          )}
+          {isRenaming ? (
+            renderSessionRenameInput()
+          ) : (
+            <>
+              <span
+                className={cn(
+                  'block min-w-0 flex-1 truncate font-medium',
+                  isActive ? 'text-sidebar-accent-foreground' : 'text-inherit',
+                )}
+                title={session.title || 'New conversation'}
+              >
+                {session.title || 'New conversation'}
+              </span>
+              {pinned && <Pin className="size-3 shrink-0 fill-current text-[color:var(--n9-accent)]" aria-label="Pinned" />}
+            </>
+          )}
+        </div>
+        {!isRenaming && !selectionMode && renderSessionMenu(session)}
+      </MotionItem>
+    );
+  };
+
   const showLiteratureEmptyState = agentMode === 'literature' && isLiteratureRoute;
   const emptyStateSubheading = showLiteratureEmptyState ? 'For Literature' : null;
   const emptyStateDescription = showLiteratureEmptyState
@@ -3647,77 +3922,70 @@ export function RightSidebar({
                 <>
                   <ScrollArea className="w-full whitespace-nowrap scrollbar-hide">
                     <div className="flex items-center gap-1">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-8 sm:size-9 text-muted-foreground shrink-0"
-                              aria-label="Show chat history"
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8 sm:size-9 text-muted-foreground shrink-0"
+                            aria-label="Show chat history"
                           >
-                              <History className="size-4" />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" className="flex w-[290px] max-w-[min(290px,calc(100vw-2rem))] flex-col p-0 overflow-hidden" sideOffset={4}>
+                            <History className="size-4" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent align="start" sideOffset={4} className="flex w-[300px] max-w-[min(300px,calc(100vw-2rem))] flex-col overflow-hidden p-0">
                           <div className="p-2 text-xs font-semibold text-muted-foreground/80 uppercase tracking-wider border-b shrink-0">
                             History
                           </div>
-                          <ScrollArea className="h-[280px] w-full overflow-hidden">
-                            <div className="min-w-max p-1">
-                              {sessions.length === 0 ? (
-                                <div className="py-6 text-center text-muted-foreground text-xs">No history yet.</div>
-                              ) : (
-                                sessions.map(session => (
-                                  <div
-                                    key={session.id}
-                                    className="group/row relative"
-                                  >
-                                    <button
-                                      type="button"
-                                      onClick={() => loadSession(session.id)}
-                                      className={cn(
-                                        "flex min-w-max max-w-full items-center justify-between gap-2 overflow-hidden rounded-md px-2 py-1.5 pr-12 text-left text-sm transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90",
-                                        currentSessionId === session.id
-                                          ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                                          : "text-sidebar-foreground/70"
-                                      )}
-                                    >
-                                      <span
+                          <div className="h-[300px] w-full overflow-y-auto overflow-x-hidden p-1">
+                            {sessions.length === 0 ? (
+                              <div className="py-6 text-center text-muted-foreground text-xs">No history yet.</div>
+                            ) : (
+                              orderedSessions.map((session) => {
+                                const isActive = currentSessionId === session.id;
+                                const pinned = sessionIsPinned(session);
+                                const isRenaming = renamingSessionId === session.id;
+                                return (
+                                  <div key={session.id} className="group/row relative">
+                                    {isRenaming ? (
+                                      <div className="flex min-w-0 items-center rounded-md py-1.5 pl-2 pr-2">
+                                        {renderSessionRenameInput()}
+                                      </div>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => loadSession(session.id)}
                                         className={cn(
-                                          "block truncate whitespace-nowrap font-medium",
-                                          currentSessionId === session.id
-                                            ? "text-sidebar-accent-foreground"
-                                            : "text-inherit"
+                                          "flex w-full min-w-0 items-center justify-between gap-2 rounded-md py-1.5 pl-2 pr-9 text-left text-sm transition-colors duration-150 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
+                                          isActive ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground/70"
                                         )}
-                                        title={session.title || 'New conversation'}
                                       >
-                                        {session.title || 'New conversation'}
-                                      </span>
-                                      <span className="shrink-0 text-2xs text-sidebar-foreground/70 opacity-70">
-                                        {new Date(session.updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                                      </span>
-                                    </button>
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="icon"
-                                      className={cn(
-                                        "absolute right-1 top-1/2 z-10 h-7 w-7 -translate-y-1/2 rounded-full border border-border/35 bg-background/82 text-sidebar-foreground/70 shadow-sm backdrop-blur-md transition-[opacity,transform,background-color,color] duration-200 ease-out hover:bg-background hover:text-destructive",
-                                        currentSessionId === session.id ? "opacity-100" : "pointer-events-none translate-x-1 opacity-0 group-hover/row:pointer-events-auto group-hover/row:translate-x-0 group-hover/row:opacity-100"
-                                      )}
-                                      onClick={(e) => handleDeleteSession(e, session.id)}
-                                      aria-label="Delete chat"
-                                    >
-                                      <Trash2 className="size-3.5" />
-                                    </Button>
+                                        <span
+                                          className={cn(
+                                            "block min-w-0 flex-1 truncate font-medium",
+                                            isActive ? "text-sidebar-accent-foreground" : "text-inherit"
+                                          )}
+                                          title={session.title || 'New conversation'}
+                                        >
+                                          {session.title || 'New conversation'}
+                                        </span>
+                                        {pinned ? (
+                                          <Pin className="size-3 shrink-0 fill-current text-[color:var(--n9-accent)]" aria-label="Pinned" />
+                                        ) : (
+                                          <span className="shrink-0 text-2xs text-sidebar-foreground/60">
+                                            {new Date(session.updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                          </span>
+                                        )}
+                                      </button>
+                                    )}
+                                    {!isRenaming && renderSessionMenu(session)}
                                   </div>
-                                ))
-                              )}
-                            </div>
-                            <ScrollBar orientation="horizontal" />
-                          </ScrollArea>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                                );
+                              })
+                            )}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
 
                       {/* Title kept here so the left cluster reads the same as the
                           page header; the "New chat" action lives in the right
@@ -3757,6 +4025,7 @@ export function RightSidebar({
                   >
                     <CircleHelp className="size-4" />
                   </Button>
+                  <ReportIssueDialog />
                   <Button
                     id="tour-theme-toggle"
                     variant="ghost"
@@ -3873,7 +4142,7 @@ export function RightSidebar({
                     the panel collapses to 0. */}
                 <div
                   className="m-2 flex h-[calc(100%-1rem)] min-h-0 flex-col gap-1 rounded-2xl border border-[color:var(--glass-border)] bg-sidebar/80 p-2 shadow-[0_10px_34px_-18px_rgba(20,14,8,0.4)] backdrop-blur-md dark:bg-sidebar/60 dark:shadow-[0_12px_38px_-16px_rgba(0,0,0,0.6)]"
-                  style={{ width: historySidebar.width }}
+                  style={{ width: historySidebar.width - 16 }}
                 >
                   {/* Header row — close button + "Chats" label on the top-left,
                       new chat on the right. */}
@@ -3888,19 +4157,61 @@ export function RightSidebar({
                     >
                       <PanelLeft className="h-4 w-4" />
                     </Button>
-                    <span className="flex-1 truncate text-[0.7rem] font-semibold uppercase tracking-wider">Chats</span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 shrink-0"
-                      onClick={handleNewChat}
-                      aria-label="New chat"
-                    >
-                      <PenBox className="h-4 w-4" />
-                    </Button>
+                    {selectionMode ? (
+                      <>
+                        <span className="flex-1 truncate text-[0.7rem] font-semibold">
+                          {selectedChatIds.size} selected
+                        </span>
+                        <Button variant="ghost" size="sm" className="h-7 shrink-0 px-2 text-xs" onClick={exitSelection}>
+                          Cancel
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="flex-1 truncate text-[0.7rem] font-semibold uppercase tracking-wider">Chats</span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 shrink-0"
+                          onClick={handleNewChat}
+                          title="New chat"
+                          aria-label="New chat"
+                        >
+                          <PenBox className="h-4 w-4" />
+                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" title="More" aria-label="More options">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" sideOffset={4} className="w-44">
+                            <DropdownMenuItem onSelect={() => setSelectionMode(true)}>
+                              <CheckSquare className="mr-2 size-4" /> Select chats
+                            </DropdownMenuItem>
+                            {foldersAvailable && (
+                              <DropdownMenuItem onSelect={() => void handleNewFolder()}>
+                                <FolderPlus className="mr-2 size-4" /> New folder
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </>
+                    )}
+                  </div>
+                  {/* Search chats */}
+                  <div className="relative shrink-0 px-0.5 pb-1">
+                    <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-sidebar-foreground/45" />
+                    <input
+                      value={historyQuery}
+                      onChange={(e) => setHistoryQuery(e.target.value)}
+                      placeholder="Search chats…"
+                      aria-label="Search chats"
+                      className="h-8 w-full rounded-lg border border-[color:var(--glass-border)] bg-background/50 pl-8 pr-2 text-sm text-sidebar-foreground outline-none placeholder:text-sidebar-foreground/40 focus:border-[color:color-mix(in_srgb,var(--n9-accent)_45%,var(--border))]"
+                    />
                   </div>
                   {/* List - same structure as lab notes */}
-                  <ScrollArea className="min-h-0 flex-1 overflow-hidden">
+                  <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
                     {sessionsLoading && sessions.length === 0 ? (
                       <div className="flex flex-col gap-0.5 pr-1" aria-hidden aria-label="Loading conversations">
                         {[...Array(5)].map((_, i) => (
@@ -3914,53 +4225,144 @@ export function RightSidebar({
                     ) : sessions.length === 0 ? (
                     <div className="px-2 py-6 text-center text-sidebar-foreground/70 text-xs">No previous conversations.</div>
                     ) : (
-                      <MotionList className="flex min-w-0 flex-col gap-0.5 pr-1" role="list">
-                        {sessions.map((session) => (
-                          <MotionItem
-                            key={session.id}
-                            className="group/row relative"
-                            role="listitem"
-                          >
-                            <div
-                              role="button"
-                              tabIndex={0}
-                              onClick={() => loadSession(session.id)}
-                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); loadSession(session.id); } }}
-                              className={cn(
-                                "relative grid min-h-9 min-w-0 grid-cols-[1fr_auto] items-center gap-2 rounded-lg px-3 py-2 text-left text-sm outline-none transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90",
-                                currentSessionId === session.id && "bg-sidebar-accent font-medium text-sidebar-accent-foreground before:absolute before:left-0.5 before:top-1/2 before:h-5 before:w-1 before:-translate-y-1/2 before:rounded-full before:bg-primary before:content-['']"
+                      <div className="flex min-w-0 flex-col gap-1 pr-1">
+                        {historyGroups.folders.map((folder) => {
+                          const items = historyGroups.byFolder.get(folder.id) ?? [];
+                          const collapsed = collapsedFolders.has(folder.id);
+                          const isFolderRenaming = renamingFolderId === folder.id;
+                          return (
+                            <div key={folder.id} className="min-w-0">
+                              <div className="group/folder flex w-full min-w-0 items-center gap-1 rounded-md px-1.5 py-1 text-[0.68rem] font-semibold uppercase tracking-wider text-sidebar-foreground/55">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleFolderCollapsed(folder.id)}
+                                  className="flex shrink-0 items-center gap-1 transition-colors hover:text-sidebar-foreground"
+                                  aria-label={collapsed ? 'Expand folder' : 'Collapse folder'}
+                                >
+                                  <ChevronRight className={cn('size-3 shrink-0 transition-transform', !collapsed && 'rotate-90')} />
+                                  <Folder className="size-3 shrink-0" />
+                                </button>
+                                {isFolderRenaming ? (
+                                  <input
+                                    autoFocus
+                                    value={folderRenameDraft}
+                                    onChange={(e) => setFolderRenameDraft(e.target.value)}
+                                    onClick={(e) => e.stopPropagation()}
+                                    onKeyDown={(e) => {
+                                      e.stopPropagation();
+                                      if (e.key === 'Enter') { e.preventDefault(); commitFolderRename(); }
+                                      else if (e.key === 'Escape') { e.preventDefault(); cancelFolderRename(); }
+                                    }}
+                                    onBlur={commitFolderRename}
+                                    className="min-w-0 flex-1 rounded border border-[color:color-mix(in_srgb,var(--n9-accent)_45%,var(--border))] bg-background px-1 py-0.5 text-[0.7rem] uppercase tracking-wider outline-none"
+                                  />
+                                ) : (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleFolderCollapsed(folder.id)}
+                                      onDoubleClick={() => beginFolderRename(folder.id, folder.name)}
+                                      className="min-w-0 flex-1 truncate text-left transition-colors hover:text-sidebar-foreground"
+                                      title="Double-click to rename"
+                                    >
+                                      {folder.name}
+                                    </button>
+                                    <span className="shrink-0 tabular-nums opacity-70">{items.length}</span>
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                        <button
+                                          type="button"
+                                          aria-label="Folder options"
+                                          onClick={(e) => e.stopPropagation()}
+                                          className="shrink-0 rounded p-0.5 text-sidebar-foreground/50 opacity-0 transition-opacity hover:text-foreground group-hover/folder:opacity-100 data-[state=open]:opacity-100"
+                                        >
+                                          <MoreHorizontal className="size-3.5" />
+                                        </button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="end" sideOffset={4} className="w-40">
+                                        <DropdownMenuItem onSelect={() => beginFolderRename(folder.id, folder.name)}>
+                                          <Pencil className="mr-2 size-4" /> Rename
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                          className="text-destructive focus:text-destructive"
+                                          onSelect={() => void deleteFolder(folder.id)}
+                                        >
+                                          <Trash2 className="mr-2 size-4" /> Delete folder
+                                        </DropdownMenuItem>
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+                                  </>
+                                )}
+                              </div>
+                              {!collapsed && (
+                                <MotionList className="flex min-w-0 flex-col gap-0.5 pl-1.5" role="list">
+                                  {items.length > 0 ? (
+                                    items.map(renderAsideRow)
+                                  ) : (
+                                    <div className="px-3 py-1.5 text-2xs text-sidebar-foreground/45">Empty — move chats here</div>
+                                  )}
+                                </MotionList>
                               )}
-                            >
-                              <span
-                                className={cn(
-                                  "block truncate font-medium",
-                                  currentSessionId === session.id
-                                    ? "text-sidebar-accent-foreground"
-                                    : "text-inherit"
-                                )}
-                                title={session.title || 'New conversation'}
-                              >
-                                {session.title || 'New conversation'}
-                              </span>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className={cn(
-                                  "size-8 shrink-0 text-sidebar-foreground/70 transition-[opacity,transform,color] duration-200 ease-out hover:text-destructive",
-                                  currentSessionId === session.id ? "opacity-100" : "pointer-events-none translate-x-1 opacity-0 group-hover/row:pointer-events-auto group-hover/row:translate-x-0 group-hover/row:opacity-100"
-                                )}
-                                onClick={(e) => handleDeleteSession(e, session.id)}
-                                aria-label="Delete chat"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
                             </div>
-                          </MotionItem>
-                        ))}
-                      </MotionList>
+                          );
+                        })}
+                        {historyGroups.folders.length > 0 && historyGroups.ungrouped.length > 0 && (
+                          <div className="px-1.5 pt-1 text-[0.68rem] font-semibold uppercase tracking-wider text-sidebar-foreground/45">
+                            Chats
+                          </div>
+                        )}
+                        <MotionList className="flex min-w-0 flex-col gap-0.5" role="list">
+                          {historyGroups.ungrouped.map(renderAsideRow)}
+                        </MotionList>
+                        {historyGroups.query && historyGroups.folders.length === 0 && historyGroups.ungrouped.length === 0 && (
+                          <div className="px-2 py-6 text-center text-xs text-sidebar-foreground/55">
+                            No chats match “{historyQuery.trim()}”.
+                          </div>
+                        )}
+                      </div>
                     )}
-                    <ScrollBar orientation="horizontal" />
-                  </ScrollArea>
+                  </div>
+                  {selectionMode && selectedChatIds.size > 0 && (
+                    <div className="mt-1 flex shrink-0 items-center gap-1 rounded-lg border border-[color:var(--glass-border)] bg-background/60 p-1 backdrop-blur-sm">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 flex-1 gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        onClick={bulkDeleteSelected}
+                      >
+                        <Trash2 className="size-4" /> Delete
+                      </Button>
+                      {foldersAvailable && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-8 flex-1 gap-1.5">
+                              <FolderInput className="size-4" /> Move
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" sideOffset={6} className="w-52">
+                            <DropdownMenuLabel>Move to folder</DropdownMenuLabel>
+                            {folders.map((f) => (
+                              <DropdownMenuItem key={f.id} onSelect={() => void bulkMoveSelected(f.id)}>
+                                <Folder className="mr-2 size-4" />
+                                <span className="truncate">{f.name}</span>
+                              </DropdownMenuItem>
+                            ))}
+                            <DropdownMenuItem onSelect={() => void createFolderAndMoveSelected()}>
+                              <FolderPlus className="mr-2 size-4" /> New folder…
+                            </DropdownMenuItem>
+                            {folders.length > 0 && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onSelect={() => void bulkMoveSelected(null)}>
+                                  Remove from folder
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                    </div>
+                  )}
                 </div>
               </aside>
               {expandedHistoryOpen && (

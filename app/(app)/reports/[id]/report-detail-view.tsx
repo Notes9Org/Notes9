@@ -113,6 +113,9 @@ export function ReportDetailView({ report, leftControls, sidebar }: ReportDetail
 
   const [content, setContent] = useState(initialHtml)
   const editorRef = useRef<Editor | null>(null)
+  // Wraps the list sidebar + editor so editor fullscreen expands the whole
+  // workspace (keeping the reports list visible), matching the lab-notes tab.
+  const reportWorkspaceRef = useRef<HTMLDivElement>(null)
   const [editorReady, setEditorReady] = useState(false)
   const searchParams = useSearchParams()
   const [inlineHighlightTarget, setInlineHighlightTarget] = useState<HighlightTarget | null>(null)
@@ -274,8 +277,12 @@ export function ReportDetailView({ report, leftControls, sidebar }: ReportDetail
 
           <TabsContent
             value="editor"
-            className="mt-0 flex min-h-0 min-w-0 flex-1 flex-row gap-4 overflow-hidden focus-visible:outline-none data-[state=inactive]:hidden"
+            className="mt-0 flex min-h-0 min-w-0 flex-1 overflow-hidden focus-visible:outline-none data-[state=inactive]:hidden"
           >
+            <div
+              ref={reportWorkspaceRef}
+              className="flex min-h-0 min-w-0 flex-1 flex-row gap-4 overflow-hidden bg-background"
+            >
             {sidebar && (
               <Card className="flex min-h-0 shrink-0 flex-col gap-0 py-0 border-0 shadow-none rounded-none sm:border sm:shadow-sm sm:rounded-xl">
                 {sidebar}
@@ -296,6 +303,7 @@ export function ReportDetailView({ report, leftControls, sidebar }: ReportDetail
                     enableMath
                     hideExportControls
                     leadingToolbarSlot={leftControls}
+                    fullscreenWorkspaceRef={reportWorkspaceRef}
                     onEditorReady={(ed) => { editorRef.current = ed; setEditorReady(true) }}
                   />
                 ) : (
@@ -306,6 +314,7 @@ export function ReportDetailView({ report, leftControls, sidebar }: ReportDetail
                 )}
               </CardContent>
             </Card>
+            </div>
           </TabsContent>
 
           <TabsContent value="details" className="mt-0 space-y-4 focus-visible:outline-none overflow-y-auto min-h-0 pb-4">
