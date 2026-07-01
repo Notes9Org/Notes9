@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import {
   Search,
   Loader2,
+  Square,
   Database,
   Unlock,
   Telescope,
@@ -60,6 +61,8 @@ interface LiteratureSearchFormProps {
   setQuery: (query: string) => void
   isSearching: boolean
   onSearch: () => void
+  /** When set, the busy button becomes a Stop button that aborts the search. */
+  onStop?: () => void
   /** When provided, a Filters control is shown inside the search bar. */
   filters?: AiResultFilters
   onFiltersChange?: (next: AiResultFilters) => void
@@ -70,6 +73,7 @@ export function LiteratureSearchForm({
   setQuery,
   isSearching,
   onSearch,
+  onStop,
   filters,
   onFiltersChange,
 }: LiteratureSearchFormProps) {
@@ -109,25 +113,42 @@ export function LiteratureSearchForm({
             />
           </div>
         )}
-        <button
-          type="submit"
-          disabled={isSearching || !query.trim()}
-          aria-label="Search"
-          title="Search"
-          className={cn(
-            'flex h-11 shrink-0 items-center gap-1.5 rounded-xl px-4 text-sm font-medium',
-            'bg-primary text-primary-foreground shadow-sm',
-            'transition-all duration-200 hover:bg-[var(--n9-accent-hover)] hover:shadow-[0_6px_18px_-8px_var(--n9-accent-glow)]',
-            'disabled:pointer-events-none disabled:opacity-50',
-          )}
-        >
-          {isSearching ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Search className="h-4 w-4" />
-          )}
-          <span className="hidden sm:inline">Search</span>
-        </button>
+        {isSearching && onStop ? (
+          <button
+            type="button"
+            onClick={onStop}
+            aria-label="Stop search"
+            title="Stop search"
+            className={cn(
+              'flex h-11 shrink-0 items-center gap-1.5 rounded-xl px-4 text-sm font-medium',
+              'bg-primary text-primary-foreground shadow-sm',
+              'transition-all duration-200 hover:bg-[var(--n9-accent-hover)] hover:shadow-[0_6px_18px_-8px_var(--n9-accent-glow)]',
+            )}
+          >
+            <Square className="h-3.5 w-3.5 fill-current" />
+            <span className="hidden sm:inline">Stop</span>
+          </button>
+        ) : (
+          <button
+            type="submit"
+            disabled={isSearching || !query.trim()}
+            aria-label="Search"
+            title="Search"
+            className={cn(
+              'flex h-11 shrink-0 items-center gap-1.5 rounded-xl px-4 text-sm font-medium',
+              'bg-primary text-primary-foreground shadow-sm',
+              'transition-all duration-200 hover:bg-[var(--n9-accent-hover)] hover:shadow-[0_6px_18px_-8px_var(--n9-accent-glow)]',
+              'disabled:pointer-events-none disabled:opacity-50',
+            )}
+          >
+            {isSearching ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Search className="h-4 w-4" />
+            )}
+            <span className="hidden sm:inline">Search</span>
+          </button>
+        )}
       </div>
     </form>
   )
@@ -165,6 +186,8 @@ interface SearchTabProps {
   onResults?: (papers: SearchPaper[]) => void
   /** Report AI-search loading so the host's search-bar spinner stays in sync. */
   onLoadingChange?: (loading: boolean) => void
+  /** Hand the host a `stop()` so the search bar can offer a Stop button. */
+  registerStop?: (fn: () => void) => void
 }
 
 export function SearchTab({
@@ -189,6 +212,7 @@ export function SearchTab({
   aiQuery,
   onResults,
   onLoadingChange,
+  registerStop,
 }: SearchTabProps) {
   // The AI runs on the submitted query (falls back to the live query).
   const effectiveAiQuery = aiQuery ?? query
@@ -233,6 +257,7 @@ export function SearchTab({
           isPaperStaging={isPaperStaging}
           onResults={onResults}
           onLoadingChange={onLoadingChange}
+          registerStop={registerStop}
         />
       )}
 

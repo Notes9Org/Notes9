@@ -35,6 +35,11 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
   const [input, setInput] = useState('');
   const [userName, setUserName] = useState<string>('');
   const [savedMessageIds, setSavedMessageIds] = useState<Set<string>>(new Set());
+  // Per-message attachment previews, keyed by the SAVED message id. Persisted in
+  // message metadata and re-signed on load (the `user` bucket is private).
+  const [messageAttachments, setMessageAttachments] = useState<Map<string, Attachment[]>>(
+    new Map()
+  );
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [votes, setVotes] = useState<Vote[]>([]);
   const [agentMode, setAgentMode] = useState<AgentMode>('general');
@@ -151,9 +156,58 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
         }));
         setMessages(chatMessages);
         setSavedMessageIds(new Set(msgs.map((m) => m.id)));
+
+        // Hydrate per-message attachments from metadata.
+        const hydratedAtts = new Map<string, Attachment[]>();
+        for (const m of msgs) {
+          const atts = (m as { metadata?: { attachments?: Attachment[] } }).metadata?.attachments;
+          if (Array.isArray(atts) && atts.length > 0) hydratedAtts.set(m.id, atts);
+        }
+        setMessageAttachments(hydratedAtts);
+
+        // The `user` bucket is private; persisted signed URLs expire, so re-sign
+        // from storagePath before rendering reloaded attachments.
+        const pathsToSign = Array.from(
+          new Set(
+            [...hydratedAtts.values()]
+              .flat()
+              .map((a) => a.storagePath)
+              .filter((p): p is string => !!p)
+          )
+        );
+        if (pathsToSign.length > 0) {
+          fetch('/api/files/sign', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ storagePaths: pathsToSign }),
+          })
+            .then((r) => (r.ok ? r.json() : Promise.reject(new Error('sign failed'))))
+            .then((data: { urls?: Record<string, string> }) => {
+              const urls = data?.urls ?? {};
+              if (Object.keys(urls).length === 0) return;
+              setMessageAttachments((prev) => {
+                const next = new Map(prev);
+                for (const [mid, list] of next) {
+                  next.set(
+                    mid,
+                    list.map((a) =>
+                      a.storagePath && urls[a.storagePath]
+                        ? { ...a, url: urls[a.storagePath] }
+                        : a
+                    )
+                  );
+                }
+                return next;
+              });
+            })
+            .catch(() => {
+              // Non-blocking: a failed re-sign leaves the (possibly stale) URLs.
+            });
+        }
       } else {
         setMessages([]);
         setSavedMessageIds(new Set());
+        setMessageAttachments(new Map());
       }
       hasLoadedSessionRef.current = sid;
       currentSessionRef.current = sid;
@@ -326,9 +380,18 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
       };
       setMessages((prev) => [...prev, userMessage]);
 
-      const savedUser = await saveMessage(sid, 'user', text);
+      const userAtts = attachments && attachments.length > 0 ? attachments : undefined;
+      const savedUser = await saveMessage(
+        sid,
+        'user',
+        text,
+        userAtts ? { attachments: userAtts } : undefined
+      );
       if (savedUser) {
         setSavedMessageIds((prev) => new Set(prev).add(savedUser.id));
+        if (userAtts) {
+          setMessageAttachments((prev) => new Map(prev).set(savedUser.id, userAtts));
+        }
         setMessages((prev) => {
           const next = [...prev];
           const last = next[next.length - 1];
@@ -609,6 +672,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
   );
 
   const handleRegenerate = useCallback(async () => {
+    if (isLoading) return;
     if (messages.length < 2) return;
 
     const sid = currentSessionRef.current;
@@ -702,6 +766,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
 
     regenerate();
   }, [
+    isLoading,
     messages,
     getMessageContent,
     regenerate,
@@ -758,6 +823,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
           ) : (
             <CatalystMessages
               messages={messages}
+              messageAttachments={messageAttachments}
               getMessageContent={getMessageContent}
               isLoading={isLoading}
               sessionId={currentSessionRef.current}
@@ -770,6 +836,8 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
                     ? () => {
                         agentStream.abort();
                         agentStream.reset();
+                        // Also cancel the backend run if one is active (HITL mode).
+                        if (agentStream.runId) agentStream.cancel();
                       }
                     : stop
                   : undefined
@@ -818,6 +886,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
               ? () => {
                   agentStream.abort();
                   agentStream.reset();
+                  if (agentStream.runId) agentStream.cancel();
                 }
               : stop
           }

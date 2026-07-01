@@ -53,13 +53,17 @@ export function LiteratureSummaryPanel({ lit }: { lit: CatalystLiterature }) {
             return true
           }}
         />
-      ) : (
+      ) : lit.streaming ? (
         <div className="space-y-2.5" aria-label="Composing summary">
           <div className="n9-skeleton-shimmer h-3 w-[94%] rounded-full bg-muted/60" />
           <div className="n9-skeleton-shimmer h-3 w-[100%] rounded-full bg-muted/60" />
           <div className="n9-skeleton-shimmer h-3 w-[86%] rounded-full bg-muted/60" />
           <div className="n9-skeleton-shimmer h-3 w-[72%] rounded-full bg-muted/60" />
         </div>
+      ) : (
+        <p className="text-[13px] text-muted-foreground">
+          The AI summary could not be generated for this search. The sources below contain relevant results.
+        </p>
       )}
 
       {/* Sources — the shared modern block, identical to agent answers. */}

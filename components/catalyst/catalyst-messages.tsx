@@ -16,6 +16,7 @@ import {
   groundingResourceToPanelItem,
 } from '@/components/catalyst/agent-citations-panel';
 import { PersistedArtifactList } from '@/components/catalyst/agent-artifact-card';
+import { PreviewAttachment, type Attachment } from '@/components/catalyst/preview-attachment';
 import { AgentGraphList } from '@/components/catalyst/agent-graph-view';
 import { Notes9ChatLoader, toolCardsProgress } from '@/components/catalyst/notes9-chat-loader';
 import { Notes9ThinkingIndicator } from '@/components/catalyst/notes9-thinking-indicator';
@@ -27,6 +28,7 @@ import type { CitationsManifest, ToolCard, AgentArtifact, AgentGraph, CitationsM
 
 interface CatalystMessagesProps {
   messages: UIMessage[];
+  messageAttachments?: Map<string, Attachment[]>;
   getMessageContent: (message: UIMessage) => string;
   isLoading: boolean;
   sessionId: string | null;
@@ -60,6 +62,7 @@ interface CatalystMessagesProps {
 
 export function CatalystMessages({
   messages,
+  messageAttachments,
   getMessageContent,
   isLoading,
   sessionId,
@@ -198,7 +201,23 @@ export function CatalystMessages({
                         )}
                       >
                         {message.role === 'user' ? (
-                          <div className="whitespace-pre-wrap">{content}</div>
+                          <div className="space-y-2">
+                            {(() => {
+                              const atts = messageAttachments?.get(message.id) ?? [];
+                              return atts.length > 0 ? (
+                                <div className="flex flex-wrap gap-2">
+                                  {atts.map((a, i) => (
+                                    <PreviewAttachment
+                                      key={a.storagePath ?? a.url ?? i}
+                                      attachment={a}
+                                      compact
+                                    />
+                                  ))}
+                                </div>
+                              ) : null;
+                            })()}
+                            <div className="whitespace-pre-wrap">{content}</div>
+                          </div>
                         ) : (() => {
                           const rawSources = getMessageSources(message);
                           const allSources = [...(notes9Sources ?? []), ...rawSources];

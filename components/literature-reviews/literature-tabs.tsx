@@ -153,6 +153,8 @@ export function LiteratureTabs({
   const [openedStagedIds, setOpenedStagedIds] = useState<string[]>([])
   const openedStagedIdsRef = useRef(openedStagedIds)
   openedStagedIdsRef.current = openedStagedIds
+  // Holds the AI-search `stop()` so the search bar's Stop button can abort it.
+  const searchStopRef = useRef<(() => void) | null>(null)
   const [tabsInitialized, setTabsInitialized] = useState(false)
   /** Tabs opened before server refresh includes the new staged row. */
   const [pendingOpenTabIds, setPendingOpenTabIds] = useState<string[]>([])
@@ -780,7 +782,14 @@ export function LiteratureTabs({
   const handleCloseTabClick = (id: string, e: React.MouseEvent | React.KeyboardEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    closeTabOnly(id)
+    // Only staged papers have a staging row that can be removed, so only they
+    // get the "close tab / also remove from staging" prompt. Repo (library)
+    // papers and pending tabs have nothing to remove — close them immediately.
+    if (stagedByIdMerged.has(id)) {
+      setPendingCloseId(id)
+    } else {
+      closeTabOnly(id)
+    }
   }
 
   const openSaveDialog = (paper: SearchPaper, literatureId?: string) => {
@@ -995,6 +1004,7 @@ export function LiteratureTabs({
             setQuery={setQuery}
             isSearching={isSearching}
             onSearch={handleSearch}
+            onStop={() => searchStopRef.current?.()}
           />
 
           {resolvedActiveTab !== "search" && (
@@ -1013,7 +1023,7 @@ export function LiteratureTabs({
 
               <div className="mt-6">
                 {hasSearched && (
-                  <TabsContent value="search" className="m-0 border-none p-0">
+                  <TabsContent value="search" className="m-0 border-none p-0" forceMount>
                     <SearchTab
                       query={query}
                       setQuery={setQuery}
@@ -1035,6 +1045,9 @@ export function LiteratureTabs({
                       aiQuery={submittedQuery}
                       onResults={setSearchResults}
                       onLoadingChange={setIsSearching}
+                      registerStop={(fn) => {
+                        searchStopRef.current = fn
+                      }}
                     />
                   </TabsContent>
                 )}
@@ -1082,6 +1095,9 @@ export function LiteratureTabs({
               aiQuery={submittedQuery}
               onResults={setSearchResults}
               onLoadingChange={setIsSearching}
+              registerStop={(fn) => {
+                searchStopRef.current = fn
+              }}
             />
           )}
         </div>

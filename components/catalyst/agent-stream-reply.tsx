@@ -111,8 +111,14 @@ export function AgentStreamReply({
   liveCitationCount = 0,
   onRetry,
 }: AgentStreamReplyProps) {
+  // Prefer the done payload, but fall back to the streamed tokens when the
+  // payload's text is EMPTY (not just null) — an empty-string `content`/`answer`
+  // must not blank out an answer the user already watched stream in. `??` alone
+  // would keep the empty string, so treat blank/whitespace as absent.
   const displayAnswer =
-    donePayload?.content ?? donePayload?.answer ?? streamedAnswer;
+    (donePayload?.content && donePayload.content.trim() ? donePayload.content : null) ??
+    (donePayload?.answer && donePayload.answer.trim() ? donePayload.answer : null) ??
+    streamedAnswer;
   const rawGrounding =
     donePayload?.resources?.length
       ? donePayload.resources

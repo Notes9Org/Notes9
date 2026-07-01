@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { BookOpen, BookmarkCheck, BookmarkPlus, ExternalLink, FileText, Loader2, MessageCircle, Quote, ScrollText, Unlock } from 'lucide-react'
-import { decodeHtmlEntities, formatLiteratureAbstractPlain } from '@/lib/literature-abstract-display'
+import { stripHtmlToText, formatLiteratureAbstractPlain } from '@/lib/literature-abstract-display'
 import { cn } from '@/lib/utils'
 import { savePaperToLibrary } from '@/app/(app)/literature-reviews/actions'
 import { openCatalystPanel, attachToCatalyst } from '@/lib/catalyst-launch'
@@ -225,11 +225,11 @@ export function AiPaperCard({
     result.paper ??
     citationToSearchPaper({ title: result.aiTitle, url: result.sourceUrl, snippet: result.snippet })
 
-  const title = decodeHtmlEntities(result.paper?.title || result.aiTitle || 'Untitled result')
+  const title = stripHtmlToText(result.paper?.title || result.aiTitle || 'Untitled result')
   const authors = result.paper?.authors?.length
-    ? result.paper.authors.map(decodeHtmlEntities).join(', ')
+    ? result.paper.authors.map(stripHtmlToText).join(', ')
     : null
-  const journalYear = [result.paper?.journal && decodeHtmlEntities(result.paper.journal), result.paper?.year || null]
+  const journalYear = [result.paper?.journal && stripHtmlToText(result.paper.journal), result.paper?.year || null]
     .filter(Boolean)
     .join(' • ')
   const href = readUrl(result)
