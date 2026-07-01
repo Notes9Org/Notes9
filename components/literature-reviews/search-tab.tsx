@@ -1,14 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { PaperSearchSortMode, SearchPaper } from '@/types/paper-search'
 import { Input } from '@/components/ui/input'
 import {
-  Search,
-  Loader2,
+  X,
   Square,
+  Sparkles,
   Database,
   Unlock,
+  Mic,
   Telescope,
   ScrollText,
   MessageCircle,
@@ -17,10 +18,13 @@ import {
   ArrowRight,
   type LucideIcon,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { AiSearchView } from './ai-search-view'
 import { AiSearchFilters } from './ai-search-filters'
 import { DEFAULT_AI_FILTERS, type AiResultFilters } from '@/lib/ai-search-filters'
+import { useAwsTranscribe } from '@/hooks/use-aws-transcribe'
+import { VoiceWaveform } from '@/components/text-editor/voice-waveform'
 
 /** What the AI literature search offers — shown on the empty (pre-search) state. */
 const SEARCH_FEATURES: { Icon: LucideIcon; title: string; desc: string }[] = [
@@ -56,6 +60,58 @@ const SEARCH_FEATURES: { Icon: LucideIcon; title: string; desc: string }[] = [
   },
 ]
 
+/** Rotating example questions typed into the empty bar — signals that this is
+ *  a natural-language AI search, not a keyword box. */
+const AI_PROMPTS = [
+  'Find ASO kidney and plasma PK data across species',
+  'Summarize the evidence on GalNAc-siRNA liver delivery',
+  'Compare knockdown efficiency of gapmer vs siRNA designs',
+  'Papers measuring tissue half-life of 2′-MOE oligonucleotides',
+]
+
+/** Types the prompts in and out, one character at a time, and cycles them.
+ *  Pauses while the field is focused or has a value; static under
+ *  prefers-reduced-motion. Returns the placeholder string to show. */
+function useTypewriterPlaceholder(active: boolean): string {
+  const [text, setText] = useState(AI_PROMPTS[0])
+
+  useEffect(() => {
+    if (!active) return
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    if (reduce) {
+      setText(AI_PROMPTS[0])
+      return
+    }
+
+    let prompt = 0
+    let chars = 0
+    let deleting = false
+    let timer: ReturnType<typeof setTimeout>
+
+    const tick = () => {
+      const full = AI_PROMPTS[prompt]
+      chars += deleting ? -1 : 1
+      setText(full.slice(0, chars))
+
+      if (!deleting && chars >= full.length) {
+        deleting = true
+        timer = setTimeout(tick, 2000) // hold the finished line
+      } else if (deleting && chars <= 0) {
+        deleting = false
+        prompt = (prompt + 1) % AI_PROMPTS.length
+        timer = setTimeout(tick, 320)
+      } else {
+        timer = setTimeout(tick, deleting ? 22 : 42)
+      }
+    }
+
+    timer = setTimeout(tick, 900)
+    return () => clearTimeout(timer)
+  }, [active])
+
+  return text
+}
+
 interface LiteratureSearchFormProps {
   query: string
   setQuery: (query: string) => void
@@ -78,10 +134,36 @@ export function LiteratureSearchForm({
   onFiltersChange,
 }: LiteratureSearchFormProps) {
   const showFilters = !!(filters && onFiltersChange)
+  const [focused, setFocused] = useState(false)
+
+  // Animate example prompts only when the bar is idle (empty + unfocused).
+  const isEmptyIdle = !focused && !query && !isSearching
+  const typedPlaceholder = useTypewriterPlaceholder(isEmptyIdle)
+  const placeholder = isEmptyIdle
+    ? typedPlaceholder
+    : 'Ask a research question, or search papers…'
+
+  const { start: startMic, stop: stopMic, isListening, getWaveformData } = useAwsTranscribe({
+    onFinal: (text) => {
+      setQuery((query ? `${query} ${text}` : text).trimStart())
+    },
+    onInterim: () => {},
+    onError: (err) => toast.error(err),
+  })
+
+  const submit = () => {
+    if (isSearching || !query.trim()) return
+    onSearch()
+  }
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!query.trim()) return
-    onSearch()
+    submit()
+  }
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+      e.preventDefault()
+      submit()
+    }
   }
 
   return (
@@ -93,13 +175,39 @@ export function LiteratureSearchForm({
           'focus-within:border-primary/45 focus-within:bg-card focus-within:shadow-[0_12px_40px_-16px_var(--n9-accent-glow)]',
         )}
       >
-        <Telescope className="size-[18px] shrink-0 text-primary/70 transition-colors group-focus-within:text-primary" aria-hidden />
+        {/* Voice-to-text mic (same AWS Transcribe dictation as Catalyst chat).
+            The mic anchors the left of the bar and never shifts; the waveform
+            renders inline right after it while listening, so the stream stays
+            contained inside the bar (it does not float into the margin). */}
+        <button
+          type="button"
+          onClick={() => (isListening ? stopMic() : startMic())}
+          disabled={isSearching}
+          aria-label={isListening ? 'Stop dictation' : 'Dictate search query'}
+          title={isListening ? 'Stop dictation' : 'Dictate search query'}
+          className={cn(
+            'flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors',
+            'hover:text-foreground disabled:pointer-events-none disabled:opacity-50',
+            isListening && 'text-red-500 hover:text-red-600',
+          )}
+        >
+          <Mic className="size-4" />
+        </button>
+        {isListening && (
+          <VoiceWaveform getWaveformData={getWaveformData} className="shrink-0" />
+        )}
         <Input
-          type="search"
-          placeholder="Ask a research question, or search papers…"
+          /* type="text" (not "search") so the browser's native clear "×" never
+             appears — we render our own below. Placeholder cycles example
+             research questions to signal natural-language AI search. */
+          type="text"
+          placeholder={placeholder}
           className="h-12 flex-1 border-0 bg-transparent px-0 text-base shadow-none placeholder:text-muted-foreground/70 focus-visible:ring-0 focus-visible:ring-offset-0"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           disabled={isSearching}
           enterKeyHint="search"
           aria-label="Literature search query"
@@ -113,6 +221,9 @@ export function LiteratureSearchForm({
             />
           </div>
         )}
+        {/* Right control. Searching → Stop. Has text → Clear (×). Empty → a
+            faint AI sparkle mark, so the bar reads as AI search. Press Enter to
+            search; there is no dedicated Search button. */}
         {isSearching && onStop ? (
           <button
             type="button"
@@ -120,34 +231,35 @@ export function LiteratureSearchForm({
             aria-label="Stop search"
             title="Stop search"
             className={cn(
-              'flex h-11 shrink-0 items-center gap-1.5 rounded-xl px-4 text-sm font-medium',
+              'flex size-9 shrink-0 items-center justify-center rounded-full',
               'bg-primary text-primary-foreground shadow-sm',
-              'transition-all duration-200 hover:bg-[var(--n9-accent-hover)] hover:shadow-[0_6px_18px_-8px_var(--n9-accent-glow)]',
+              'transition-colors duration-200 hover:bg-[var(--n9-accent-hover)]',
             )}
           >
-            <Square className="h-3.5 w-3.5 fill-current" />
-            <span className="hidden sm:inline">Stop</span>
+            <Square className="size-3.5 fill-current" />
+          </button>
+        ) : query.trim() ? (
+          <button
+            type="button"
+            // Keep focus in the input while clearing.
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => setQuery('')}
+            aria-label="Clear search"
+            title="Clear"
+            className={cn(
+              'flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground',
+              'transition-colors duration-200 hover:bg-muted hover:text-foreground',
+            )}
+          >
+            <X className="size-4" />
           </button>
         ) : (
-          <button
-            type="submit"
-            disabled={isSearching || !query.trim()}
-            aria-label="Search"
-            title="Search"
-            className={cn(
-              'flex h-11 shrink-0 items-center gap-1.5 rounded-xl px-4 text-sm font-medium',
-              'bg-primary text-primary-foreground shadow-sm',
-              'transition-all duration-200 hover:bg-[var(--n9-accent-hover)] hover:shadow-[0_6px_18px_-8px_var(--n9-accent-glow)]',
-              'disabled:pointer-events-none disabled:opacity-50',
-            )}
+          <div
+            aria-hidden
+            className="flex size-9 shrink-0 items-center justify-center text-primary/55"
           >
-            {isSearching ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Search className="h-4 w-4" />
-            )}
-            <span className="hidden sm:inline">Search</span>
-          </button>
+            <Sparkles className="n9-ai-twinkle size-[18px]" />
+          </div>
         )}
       </div>
     </form>

@@ -1526,3 +1526,28 @@ body > [data-radix-popper-content-wrapper] {
     background-color: rgba(0, 0, 0, 0.5);
   }
 }
+
+/* AI-search sparkle: a gentle twinkle on the idle literature search bar so it
+   reads as AI-powered without a garish animated border. */
+@keyframes n9-ai-twinkle {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(1) rotate(0deg);
+  }
+  50% {
+    opacity: 0.95;
+    transform: scale(1.12) rotate(8deg);
+  }
+}
+
+.n9-ai-twinkle {
+  animation: n9-ai-twinkle 2.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .n9-ai-twinkle {
+    animation: none;
+    opacity: 0.6;
+  }
+}
