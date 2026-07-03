@@ -6,8 +6,8 @@
  * Feature-dwell timer hook (Workstream A).
  *
  * Tracks how long the user spends on each product feature and emits a
- * `feature_view` event via lib/telemetry/track.ts when the user navigates
- * away, the tab is hidden, or the component unmounts.
+ * `feature_view` PostHog event when the user navigates away, the tab is
+ * hidden, or the component unmounts.
  *
  * Wire this ONCE in app/(app)/layout.tsx (the authenticated app shell) so
  * every route change is captured without polluting individual page components.
@@ -22,7 +22,8 @@
 
 import { useEffect, useRef, useCallback } from 'react'
 import { usePathname } from 'next/navigation'
-import { track } from '@/lib/telemetry/track'
+import posthog from 'posthog-js'
+import { isPostHogConfigured } from '@/lib/analytics/posthog'
 
 // ---------------------------------------------------------------------------
 // Route → feature mapping
@@ -89,11 +90,15 @@ export function useFeatureTimer(): void {
     const durationMs = Date.now() - enterTime
     // Only track dwell times ≥ 500 ms to filter out accidental or bounce visits.
     if (durationMs >= 500) {
-      track('feature_view', {
-        feature,
-        properties: {},
-        durationMs,
-      })
+      try {
+        if (!isPostHogConfigured()) return
+        posthog.capture('feature_view', {
+          feature,
+          duration_ms: durationMs,
+        })
+      } catch {
+        // Analytics must never break the app (this runs in unmount cleanup).
+      }
     }
   }, [])
 
