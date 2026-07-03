@@ -16,6 +16,8 @@
  * optional web search; use **`POST /notes9`** for SQL/RAG over lab data.
  */
 
+import type { AllowedMimeType } from './attachment-types';
+
 export type Notes9AgentHistoryItem = { role: string; content: string };
 
 /** Workspace entity the user explicitly tagged for this turn. Catalyst preflights
@@ -42,16 +44,21 @@ export type Notes9AgentAttachment = {
 export type Notes9FileAttachment = {
   url: string;
   name: string;
-  content_type:
-    | 'image/jpeg'
-    | 'image/png'
-    | 'image/gif'
-    | 'image/webp'
-    | 'application/pdf'
-    | 'text/csv'
-    | 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    | 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  content_type: AllowedMimeType;
   size: number;
+};
+
+/** A transient paper passed inline for grounding + inline citation (no DB row).
+ * Materialized into a citable source at preflight (agents/core/literature_preflight.py). */
+export type Notes9LiteratureSource = {
+  title: string;
+  abstract?: string;
+  doi?: string;
+  pmid?: string;
+  journal?: string;
+  year?: number;
+  url?: string;
+  authors?: string[];
 };
 
 export type Notes9AgentRequestInput = {
@@ -63,6 +70,9 @@ export type Notes9AgentRequestInput = {
   attachments?: Notes9AgentAttachment[];
   /** User-uploaded files (images, PDFs) the LLM should consume this turn. */
   file_attachments?: Notes9FileAttachment[];
+  /** Transient papers (title + abstract + ids) grounded + inline-cited without a
+   * literature_review row — follow-up context / closed-access "Ask Catalyst". */
+  literature_sources?: Notes9LiteratureSource[];
   options?: {
     debug?: boolean;
     max_retries?: number;
@@ -105,6 +115,9 @@ export function buildNotes9AgentRequestBody(params: Notes9AgentRequestInput): Re
   // the LLM provider.
   if (params.file_attachments && params.file_attachments.length > 0) {
     body.file_attachments = params.file_attachments;
+  }
+  if (params.literature_sources && params.literature_sources.length > 0) {
+    body.literature_sources = params.literature_sources;
   }
   return body;
 }

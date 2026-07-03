@@ -665,10 +665,14 @@ export function LiteratureTabs({
   // Resolve a result paper to an existing literature row — staged first, then the
   // library — so "Read" opens the already-imported paper (PDF or overview)
   // instead of re-staging it.
-  const resolveOpenableLiteratureId = useCallback(
-    (paper: SearchPaper): string | null => {
+  // Placement-aware membership: is this search paper already in the user's DB, and
+  // where? Staging first (a staged read), then the repository (library). Returns the
+  // matched row id + placement so cards can show "Open staged reader" vs "Open in
+  // library" and route to the right target. Same pmid → doi → title+year match key.
+  const resolvePaperMembership = useCallback(
+    (paper: SearchPaper): { id: string; placement: 'staging' | 'repository' } | null => {
       const staged = resolveStagedLiteratureId(paper)
-      if (staged) return staged
+      if (staged) return { id: staged, placement: 'staging' }
       const nd = paper.doi ? normalizeDoi(paper.doi) : null
       const pool = lockedProjectId
         ? repositoryReviews.filter((r) => r.project?.id === lockedProjectId)
@@ -681,9 +685,14 @@ export function LiteratureTabs({
           return true
         return false
       })
-      return match ? String(match.id) : null
+      return match ? { id: String(match.id), placement: 'repository' } : null
     },
     [resolveStagedLiteratureId, repositoryReviews, lockedProjectId]
+  )
+
+  const resolveOpenableLiteratureId = useCallback(
+    (paper: SearchPaper): string | null => resolvePaperMembership(paper)?.id ?? null,
+    [resolvePaperMembership]
   )
 
   /**
@@ -743,6 +752,16 @@ export function LiteratureTabs({
     if (!paper) return false
     // Already in the library (staging OR library) → "Read" opens it directly.
     return resolveOpenableLiteratureId(paper) !== null
+  }
+
+  // 3-state membership for a search result: already in the library ('saved'), staged
+  // for reading ('staged'), or neither (null). Drives the card's open-target + label.
+  const getPaperMembership = (paperId: string): 'saved' | 'staged' | null => {
+    const paper = searchResults.find((p) => p.id === paperId)
+    if (!paper) return null
+    const m = resolvePaperMembership(paper)
+    if (!m) return null
+    return m.placement === 'repository' ? 'saved' : 'staged'
   }
 
   const handleOpenStaged = (paper: SearchPaper) => {
@@ -1131,6 +1150,7 @@ export function LiteratureTabs({
                         onStagePaper={handleStagePaper}
                         onOpenStaged={handleOpenStaged}
                         isPaperStaged={isPaperStaged}
+                        getPaperMembership={getPaperMembership}
                         isPaperStaging={(paperId) => stagingPaperId === paperId}
                         sortMode={searchSort}
                         onSortModeChange={handleSearchSortChange}

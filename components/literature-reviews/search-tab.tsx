@@ -302,6 +302,7 @@ interface SearchTabProps {
   onStagePaper: (paper: SearchPaper) => void | Promise<void>
   onOpenStaged?: (paper: SearchPaper) => void
   isPaperStaged: (paperId: string) => boolean
+  getPaperMembership?: (paperId: string) => 'saved' | 'staged' | null
   isPaperStaging?: (paperId: string) => boolean
   sortMode: PaperSearchSortMode
   onSortModeChange: (sort: PaperSearchSortMode) => void
@@ -337,6 +338,7 @@ export function SearchTab({
   onStagePaper,
   onOpenStaged,
   isPaperStaged,
+  getPaperMembership,
   isPaperStaging,
   sortMode,
   onSortModeChange,
@@ -390,6 +392,7 @@ export function SearchTab({
           onStagePaper={onStagePaper}
           onOpenStaged={onOpenStaged}
           isPaperStaged={isPaperStaged}
+          getPaperMembership={getPaperMembership}
           isPaperStaging={isPaperStaging}
           onResults={onResults}
           onLoadingChange={onLoadingChange}

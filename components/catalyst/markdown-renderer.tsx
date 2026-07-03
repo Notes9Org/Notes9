@@ -38,6 +38,30 @@ const STREAMDOWN_PLUGINS = {
   code: codePlugin,
 };
 
+/**
+ * Streamdown's default `a` renderer wraps external links in a "link-safety"
+ * component that mounts a `fixed inset-0` warning dialog INLINE — as a DOM
+ * descendant of the markdown `<p>`. That dialog contains `<div>`/`<p>` nodes,
+ * so an external-link chip inside a paragraph produces invalid nesting
+ * (`<div>`/`<p>` cannot descend from `<p>`) and a React hydration error —
+ * exactly what our web-source citation anchors (`<a class="notes9-cite--link"
+ * href="https://…">`) trigger.
+ *
+ * Render a plain anchor instead. `harden` already applies target="_blank" +
+ * rel="noopener noreferrer" to markdown-authored links, and the citation plugin
+ * sets those explicitly on its own chip anchors, so no safety attribute is lost.
+ * Spreading `...props` preserves className + data-cite-* attributes, so the chip
+ * hover/click delegation (which keys off `.notes9-cite`) keeps working.
+ */
+function PlainAnchor({
+  node: _node,
+  ...props
+}: React.ComponentPropsWithoutRef<'a'> & { node?: unknown }) {
+  return <a {...props} />;
+}
+
+const STREAMDOWN_COMPONENTS = { a: PlainAnchor };
+
 /** Citation chip metadata read off the clicked/hovered DOM element's data-*. */
 interface ChipData {
   label: string;
@@ -572,6 +596,7 @@ function MarkdownRendererImpl({
           mode={showCursor ? 'streaming' : 'static'}
           rehypePlugins={rehypePlugins}
           plugins={STREAMDOWN_PLUGINS}
+          components={STREAMDOWN_COMPONENTS}
         >
           {content}
         </Streamdown>

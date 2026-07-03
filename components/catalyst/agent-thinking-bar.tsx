@@ -36,6 +36,9 @@ const STAGE_META: Record<ThinkingStage, { label: string; Icon: LucideIcon }> = {
   synthesizing:  { label: 'Designing', Icon: FlaskConical },
   composing:     { label: 'Drafting', Icon: PenLine },
   validating:    { label: 'Drafting', Icon: PenLine },
+  verifying:     { label: 'Verifying', Icon: CheckCircle2 },
+  gating:        { label: 'Understanding', Icon: Activity },
+  safety:        { label: 'Understanding', Icon: Activity },
 };
 
 /** Map any emitted stage onto its canonical position in STAGE_ORDER. */
@@ -50,6 +53,11 @@ const STAGE_TO_CANONICAL: Record<ThinkingStage, ThinkingStage> = {
   synthesizing:  'designing',
   composing:     'drafting',
   validating:    'drafting',
+  // New backend phases (Phase F): map onto existing stepper positions so they
+  // advance the visible progress bar instead of being silently swallowed.
+  verifying:     'drafting',
+  gating:        'understanding',
+  safety:        'understanding',
 };
 
 interface AgentThinkingBarProps {

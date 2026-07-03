@@ -8,6 +8,7 @@ import type {
   RagChunk,
 } from '@/lib/agent-stream-types';
 import { normalizeSourceNames } from '@/lib/agent-stream-types';
+import type { AllowedMimeType } from '@/lib/attachment-types';
 import { buildNotes9AgentRequestBody } from '@/lib/notes9-agent-request';
 import { splitSseBuffer, parseSseDataJson } from '@/lib/sse-event-blocks';
 import { recordRumEvent } from '@/lib/rum';
@@ -47,16 +48,23 @@ export type AgentAttachment = {
 export type AgentFileAttachment = {
   url: string;
   name: string;
-  content_type:
-    | 'image/jpeg'
-    | 'image/png'
-    | 'image/gif'
-    | 'image/webp'
-    | 'application/pdf'
-    | 'text/csv'
-    | 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    | 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  // Single source of truth — do NOT re-declare a local union here; a subset
+  // silently drops the missing types at the live send path (the exact drift
+  // lib/attachment-types.ts exists to prevent).
+  content_type: AllowedMimeType;
   size: number;
+};
+
+/** A transient paper passed inline for grounding + inline citation (no DB row). */
+export type AgentLiteratureSource = {
+  title: string;
+  abstract?: string;
+  doi?: string;
+  pmid?: string;
+  journal?: string;
+  year?: number;
+  url?: string;
+  authors?: string[];
 };
 
 /** Request shape for POST /notes9/stream (proxied via /api/agent/stream). */
@@ -72,6 +80,11 @@ export interface AgentStreamParams {
   /** User-uploaded files (images, PDFs). Forwarded to catalyst which
    * fetches + verifies + base64-encodes before passing to the LLM. */
   file_attachments?: AgentFileAttachment[];
+  /** Transient papers (title + abstract + ids) passed inline so the agent
+   * grounds + inline-cites them WITHOUT a persisted literature_review row —
+   * literature-session follow-up context, or a closed-access paper's abstract
+   * on "Ask Catalyst". Materialized into citable sources at preflight. */
+  literature_sources?: AgentLiteratureSource[];
   options?: {
     debug?: boolean;
     max_retries?: number;
@@ -213,6 +226,9 @@ export type ThinkingStage =
   | 'synthesizing'
   | 'composing'
   | 'validating'
+  | 'verifying'
+  | 'gating'
+  | 'safety'
   | 'done';
 
 export interface AgentStreamState {

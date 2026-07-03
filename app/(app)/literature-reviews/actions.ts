@@ -150,6 +150,10 @@ export async function stagePaper(
         created_by: user.id,
         organization_id: organizationId,
         catalog_placement: "staging",
+        // Read-without-library: this staged row auto-expires in 7 days unless the
+        // user promotes it to the library (which clears staged_expires_at). See
+        // migration 092 + the cleanup cron.
+        staged_expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
         pdf_import_status: "pending",
       })
       .select()
@@ -247,6 +251,8 @@ export async function savePaperToRepository(
         .from("literature_reviews")
         .update({
           catalog_placement: "repository",
+          // Promoted to the library — no longer a temporary read, so clear the TTL.
+          staged_expires_at: null,
           project_id: options?.projectId || null,
           experiment_id: options?.experimentId || null,
         })

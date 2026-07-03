@@ -28,6 +28,51 @@ function cacheKeyForSearch(query: string): string {
   return query
 }
 
+/* sessionStorage layer under the module Map: survives navigating away (dashboard →
+ * back) and soft reloads within the tab; cleared on tab close. Bounded to the last
+ * few queries so it never bloats. The module Map stays the fast in-memory hit; this
+ * only rehydrates it after the JS bundle re-runs. Fail-safe: any storage error is a
+ * no-op (private mode / quota) and we simply re-fetch (backend 24h cache makes that cheap). */
+const SS_PREFIX = 'n9-litsearch:'
+const SS_INDEX = 'n9-litsearch-index'
+const SS_MAX = 5
+
+function ssKey(key: string): string {
+  return SS_PREFIX + key.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+function readSessionSearch(key: string): CachedAi | undefined {
+  if (typeof window === 'undefined') return undefined
+  try {
+    const raw = window.sessionStorage.getItem(ssKey(key))
+    return raw ? (JSON.parse(raw) as CachedAi) : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function writeSessionSearch(key: string, value: CachedAi): void {
+  if (typeof window === 'undefined') return
+  try {
+    const k = ssKey(key)
+    window.sessionStorage.setItem(k, JSON.stringify(value))
+    let index: string[] = []
+    try {
+      index = JSON.parse(window.sessionStorage.getItem(SS_INDEX) || '[]')
+    } catch {
+      index = []
+    }
+    index = [k, ...index.filter((x) => x !== k)]
+    while (index.length > SS_MAX) {
+      const evict = index.pop()
+      if (evict) window.sessionStorage.removeItem(evict)
+    }
+    window.sessionStorage.setItem(SS_INDEX, JSON.stringify(index))
+  } catch {
+    /* quota / private mode — persistence is best-effort */
+  }
+}
+
 function matchKindFor(p: SearchPaper): AiSearchMatchKind {
   if (p.doi) return 'doi'
   if (p.pmid) return 'pmid'
@@ -137,8 +182,17 @@ export function useAiLiteratureSearch({
       setActiveQuery(q)
       setError(null)
 
-      // Restore a completed answer from cache — no network call.
-      const cached = aiSearchCache.get(cacheKey)
+      // Restore a completed answer from cache — no network call. Fall back to the
+      // sessionStorage layer (survives dashboard round-trips / soft reload) and
+      // rehydrate the module Map so subsequent hits stay in-memory.
+      let cached = aiSearchCache.get(cacheKey)
+      if (!cached) {
+        const persisted = readSessionSearch(cacheKey)
+        if (persisted) {
+          aiSearchCache.set(cacheKey, persisted)
+          cached = persisted
+        }
+      }
       if (cached) {
         setPapers(cached.papers)
         setSummary(cached.summary)
@@ -238,7 +292,11 @@ export function useAiLiteratureSearch({
         // Stop any lingering per-card shimmers and cache the completed answer.
         if (isActiveRequest()) setPapers((prev) => prev.map((p) => ({ ...p })))
         if (receivedPapers.length > 0) {
-          aiSearchCache.set(q, { summary: overall, papers: receivedPapers, manifest: receivedManifest })
+          {
+            const entry: CachedAi = { summary: overall, papers: receivedPapers, manifest: receivedManifest }
+            aiSearchCache.set(q, entry)
+            writeSessionSearch(cacheKey, entry)
+          }
         }
       } catch (e) {
         // Only the still-active request may touch shared state — a superseded

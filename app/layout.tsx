@@ -4,7 +4,7 @@ import "katex/dist/katex.min.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster as Sonner } from "@/components/ui/sonner"
 import { NavigationLoader } from "@/components/navigation-loader"
-import { RumProvider } from "@/components/rum-provider"
+import { PostHogProvider } from "@/components/analytics/posthog-provider"
 
 export const metadata: Metadata = {
   title: 'Notes9 - Research Lab Management',
@@ -104,11 +104,11 @@ export default function RootLayout({
           enableSystem={false}
           disableTransitionOnChange
         >
-          <RumProvider>
+          <PostHogProvider>
             <NavigationLoader />
             {children}
             <Sonner />
-          </RumProvider>
+          </PostHogProvider>
           {/*
             Univer UI portals toolbar/menu popups here (default id `univer-popup-portal`).
             If this node is missing, createPortal returns null — font/color dropdowns never appear.

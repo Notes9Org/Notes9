@@ -193,6 +193,18 @@ export function StagedPaperView({
             </Button>
           </div>
         </div>
+        {!isSavedToLibrary && stagedDaysLeft !== null ? (
+          <div className="mt-3 flex items-start gap-2 rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+            <BookmarkPlus className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>
+              You&apos;re reading this without adding it to your library. It stays available for{" "}
+              <span className="font-medium text-foreground">
+                {stagedDaysLeft} {stagedDaysLeft === 1 ? "day" : "days"}
+              </span>
+              , then it&apos;s removed automatically. <span className="font-medium text-foreground">Save to library</span> to keep it.
+            </span>
+          </div>
+        ) : null}
       </div>
 
       <div ref={pdfCardRef} className="scroll-mt-4">
