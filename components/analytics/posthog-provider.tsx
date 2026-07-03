@@ -22,7 +22,7 @@ import posthog from 'posthog-js'
 import { PostHogProvider as PHProvider } from 'posthog-js/react'
 import { createClient } from '@/lib/supabase/client'
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
-import { POSTHOG_KEY, POSTHOG_HOST, isPostHogConfigured } from '@/lib/analytics/posthog'
+import { POSTHOG_KEY, POSTHOG_HOST, POSTHOG_UI_HOST, isPostHogConfigured } from '@/lib/analytics/posthog'
 
 let _initialised = false
 
@@ -31,6 +31,9 @@ function initPostHog() {
   if (!isPostHogConfigured()) return
   posthog.init(POSTHOG_KEY, {
     api_host: POSTHOG_HOST,
+    // Required when api_host is a managed reverse proxy: tells PostHog where the
+    // app lives so toolbar/links/replay playback resolve correctly.
+    ui_host: POSTHOG_UI_HOST,
     // We capture pageviews manually (App Router) and named product events.
     capture_pageview: false,
     capture_pageleave: true,
