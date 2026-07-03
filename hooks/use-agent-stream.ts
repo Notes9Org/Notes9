@@ -8,6 +8,7 @@ import type {
   RagChunk,
 } from '@/lib/agent-stream-types';
 import { normalizeSourceNames } from '@/lib/agent-stream-types';
+import type { AllowedMimeType } from '@/lib/attachment-types';
 import { buildNotes9AgentRequestBody } from '@/lib/notes9-agent-request';
 import { splitSseBuffer, parseSseDataJson } from '@/lib/sse-event-blocks';
 import { recordRumEvent } from '@/lib/rum';
@@ -47,15 +48,10 @@ export type AgentAttachment = {
 export type AgentFileAttachment = {
   url: string;
   name: string;
-  content_type:
-    | 'image/jpeg'
-    | 'image/png'
-    | 'image/gif'
-    | 'image/webp'
-    | 'application/pdf'
-    | 'text/csv'
-    | 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    | 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  // Single source of truth — do NOT re-declare a local union here; a subset
+  // silently drops the missing types at the live send path (the exact drift
+  // lib/attachment-types.ts exists to prevent).
+  content_type: AllowedMimeType;
   size: number;
 };
 
@@ -230,6 +226,9 @@ export type ThinkingStage =
   | 'synthesizing'
   | 'composing'
   | 'validating'
+  | 'verifying'
+  | 'gating'
+  | 'safety'
   | 'done';
 
 export interface AgentStreamState {

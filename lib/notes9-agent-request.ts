@@ -16,6 +16,8 @@
  * optional web search; use **`POST /notes9`** for SQL/RAG over lab data.
  */
 
+import type { AllowedMimeType } from './attachment-types';
+
 export type Notes9AgentHistoryItem = { role: string; content: string };
 
 /** Workspace entity the user explicitly tagged for this turn. Catalyst preflights
@@ -42,15 +44,7 @@ export type Notes9AgentAttachment = {
 export type Notes9FileAttachment = {
   url: string;
   name: string;
-  content_type:
-    | 'image/jpeg'
-    | 'image/png'
-    | 'image/gif'
-    | 'image/webp'
-    | 'application/pdf'
-    | 'text/csv'
-    | 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    | 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  content_type: AllowedMimeType;
   size: number;
 };
 

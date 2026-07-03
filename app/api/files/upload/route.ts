@@ -4,8 +4,13 @@ import { getCurrentUser } from "@/lib/auth/current-user"
 import { USER_STORAGE_BUCKET } from "@/lib/user-storage-bucket"
 import { fileTypeFromBuffer } from "file-type"
 import { enforceLimits, checkBodyBytes } from "@/lib/limits/guards"
-
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+import {
+  ALLOWED_MIME_TYPES,
+  ATTACHMENT_MAX_FILE_SIZE as MAX_FILE_SIZE,
+  OOXML_MIME_TYPES,
+  TEXT_SNIFF_MIME_TYPES,
+  resolveAttachmentMime,
+} from "@/lib/attachment-types"
 
 // The `user` bucket is PRIVATE (see scripts/057_security_hardening.sql §4), so
 // getPublicUrl() returns a dead link. We mint a signed URL whose lifetime ==
@@ -14,19 +19,12 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 // persist it and re-sign later (e.g. when chat history reloads).
 const SIGNED_URL_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days
 
-const ALLOWED_MIME_TYPES = [
-  'image/jpeg',
-  'image/png',
-  'image/gif',
-  'image/webp',
-  'application/pdf',
-  'text/plain',
-  'text/csv',
-  'text/markdown',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/json',
-];
+// OOXML container markers (stored as raw entry names in the zip). Used to
+// confirm a generic-zip detection is genuinely a .docx/.xlsx and not a plain
+// .zip/.jar/.apk/.odt masquerading as one.
+const OOXML_CONTENT_TYPES_MARKER = Buffer.from("[Content_Types].xml");
+const OOXML_WORD_MARKER = Buffer.from("word/document.xml");
+const OOXML_XL_MARKER = Buffer.from("xl/workbook.xml");
 
 export async function POST(request: Request) {
   try {
@@ -66,31 +64,61 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+    // Resolve the canonical MIME. Browsers report a blank or generic type for
+    // .docx/.xlsx on some OS/browser combos and for files from zips/cloud
+    // drives, so fall back to the filename extension when the declared type is
+    // missing or not in the allow-list.
+    const effectiveType = resolveAttachmentMime({
+      type: file.type,
+      name: file.name,
+    });
+    if (!effectiveType) {
       return NextResponse.json(
-        { error: `File type ${file.type} not allowed` },
+        { error: `File type ${file.type || file.name} not allowed` },
         { status: 400 }
       );
     }
 
-    // Server-side magic-byte verification — rejects spoofed MIME types.
-    const buf = Buffer.from(await file.slice(0, 4096).arrayBuffer());
-    const detected = await fileTypeFromBuffer(buf);
-
-    if (file.type.startsWith('text/')) {
-      // file-type cannot sniff plain text; accept if the buffer is valid UTF-8.
+    // Server-side content verification — still rejects spoofed MIME types.
+    if (TEXT_SNIFF_MIME_TYPES.includes(effectiveType)) {
+      // Text/markdown/JSON/SVG have no reliable magic bytes; require valid UTF-8.
+      const textBuf = Buffer.from(await file.slice(0, 4096).arrayBuffer());
       try {
-        new TextDecoder('utf-8', { fatal: true }).decode(buf);
+        new TextDecoder("utf-8", { fatal: true }).decode(textBuf);
       } catch {
-        console.warn(JSON.stringify({ event: 'upload_mime_mismatch', declared: file.type, detected: detected?.mime ?? null, user_id: user.id }));
-        return NextResponse.json({ error: 'File content is not valid UTF-8 text' }, { status: 400 });
+        console.warn(JSON.stringify({ event: "upload_mime_mismatch", declared: effectiveType, detected: "non-utf8", user_id: user.id }));
+        return NextResponse.json({ error: "File content is not valid UTF-8 text" }, { status: 400 });
       }
-    } else if (!detected || detected.mime !== file.type || !ALLOWED_MIME_TYPES.includes(detected.mime)) {
-      console.warn(JSON.stringify({ event: 'upload_mime_mismatch', declared: file.type, detected: detected?.mime ?? null, user_id: user.id }));
-      return NextResponse.json(
-        { error: `File content does not match declared type ${file.type}` },
-        { status: 400 }
-      );
+    } else if (OOXML_MIME_TYPES.includes(effectiveType)) {
+      // .docx/.xlsx are ZIP containers; the identifying entries can sit past the
+      // first few KB, so sniff the WHOLE buffer (10MB-capped above) — fixes
+      // larger Office files 400ing.
+      const zipBuf = Buffer.from(await file.arrayBuffer());
+      const detected = await fileTypeFromBuffer(zipBuf);
+      let ok = detected?.mime === effectiveType;
+      if (!ok && detected?.mime === "application/zip") {
+        // file-type only resolved the generic container. Confirm OOXML-specific
+        // parts are present so a plain .zip/.jar/.apk/.odt can't pass as Office.
+        const isXlsx = effectiveType.includes("spreadsheetml");
+        ok =
+          zipBuf.includes(OOXML_CONTENT_TYPES_MARKER) &&
+          zipBuf.includes(isXlsx ? OOXML_XL_MARKER : OOXML_WORD_MARKER);
+        if (ok) {
+          console.warn(JSON.stringify({ event: "upload_ooxml_zip_fallback", declared: effectiveType, user_id: user.id }));
+        }
+      }
+      if (!ok) {
+        console.warn(JSON.stringify({ event: "upload_mime_mismatch", declared: effectiveType, detected: detected?.mime ?? null, user_id: user.id }));
+        return NextResponse.json({ error: `File content does not match declared type ${effectiveType}` }, { status: 400 });
+      }
+    } else {
+      // Images and PDF carry magic bytes at offset 0 — cheap 4 KB slice.
+      const buf = Buffer.from(await file.slice(0, 4096).arrayBuffer());
+      const detected = await fileTypeFromBuffer(buf);
+      if (!detected || detected.mime !== effectiveType || !(ALLOWED_MIME_TYPES as readonly string[]).includes(detected.mime)) {
+        console.warn(JSON.stringify({ event: "upload_mime_mismatch", declared: effectiveType, detected: detected?.mime ?? null, user_id: user.id }));
+        return NextResponse.json({ error: `File content does not match declared type ${effectiveType}` }, { status: 400 });
+      }
     }
 
     const timestamp = Date.now();
@@ -135,7 +163,7 @@ export async function POST(request: Request) {
           storage_bucket: USER_STORAGE_BUCKET,
           storage_path: storagePath,
           file_name: file.name,
-          mime_type: file.type,
+          mime_type: effectiveType,
           size_bytes: file.size,
         })
         .select("id")
@@ -179,7 +207,7 @@ export async function POST(request: Request) {
       url: signedUrl,
       storagePath,
       pathname: file.name,
-      contentType: file.type,
+      contentType: effectiveType,
       size: file.size,
       chatAttachmentId,
       attachmentWarning,

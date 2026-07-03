@@ -58,6 +58,12 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
+  ATTACHMENT_MAX_FILE_SIZE,
+  ATTACHMENT_ACCEPT,
+  isAcceptedAttachment,
+  isAllowedMimeType,
+} from '@/lib/attachment-types';
+import {
   formatNotes9AssistantMarkdown,
   isPersistedChatMessageId,
   parseNotes9AssistantStoredContent,
@@ -123,9 +129,10 @@ import {
   catalystMentionPath,
 } from '@/lib/catalyst-mention-types';
 import { isLikelyUuid } from '@/lib/url-project-param';
-import type { CatalystLaunchDetail, CatalystAttachDetail } from '@/lib/catalyst-launch';
+import type { CatalystLaunchDetail, CatalystAttachDetail, CatalystNoticeDetail } from '@/lib/catalyst-launch';
 import {
   CATALYST_ATTACH_EVENT,
+  CATALYST_NOTICE_EVENT,
   openCatalystPanel,
   setCatalystOrigin,
   getCatalystOrigin,
@@ -138,7 +145,7 @@ import {
   type CoPilotContext,
 } from '@/lib/catalyst-copilot';
 import { useCatalystLiterature, setCatalystLiterature, type CatalystLiterature } from '@/lib/catalyst-literature';
-import { literatureContextToSystemMessage, literatureContextToSources, type LiteratureSessionContext } from '@/lib/literature-citations';
+import { literatureContextToSystemMessage, literatureContextToSources, dedupeLiteratureSources, type LiteratureSessionContext } from '@/lib/literature-citations';
 import { MotionReveal, MotionList, MotionItem } from '@/components/literature-reviews/motion';
 import { useLiteratureMentionCandidates } from '@/contexts/literature-mention-context';
 import { useLiteratureAgentStream } from '@/hooks/use-literature-agent-stream';
@@ -222,6 +229,18 @@ function literatureHistoryTurnContent(msg: {
 }
 
 /** Notes9 agent: assistant turns omit §§NOTES9_GROUNDING§§ payload from API history. */
+/** Max time to wait for an "Ask Catalyst" paper to attach before releasing the
+ *  Send gate. Shared by the arm auto-timeout and the handleSubmit poll-gate so a
+ *  slow open-access fetch still lands on the first turn (no ungrounded window). */
+const ASK_CATALYST_ATTACH_TIMEOUT_MS = 8000;
+
+/** True for synthetic in-chat notices (e.g. the "upload the PDF" bubble) that are
+ *  shown to the user but must NEVER be replayed to the model as a prior assistant
+ *  turn — otherwise the model treats a fabricated utterance as its own answer. */
+function isNoticeMessage(msg: { metadata?: unknown }): boolean {
+  return (msg.metadata as { notice?: boolean } | undefined)?.notice === true;
+}
+
 function notes9HistoryTurnContent(msg: {
   role: string;
   content?: unknown;
@@ -415,20 +434,7 @@ const MENTION_ITEMS_TTL_MS = 60_000;
 let mentionItemsCache: { fetchedAt: number; items: MentionItem[] } | null = null;
 let mentionItemsInflight: Promise<MentionItem[]> | null = null;
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
-// Kept in sync with the backend allowlist (agents/contracts/request.py).
-// Images + PDF go to the model natively; CSV/XLSX/DOCX are parsed to text
-// server-side. text/plain is omitted (the backend does not support it).
-const ALLOWED_TYPES = [
-  'image/jpeg',
-  'image/png',
-  'image/gif',
-  'image/webp',
-  'application/pdf',
-  'text/csv',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
-];
+const MAX_FILE_SIZE = ATTACHMENT_MAX_FILE_SIZE;
 const MAX_LITERATURE_TAGS = 4;
 
 function sortLiteratureCandidates(
@@ -947,12 +953,41 @@ export function RightSidebar({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  // Synchronous mirror of `attachments`: handleSubmit is an async closure that
+  // captures the render-time `attachments` snapshot, so after the poll-gate awaits
+  // a late-arriving paper it must read this ref (updated in place by onAttach and
+  // on every render) to include the freshly attached PDF — not the stale closure.
+  const attachmentsRef = useRef<Attachment[]>([]);
+  attachmentsRef.current = attachments;
   const [uploadQueue, setUploadQueue] = useState<string[]>([]);
   const [messageAttachments, setMessageAttachments] = useState<Map<string, Attachment[]>>(new Map());
   const pendingAttachmentsRef = useRef<Attachment[]>([]);
   // Closed-access papers hit with "Ask Catalyst" ride here as citable literature_sources
   // for the next send (they have no PDF to attach), then are cleared. See Step 7.
   const pendingLiteratureSourcesRef = useRef<AgentLiteratureSource[]>([]);
+  // Set when an Ask-Catalyst launch signals a paper attachment is being fetched
+  // (launch.expectAttachment); cleared when the attachment lands, a notice fires,
+  // or a bounded timeout elapses. Gates the first Send so the user can't fire the
+  // message before the paper attaches.
+  const pendingAttachRef = useRef(false);
+  const pendingAttachTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearPendingAttach = useCallback(() => {
+    pendingAttachRef.current = false;
+    if (pendingAttachTimerRef.current) {
+      clearTimeout(pendingAttachTimerRef.current);
+      pendingAttachTimerRef.current = null;
+    }
+  }, []);
+  const armPendingAttach = useCallback(() => {
+    pendingAttachRef.current = true;
+    if (pendingAttachTimerRef.current) clearTimeout(pendingAttachTimerRef.current);
+    // Never block Send forever — if the fetch stalls, release the gate so the user
+    // can still send (falling back to abstract-grounded literature_sources).
+    pendingAttachTimerRef.current = setTimeout(() => {
+      pendingAttachRef.current = false;
+      pendingAttachTimerRef.current = null;
+    }, ASK_CATALYST_ATTACH_TIMEOUT_MS);
+  }, []);
   const [mounted, setMounted] = useState(false);
   const [isDraggingContext, setIsDraggingContext] = useState(false);
   const [contextLoading, setContextLoading] = useState(false);
@@ -1871,6 +1906,11 @@ export function RightSidebar({
         throw new Error(data.error || 'Upload failed');
       }
       const data = await response.json();
+      // Uploaded but not registered — the model can read it this turn (signed
+      // URL) but not on later turns. Tell the user instead of failing silently.
+      if (data.attachmentWarning) {
+        toast.warning(data.attachmentWarning);
+      }
       return {
         url: data.url,
         name: data.pathname,
@@ -1893,7 +1933,9 @@ export function RightSidebar({
         toast.error(`${file.name} is too large`);
         return false;
       }
-      if (!ALLOWED_TYPES.includes(file.type)) {
+      // Accept by declared MIME OR filename extension — browsers report a blank
+      // or generic type for .docx/.xlsx on some OS/browser combos.
+      if (!isAcceptedAttachment(file)) {
         toast.error(`${file.name} type not supported`);
         return false;
       }
@@ -1914,7 +1956,9 @@ export function RightSidebar({
         toast.error(`${file.name} is too large`);
         return false;
       }
-      if (!ALLOWED_TYPES.includes(file.type)) {
+      // Accept by declared MIME OR filename extension — browsers report a blank
+      // or generic type for .docx/.xlsx on some OS/browser combos.
+      if (!isAcceptedAttachment(file)) {
         toast.error(`${file.name} type not supported`);
         return false;
       }
@@ -1981,6 +2025,23 @@ export function RightSidebar({
     if (submitInFlightRef.current) return;
     submitInFlightRef.current = true;
     try {
+    // If a paper attachment is still being fetched (just pressed "Ask Catalyst"),
+    // briefly wait so the first message carries the paper rather than racing ahead
+    // without it. pendingAttachRef is cleared when the attachment lands, a notice
+    // fires, or the 8s arm-timeout elapses — and we cap our own wait at 3s.
+    if (pendingAttachRef.current) {
+      await new Promise<void>((resolve) => {
+        const started = Date.now();
+        const poll = () => {
+          if (!pendingAttachRef.current || Date.now() - started > ASK_CATALYST_ATTACH_TIMEOUT_MS) {
+            resolve();
+            return;
+          }
+          setTimeout(poll, 100);
+        };
+        poll();
+      });
+    }
     const litEl = literatureEditableRef.current;
     const literaturePlain =
       agentMode === 'literature' && isLiteratureRoute && litEl
@@ -2049,7 +2110,9 @@ export function RightSidebar({
         ? segmentsToLiteratureMessageMarkdown(getLiteratureSegmentsFromEl(litEl))
         : null;
 
-    const currentAttachments = [...attachments];
+    // Read from the ref, not the render-time `attachments` closure: a paper that
+    // landed during the poll-gate above is only visible here via the ref.
+    const currentAttachments = [...attachmentsRef.current];
     if (currentAttachments.length > 0) pendingAttachmentsRef.current = currentAttachments;
     setInput('');
       setSelectedMentions([]);
@@ -2163,7 +2226,7 @@ export function RightSidebar({
         });
       }
 
-      const history = messages.map((m) => ({
+      const history = messages.filter((m) => !isNoticeMessage(m)).map((m) => ({
         role: m.role,
         content: literatureHistoryTurnContent(m),
       }));
@@ -2238,7 +2301,7 @@ export function RightSidebar({
         });
       }
 
-      const history = messages.map((m) => ({
+      const history = messages.filter((m) => !isNoticeMessage(m)).map((m) => ({
         role: m.role,
         content: notes9HistoryTurnContent(m),
       }));
@@ -2249,14 +2312,16 @@ export function RightSidebar({
       if ((attachments ?? []).length > 5) {
         toast.info(`Catalyst uses up to 5 attachments per message — using the first 5 of ${attachments!.length}.`);
       }
-      const fileAttachments = (attachments ?? [])
+      const fileAttachments: AgentFileAttachment[] = (attachments ?? [])
         .slice(0, 5) // mirror backend MAX_FILE_ATTACHMENTS_PER_REQUEST
-        .map((a) => ({
-          url: a.url,
-          name: a.name,
-          content_type: a.contentType,
-          size: a.size ?? 0,
-        }));
+        // Narrow contentType (string) to AllowedMimeType via the shared guard so
+        // the payload is typed, not force-cast. Post-upload these are always
+        // allow-listed; the filter is defensive.
+        .flatMap((a) =>
+          isAllowedMimeType(a.contentType)
+            ? [{ url: a.url, name: a.name, content_type: a.contentType, size: a.size ?? 0 }]
+            : []
+        );
       // Literature grounding: prepend the search context (papers + abstracts +
       // summary) to the MODEL query only — the user's visible message stays the
       // clean question. Prefer the DURABLE context persisted on the session
@@ -2271,11 +2336,25 @@ export function RightSidebar({
         activeLitSession?.kind === 'literature'
           ? ((activeLitSession.metadata as { literature?: LiteratureSessionContext } | null)?.literature ?? null)
           : null;
-      const litPreamble = persistedLitCtx
-        ? literatureContextToSystemMessage(persistedLitCtx)
+      // Live AI-search bridge fallback: the search summary is pushed into the panel
+      // but persisted into a *different, non-active* session, so persistedLitCtx is
+      // null on the normal follow-up path (and the co-pilot bridge is never primed by
+      // AI-search). Fall back to the live `literature` bridge so follow-ups still
+      // carry the summary text + the citable source papers. Prefer persisted context
+      // when present to avoid injecting the same grounding twice.
+      const liveLitCtx = !persistedLitCtx ? (literature?.context ?? null) : null;
+      const effectiveLitCtx = persistedLitCtx ?? liveLitCtx;
+      const liveSummary = liveLitCtx ? (literature?.summary ?? '').trim() : '';
+      const ctxPreamble = effectiveLitCtx
+        ? literatureContextToSystemMessage(effectiveLitCtx)
         : coPilotRef.current
           ? buildCoPilotPreamble(coPilotRef.current)
           : '';
+      // Prepend the overall synthesized summary so the model has both the answer it
+      // already gave the user and the per-paper context behind it.
+      const litPreamble = liveSummary
+        ? `Earlier you gave this literature summary:\n\n${liveSummary}\n\n${ctxPreamble}`.trim()
+        : ctxPreamble;
       const notes9ModelQuery = litPreamble
         ? `${litPreamble}\n\n## User question\n${text}`
         : text;
@@ -2283,10 +2362,10 @@ export function RightSidebar({
       // paper the user hit "Ask Catalyst" on) through the content-bearing
       // literature_sources channel so the agent produces real inline [N] citations.
       // The text preamble above stays as a fail-safe ground even if this is empty.
-      const litSources = [
-        ...(persistedLitCtx ? literatureContextToSources(persistedLitCtx) : []),
+      const litSources = dedupeLiteratureSources([
+        ...(effectiveLitCtx ? literatureContextToSources(effectiveLitCtx) : []),
         ...pendingLiteratureSourcesRef.current,
-      ];
+      ]);
       pendingLiteratureSourcesRef.current = [];
       const { donePayload, error, artifacts: streamArtifacts, citationsManifest: streamManifest, graphs: streamGraphs } = await agentStream.runStream(
         {
@@ -2295,9 +2374,7 @@ export function RightSidebar({
           history,
           attachments: tagsToAttachments(requestTags),
           file_attachments:
-            fileAttachments.length > 0
-              ? (fileAttachments as unknown as AgentFileAttachment[])
-              : undefined,
+            fileAttachments.length > 0 ? fileAttachments : undefined,
           literature_sources: litSources.length > 0 ? litSources : undefined,
           options: buildNotes9StreamOptions(requestTags),
         },
@@ -2376,7 +2453,7 @@ export function RightSidebar({
         setSavedMessageIds(newSavedIds);
       }
 
-      const history = messages.slice(0, messageIndex).map((m) => ({
+      const history = messages.slice(0, messageIndex).filter((m) => !isNoticeMessage(m)).map((m) => ({
         role: m.role,
         content:
           agentMode === 'literature'
@@ -2498,12 +2575,13 @@ export function RightSidebar({
         const requestTags = mergeUniqueTags(selectedMentions, parsedEditTags);
         // Re-send the original uploaded files (not just tags) so an edited request
         // keeps its attachments — mirrors the fresh-send file_attachments shape.
-        const editFileAttachments = editAtts.slice(0, 5).map((a) => ({
-          url: a.url,
-          name: a.name,
-          content_type: a.contentType,
-          size: a.size ?? 0,
-        }));
+        const editFileAttachments: AgentFileAttachment[] = editAtts
+          .slice(0, 5)
+          .flatMap((a) =>
+            isAllowedMimeType(a.contentType)
+              ? [{ url: a.url, name: a.name, content_type: a.contentType, size: a.size ?? 0 }]
+              : []
+          );
         const { donePayload, error, artifacts: streamArtifacts, citationsManifest: streamManifest, graphs: streamGraphs } = await agentStream.runStream(
           {
             query: newContent,
@@ -2511,9 +2589,7 @@ export function RightSidebar({
             history,
             attachments: tagsToAttachments(requestTags),
             file_attachments:
-              editFileAttachments.length > 0
-                ? (editFileAttachments as unknown as AgentFileAttachment[])
-                : undefined,
+              editFileAttachments.length > 0 ? editFileAttachments : undefined,
             options: buildNotes9StreamOptions(requestTags),
           },
           token
@@ -2651,7 +2727,7 @@ export function RightSidebar({
       const query = getPlainTextFromMessage(lastUserMessage);
       const parsedRegenTags = extractTagItemsFromMarkdown(query);
       const requestTags = mergeUniqueTags(selectedMentions, parsedRegenTags);
-      const history = messages.slice(0, lastAssistantIndex - 1).map((m) => ({
+      const history = messages.slice(0, lastAssistantIndex - 1).filter((m) => !isNoticeMessage(m)).map((m) => ({
         role: m.role,
         content: notes9HistoryTurnContent(m),
       }));
@@ -3034,7 +3110,12 @@ export function RightSidebar({
   }, [isPageVariant, router]);
 
   const applyCatalystLaunch = useCallback(
-    (launch: { query?: string; projectId?: string; attachments?: Array<{ url: string; name: string; contentType: string; size?: number }>; literatureSources?: AgentLiteratureSource[]; webSearch?: boolean; autoSend?: boolean; sessionId?: string }) => {
+    (launch: { query?: string; projectId?: string; attachments?: Array<{ url: string; name: string; contentType: string; size?: number }>; literatureSources?: AgentLiteratureSource[]; webSearch?: boolean; autoSend?: boolean; sessionId?: string; expectAttachment?: boolean }) => {
+      // Gate the first Send while a paper attachment is being fetched, so the user
+      // can't fire the message before it lands. A later launch (the closed-access
+      // fallback re-open) or the attach/notice events release the gate.
+      if (launch.expectAttachment) armPendingAttach();
+      else clearPendingAttach();
       // Continue an existing conversation (e.g. minimizing the full page back
       // into the docked sidebar) before seeding any new query.
       if (launch.sessionId && launch.sessionId !== currentSessionRef.current) {
@@ -3107,7 +3188,7 @@ export function RightSidebar({
         setWebSearchEnabled(launch.webSearch);
       }
     },
-    [resizeInput, supabase],
+    [resizeInput, supabase, armPendingAttach, clearPendingAttach],
   );
 
   useEffect(() => {
@@ -3148,21 +3229,60 @@ export function RightSidebar({
       const detail = (e as CustomEvent<CatalystAttachDetail>).detail;
       const incoming = detail?.attachments;
       if (!incoming || incoming.length === 0) return;
-      setAttachments((prev) => {
-        // Dedupe on the stable `paperKey` first: paper attachments from
-        // "Ask Catalyst" carry a fresh signed `url` on every press, so a
-        // url-keyed dedupe never matches and stacks duplicate chips. Fall back
-        // to url/name for ordinary uploads that have no paperKey.
-        const keyOf = (a: { paperKey?: string; url?: string; name?: string }) =>
-          a.paperKey || a.url || a.name;
-        const seen = new Set(prev.map(keyOf));
-        const fresh = incoming.filter((a) => !seen.has(keyOf(a)));
-        return fresh.length ? [...prev, ...fresh] : prev;
-      });
+      // Fold any durable citable sources (the attached paper's metadata + abstract)
+      // into the pending sources so the paper stays grounded on follow-up turns
+      // after the transient file chip is cleared post-send. Reuse the shared dedupe.
+      const litSources = detail?.literatureSources;
+      if (litSources?.length) {
+        pendingLiteratureSourcesRef.current = dedupeLiteratureSources([
+          ...pendingLiteratureSourcesRef.current,
+          ...litSources,
+        ]);
+      }
+      // Merge into the attachments ref SYNCHRONOUSLY (the source of truth) so an
+      // in-flight handleSubmit that awaited the poll-gate reads the freshly landed
+      // paper, then mirror into state for the UI. Dedupe on the stable `paperKey`
+      // first: "Ask Catalyst" papers carry a fresh signed `url` on every press, so
+      // a url-keyed dedupe never matches; fall back to url/name for plain uploads.
+      const keyOf = (a: { paperKey?: string; url?: string; name?: string }) =>
+        a.paperKey || a.url || a.name;
+      const prev = attachmentsRef.current;
+      const seen = new Set(prev.map(keyOf));
+      const fresh = incoming.filter((a) => !seen.has(keyOf(a)));
+      if (fresh.length) {
+        const next = [...prev, ...fresh];
+        attachmentsRef.current = next;
+        setAttachments(next);
+      }
+      // Release the Send gate only AFTER the ref reflects the paper, so a waiting
+      // handleSubmit resolves against up-to-date attachments.
+      clearPendingAttach();
+    };
+    // Post a system notice as an assistant bubble in the chat — used to tell the
+    // user, in the conversation, that a paper isn't open-access or its PDF couldn't
+    // be read and they should upload it. Also releases the Send gate.
+    const onNotice = (e: Event) => {
+      const detail = (e as CustomEvent<CatalystNoticeDetail>).detail;
+      const message = detail?.message?.trim();
+      if (!message) return;
+      clearPendingAttach();
+      const noticeMessage = {
+        id: `notice-${Date.now()}`,
+        role: 'assistant' as const,
+        content: message,
+        parts: [{ type: 'text' as const, text: message }],
+        createdAt: new Date(),
+        metadata: { notice: true, tone: detail?.tone ?? 'info' },
+      };
+      setMessages((prev) => [...prev, noticeMessage]);
     };
     window.addEventListener(CATALYST_ATTACH_EVENT, onAttach);
-    return () => window.removeEventListener(CATALYST_ATTACH_EVENT, onAttach);
-  }, []);
+    window.addEventListener(CATALYST_NOTICE_EVENT, onNotice);
+    return () => {
+      window.removeEventListener(CATALYST_ATTACH_EVENT, onAttach);
+      window.removeEventListener(CATALYST_NOTICE_EVENT, onNotice);
+    };
+  }, [clearPendingAttach]);
 
   // Pick up the literature co-pilot context: read whatever's already primed when
   // the sidebar mounts (opened on demand), and stay in sync as new searches run.
@@ -3354,9 +3474,13 @@ export function RightSidebar({
           </div>
         )}
         <FileDropzone
-          onFilesDrop={() => {}}
+          onFilesDrop={handleFilesDrop}
           onNonFileDrop={handleNonFileDrop}
-          accept={ALLOWED_TYPES}
+          // No `accept` here on purpose: handleFilesDrop validates every dropped
+          // file through the shared isAcceptedAttachment (MIME + extension
+          // fallback), so it stays the single source of truth. The dropzone's
+          // own exact-MIME filter would otherwise reject extensionless blobs
+          // with a charset-suffixed type that the fallback accepts.
           description="Drop tagged items to attach context"
           activeClassName="ring-2 ring-primary border-primary bg-primary/5 min-h-[132px]"
         >
@@ -3623,7 +3747,7 @@ export function RightSidebar({
           )
     )}>
       {/* Hidden File Input */}
-      <input ref={fileInputRef} type="file" multiple accept={ALLOWED_TYPES.join(',')} className="hidden" onChange={handleFileSelect} disabled={isLoading || isUploading} />
+      <input ref={fileInputRef} type="file" multiple accept={ATTACHMENT_ACCEPT} className="hidden" onChange={handleFileSelect} disabled={isLoading || isUploading} />
 
       {!mounted ? (
         <div className="flex flex-1 items-center justify-center">
