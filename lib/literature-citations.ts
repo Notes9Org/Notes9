@@ -211,3 +211,33 @@ export function literatureContextToSources(
       url: p.url,
     }))
 }
+
+export type LiteratureSource = {
+  title: string
+  abstract?: string
+  doi?: string
+  pmid?: string
+  year?: number
+  url?: string
+}
+
+/**
+ * De-duplicate literature sources by DOI, then PMID, then normalized title, so a
+ * follow-up that merges the live search context with any pending Ask-Catalyst
+ * papers never sends the same paper twice. Order-preserving (first wins).
+ */
+export function dedupeLiteratureSources<T extends LiteratureSource>(sources: T[]): T[] {
+  const seen = new Set<string>()
+  const out: T[] = []
+  for (const s of sources) {
+    if (!s || !s.title?.trim()) continue
+    const key =
+      (s.doi && `doi:${s.doi.trim().toLowerCase()}`) ||
+      (s.pmid && `pmid:${String(s.pmid).trim()}`) ||
+      `title:${s.title.trim().toLowerCase()}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(s)
+  }
+  return out
+}

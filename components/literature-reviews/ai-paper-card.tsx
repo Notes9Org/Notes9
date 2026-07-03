@@ -8,7 +8,7 @@ import { BookOpen, BookmarkCheck, BookmarkPlus, ExternalLink, FileText, Loader2,
 import { stripHtmlToText, formatLiteratureAbstractPlain } from '@/lib/literature-abstract-display'
 import { cn } from '@/lib/utils'
 import { savePaperToLibrary } from '@/app/(app)/literature-reviews/actions'
-import { openCatalystPanel, attachToCatalyst } from '@/lib/catalyst-launch'
+import { openCatalystPanel, attachToCatalyst, notifyCatalyst } from '@/lib/catalyst-launch'
 import { flyToCatalyst } from '@/lib/fly-to-catalyst'
 import { citationToSearchPaper } from '@/lib/ai-search-match'
 import { MotionTabPanel } from './motion'
@@ -302,6 +302,10 @@ function AiPaperCardImpl({
       scope: 'literature',
       webSearch: false,
       autoSend: false,
+      // A paper attachment is being fetched — gate Send until it lands so the user
+      // can't fire the first message before the paper attaches (cleared on attach,
+      // on the fallback re-open below, or by the sidebar's timeout).
+      expectAttachment: !!paper,
     })
     if (!paper) {
       // Web-only hit with no paper record — fall back to web search.
@@ -336,7 +340,26 @@ function AiPaperCardImpl({
             chatAttachmentId: (data.chatAttachmentId as string) || undefined,
           },
         ]
-        flyToCatalyst(target, { onLand: () => attachToCatalyst(attachments) })
+        // Durable citable source: the file chip is cleared after the first send
+        // (setAttachments([])), so also carry the paper's metadata + abstract as a
+        // literature_source. The first turn grounds on the full PDF text; later
+        // follow-ups keep citing the paper via this abstract-backed source.
+        const litSource = paper.title
+          ? [{
+              title: paper.title,
+              abstract: paper.abstract ?? undefined,
+              doi: paper.doi ?? undefined,
+              pmid: paper.pmid ?? undefined,
+              journal: paper.journal ?? undefined,
+              year: paper.year ?? undefined,
+              url: readUrl(result) ?? undefined,
+            }]
+          : undefined
+        // Attach immediately (durable state carrier) so the paper is present the
+        // instant the user sends; the fly is now purely a cosmetic flourish. This
+        // removes the ~1.4s animation window where a send would drop the paper.
+        attachToCatalyst(attachments, litSource)
+        flyToCatalyst(target)
       } else {
         // No open-access full text reachable — don't dead-end. Pass the ABSTRACT as a
         // citable literature_source so Catalyst can read AND inline-cite it (not just
@@ -364,10 +387,20 @@ function AiPaperCardImpl({
             ? 'No open-access full text found — Catalyst will read and cite the abstract (upload the PDF for full-text analysis).'
             : 'No open-access full text found. Catalyst will use web search; upload the PDF for full-text analysis.'
         )
+        notifyCatalyst(
+          abstract
+            ? `“${paper.title}” isn’t open-access, so I could only load its abstract. Upload the PDF here for full-text analysis and passage-level citations.`
+            : `“${paper.title}” isn’t open-access and I couldn’t find readable full text. Upload the PDF here so I can analyze and cite it directly.`,
+          'warning'
+        )
       }
     } catch {
       openCatalystPanel({ scope: 'literature', webSearch: true, autoSend: false })
       toast.error('Couldn’t load the paper into Catalyst. Falling back to web search.')
+      notifyCatalyst(
+        `I couldn’t load “${paper.title}” automatically. Upload the PDF here and I’ll analyze and cite it directly.`,
+        'warning'
+      )
     } finally {
       setAsking(false)
     }

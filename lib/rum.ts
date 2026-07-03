@@ -1,109 +1,32 @@
-import type { AwsRum } from 'aws-rum-web'
+/**
+ * lib/rum.ts
+ *
+ * Compatibility shim. The app formerly used AWS CloudWatch RUM for event
+ * recording. Product/error analytics are now unified on PostHog (one tool).
+ * This module preserves the `recordRumEvent(type, data)` surface so existing
+ * call sites keep working unchanged — every event is forwarded to PostHog.
+ *
+ * Fail-soft and inert when PostHog is unconfigured.
+ */
 
-// ---------------------------------------------------------------------------
-// Constants — CloudWatch RUM App Monitor (public resource policy, unsigned)
-// Production reads from env. Dev falls back to historical values so local dev
-// continues to work without env wiring.
-// ---------------------------------------------------------------------------
-
-const DEV_FALLBACK_APP_ID = 'dcab8f83-af35-4768-873c-3e0918faccdb'
-const DEV_FALLBACK_IDENTITY_POOL_ID = 'us-east-1:fdab262d-f18d-4d45-933b-756a1a2f7093'
-
-function readPublicEnv(key: string): string | undefined {
-  if (typeof process === 'undefined' || !process.env) return undefined
-  const v = process.env[key]
-  return typeof v === 'string' && v.length > 0 ? v : undefined
-}
-
-const IS_PROD = (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production')
-
-export const RUM_APP_ID =
-  readPublicEnv('NEXT_PUBLIC_CW_RUM_APP_ID') ??
-  (IS_PROD ? '' : DEV_FALLBACK_APP_ID)
-export const RUM_IDENTITY_POOL_ID =
-  readPublicEnv('NEXT_PUBLIC_CW_RUM_IDENTITY_POOL_ID') ??
-  (IS_PROD ? '' : DEV_FALLBACK_IDENTITY_POOL_ID)
-export const RUM_ENDPOINT = 'https://dataplane.rum.us-east-1.amazonaws.com'
-export const RUM_REGION = 'us-east-1'
-export const RUM_APP_VERSION = '1.0.0'
-
-export function isRumConfigured(): boolean {
-  return RUM_APP_ID.length > 0 && RUM_IDENTITY_POOL_ID.length > 0
-}
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-export interface RumConfig {
-  sessionSampleRate: number
-  identityPoolId: string
-  endpoint: string
-  telemetries: string[]
-  allowCookies: boolean
-  enableXRay: boolean
-  signing: boolean
-  sessionEventLimit?: number
-}
-
-// ---------------------------------------------------------------------------
-// Module-level singleton — set by RumProvider on init
-// ---------------------------------------------------------------------------
-
-let rumClient: AwsRum | null = null
-
-export function setRumClient(client: AwsRum | null): void {
-  rumClient = client
-}
-
-export function getRumClient(): AwsRum | null {
-  return rumClient
-}
-
-// ---------------------------------------------------------------------------
-// Pure functions
-// ---------------------------------------------------------------------------
+import posthog from 'posthog-js'
+import { isPostHogConfigured } from '@/lib/analytics/posthog'
 
 /**
- * Build the RUM configuration object from the hardcoded constants.
+ * Record a client-side product/analytics event. Forwarded to PostHog.
+ * `data` MUST contain only opaque ids / counts / enums — never free text/PII.
+ *
+ * Inert when PostHog is unconfigured (no key) so local/preview environments
+ * never emit "you must initialize PostHog" console noise.
  */
-export function buildRumConfig(): RumConfig {
-  return {
-    sessionSampleRate: 1,
-    identityPoolId: RUM_IDENTITY_POOL_ID,
-    endpoint: RUM_ENDPOINT,
-    telemetries: ['performance', 'errors', 'http'],
-    allowCookies: true,
-    enableXRay: false,
-    signing: false,
-    sessionEventLimit: 0,
-  }
-}
-
-/**
- * Extract session metadata from a user object.
- * Returns only the opaque user UUID — no PII (email, name, etc.).
- */
-export function extractSessionMetadata(user: { id: string }): {
-  userId: string
-} {
-  return { userId: user.id }
-}
-
-// ---------------------------------------------------------------------------
-// Standalone event recorder
-// ---------------------------------------------------------------------------
-
-/**
- * Record a custom RUM event. No-ops silently when the client is null.
- * Wraps `client.recordEvent()` in try-catch so callers are never affected.
- */
-export function recordRumEvent(type: string, data: Record<string, unknown>): void {
-  if (!rumClient) return
-
+export function recordRumEvent(
+  type: string,
+  data: Record<string, unknown> = {}
+): void {
   try {
-    rumClient.recordEvent(type, data)
-  } catch (err) {
-    console.warn('[RUM] Failed to record event:', err)
+    if (typeof window === 'undefined' || !isPostHogConfigured()) return
+    posthog.capture(type, data)
+  } catch {
+    // Analytics must never break the app.
   }
 }

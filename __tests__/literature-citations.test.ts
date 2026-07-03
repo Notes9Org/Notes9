@@ -11,6 +11,7 @@ import {
   papersToGrounding,
   buildLiteratureSessionContext,
   literatureContextToSystemMessage,
+  dedupeLiteratureSources,
 } from '../lib/literature-citations'
 import {
   formatNotes9AssistantMarkdown,
@@ -147,5 +148,36 @@ describe('round-trip through notes9 chat format', () => {
     expect(parsed.bodyMarkdown).toContain('X reduces off-target effects [1]')
     expect(parsed.resources).toHaveLength(2)
     expect(parsed.citationsManifest?.manifest['1']?.source_name).toBe('Paper One')
+  })
+})
+
+describe('dedupeLiteratureSources', () => {
+  it('drops duplicates by DOI, then PMID, then normalized title (first wins)', () => {
+    const out = dedupeLiteratureSources([
+      { title: 'Paper A', doi: '10.1/AbC', abstract: 'first' },
+      { title: 'Paper A (dup by doi, different case)', doi: '10.1/abc', abstract: 'second' },
+      { title: 'Paper B', pmid: '999' },
+      { title: 'Paper B again', pmid: '999' },
+      { title: '  paper c  ' },
+      { title: 'Paper C' },
+      { title: 'Paper D', doi: '10.9/z' },
+    ])
+    expect(out.map((s) => s.title)).toEqual(['Paper A', 'Paper B', '  paper c  ', 'Paper D'])
+    // first-wins: the kept "Paper A" carries the first entry's abstract
+    expect(out[0].abstract).toBe('first')
+  })
+
+  it('skips entries without a usable title and preserves order', () => {
+    const out = dedupeLiteratureSources([
+      { title: '' },
+      { title: '   ' },
+      { title: 'Real', doi: '10.1/x' },
+    ])
+    expect(out).toHaveLength(1)
+    expect(out[0].title).toBe('Real')
+  })
+
+  it('returns an empty array for an empty input', () => {
+    expect(dedupeLiteratureSources([])).toEqual([])
   })
 })
