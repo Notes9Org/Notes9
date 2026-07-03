@@ -99,6 +99,11 @@ export function StagedPaperView({
 }: StagedPaperViewProps) {
   // Persisted save state: anything past the "staging" statuses is in the library.
   const isSavedToLibrary = !["stage", "staged", "staging"].includes(String(lit.status ?? "").toLowerCase())
+  const stagedExpiresAt = (lit as { staged_expires_at?: string | null }).staged_expires_at ?? null
+  const stagedDaysLeft =
+    !isSavedToLibrary && stagedExpiresAt
+      ? Math.max(0, Math.ceil((new Date(stagedExpiresAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000)))
+      : null
   const isSaving = savingLiteratureId === lit.id
   const isClosedSource =
     !lit.pdf_storage_path &&
