@@ -30,6 +30,8 @@ import {
   AlignCenter,
   AlignRight,
   WrapText,
+  Quote,
+  MessageSquarePlus,
 } from "lucide-react"
 import { moveTopLevelBlock } from "./editor-block-utils"
 
@@ -38,6 +40,8 @@ export type EditorContextMenuActions = {
   insertImage?: () => void
   insertTable?: () => void
   insertEquation?: () => void
+  citeFromRepository?: () => void
+  addComment?: () => void
 }
 
 const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform)
@@ -162,6 +166,22 @@ export function EditorContextMenu({
             {actions?.insertLink ? (
               <ContextMenuItem onSelect={actions.insertLink}>
                 <Link2 className="mr-2 h-4 w-4" /> Link…
+              </ContextMenuItem>
+            ) : null}
+          </>
+        )}
+
+        {(actions?.addComment || actions?.citeFromRepository) && (
+          <>
+            <ContextMenuSeparator />
+            {actions?.addComment ? (
+              <ContextMenuItem onSelect={actions.addComment}>
+                <MessageSquarePlus className="mr-2 h-4 w-4" /> Add comment
+              </ContextMenuItem>
+            ) : null}
+            {actions?.citeFromRepository ? (
+              <ContextMenuItem onSelect={actions.citeFromRepository}>
+                <Quote className="mr-2 h-4 w-4" /> Cite from repository
               </ContextMenuItem>
             ) : null}
           </>

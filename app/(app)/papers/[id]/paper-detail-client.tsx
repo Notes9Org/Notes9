@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { useProjectScope } from "@/contexts/project-scope-context"
@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
 import { useMediaQuery } from "@/hooks/use-media-query"
-import { FileText, PanelLeftClose, PanelLeftOpen, Loader2, Plus, MoreVertical, Trash2, Pencil } from "lucide-react"
+import { FileText, ChevronLeft, List, Loader2, Plus, MoreVertical, Trash2, Pencil } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { PaperWorkspace } from "../paper-workspace"
 import {
@@ -44,6 +44,9 @@ export function PaperDetailClient({ activePaperId }: { activePaperId: string }) 
   const [papers, setPapers] = useState<Paper[]>([])
   const [loading, setLoading] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  // Wraps the papers list + editor so editor fullscreen expands the whole
+  // workspace, keeping the list visible (same pattern as lab notes / reports).
+  const paperWorkspaceRef = useRef<HTMLDivElement>(null)
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   
@@ -206,13 +209,15 @@ export function PaperDetailClient({ activePaperId }: { activePaperId: string }) 
 
   const toggleButton = (
     <Button
+      type="button"
       variant="ghost"
-      size="icon"
+      size="icon-sm"
       className="shrink-0 text-muted-foreground hover:text-foreground"
       onClick={() => setSidebarOpen(prev => !prev)}
-      title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+      aria-label={sidebarOpen ? "Hide papers" : "Show papers"}
+      title={sidebarOpen ? "Hide papers list" : "Show papers list"}
     >
-      {sidebarOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
+      {sidebarOpen ? <ChevronLeft className="h-4 w-4" /> : <List className="h-4 w-4" />}
     </Button>
   )
 
@@ -244,16 +249,26 @@ export function PaperDetailClient({ activePaperId }: { activePaperId: string }) 
       
       <div className="flex-1 min-w-0 min-h-0 flex flex-col">
         <Card className="flex h-full min-h-0 flex-col gap-0 py-0 border-0 shadow-none rounded-none sm:border sm:shadow-sm sm:rounded-xl">
-          <div className="flex h-full min-h-0 min-w-0 flex-1 flex-row items-stretch overflow-hidden">
+          <div ref={paperWorkspaceRef} className="flex h-full min-h-0 min-w-0 flex-1 flex-row items-stretch overflow-hidden bg-background">
             {/* Desktop Sidebar */}
             <aside
               className={cn(
-                "hidden sm:flex min-h-0 shrink-0 flex-col self-stretch overflow-hidden border-r border-border relative transition-[width]",
-                sidebarOpen ? "w-52 min-w-[13rem] bg-muted/20" : "w-0 border-r-0"
+                "hidden sm:flex min-h-0 shrink-0 flex-col self-stretch overflow-hidden relative",
+                sidebarOpen ? "border-r border-border bg-muted/20" : "border-r-0"
               )}
+              /* Animate the rail width (like lab notes / the left + Catalyst sidebars):
+                 the fixed-width inner panel stays mounted and is clipped by
+                 overflow-hidden, so it slides smoothly instead of reflowing. */
+              style={{
+                width: sidebarOpen ? "13rem" : 0,
+                minWidth: 0,
+                transition: "width 0.5s cubic-bezier(0.22, 1, 0.36, 1)",
+              }}
               aria-hidden={!sidebarOpen}
             >
-              {sidebarOpen && <SidebarContent />}
+              <div className="flex h-full min-h-0 w-52 min-w-[13rem] flex-col">
+                <SidebarContent />
+              </div>
             </aside>
 
             {/* Mobile Sidebar (Sheet) */}
@@ -270,6 +285,7 @@ export function PaperDetailClient({ activePaperId }: { activePaperId: string }) 
               <PaperWorkspace
                 key={activePaperId} // ensure it fully remounts/resets if paper changes
                 paperId={activePaperId}
+                fullscreenWorkspaceRef={paperWorkspaceRef}
                 backLink={{ href: projectId ? `/papers?project=${projectId}` : "/papers" }}
                 leftControls={toggleButton}
                 onPaperTitleUpdated={handleTitleUpdated}

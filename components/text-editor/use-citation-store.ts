@@ -161,7 +161,7 @@ export function syncStoreFromHtml(html: string, dispatch: Dispatch<CitationActio
 // Helper: apply current store state to editor HTML
 // ---------------------------------------------------------------------------
 
-export function applyStoreToHtml(html: string, state: CitationState): string {
+export function applyStoreToHtml(html: string, state: CitationState, fontFamily?: string): string {
   // Build metadata map from store entries
   const metaMap = new Map<number, CitationMetadata>()
   state.entries.forEach((e, i) => {
@@ -171,9 +171,9 @@ export function applyStoreToHtml(html: string, state: CitationState): string {
   // Reformat inline citations
   let result = reformatInlineCitations(html, state.style)
 
-  // Reformat bibliography if it exists
+  // Reformat the bibliography in place (or create it if missing).
   if (metaMap.size > 0) {
-    result = reformatBibliography(result, metaMap, state.style)
+    result = reformatBibliography(result, metaMap, state.style, fontFamily)
   }
 
   return result

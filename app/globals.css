@@ -75,6 +75,18 @@
   --glass-bg: rgba(255, 253, 250, 0.72);
   --glass-border: rgba(150, 80, 52, 0.14);
   --glass-blur: 14px;
+  /* ── Catalyst design language (G) ─────────────────────────────────── */
+  /* G1 · one spring-like curve + three durations. */
+  --n9-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --n9-dur-fast: 120ms;
+  --n9-dur-base: 220ms;
+  --n9-dur-slow: 420ms;
+  /* G2 · elevation scale (warm-tinted in light). */
+  --n9-elev-1: 0 1px 2px rgba(44, 36, 24, 0.06), 0 1px 1px rgba(44, 36, 24, 0.04);
+  --n9-elev-2: 0 1px 2px rgba(44, 36, 24, 0.05), 0 12px 32px -14px rgba(44, 36, 24, 0.18);
+  --n9-elev-3: 0 2px 4px rgba(44, 36, 24, 0.06), 0 24px 60px -20px rgba(44, 36, 24, 0.28);
+  /* G5 · accent gradient (var() resolves per-theme at use-site). */
+  --n9-accent-grad: linear-gradient(135deg, color-mix(in srgb, var(--n9-accent) 90%, white) 0%, var(--n9-accent) 55%, var(--n9-accent-hover) 100%);
 }
 
 .dark {
@@ -130,6 +142,10 @@
   --glass-bg: rgba(34, 29, 24, 0.66);
   --glass-border: rgba(245, 240, 232, 0.12);
   --glass-blur: 14px;
+  /* G2 · elevation scale — deeper shadows for dark. */
+  --n9-elev-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 1px rgba(0, 0, 0, 0.3);
+  --n9-elev-2: 0 1px 2px rgba(0, 0, 0, 0.4), 0 14px 34px -14px rgba(0, 0, 0, 0.6);
+  --n9-elev-3: 0 2px 4px rgba(0, 0, 0, 0.45), 0 26px 64px -20px rgba(0, 0, 0, 0.72);
 }
 
 @theme inline {
@@ -1531,6 +1547,77 @@ body > [data-radix-popper-content-wrapper] {
   }
   .glass-overlay {
     background-color: rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* ── Catalyst design-language utilities (G) ──────────────────────────── */
+
+/* G1 · tactile press + unified transition for interactive controls. */
+.n9-press {
+  transition:
+    transform var(--n9-dur-fast) var(--n9-ease),
+    background-color var(--n9-dur-fast) var(--n9-ease),
+    color var(--n9-dur-fast) var(--n9-ease),
+    border-color var(--n9-dur-base) var(--n9-ease),
+    box-shadow var(--n9-dur-base) var(--n9-ease);
+}
+.n9-press:active {
+  transform: scale(0.96);
+}
+
+/* G2 · elevation helpers. */
+.n9-elev-1 { box-shadow: var(--n9-elev-1); }
+.n9-elev-2 { box-shadow: var(--n9-elev-2); }
+.n9-elev-3 { box-shadow: var(--n9-elev-3); }
+
+/* G4 · control-grade glass (popovers, menus, floating chips). */
+.n9-glass {
+  background-color: var(--glass-bg);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  border: 1px solid var(--glass-border);
+}
+
+/* G5 · accent gradient surface + soft glow for primary/active states. */
+.n9-accent-surface {
+  background-image: var(--n9-accent-grad);
+  color: #fff;
+}
+.n9-glow {
+  box-shadow: 0 6px 20px -8px var(--n9-accent-glow);
+}
+
+/* 11.1 · unified composer deck — one elevated glass shell (hero + docked). */
+.n9-composer {
+  border-radius: 1rem;
+  border: 1px solid var(--glass-border);
+  background-color: var(--glass-bg);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  box-shadow: var(--n9-elev-2);
+  transition:
+    border-color var(--n9-dur-base) var(--n9-ease),
+    box-shadow var(--n9-dur-base) var(--n9-ease);
+}
+.n9-composer:focus-within {
+  border-color: color-mix(in srgb, var(--n9-accent) 42%, var(--border));
+  box-shadow: var(--n9-elev-2), 0 0 0 3px color-mix(in srgb, var(--n9-accent) 14%, transparent);
+}
+
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .n9-glass,
+  .n9-composer {
+    background-color: var(--card);
+  }
+}
+
+/* G7 · reduced-motion parity for the new interaction utilities. */
+@media (prefers-reduced-motion: reduce) {
+  .n9-press {
+    transition: none;
+  }
+  .n9-press:active {
+    transform: none;
   }
 }
 

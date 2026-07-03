@@ -47,7 +47,7 @@ import {
   GitCompare,
   History,
   MessageSquare,
-  FileText,
+  FileDown,
 } from "lucide-react"
 import {
   Table,
@@ -243,10 +243,10 @@ export function LabNotesTab({
             variant="ghost"
             size="icon-sm"
             className="shrink-0 text-muted-foreground hover:text-foreground"
-            aria-label="File (print, import, export)"
-            title="File"
+            aria-label="Import, export & print"
+            title="Import / export"
           >
-            <FileText className="h-4 w-4" />
+            <FileDown className="h-4 w-4" />
           </Button>
         }
       />
@@ -1476,18 +1476,26 @@ export function LabNotesTab({
             <aside
               ref={notesAsideRef}
               className={cn(
-                "flex min-h-0 shrink-0 flex-col self-stretch overflow-hidden border-r border-border bg-muted/30 relative",
+                "flex min-h-0 shrink-0 flex-col self-stretch overflow-hidden bg-muted/30 relative",
                 !isMobile && notebookPanelOpen
                   ? cn(
-                      "w-52 min-w-[13rem] bg-card",
+                      "border-r border-border bg-card",
                       /* Above editor column (z-0) and TipTap chrome — critical when workspace is fullscreen z-110 */
                       noteEditorFullscreen ? "z-[120]" : "z-10",
                     )
-                  : "w-0 min-w-0 border-r-0 overflow-hidden",
+                  : "border-r-0",
               )}
+              /* Animate the rail width (matches the left + Catalyst sidebars) instead of
+                 snapping w-52 ↔ w-0. The fixed-width inner content stays mounted and is
+                 clipped by overflow-hidden, so it slides smoothly rather than reflowing. */
+              style={{
+                width: !isMobile && notebookPanelOpen ? "13rem" : 0,
+                minWidth: 0,
+                transition: "width 0.5s cubic-bezier(0.22, 1, 0.36, 1)",
+              }}
               aria-hidden={!notebookPanelOpen || isMobile}
             >
-              {!isMobile && notebookPanelOpen && (
+              {!isMobile && (
                 <div className="flex h-full min-h-0 w-52 min-w-[13rem] flex-col gap-0 p-2">
                   <div className="flex h-9 shrink-0 items-center px-1">
                     <span className="truncate text-xs font-medium text-muted-foreground">Notes</span>

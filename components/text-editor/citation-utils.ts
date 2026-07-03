@@ -78,26 +78,114 @@ export const DEFAULT_CITATION_STYLE = 'APA'
 // Helper: get last name from a full name string
 // ---------------------------------------------------------------------------
 
-function lastName(full: string): string {
-  return full.split(/\s+/).pop() || full
+// ---------------------------------------------------------------------------
+// Author-name parsing + per-style author-list formatting.
+//
+// Names arrive either "Given Family" (e.g. "Jane A. Smith") or inverted
+// "Family, Given" (e.g. "Smith, Jane A."). We normalise to {family, given} and
+// then format per the real rules of each style. Fields we don't have (volume,
+// issue, pages) are omitted rather than invented.
+// ---------------------------------------------------------------------------
+
+function parseName(full: string): { family: string; given: string } {
+  const s = (full || '').trim()
+  if (!s) return { family: '', given: '' }
+  if (s.includes(',')) {
+    const [family, ...rest] = s.split(',')
+    return { family: family.trim(), given: rest.join(',').trim() }
+  }
+  const parts = s.split(/\s+/)
+  if (parts.length === 1) return { family: parts[0], given: '' }
+  return { family: parts[parts.length - 1], given: parts.slice(0, -1).join(' ') }
 }
 
-// ---------------------------------------------------------------------------
-// Helper: build a human-readable author string from an authors array
-// ---------------------------------------------------------------------------
-
-function authorString(authors: string[] | undefined | null): string | null {
-  if (!authors || authors.length === 0) return null
-  if (authors.length === 1) return authors[0]
-  if (authors.length === 2) return `${authors[0]} & ${authors[1]}`
-  return `${authors[0]} et al.`
+/** "Jane A." → "J. A." (spaced, periods) — APA/MLA/Chicago/IEEE/Nature style. */
+function initialsDotted(given: string): string {
+  return given
+    .split(/[\s.]+/)
+    .filter(Boolean)
+    .map((p) => `${p[0].toUpperCase()}.`)
+    .join(' ')
 }
 
+/** "Jane A." → "JA" (no periods, no spaces) — Vancouver/AMA/CSE/NLM style. */
+function initialsPacked(given: string): string {
+  return given
+    .split(/[\s.]+/)
+    .filter(Boolean)
+    .map((p) => p[0].toUpperCase())
+    .join('')
+}
+
+type Author = { family: string; given: string }
+const parsedAuthors = (authors?: string[] | null): Author[] =>
+  (authors || []).map(parseName).filter((a) => a.family || a.given)
+
+/** APA 7 / Harvard: "Family, G. G." with an ampersand before the last author. */
+function apaAuthorList(authors: Author[]): string {
+  const one = (a: Author) => (a.given ? `${a.family}, ${initialsDotted(a.given)}` : a.family)
+  if (authors.length === 1) return one(authors[0])
+  if (authors.length === 2) return `${one(authors[0])}, & ${one(authors[1])}`
+  if (authors.length <= 20)
+    return `${authors.slice(0, -1).map(one).join(', ')}, & ${one(authors[authors.length - 1])}`
+  // APA caps at 20: first 19, an ellipsis, then the final author.
+  return `${authors.slice(0, 19).map(one).join(', ')}, … ${one(authors[authors.length - 1])}`
+}
+
+/** MLA 9: first author inverted, second normal; 3+ → "First, et al." */
+function mlaAuthorList(authors: Author[]): string {
+  const inv = (a: Author) => (a.given ? `${a.family}, ${a.given}` : a.family)
+  const norm = (a: Author) => (a.given ? `${a.given} ${a.family}` : a.family)
+  if (authors.length === 1) return inv(authors[0])
+  if (authors.length === 2) return `${inv(authors[0])}, and ${norm(authors[1])}`
+  return `${inv(authors[0])}, et al.`
+}
+
+/** Chicago / ASA reference list: first author inverted, the rest normal. */
+function chicagoAuthorList(authors: Author[]): string {
+  const inv = (a: Author) => (a.given ? `${a.family}, ${a.given}` : a.family)
+  const norm = (a: Author) => (a.given ? `${a.given} ${a.family}` : a.family)
+  if (authors.length === 1) return inv(authors[0])
+  if (authors.length === 2) return `${inv(authors[0])}, and ${norm(authors[1])}`
+  if (authors.length <= 10) {
+    const middle = authors.slice(1, -1).map(norm).join(', ')
+    return `${inv(authors[0])}, ${middle ? middle + ', ' : ''}and ${norm(authors[authors.length - 1])}`
+  }
+  return `${inv(authors[0])}, et al.`
+}
+
+/** Vancouver / AMA / CSE (NLM): "Family GG", comma-separated, ≤6 then "et al." */
+function nlmAuthorList(authors: Author[]): string {
+  const one = (a: Author) => (a.given ? `${a.family} ${initialsPacked(a.given)}` : a.family)
+  if (authors.length <= 6) return authors.map(one).join(', ')
+  return `${authors.slice(0, 6).map(one).join(', ')}, et al.`
+}
+
+/** IEEE / Science / APS / AIP: initials before surname ("G. G. Family"). */
+function initialsFirstAuthorList(authors: Author[], conjunction = 'and'): string {
+  const one = (a: Author) => (a.given ? `${initialsDotted(a.given)} ${a.family}` : a.family)
+  if (authors.length === 1) return one(authors[0])
+  if (authors.length <= 6)
+    return `${authors.slice(0, -1).map(one).join(', ')}, ${conjunction} ${one(authors[authors.length - 1])}`
+  return `${one(authors[0])} et al.`
+}
+
+/** Nature: "Family, G. G." with an ampersand before the last; ≤5 then "et al." */
+function natureAuthorList(authors: Author[]): string {
+  const one = (a: Author) => (a.given ? `${a.family}, ${initialsDotted(a.given)}` : a.family)
+  if (authors.length === 1) return one(authors[0])
+  if (authors.length <= 5)
+    return `${authors.slice(0, -1).map(one).join(', ')} & ${one(authors[authors.length - 1])}`
+  return `${authors.slice(0, 5).map(one).join(', ')} et al.`
+}
+
+/** In-text label author fragment (surname-only), used by author–date styles. */
 function shortAuthorString(authors: string[] | undefined | null): string | null {
-  if (!authors || authors.length === 0) return null
-  if (authors.length === 1) return lastName(authors[0])
-  if (authors.length === 2) return `${lastName(authors[0])} & ${lastName(authors[1])}`
-  return `${lastName(authors[0])} et al.`
+  const list = parsedAuthors(authors)
+  if (list.length === 0) return null
+  if (list.length === 1) return list[0].family
+  if (list.length === 2) return `${list[0].family} & ${list[1].family}`
+  return `${list[0].family} et al.`
 }
 
 /** Prefer explicit year; else first 4-digit 19xx/20xx in title, journal, or URL. */
@@ -132,25 +220,32 @@ export function formatInlineCitation(
   const yearStr = citationYearString(meta)
 
   switch (style) {
+    // Author–date, comma before year: (Author, Year)
     case 'APA':
     case 'APA (6th Ed.)':
+    case 'Harvard':
       return yearStr ? `(${authorStr}, ${yearStr})` : `(${authorStr})`
-    case 'MLA':
-      return `(${authorStr}${meta?.title ? ' ' + meta.title.split(' ').slice(0, 3).join(' ') : ''})`
+    // Author–date, no comma: (Author Year)
     case 'Chicago (Author-Date)':
     case 'ASA':
-    case 'Harvard':
       return yearStr ? `(${authorStr} ${yearStr})` : `(${authorStr})`
+    // MLA 9: (Author page). We have no page numbers → author only.
+    case 'MLA':
+      return `(${authorStr})`
+    // Superscript numeric note/reference styles.
     case 'Chicago (Notes & Bib)':
     case 'Nature':
-    case 'Science':
-    case 'APS':
-    case 'AIP':
-      return `<sup>${num}</sup>`
-    case 'IEEE':
-    case 'Vancouver':
     case 'AMA':
+    case 'AIP':
     case 'CSE':
+      return `<sup>${num}</sup>`
+    // Parenthetical numeric.
+    case 'Vancouver':
+    case 'Science':
+      return `(${num})`
+    // Bracketed numeric.
+    case 'IEEE':
+    case 'APS':
     case 'BibTeX':
     case 'RIS':
     default:
@@ -163,102 +258,145 @@ export function formatInlineCitation(
 // ---------------------------------------------------------------------------
 
 /** When authors are missing, lead with title (no "Unknown author" placeholders). */
+/** DOI as a canonical link when present, else the raw URL. */
+function refLink(meta: Pick<CitationMetadata, 'doi' | 'url'>): string {
+  const doi = (meta.doi || '').trim()
+  if (doi) return `https://doi.org/${doi.replace(/^https?:\/\/(dx\.)?doi\.org\//i, '')}`
+  return (meta.url || '').trim()
+}
+
+/** No-author entries lead with the title (no "Unknown author" placeholder). */
 function formatCitationNoAuthor(rawMetadata: CitationMetadata, style: string): string {
   const metadata = escapeMetadata(rawMetadata)
-  const { title, journal, url } = metadata
+  const { title, journal, doi, url } = metadata
   const yearStr = citationYearString(metadata)
   const t = title?.trim() || ''
+  const j = journal?.trim() || ''
+  const em = j ? `<em>${j}</em>` : ''
+  const link = refLink(metadata)
 
   switch (style) {
     case 'APA':
     case 'APA (6th Ed.)':
-      return `${t}.${yearStr ? ` (${yearStr}).` : ''} ${journal ? `<em>${journal}</em>. ` : ''}${url ? `Retrieved from ${url}` : ''}`
-    case 'MLA':
-      return `"${t}." ${journal ? `<em>${journal}</em>, ` : ''}${yearStr ? `${yearStr}. ` : ''}${url ? `Web. ${url}` : ''}`
+      return `${t}.${yearStr ? ` (${yearStr}).` : ''}${em ? ` ${em}.` : ''}${link ? ` ${link}` : ''}`
+    case 'MLA': {
+      const tail = [em, yearStr, link].filter(Boolean)
+      return `"${t}."${tail.length ? ' ' + tail.join(', ') + '.' : ''}`
+    }
     case 'Chicago':
     case 'Chicago (Author-Date)':
-      return `"${t}." ${journal ? `<em>${journal}</em> ` : ''}${yearStr ? `(${yearStr}). ` : ''}${url || ''}`
+      return `${yearStr ? `${yearStr}. ` : ''}"${t}."${em ? ` ${em}.` : ''}${link ? ` ${link}.` : ''}`
     case 'Chicago (Notes & Bib)':
-      return `"${t}," ${journal ? `<em>${journal}</em> ` : ''}${yearStr ? `(${yearStr}). ` : ''}${url || ''}`
+      return `"${t}."${em ? ` ${em}` : ''}${yearStr ? ` (${yearStr})` : ''}.${link ? ` ${link}.` : ''}`
     case 'Harvard':
-      return `${yearStr ? `${yearStr}. ` : ''}${t}. ${journal ? `<em>${journal}</em>. ` : ''}${url ? `Available at: ${url}` : ''}`
-    case 'IEEE':
-      return `"${t}," ${journal ? `<em>${journal}</em>, ` : ''}${yearStr ? `${yearStr}. ` : ''}${url ? `[Online]. Available: ${url}` : ''}`
+      return `${t}${yearStr ? ` (${yearStr})` : ''}.${em ? ` ${em}.` : ''}${link ? ` Available at: ${link}` : ''}`
     case 'Vancouver':
-      return `${t}. ${journal ? `${journal}. ` : ''}${yearStr ? `${yearStr}. ` : ''}${url ? `Available from: ${url}` : ''}`
+      return `${t}.${j ? ` ${j}.` : ''}${yearStr ? ` ${yearStr}.` : ''}${link ? ` ${link}` : ''}`
     case 'AMA':
-      return `${t}. ${journal ? `<em>${journal}</em>. ` : ''}${yearStr ? `${yearStr}. ` : ''}${url ? `doi:${url}` : ''}`
-    case 'Nature':
-      return `${t}. ${journal ? `<em>${journal}</em> ` : ''}${yearStr ? `(${yearStr}). ` : ''}${url || ''}`
-    case 'Science':
-      return `${t}. ${journal ? `<em>${journal}</em> ` : ''}${yearStr ? `(${yearStr}). ` : ''}${url || ''}`
+      return `${t}.${em ? ` ${em}.` : ''}${yearStr ? ` ${yearStr}.` : ''}${doi ? ` doi:${doi}` : link ? ` ${link}` : ''}`
     case 'CSE':
-      return `${yearStr ? `${yearStr}. ` : ''}${t}. ${journal ? `${journal}. ` : ''}${url ? `Available from: ${url}` : ''}`
+      return `${yearStr ? `${yearStr}. ` : ''}${t}.${j ? ` ${j}.` : ''}${link ? ` ${link}` : ''}`
+    case 'IEEE':
+      return `"${t},"${em ? ` ${em},` : ''}${yearStr ? ` ${yearStr}.` : ''}${link ? ` ${link}` : ''}`
+    case 'Nature':
+    case 'Science':
+      return `${t}.${em ? ` ${em}` : ''}${yearStr ? ` (${yearStr})` : ''}.${link ? ` ${link}` : ''}`
     case 'ASA':
-      return `${yearStr ? `${yearStr}. ` : ''}"${t}." ${journal ? `<em>${journal}</em>. ` : ''}${url ? `Retrieved ${url}` : ''}`
+      return `${yearStr ? `${yearStr}. ` : ''}"${t}."${em ? ` ${em}.` : ''}${link ? ` ${link}` : ''}`
     case 'APS':
-      return `${t}, ${journal ? `${journal} ` : ''}${yearStr ? `(${yearStr}). ` : ''}${url || ''}`
+      return `${t}, ${em ? `${em} ` : ''}${yearStr ? `(${yearStr})` : ''}.${link ? ` ${link}` : ''}`
     case 'AIP':
-      return `"${t}," ${journal ? `${journal} ` : ''}${yearStr ? `(${yearStr}). ` : ''}${url || ''}`
-    case 'BibTeX': {
-      const key = `ref${yearStr || 'X'}${t ? `_${t.slice(0, 12).replace(/\W+/g, '')}` : ''}`
-      return `@article{${key},<br/>&nbsp;&nbsp;title = {${t}},${journal ? `<br/>&nbsp;&nbsp;journal = {${journal}},` : ''}${yearStr ? `<br/>&nbsp;&nbsp;year = {${yearStr}}` : ''}${url ? `,<br/>&nbsp;&nbsp;url = {${url}}` : ''}<br/>}`
-    }
+      return `"${t}," ${em ? `${em} ` : ''}${yearStr ? `(${yearStr})` : ''}.${link ? ` ${link}` : ''}`
+    case 'BibTeX':
+      return `@article{ref${yearStr || 'X'},<br/>&nbsp;&nbsp;title = {${t}},${j ? `<br/>&nbsp;&nbsp;journal = {${j}},` : ''}${yearStr ? `<br/>&nbsp;&nbsp;year = {${yearStr}},` : ''}${doi ? `<br/>&nbsp;&nbsp;doi = {${doi}}` : url ? `<br/>&nbsp;&nbsp;url = {${url}}` : ''}<br/>}`
     case 'RIS':
-      return `TY  - JOUR<br/>TI  - ${t}${journal ? `<br/>JO  - ${journal}` : ''}${yearStr ? `<br/>PY  - ${yearStr}` : ''}${url ? `<br/>UR  - ${url}` : ''}<br/>ER  -`
+      return `TY  - JOUR<br/>TI  - ${t}${j ? `<br/>JO  - ${j}` : ''}${yearStr ? `<br/>PY  - ${yearStr}` : ''}${doi ? `<br/>DO  - ${doi}` : ''}${url ? `<br/>UR  - ${url}` : ''}<br/>ER  -`
     default:
-      return `${t}.${yearStr ? ` (${yearStr}).` : ''} ${journal ? `<em>${journal}</em>. ` : ''}${url || ''}`
+      return `${t}.${yearStr ? ` (${yearStr}).` : ''}${em ? ` ${em}.` : ''}${link ? ` ${link}` : ''}`
   }
 }
 
+/**
+ * Full reference-list entry. Follows each style's real ordering, author
+ * formatting, and punctuation for the fields we have (authors, year, title,
+ * journal, DOI/URL). Fields the app doesn't store (volume, issue, pages,
+ * publisher) are omitted rather than fabricated.
+ */
 export function formatCitation(rawMetadata: CitationMetadata, style: string): string {
   const metadata = escapeMetadata(rawMetadata)
-  const { authors, title, journal, url } = metadata
-  const authorStr = authorString(authors)
+  const { title, journal, doi, url } = metadata
   const yearStr = citationYearString(metadata)
+  const authors = parsedAuthors(metadata.authors)
+  const t = title?.trim() || ''
+  const j = journal?.trim() || ''
+  const em = j ? `<em>${j}</em>` : ''
+  const link = refLink(metadata)
 
-  if (!authorStr) {
-    return formatCitationNoAuthor(rawMetadata, style)
-  }
+  if (authors.length === 0) return formatCitationNoAuthor(rawMetadata, style)
 
   switch (style) {
+    // APA 7: Family, G. G. (Year). Title. Journal. https://doi.org/xxx
     case 'APA':
-      return `${authorStr}${yearStr ? ` (${yearStr})` : ''}. ${title}. ${journal ? `<em>${journal}</em>. ` : ''}${url ? `Retrieved from ${url}` : ''}`
-    case 'MLA':
-      return `${authorStr}. "${title}." ${journal ? `<em>${journal}</em>, ` : ''}${yearStr ? `${yearStr}. ` : ''}${url ? `Web. ${url}` : ''}`
+      return `${apaAuthorList(authors)}${yearStr ? ` (${yearStr})` : ''}. ${t}.${em ? ` ${em}.` : ''}${link ? ` ${link}` : ''}`
+    // APA 6: same shape, "Retrieved from" for a bare URL (not for a DOI).
+    case 'APA (6th Ed.)': {
+      const loc = doi ? link : url ? `Retrieved from ${url}` : ''
+      return `${apaAuthorList(authors)}${yearStr ? ` (${yearStr})` : ''}. ${t}.${em ? ` ${em}.` : ''}${loc ? ` ${loc}` : ''}`
+    }
+    // MLA 9: Family, First. "Title." Journal, Year, URL.
+    case 'MLA': {
+      const tail = [em, yearStr, link].filter(Boolean)
+      return `${mlaAuthorList(authors)}. "${t}."${tail.length ? ' ' + tail.join(', ') + '.' : ''}`
+    }
+    // Chicago Author–Date: Family, First. Year. "Title." Journal. URL.
     case 'Chicago':
     case 'Chicago (Author-Date)':
-      return `${authorStr}. "${title}." ${journal ? `<em>${journal}</em> ` : ''}${yearStr ? `(${yearStr}). ` : ''}${url || ''}`
+      return `${chicagoAuthorList(authors)}.${yearStr ? ` ${yearStr}.` : ''} "${t}."${em ? ` ${em}.` : ''}${link ? ` ${link}.` : ''}`
+    // Chicago Notes & Bibliography: Family, First. "Title." Journal (Year). URL.
     case 'Chicago (Notes & Bib)':
-      return `${authorStr}, "${title}," ${journal ? `<em>${journal}</em> ` : ''}${yearStr ? `(${yearStr}). ` : ''}${url || ''}`
+      return `${chicagoAuthorList(authors)}. "${t}."${em ? ` ${em}` : ''}${yearStr ? ` (${yearStr})` : ''}.${link ? ` ${link}.` : ''}`
+    // Harvard: Family, G. G. (Year) Title. Journal. Available at: URL
     case 'Harvard':
-      return `${authorStr}, ${yearStr ? `${yearStr}. ` : ''}${title}. ${journal ? `<em>${journal}</em>. ` : ''}${url ? `Available at: ${url}` : ''}`
-    case 'IEEE':
-      return `${authorStr}, "${title}," ${journal ? `<em>${journal}</em>, ` : ''}${yearStr ? `${yearStr}. ` : ''}${url ? `[Online]. Available: ${url}` : ''}`
+      return `${apaAuthorList(authors)}${yearStr ? ` (${yearStr})` : ''} ${t}.${em ? ` ${em}.` : ''}${link ? ` Available at: ${link}` : ''}`
+    // Vancouver: Family GG. Title. Journal. Year. (journal not italicised here)
     case 'Vancouver':
-      return `${authorStr}. ${title}. ${journal ? `${journal}. ` : ''}${yearStr ? `${yearStr}. ` : ''}${url ? `Available from: ${url}` : ''}`
+      return `${nlmAuthorList(authors)}. ${t}.${j ? ` ${j}.` : ''}${yearStr ? ` ${yearStr}.` : ''}${link ? ` ${link}` : ''}`
+    // AMA: Family GG. Title. Journal. Year. doi:xxx
     case 'AMA':
-      return `${authorStr}. ${title}. ${journal ? `<em>${journal}</em>. ` : ''}${yearStr ? `${yearStr}. ` : ''}${url ? `doi:${url}` : ''}`
-    case 'Nature':
-      return `${authorStr}. ${title}. ${journal ? `<em>${journal}</em> ` : ''}${yearStr ? `(${yearStr}). ` : ''}${url || ''}`
-    case 'Science':
-      return `${authorStr}, ${title}. ${journal ? `<em>${journal}</em> ` : ''}${yearStr ? `(${yearStr}). ` : ''}${url || ''}`
-    case 'APA (6th Ed.)':
-      return `${authorStr}${yearStr ? ` (${yearStr})` : ''}. ${title}. ${journal ? `<em>${journal}</em>. ` : ''}${url ? `Retrieved from ${url}` : ''}`
+      return `${nlmAuthorList(authors)}. ${t}.${em ? ` ${em}.` : ''}${yearStr ? ` ${yearStr}.` : ''}${doi ? ` doi:${doi}` : link ? ` ${link}` : ''}`
+    // CSE (name–year): Family GG. Year. Title. Journal.
     case 'CSE':
-      return `${authorStr}. ${yearStr ? `${yearStr}. ` : ''}${title}. ${journal ? `${journal}. ` : ''}${url ? `Available from: ${url}` : ''}`
+      return `${nlmAuthorList(authors)}.${yearStr ? ` ${yearStr}.` : ''} ${t}.${j ? ` ${j}.` : ''}${link ? ` ${link}` : ''}`
+    // IEEE: G. G. Family, "Title," Journal, Year.
+    case 'IEEE':
+      return `${initialsFirstAuthorList(authors)}, "${t},"${em ? ` ${em},` : ''}${yearStr ? ` ${yearStr}.` : ''}${link ? ` ${link}` : ''}`
+    // Nature: Family, G. G. Title. Journal (Year).
+    case 'Nature':
+      return `${natureAuthorList(authors)} ${t}.${em ? ` ${em}` : ''}${yearStr ? ` (${yearStr})` : ''}.${link ? ` ${link}` : ''}`
+    // Science: G. G. Family, Title. Journal (Year).
+    case 'Science':
+      return `${initialsFirstAuthorList(authors)}, ${t}.${em ? ` ${em}` : ''}${yearStr ? ` (${yearStr})` : ''}.${link ? ` ${link}` : ''}`
+    // ASA: Family, First. Year. "Title." Journal.
     case 'ASA':
-      return `${authorStr}. ${yearStr ? `${yearStr}. ` : ''}"${title}." ${journal ? `<em>${journal}</em>. ` : ''}${url ? `Retrieved ${url}` : ''}`
+      return `${chicagoAuthorList(authors)}.${yearStr ? ` ${yearStr}.` : ''} "${t}."${em ? ` ${em}.` : ''}${link ? ` ${link}` : ''}`
+    // APS: G. G. Family, Title, Journal (Year).
     case 'APS':
-      return `${authorStr}, ${title}, ${journal ? `${journal} ` : ''}${yearStr ? `(${yearStr}). ` : ''}${url || ''}`
+      return `${initialsFirstAuthorList(authors)}, ${t}, ${em ? `${em} ` : ''}${yearStr ? `(${yearStr})` : ''}.${link ? ` ${link}` : ''}`
+    // AIP: G. G. Family, "Title," Journal (Year).
     case 'AIP':
-      return `${authorStr}, "${title}," ${journal ? `${journal} ` : ''}${yearStr ? `(${yearStr}). ` : ''}${url || ''}`
-    case 'BibTeX':
-      return `@article{ref${yearStr || 'X'},<br/>&nbsp;&nbsp;author = {${authorStr}},<br/>&nbsp;&nbsp;title = {${title}},${journal ? `<br/>&nbsp;&nbsp;journal = {${journal}},` : ''}${yearStr ? `<br/>&nbsp;&nbsp;year = {${yearStr}}` : ''}${url ? `,<br/>&nbsp;&nbsp;url = {${url}}` : ''}<br/>}`
-    case 'RIS':
-      return `TY  - JOUR<br/>AU  - ${authorStr}<br/>TI  - ${title}${journal ? `<br/>JO  - ${journal}` : ''}${yearStr ? `<br/>PY  - ${yearStr}` : ''}${url ? `<br/>UR  - ${url}` : ''}<br/>ER  -`
+      return `${initialsFirstAuthorList(authors)}, "${t}," ${em ? `${em} ` : ''}${yearStr ? `(${yearStr})` : ''}.${link ? ` ${link}` : ''}`
+    case 'BibTeX': {
+      const bibAuthors = authors.map((a) => (a.given ? `${a.family}, ${a.given}` : a.family)).join(' and ')
+      return `@article{ref${yearStr || 'X'},<br/>&nbsp;&nbsp;author = {${bibAuthors}},<br/>&nbsp;&nbsp;title = {${t}},${j ? `<br/>&nbsp;&nbsp;journal = {${j}},` : ''}${yearStr ? `<br/>&nbsp;&nbsp;year = {${yearStr}},` : ''}${doi ? `<br/>&nbsp;&nbsp;doi = {${doi}}` : url ? `<br/>&nbsp;&nbsp;url = {${url}}` : ''}<br/>}`
+    }
+    case 'RIS': {
+      const auLines = authors
+        .map((a) => `AU  - ${a.given ? `${a.family}, ${a.given}` : a.family}`)
+        .join('<br/>')
+      return `TY  - JOUR<br/>${auLines}<br/>TI  - ${t}${j ? `<br/>JO  - ${j}` : ''}${yearStr ? `<br/>PY  - ${yearStr}` : ''}${doi ? `<br/>DO  - ${doi}` : ''}${url ? `<br/>UR  - ${url}` : ''}<br/>ER  -`
+    }
     default:
-      return `${authorStr}${yearStr ? ` (${yearStr})` : ''}. ${title}. ${url || ''}`
+      return `${apaAuthorList(authors)}${yearStr ? ` (${yearStr})` : ''}. ${t}.${em ? ` ${em}.` : ''}${link ? ` ${link}` : ''}`
   }
 }
 
@@ -400,17 +538,26 @@ export function reformatInlineCitations(html: string, style: string): string {
 // Reformat the References section in HTML (or append one)
 // ---------------------------------------------------------------------------
 
+// Matches an existing References/Bibliography section so a re-insert REPLACES it
+// (updating in place) instead of appending a second one. Tolerates heading
+// attributes and inline tags wrapping the word (e.g. <h2><strong>References</strong></h2>),
+// and runs from the heading to the next heading or the end of the document.
 const REFS_SECTION_REGEX =
-  /<h[1-3][^>]*>\s*(?:References|Bibliography|Works Cited)\s*<\/h[1-3]>[\s\S]*?(?:(?=<h[1-3])|\s*$)/i
+  /<h[1-3][^>]*>\s*(?:<[^>]*>\s*)*(?:References|Bibliography|Works Cited)\s*(?:<\/[^>]*>\s*)*<\/h[1-3]>[\s\S]*?(?:(?=<h[1-3])|\s*$)/i
 
 export function reformatBibliography(
   html: string,
   citations: Map<number, CitationMetadata>,
   style: string,
+  /** When provided, the heading + list inherit the document's font so the
+   *  bibliography matches the body text rather than the editor default. */
+  fontFamily?: string,
 ): string {
   const sorted = Array.from(citations.entries()).sort((a, b) => a[0] - b[0])
 
-  let bibHtml = '<h2>References</h2><div class="bibliography">'
+  // Single-quote any inner quotes so the value stays valid inside a double-quoted attr.
+  const fontAttr = fontFamily ? ` style="font-family:${fontFamily.replace(/"/g, "'")}"` : ''
+  let bibHtml = `<h2${fontAttr}>References</h2><div class="bibliography"${fontAttr}>`
   sorted.forEach(([number, meta]) => {
     const formatted = formatCitation(meta, style)
     const prefix = ['BibTeX', 'RIS'].includes(style) ? '' : `[${number}] `
