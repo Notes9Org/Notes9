@@ -130,6 +130,9 @@ export function papersToGrounding(results: AiSearchResult[] | null | undefined):
  */
 export interface LiteratureSessionContext {
   query: string
+  /** Final AI-search summary prose, persisted so follow-ups in a reopened
+   * literature session keep the summary text, not just the paper list. */
+  summary?: string
   papers: Array<{
     label: string
     title: string

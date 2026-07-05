@@ -103,6 +103,10 @@ export async function POST(request: Request) {
       ].filter(Boolean)
       return NextResponse.json({
         fallback: true,
+        // Deterministic reason so the UI can say WHY: no OA link at all
+        // (paper isn't open access) vs links existed but every download
+        // failed (bot wall / dead link).
+        reason: candidates.length === 0 ? "no_open_access_link" : "fetch_failed",
         sourceUrl,
         name: paper.title ?? "paper",
         text: lines.join("\n"),

@@ -1314,7 +1314,12 @@ export function RightSidebar({
       const formatted = formatNotes9AssistantMarkdown(donePayload, literature.manifest ?? null);
       const sessionId = await createSession(query.slice(0, 80), {
         kind: 'literature',
-        metadata: literature.context ? { literature: literature.context } : {},
+        // Persist the summary prose alongside the paper context so follow-ups
+        // in a reopened session keep the summary text (capped to keep the
+        // metadata row small; the full text lives in the assistant message).
+        metadata: literature.context
+          ? { literature: { ...literature.context, summary: summary.slice(0, 6000) } }
+          : {},
       });
       if (!sessionId || cancelled) return;
       await saveMessage(sessionId, 'user', query);
@@ -2364,7 +2369,11 @@ export function RightSidebar({
       // when present to avoid injecting the same grounding twice.
       const liveLitCtx = !persistedLitCtx ? (literature?.context ?? null) : null;
       const effectiveLitCtx = persistedLitCtx ?? liveLitCtx;
-      const liveSummary = liveLitCtx ? (literature?.summary ?? '').trim() : '';
+      // Summary prose: live bridge on the fresh-search path, persisted
+      // metadata.literature.summary on the reopened-session path (the live
+      // bridge is cleared on session load, so without the persisted copy a
+      // reopened literature chat kept only paper metadata).
+      const litSummary = (liveLitCtx ? literature?.summary : persistedLitCtx?.summary)?.trim() ?? '';
       const ctxPreamble = effectiveLitCtx
         ? literatureContextToSystemMessage(effectiveLitCtx)
         : coPilotRef.current
@@ -2372,8 +2381,8 @@ export function RightSidebar({
           : '';
       // Prepend the overall synthesized summary so the model has both the answer it
       // already gave the user and the per-paper context behind it.
-      const litPreamble = liveSummary
-        ? `Earlier you gave this literature summary:\n\n${liveSummary}\n\n${ctxPreamble}`.trim()
+      const litPreamble = litSummary
+        ? `Earlier you gave this literature summary:\n\n${litSummary}\n\n${ctxPreamble}`.trim()
         : ctxPreamble;
       const notes9ModelQuery = litPreamble
         ? `${litPreamble}\n\n## User question\n${text}`
