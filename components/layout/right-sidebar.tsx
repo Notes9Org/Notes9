@@ -2679,7 +2679,11 @@ export function RightSidebar({
   );
 
   const handleRegenerate = useCallback(async () => {
-    if (messages.length < 2) return;
+    // Failed-turn retry (error card "Try again"): the stream failed, so the
+    // last entry is the user's message with NO assistant reply appended. Let
+    // that through even on the very first turn (messages.length === 1).
+    const isFailedTurnRetry = messages[messages.length - 1]?.role === 'user';
+    if (!isFailedTurnRetry && messages.length < 2) return;
 
     const sid = currentSessionRef.current;
     if (!sid) return;
@@ -2736,27 +2740,41 @@ export function RightSidebar({
     }
 
     if (agentMode === 'notes9') {
-      const lastAssistantIndex = messages.findLastIndex((m) => m.role === 'assistant');
-      if (lastAssistantIndex === -1) return;
-      const lastUserMessage = messages[lastAssistantIndex - 1];
-      if (lastUserMessage?.role !== 'user') return;
+      let retryUserMessage: (typeof messages)[number];
+      let historySource: typeof messages;
 
-      const lastAssistantMessage = messages[lastAssistantIndex];
-      if (isPersistedChatMessageId(lastAssistantMessage.id)) {
-        await deleteTrailingMessages({ id: lastAssistantMessage.id });
-        setSavedMessageIds((prev) => {
-          const next = new Set(prev);
-          next.delete(lastAssistantMessage.id);
-          return next;
-        });
+      if (isFailedTurnRetry) {
+        // The failed turn's user message is already rendered and persisted and
+        // has no assistant answer: retry it in place. Do NOT delete anything
+        // and do NOT append a duplicate user message.
+        retryUserMessage = messages[messages.length - 1];
+        historySource = messages.slice(0, messages.length - 1);
+      } else {
+        const lastAssistantIndex = messages.findLastIndex((m) => m.role === 'assistant');
+        if (lastAssistantIndex === -1) return;
+        const lastUserMessage = messages[lastAssistantIndex - 1];
+        if (lastUserMessage?.role !== 'user') return;
+
+        const lastAssistantMessage = messages[lastAssistantIndex];
+        if (isPersistedChatMessageId(lastAssistantMessage.id)) {
+          await deleteTrailingMessages({ id: lastAssistantMessage.id });
+          setSavedMessageIds((prev) => {
+            const next = new Set(prev);
+            next.delete(lastAssistantMessage.id);
+            return next;
+          });
+        }
+
+        setMessages((curr) => curr.slice(0, lastAssistantIndex));
+
+        retryUserMessage = lastUserMessage;
+        historySource = messages.slice(0, lastAssistantIndex - 1);
       }
 
-      setMessages((curr) => curr.slice(0, lastAssistantIndex));
-
-      const query = getPlainTextFromMessage(lastUserMessage);
+      const query = getPlainTextFromMessage(retryUserMessage);
       const parsedRegenTags = extractTagItemsFromMarkdown(query);
       const requestTags = mergeUniqueTags(selectedMentions, parsedRegenTags);
-      const history = messages.slice(0, lastAssistantIndex - 1).filter((m) => !isNoticeMessage(m)).map((m) => ({
+      const history = historySource.filter((m) => !isNoticeMessage(m)).map((m) => ({
         role: m.role,
         content: notes9HistoryTurnContent(m),
       }));
