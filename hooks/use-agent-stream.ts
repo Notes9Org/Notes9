@@ -178,6 +178,14 @@ export interface AgentArtifact {
   generator?: string | null;
   /** Human kind label, e.g. "PDF report". */
   kind?: string | null;
+  /** 'python' | 'spec' when a regenerable recipe was stored (enables View-code / Edit). */
+  sourceKind?: 'python' | 'spec' | null;
+  /** True ⇒ a recipe is available to fetch/edit. */
+  hasSource?: boolean;
+  /** 1-based version in the edit lineage. */
+  version?: number | null;
+  /** v1 id shared by every version — used to list the version chain. */
+  rootDataId?: string | null;
 }
 
 /** A structured relationship graph the agent produced via map_relationships,
@@ -771,6 +779,13 @@ export function useAgentStream() {
                       experimentId: typeof p.experiment_id === 'string' ? p.experiment_id : null,
                       generator: typeof p.generator === 'string' ? p.generator : null,
                       kind: typeof p.kind === 'string' ? p.kind : null,
+                      sourceKind:
+                        p.source_kind === 'python' || p.source_kind === 'spec'
+                          ? p.source_kind
+                          : null,
+                      hasSource: p.has_source === true,
+                      version: typeof p.version === 'number' ? p.version : null,
+                      rootDataId: typeof p.root_data_id === 'string' ? p.root_data_id : null,
                     };
                     // Mirror into the local accumulator so runStream can return
                     // the final list (state reads in the caller's closure are stale).

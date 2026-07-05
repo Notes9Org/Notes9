@@ -43,6 +43,10 @@ function initPostHog() {
     // Never record raw user input — PII discipline.
     session_recording: { maskAllInputs: true },
   })
+  // Capture unhandled exceptions + promise rejections into Error Tracking.
+  // (Also enable "Exception autocapture" in PostHog project settings so
+  // remote config keeps this on across sessions.)
+  posthog.startExceptionAutocapture?.()
   _initialised = true
 }
 

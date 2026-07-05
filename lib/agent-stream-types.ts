@@ -101,6 +101,13 @@ export interface ArtifactPayload {
   experiment_id?: string | null;
   generator?: string | null;
   kind?: string | null;
+  /** 'python' (figure code) | 'spec' (tool inputs). Present when a regenerable
+   * recipe was stored; the code/spec itself is fetched on demand from
+   * GET /api/agent/artifacts/[dataId]/source, never inlined here. */
+  source_kind?: 'python' | 'spec' | null;
+  has_source?: boolean;
+  version?: number | null;
+  root_data_id?: string | null;
   [key: string]: unknown;
 }
 

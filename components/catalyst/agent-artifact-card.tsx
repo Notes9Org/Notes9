@@ -13,6 +13,7 @@ import {
   Eye,
   Loader2,
   ZoomIn,
+  Code2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
@@ -23,11 +24,13 @@ import {
   resignArtifact,
   type ArtifactKind,
   type PersistedArtifact,
+  type RegenerateResult,
 } from '@/lib/agent-artifacts';
 import type { AgentArtifact } from '@/hooks/use-agent-stream';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SaveToDataFilesDialog } from './save-to-data-files-dialog';
+import { ArtifactSourceDialog } from './artifact-source-dialog';
 
 // ── Icon map ──────────────────────────────────────────────────────────────────
 
@@ -103,10 +106,17 @@ interface AgentArtifactCardProps {
   artifact: AgentArtifact;
 }
 
-export function AgentArtifactCard({ artifact }: AgentArtifactCardProps) {
+export function AgentArtifactCard({ artifact: artifactProp }: AgentArtifactCardProps) {
+  // A regenerate/edit produces a NEW draft version; we display it in place
+  // without disturbing the parent's list. `artifact` below is the version the
+  // card is currently showing (the freshly-regenerated one, else the prop).
+  const [replacement, setReplacement] = useState<AgentArtifact | null>(null);
+  const artifact = replacement ?? artifactProp;
+
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [saved, setSaved] = useState(!artifact.draft);
-  const [liveUrl, setLiveUrl] = useState<string | null>(artifact.signedUrl ?? null);
+  const [sourceOpen, setSourceOpen] = useState(false);
+  const [saved, setSaved] = useState(!artifactProp.draft);
+  const [liveUrl, setLiveUrl] = useState<string | null>(artifactProp.signedUrl ?? null);
   const [resigning, setResigning] = useState(false);
   // Three-state image thumbnail: loading while re-signing, ready once URL is
   // live, error if the resign fails so we fall back to the icon tile.
@@ -468,6 +478,28 @@ export function AgentArtifactCard({ artifact }: AgentArtifactCardProps) {
             </Button>
           )}
 
+          {/* View code / Edit — only when a regenerable recipe was stored */}
+          {artifact.hasSource && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              title={artifact.sourceKind === 'python' ? 'View / edit figure code' : 'View / edit spec'}
+              aria-label="View or edit the code behind this artifact"
+              className="text-muted-foreground hover:text-foreground"
+              onClick={() => setSourceOpen(true)}
+            >
+              <Code2 className="size-4" aria-hidden="true" />
+            </Button>
+          )}
+          {typeof artifact.version === 'number' && artifact.version > 1 && (
+            <span
+              className="ml-0.5 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+              title={`Version ${artifact.version} (edited)`}
+            >
+              v{artifact.version}
+            </span>
+          )}
+
           {/* Save to Data files / Saved badge */}
           {saved ? (
             <span
@@ -512,6 +544,35 @@ export function AgentArtifactCard({ artifact }: AgentArtifactCardProps) {
           open={dialogOpen}
           onOpenChange={setDialogOpen}
           onSaved={() => setSaved(true)}
+        />
+      )}
+
+      {/* ── View code / Edit + Regenerate ─────────────────────────────────── */}
+      {artifact.hasSource && (
+        <ArtifactSourceDialog
+          artifact={artifact}
+          open={sourceOpen}
+          onOpenChange={setSourceOpen}
+          onRegenerated={(next: RegenerateResult) => {
+            // Swap the card to the freshly-rendered version in place.
+            setReplacement({
+              dataId: next.data_id,
+              fileName: next.file_name,
+              mimeType: next.mime_type,
+              sizeBytes: next.size_bytes,
+              signedUrl: next.signed_url,
+              draft: next.draft,
+              experimentId: artifact.experimentId ?? null,
+              generator: next.generator,
+              kind: next.kind,
+              sourceKind: next.source_kind,
+              hasSource: next.has_source,
+              version: next.version,
+              rootDataId: next.root_data_id,
+            });
+            setLiveUrl(next.signed_url ?? null);
+            setSaved(false);
+          }}
         />
       )}
     </div>

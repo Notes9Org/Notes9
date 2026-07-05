@@ -2,7 +2,7 @@
 
 import { useEffect } from "react"
 import { usePathname } from "next/navigation"
-import { recordRumEvent } from "@/lib/rum"
+import { recordRumEvent, captureClientException } from "@/lib/rum"
 
 export default function PapersError({
   error,
@@ -14,6 +14,7 @@ export default function PapersError({
   const pathname = usePathname()
   useEffect(() => {
     recordRumEvent('page_error', { message: error.message, digest: error.digest, route: pathname })
+    captureClientException(error, { route: pathname, digest: error.digest ?? null })
   }, [error, pathname])
   return (
     <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4">
