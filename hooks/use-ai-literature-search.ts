@@ -213,6 +213,10 @@ export function useAiLiteratureSearch({
       let receivedPapers: SearchPaper[] = []
       let overall = ''
       let receivedManifest: CitationsManifest | null = null
+      // Backend-emitted `error` SSE events end the stream WITHOUT throwing, so
+      // they never hit the catch below. Track them so the run is treated as a
+      // failure: guard cleared (Try again re-runs) and nothing cached.
+      let sawError = false
 
       try {
         const res = await fetch('/api/literature/ai-search', {
@@ -280,6 +284,7 @@ export function useAiLiteratureSearch({
                 if (isActiveRequest()) setManifest(receivedManifest)
               }
             } else if (event === 'error') {
+              sawError = true
               if (isActiveRequest())
                 setError(
                   String((data as { error?: string }).error ?? 'Literature search failed.'),
@@ -291,12 +296,21 @@ export function useAiLiteratureSearch({
 
         // Stop any lingering per-card shimmers and cache the completed answer.
         if (isActiveRequest()) setPapers((prev) => prev.map((p) => ({ ...p })))
-        if (receivedPapers.length > 0) {
-          {
-            const entry: CachedAi = { summary: overall, papers: receivedPapers, manifest: receivedManifest }
-            aiSearchCache.set(q, entry)
-            writeSessionSearch(cacheKey, entry)
+        if (sawError) {
+          // Failed run: clear the dedupe guard so the error banner's "Try again"
+          // actually re-runs (it calls run() with the SAME query, which the
+          // guard at the top would otherwise swallow), and do NOT cache — a
+          // cached partial (papers, no summary) would replay the broken state
+          // on every retry and across reloads via sessionStorage.
+          if (activeRequestIdRef.current === requestId) {
+            lastRunQueryRef.current = null
           }
+        } else if (receivedPapers.length > 0) {
+          // Key by cacheKey (not raw q) so the in-memory entry is found by the
+          // same key the read path + sessionStorage layer use.
+          const entry: CachedAi = { summary: overall, papers: receivedPapers, manifest: receivedManifest }
+          aiSearchCache.set(cacheKey, entry)
+          writeSessionSearch(cacheKey, entry)
         }
       } catch (e) {
         // Only the still-active request may touch shared state — a superseded

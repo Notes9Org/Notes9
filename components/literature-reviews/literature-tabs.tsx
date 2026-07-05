@@ -538,6 +538,19 @@ export function LiteratureTabs({
             // the importing spinner to the PDF panel without a full server-tree
             // refetch. The earlier router.refresh() caused a second visible
             // reload of the paper right as it finished importing.
+          } else if (data.pdf_import_status === "none" || data.pdf_import_status === "failed") {
+            // Terminal failure: say so actively — the import runs server-side
+            // after the staging action returns, so this poller is the only
+            // place the outcome becomes known. Fires once per paper: the patch
+            // above removes the id from pendingPdfImportIds.
+            delete importStartedAtRef.current[id]
+            const title = stagedByIdMerged.get(id)?.title?.trim()
+            const paperLabel = title ? `"${title}"` : "this paper"
+            toast.warning(
+              data.pdf_import_status === "none"
+                ? `No open-access PDF is available for ${paperLabel} — upload the PDF in its tab to read the full text.`
+                : `The PDF for ${paperLabel} could not be downloaded — upload it in its tab to read the full text.`,
+            )
           }
         } catch (err) {
           anyError = true
@@ -569,7 +582,7 @@ export function LiteratureTabs({
       cancelled = true
       window.clearInterval(interval)
     }
-  }, [topSection, pendingPdfImportIds, router])
+  }, [topSection, pendingPdfImportIds, stagedByIdMerged, router])
 
   const scrollTabsRef = useRef<HTMLDivElement>(null)
   const [showLeftArrow, setShowLeftArrow] = useState(false)

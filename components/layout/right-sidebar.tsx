@@ -1314,7 +1314,12 @@ export function RightSidebar({
       const formatted = formatNotes9AssistantMarkdown(donePayload, literature.manifest ?? null);
       const sessionId = await createSession(query.slice(0, 80), {
         kind: 'literature',
-        metadata: literature.context ? { literature: literature.context } : {},
+        // Persist the summary prose alongside the paper context so follow-ups
+        // in a reopened session keep the summary text (capped to keep the
+        // metadata row small; the full text lives in the assistant message).
+        metadata: literature.context
+          ? { literature: { ...literature.context, summary: summary.slice(0, 6000) } }
+          : {},
       });
       if (!sessionId || cancelled) return;
       await saveMessage(sessionId, 'user', query);
@@ -2364,7 +2369,11 @@ export function RightSidebar({
       // when present to avoid injecting the same grounding twice.
       const liveLitCtx = !persistedLitCtx ? (literature?.context ?? null) : null;
       const effectiveLitCtx = persistedLitCtx ?? liveLitCtx;
-      const liveSummary = liveLitCtx ? (literature?.summary ?? '').trim() : '';
+      // Summary prose: live bridge on the fresh-search path, persisted
+      // metadata.literature.summary on the reopened-session path (the live
+      // bridge is cleared on session load, so without the persisted copy a
+      // reopened literature chat kept only paper metadata).
+      const litSummary = (liveLitCtx ? literature?.summary : persistedLitCtx?.summary)?.trim() ?? '';
       const ctxPreamble = effectiveLitCtx
         ? literatureContextToSystemMessage(effectiveLitCtx)
         : coPilotRef.current
@@ -2372,8 +2381,8 @@ export function RightSidebar({
           : '';
       // Prepend the overall synthesized summary so the model has both the answer it
       // already gave the user and the per-paper context behind it.
-      const litPreamble = liveSummary
-        ? `Earlier you gave this literature summary:\n\n${liveSummary}\n\n${ctxPreamble}`.trim()
+      const litPreamble = litSummary
+        ? `Earlier you gave this literature summary:\n\n${litSummary}\n\n${ctxPreamble}`.trim()
         : ctxPreamble;
       const notes9ModelQuery = litPreamble
         ? `${litPreamble}\n\n## User question\n${text}`
@@ -2670,7 +2679,11 @@ export function RightSidebar({
   );
 
   const handleRegenerate = useCallback(async () => {
-    if (messages.length < 2) return;
+    // Failed-turn retry (error card "Try again"): the stream failed, so the
+    // last entry is the user's message with NO assistant reply appended. Let
+    // that through even on the very first turn (messages.length === 1).
+    const isFailedTurnRetry = messages[messages.length - 1]?.role === 'user';
+    if (!isFailedTurnRetry && messages.length < 2) return;
 
     const sid = currentSessionRef.current;
     if (!sid) return;
@@ -2727,27 +2740,41 @@ export function RightSidebar({
     }
 
     if (agentMode === 'notes9') {
-      const lastAssistantIndex = messages.findLastIndex((m) => m.role === 'assistant');
-      if (lastAssistantIndex === -1) return;
-      const lastUserMessage = messages[lastAssistantIndex - 1];
-      if (lastUserMessage?.role !== 'user') return;
+      let retryUserMessage: (typeof messages)[number];
+      let historySource: typeof messages;
 
-      const lastAssistantMessage = messages[lastAssistantIndex];
-      if (isPersistedChatMessageId(lastAssistantMessage.id)) {
-        await deleteTrailingMessages({ id: lastAssistantMessage.id });
-        setSavedMessageIds((prev) => {
-          const next = new Set(prev);
-          next.delete(lastAssistantMessage.id);
-          return next;
-        });
+      if (isFailedTurnRetry) {
+        // The failed turn's user message is already rendered and persisted and
+        // has no assistant answer: retry it in place. Do NOT delete anything
+        // and do NOT append a duplicate user message.
+        retryUserMessage = messages[messages.length - 1];
+        historySource = messages.slice(0, messages.length - 1);
+      } else {
+        const lastAssistantIndex = messages.findLastIndex((m) => m.role === 'assistant');
+        if (lastAssistantIndex === -1) return;
+        const lastUserMessage = messages[lastAssistantIndex - 1];
+        if (lastUserMessage?.role !== 'user') return;
+
+        const lastAssistantMessage = messages[lastAssistantIndex];
+        if (isPersistedChatMessageId(lastAssistantMessage.id)) {
+          await deleteTrailingMessages({ id: lastAssistantMessage.id });
+          setSavedMessageIds((prev) => {
+            const next = new Set(prev);
+            next.delete(lastAssistantMessage.id);
+            return next;
+          });
+        }
+
+        setMessages((curr) => curr.slice(0, lastAssistantIndex));
+
+        retryUserMessage = lastUserMessage;
+        historySource = messages.slice(0, lastAssistantIndex - 1);
       }
 
-      setMessages((curr) => curr.slice(0, lastAssistantIndex));
-
-      const query = getPlainTextFromMessage(lastUserMessage);
+      const query = getPlainTextFromMessage(retryUserMessage);
       const parsedRegenTags = extractTagItemsFromMarkdown(query);
       const requestTags = mergeUniqueTags(selectedMentions, parsedRegenTags);
-      const history = messages.slice(0, lastAssistantIndex - 1).filter((m) => !isNoticeMessage(m)).map((m) => ({
+      const history = historySource.filter((m) => !isNoticeMessage(m)).map((m) => ({
         role: m.role,
         content: notes9HistoryTurnContent(m),
       }));

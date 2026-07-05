@@ -1,6 +1,7 @@
 import {
   buildNotes9AgentRequestBody,
   type Notes9AgentHistoryItem,
+  type Notes9LiteratureSource,
 } from '@/lib/notes9-agent-request';
 import { verifyBearerToken } from "@/lib/verify-bearer-token";
 import { enforceLimits, checkBodyBytes, checkHistory, checkQueryChars, checkAttachments } from '@/lib/limits/guards';
@@ -64,6 +65,12 @@ export async function POST(req: Request) {
     // dropped here, so attachments never reached the backend).
     file_attachments: Array.isArray(rest.file_attachments) ? rest.file_attachments : undefined,
     attachments: Array.isArray(rest.attachments) ? rest.attachments : undefined,
+    // Forward literature grounding (closed-access "Ask Catalyst" abstracts and
+    // literature-search follow-up sources). Same silent-drop failure mode as
+    // file_attachments above; the builder clamps entries to the backend caps.
+    literature_sources: Array.isArray(rest.literature_sources)
+      ? (rest.literature_sources as Notes9LiteratureSource[])
+      : undefined,
   });
   const token = headerToken;
 

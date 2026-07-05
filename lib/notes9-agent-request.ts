@@ -81,6 +81,72 @@ export type Notes9AgentRequestInput = {
   };
 };
 
+/** Field caps mirrored from the backend contract (AI/catalyst/agents/contracts/request.py
+ * LiteratureSource + MAX_LITERATURE_SOURCES_PER_REQUEST). Pydantic REJECTS the whole
+ * request (422) when any cap is exceeded, so the client must truncate — never reject —
+ * before sending. Keep these in sync with the backend. */
+const LITERATURE_SOURCE_CAPS = {
+  maxSources: 12,
+  title: 1024,
+  abstract: 20_000,
+  doi: 256,
+  pmid: 64,
+  journal: 512,
+  url: 2048,
+  maxAuthors: 64,
+  author: 512,
+  yearMin: 0,
+  yearMax: 3000,
+} as const;
+
+function truncated(value: unknown, max: number): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return trimmed.length > max ? trimmed.slice(0, max) : trimmed;
+}
+
+/** Deterministically clamp literature sources to the backend pydantic caps.
+ * Drops entries without a usable title (required upstream); truncates every
+ * string field; coerces/drops out-of-range years. Pure data transform. */
+export function sanitizeLiteratureSources(input: unknown): Notes9LiteratureSource[] {
+  if (!Array.isArray(input)) return [];
+  const out: Notes9LiteratureSource[] = [];
+  for (const item of input) {
+    if (out.length >= LITERATURE_SOURCE_CAPS.maxSources) break;
+    if (!item || typeof item !== 'object') continue;
+    const raw = item as Record<string, unknown>;
+    const title = truncated(raw.title, LITERATURE_SOURCE_CAPS.title);
+    if (!title) continue;
+    const source: Notes9LiteratureSource = { title };
+    const abstract = truncated(raw.abstract, LITERATURE_SOURCE_CAPS.abstract);
+    if (abstract) source.abstract = abstract;
+    const doi = truncated(raw.doi, LITERATURE_SOURCE_CAPS.doi);
+    if (doi) source.doi = doi;
+    const pmid = truncated(raw.pmid, LITERATURE_SOURCE_CAPS.pmid);
+    if (pmid) source.pmid = pmid;
+    const journal = truncated(raw.journal, LITERATURE_SOURCE_CAPS.journal);
+    if (journal) source.journal = journal;
+    const url = truncated(raw.url, LITERATURE_SOURCE_CAPS.url);
+    if (url) source.url = url;
+    if (typeof raw.year === 'number' && Number.isFinite(raw.year)) {
+      const year = Math.trunc(raw.year);
+      if (year >= LITERATURE_SOURCE_CAPS.yearMin && year <= LITERATURE_SOURCE_CAPS.yearMax) {
+        source.year = year;
+      }
+    }
+    if (Array.isArray(raw.authors)) {
+      const authors = raw.authors
+        .map((a) => truncated(a, LITERATURE_SOURCE_CAPS.author))
+        .filter((a): a is string => Boolean(a))
+        .slice(0, LITERATURE_SOURCE_CAPS.maxAuthors);
+      if (authors.length > 0) source.authors = authors;
+    }
+    out.push(source);
+  }
+  return out;
+}
+
 export function notes9AgentIncludesBodyHistory(): boolean {
   // Opt-OUT: history passthrough is ON unless explicitly disabled. Previously
   // this was opt-in (`=== 'true'`) for a Zep integration that was never wired
@@ -117,7 +183,10 @@ export function buildNotes9AgentRequestBody(params: Notes9AgentRequestInput): Re
     body.file_attachments = params.file_attachments;
   }
   if (params.literature_sources && params.literature_sources.length > 0) {
-    body.literature_sources = params.literature_sources;
+    const literatureSources = sanitizeLiteratureSources(params.literature_sources);
+    if (literatureSources.length > 0) {
+      body.literature_sources = literatureSources;
+    }
   }
   return body;
 }

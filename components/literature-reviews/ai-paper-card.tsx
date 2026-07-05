@@ -360,6 +360,13 @@ function AiPaperCardImpl({
         // removes the ~1.4s animation window where a send would drop the paper.
         attachToCatalyst(attachments, litSource)
         flyToCatalyst(target)
+        // No chatAttachmentId means the chat_attachments registration failed
+        // server-side: the PDF still works for this message, but the agent
+        // can't re-open it by UUID on later turns. Say so instead of letting
+        // follow-ups degrade silently (they still ground on the abstract).
+        if (!data.chatAttachmentId) {
+          toast.info('Paper attached for this message; follow-ups will use its abstract. Re-attach or upload the PDF if you need full text again.')
+        }
       } else {
         // No open-access full text reachable — don't dead-end. Pass the ABSTRACT as a
         // citable literature_source so Catalyst can read AND inline-cite it (not just
@@ -382,15 +389,21 @@ function AiPaperCardImpl({
               }]
             : undefined,
         })
+        // The server distinguishes "paper has no open-access link at all" from
+        // "links existed but every download failed" — tell the user which.
+        const fetchFailed = data?.reason === 'fetch_failed'
+        const reasonLead = fetchFailed
+          ? 'The open-access link couldn’t be downloaded'
+          : 'This paper isn’t open access'
         toast.info(
           abstract
-            ? 'No open-access full text found — Catalyst will read and cite the abstract (upload the PDF for full-text analysis).'
-            : 'No open-access full text found. Catalyst will use web search; upload the PDF for full-text analysis.'
+            ? `${reasonLead} — Catalyst will read and cite the abstract. Upload the PDF for full-text analysis.`
+            : `${reasonLead}. Catalyst will use web search; upload the PDF for full-text analysis.`
         )
         notifyCatalyst(
           abstract
-            ? `“${paper.title}” isn’t open-access, so I could only load its abstract. Upload the PDF here for full-text analysis and passage-level citations.`
-            : `“${paper.title}” isn’t open-access and I couldn’t find readable full text. Upload the PDF here so I can analyze and cite it directly.`,
+            ? `${fetchFailed ? `The full text of “${paper.title}” couldn’t be downloaded` : `“${paper.title}” isn’t open access`}, so I could only load its abstract. Upload the PDF here for full-text analysis and passage-level citations.`
+            : `${fetchFailed ? `The full text of “${paper.title}” couldn’t be downloaded` : `“${paper.title}” isn’t open access`} and I couldn’t find readable full text. Upload the PDF here so I can analyze and cite it directly.`,
           'warning'
         )
       }
