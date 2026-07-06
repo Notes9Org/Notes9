@@ -76,6 +76,22 @@ export const approaching: Record<string, LimitMessage> = {
     icon: 'cloud',
     color: 'blue',
   },
+  lit_search_weekly: {
+    title: 'Plenty of searching this week',
+    body: "You've used a good share of this week's literature searches. Everything is still fully available.",
+    action: 'Keep going — you still have searches left.',
+    resetHint: 'Full capacity returns Monday at 00:00 UTC.',
+    icon: 'zap',
+    color: 'blue',
+  },
+  ai_budget_monthly: {
+    title: 'Good amount of AI work this month',
+    body: "You've used a healthy chunk of this month's AI capacity. Your work is safe and the AI is still fully available.",
+    action: 'Keep going — you still have capacity left.',
+    resetHint: 'Full capacity returns on the 1st.',
+    icon: 'zap',
+    color: 'blue',
+  },
 }
 
 // ---------------------------------------------------------------------------
@@ -228,6 +244,8 @@ export type LimitCode =
   | 'upload_size'
   | 'upload_count'
   | 'body_too_large'
+  | 'lit_search_weekly'
+  | 'ai_budget_monthly'
 
 /**
  * Resolve the right LimitMessage for a given limit code and severity.
