@@ -46,6 +46,26 @@ export function captureServer(
   }
 }
 
+/**
+ * Capture a server-side exception into PostHog Error Tracking.
+ * `distinctId` is optional — pass the user id when known (e.g. parsed from the
+ * PostHog cookie in the Next.js `onRequestError` hook) so the exception links
+ * to a person. Never throws; inert when unconfigured.
+ */
+export function captureServerException(
+  error: unknown,
+  distinctId?: string,
+  properties?: Record<string, string | number | boolean | null>
+): void {
+  try {
+    const client = getClient()
+    if (!client) return
+    client.captureException(error, distinctId, properties)
+  } catch (err) {
+    console.warn('[posthog-server] captureException failed', err)
+  }
+}
+
 /** Best-effort flush of queued server events. Safe to await. */
 export async function flushServer(): Promise<void> {
   try {

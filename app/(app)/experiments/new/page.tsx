@@ -25,6 +25,7 @@ import { ArrowLeft } from 'lucide-react'
 import { getUniqueNameErrorMessage } from "@/lib/unique-name-error"
 import { DATE_ORDER_ERROR, isEndDateBeforeStartDate } from "@/lib/date-order"
 import { recordRumEvent } from "@/lib/rum"
+import { AnalyticsEvent } from "@/lib/analytics/events"
 import { toast } from "sonner"
 
 function NewExperimentForm() {
@@ -147,6 +148,8 @@ function NewExperimentForm() {
           toast.warning("Experiment created, but the protocol could not be linked", {
             description: "You can link it from the experiment's Protocol tab.",
           })
+        } else {
+          recordRumEvent(AnalyticsEvent.PROTOCOL_LINKED_TO_EXPERIMENT, {})
         }
       }
 

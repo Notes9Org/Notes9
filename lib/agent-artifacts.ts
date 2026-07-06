@@ -24,6 +24,45 @@ export interface PersistedArtifact {
   experiment_id: string | null;
   generator: string | null;
   kind: string | null;
+  /** Recipe flag + version lineage (the recipe itself is fetched on demand). */
+  source_kind?: 'python' | 'spec' | null;
+  has_source?: boolean;
+  version?: number | null;
+  root_data_id?: string | null;
+}
+
+/** Fields shared by the live-artifact → persisted-artifact mappers. */
+type LiveArtifactInput = {
+  dataId: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  draft: boolean;
+  experimentId?: string | null;
+  generator?: string | null;
+  kind?: string | null;
+  sourceKind?: 'python' | 'spec' | null;
+  hasSource?: boolean;
+  version?: number | null;
+  rootDataId?: string | null;
+};
+
+/** One place that turns a live artifact into its stable persisted shape. */
+function liveToPersisted(a: LiveArtifactInput): PersistedArtifact {
+  return {
+    data_id: a.dataId,
+    file_name: a.fileName,
+    mime_type: a.mimeType,
+    size_bytes: a.sizeBytes,
+    draft: a.draft,
+    experiment_id: a.experimentId ?? null,
+    generator: a.generator ?? null,
+    kind: a.kind ?? null,
+    source_kind: a.sourceKind ?? null,
+    has_source: a.hasSource ?? false,
+    version: a.version ?? null,
+    root_data_id: a.rootDataId ?? null,
+  };
 }
 
 /** Marker appended after the citations manifest block. Hidden from display. */
@@ -49,27 +88,9 @@ function base64ToUtf8Artifacts(b64: string): string {
  * (no `signed_url`) are persisted.
  */
 export function encodeStoredArtifacts(
-  artifacts: ReadonlyArray<{
-    dataId: string;
-    fileName: string;
-    mimeType: string;
-    sizeBytes: number;
-    draft: boolean;
-    experimentId?: string | null;
-    generator?: string | null;
-    kind?: string | null;
-  }>,
+  artifacts: ReadonlyArray<LiveArtifactInput>,
 ): string {
-  const payload: PersistedArtifact[] = artifacts.map((a) => ({
-    data_id: a.dataId,
-    file_name: a.fileName,
-    mime_type: a.mimeType,
-    size_bytes: a.sizeBytes,
-    draft: a.draft,
-    experiment_id: a.experimentId ?? null,
-    generator: a.generator ?? null,
-    kind: a.kind ?? null,
-  }));
+  const payload: PersistedArtifact[] = artifacts.map(liveToPersisted);
   return utf8ToBase64Artifacts(JSON.stringify(payload));
 }
 
@@ -102,27 +123,9 @@ export function parseStoredArtifacts(b64: string): PersistedArtifact[] {
  * linkage that replaces the fragile hidden `§§NOTES9_ARTIFACTS§§` markdown block.
  */
 export function toPersistedArtifacts(
-  artifacts: ReadonlyArray<{
-    dataId: string;
-    fileName: string;
-    mimeType: string;
-    sizeBytes: number;
-    draft: boolean;
-    experimentId?: string | null;
-    generator?: string | null;
-    kind?: string | null;
-  }>,
+  artifacts: ReadonlyArray<LiveArtifactInput>,
 ): PersistedArtifact[] {
-  return artifacts.map((a) => ({
-    data_id: a.dataId,
-    file_name: a.fileName,
-    mime_type: a.mimeType,
-    size_bytes: a.sizeBytes,
-    draft: a.draft,
-    experiment_id: a.experimentId ?? null,
-    generator: a.generator ?? null,
-    kind: a.kind ?? null,
-  }));
+  return artifacts.map(liveToPersisted);
 }
 
 /** Map a MIME type to a coarse kind used for icon + preview decisions. */
@@ -192,6 +195,10 @@ export function persistedToArtifact(p: PersistedArtifact): {
   experimentId: string | null;
   generator: string | null;
   kind: string | null;
+  sourceKind: 'python' | 'spec' | null;
+  hasSource: boolean;
+  version: number | null;
+  rootDataId: string | null;
 } {
   return {
     dataId: p.data_id,
@@ -203,6 +210,10 @@ export function persistedToArtifact(p: PersistedArtifact): {
     experimentId: p.experiment_id,
     generator: p.generator,
     kind: p.kind,
+    sourceKind: p.source_kind ?? null,
+    hasSource: p.has_source ?? false,
+    version: p.version ?? null,
+    rootDataId: p.root_data_id ?? null,
   };
 }
 
@@ -246,4 +257,95 @@ export async function commitArtifact(
     throw new Error(detail);
   }
   return (await res.json()) as CommitArtifactResult;
+}
+
+/** One version in an artifact's edit lineage (from GET /source). */
+export interface ArtifactVersionMeta {
+  data_id: string;
+  version: number;
+  file_name: string;
+  created_at: string | null;
+  committed: boolean;
+}
+
+/** Full recipe + version chain returned by GET /source. */
+export interface ArtifactSource {
+  data_id: string;
+  generator: string | null;
+  source_kind: 'python' | 'spec' | null;
+  /** matplotlib code (python) or the tool-input spec object (spec). */
+  source: Record<string, unknown> | null;
+  version: number;
+  root_data_id: string | null;
+  parent_data_id: string | null;
+  versions: ArtifactVersionMeta[];
+}
+
+/**
+ * Fetch the stored recipe + version chain for an artifact. Returns null when no
+ * recipe was stored (has_source false), the draft expired (410), or the artifact
+ * is not the user's — callers treat null as "no code to show".
+ */
+export async function fetchArtifactSource(
+  dataId: string,
+  token: string | null,
+): Promise<ArtifactSource | null> {
+  try {
+    const res = await fetch(`/api/agent/artifacts/${encodeURIComponent(dataId)}/source`, {
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as ArtifactSource;
+  } catch {
+    return null;
+  }
+}
+
+/** The artifact-card shape a regenerate returns (a fresh draft version). */
+export interface RegenerateResult {
+  data_id: string;
+  file_name: string;
+  mime_type: string;
+  size_bytes: number;
+  signed_url: string | null;
+  draft: boolean;
+  generator: string | null;
+  kind: string | null;
+  source_kind: 'python' | 'spec' | null;
+  has_source: boolean;
+  version: number;
+  parent_data_id: string | null;
+  root_data_id: string | null;
+}
+
+/**
+ * Regenerate an artifact into a NEW draft version. Pass EITHER a natural-language
+ * `instruction` (the backend LLM-patches the stored recipe) OR a raw `source`
+ * (direct code/spec edit, re-rendered as-is). Throws Error(message) on failure so
+ * the card can show it without discarding the current version.
+ */
+export async function regenerateArtifact(
+  dataId: string,
+  body: { instruction: string } | { source: Record<string, unknown> },
+  token: string | null,
+): Promise<RegenerateResult> {
+  const res = await fetch(`/api/agent/artifacts/${encodeURIComponent(dataId)}/regenerate`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let detail = `Regenerate failed (${res.status})`;
+    try {
+      const j = (await res.json()) as { detail?: string; error?: string };
+      detail = j.detail || j.error || detail;
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new Error(detail);
+  }
+  return (await res.json()) as RegenerateResult;
 }

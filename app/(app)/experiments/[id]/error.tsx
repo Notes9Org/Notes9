@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
+import { captureClientException } from "@/lib/rum"
 
 export default function ExperimentError({
   error,
@@ -11,6 +12,7 @@ export default function ExperimentError({
 }) {
   useEffect(() => {
     console.error("[ExperimentPage Error]", error)
+    captureClientException(error, { route: "experiments/[id]", digest: error.digest ?? null })
   }, [error])
 
   return (

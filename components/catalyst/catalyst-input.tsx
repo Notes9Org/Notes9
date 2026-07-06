@@ -17,7 +17,6 @@ import { cn } from '@/lib/utils';
 import { PreviewAttachment, type Attachment } from './preview-attachment';
 import { toast } from 'sonner';
 import { FileDropzone } from '../ui/file-dropzone';
-import { recordRumEvent } from '@/lib/rum';
 import { useAwsTranscribe } from '@/hooks/use-aws-transcribe';
 import { VoiceWaveform } from '@/components/text-editor/voice-waveform';
 
@@ -248,7 +247,8 @@ export function CatalystInput({
     e.preventDefault();
     if ((!input.trim() && attachments.length === 0) || isLoading) return;
 
-    recordRumEvent('catalyst_message_sent', {});
+    // catalyst_message_sent is emitted centrally in useAgentStream (covers all
+    // live chat surfaces with enriched props) — do not double-count here.
     onSubmit(input, attachments.length > 0 ? attachments : undefined);
     setInput('');
     setAttachments([]);

@@ -12,6 +12,7 @@ import type { AllowedMimeType } from '@/lib/attachment-types';
 import { buildNotes9AgentRequestBody } from '@/lib/notes9-agent-request';
 import { splitSseBuffer, parseSseDataJson } from '@/lib/sse-event-blocks';
 import { recordRumEvent } from '@/lib/rum';
+import { AnalyticsEvent } from '@/lib/analytics/events';
 import {
   extractSseTokenPiece,
   maskCiteTokensForStream,
@@ -178,6 +179,14 @@ export interface AgentArtifact {
   generator?: string | null;
   /** Human kind label, e.g. "PDF report". */
   kind?: string | null;
+  /** 'python' | 'spec' when a regenerable recipe was stored (enables View-code / Edit). */
+  sourceKind?: 'python' | 'spec' | null;
+  /** True ⇒ a recipe is available to fetch/edit. */
+  hasSource?: boolean;
+  /** 1-based version in the edit lineage. */
+  version?: number | null;
+  /** v1 id shared by every version — used to list the version chain. */
+  rootDataId?: string | null;
 }
 
 /** A structured relationship graph the agent produced via map_relationships,
@@ -444,6 +453,7 @@ export function useAgentStream() {
   /** Bearer token from the active run, so `cancel()` can authorize the proxy
    * POST without the caller having to thread it through again. */
   const tokenRef = useRef<string | null>(null);
+  const messageStartedAtRef = useRef<number>(0);
 
   const runStream = useCallback(
     async (
@@ -463,6 +473,16 @@ export function useAgentStream() {
       const signal = abortControllerRef.current.signal;
       runIdRef.current = null;
       tokenRef.current = token;
+
+      messageStartedAtRef.current = Date.now();
+      recordRumEvent(AnalyticsEvent.CATALYST_MESSAGE_SENT, {
+        message_length: params.query?.length ?? 0,
+        tagged_record_count: params.attachments?.length ?? 0,
+        file_attachment_count: params.file_attachments?.length ?? 0,
+        literature_source_count: params.literature_sources?.length ?? 0,
+        web_search: params.options?.web_search ?? 'off',
+        turn_index: params.history?.length ?? 0,
+      });
 
       // Collect artifacts in a LOCAL array (not just React state) so the caller
       // can read the FINAL list synchronously when the stream resolves. Reading
@@ -547,6 +567,37 @@ export function useAgentStream() {
 
         if (!response.ok) {
           const errText = await response.text();
+          if (response.status === 429) {
+            // Free-tier quota reached — a fact, not a failure. Surface the
+            // problem+json detail (friendly copy + reset date) as the message;
+            // the turn never started, so nothing is lost.
+            let problem: Record<string, unknown> = {};
+            try {
+              problem = JSON.parse(errText) as Record<string, unknown>;
+            } catch {
+              /* fall through to defaults */
+            }
+            const resetAt =
+              typeof problem.reset_at === 'string' ? new Date(problem.reset_at) : null;
+            const resetLabel =
+              resetAt && !Number.isNaN(resetAt.getTime())
+                ? ` Full capacity returns ${resetAt.toLocaleDateString(undefined, {
+                    weekday: 'long',
+                    month: 'short',
+                    day: 'numeric',
+                  })}.`
+                : '';
+            const limitMsg =
+              (typeof problem.detail === 'string' && problem.detail) ||
+              "You've reached the current usage limit.";
+            const errMsg = `${limitMsg}${resetLabel}`;
+            recordRumEvent(AnalyticsEvent.AI_LIMIT_REACHED, {
+              feature: 'chat',
+              limit_code: String(problem.limit_code ?? 'ai_budget_monthly'),
+            });
+            setState((s) => ({ ...s, error: errMsg, isStreaming: false }));
+            return { donePayload: null, error: errMsg, artifacts: collectedArtifacts, citationsManifest: collectedManifest, graphs: collectedGraphs };
+          }
           let errMsg = errText || `Request failed: ${response.status}`;
           try {
             const j = JSON.parse(errText) as { error?: string };
@@ -771,6 +822,13 @@ export function useAgentStream() {
                       experimentId: typeof p.experiment_id === 'string' ? p.experiment_id : null,
                       generator: typeof p.generator === 'string' ? p.generator : null,
                       kind: typeof p.kind === 'string' ? p.kind : null,
+                      sourceKind:
+                        p.source_kind === 'python' || p.source_kind === 'spec'
+                          ? p.source_kind
+                          : null,
+                      hasSource: p.has_source === true,
+                      version: typeof p.version === 'number' ? p.version : null,
+                      rootDataId: typeof p.root_data_id === 'string' ? p.root_data_id : null,
                     };
                     // Mirror into the local accumulator so runStream can return
                     // the final list (state reads in the caller's closure are stale).
@@ -1001,6 +1059,11 @@ export function useAgentStream() {
               }
               case 'done': {
                 flushTokens();
+                recordRumEvent(AnalyticsEvent.CATALYST_MESSAGE_COMPLETED, {
+                  duration_ms: messageStartedAtRef.current
+                    ? Date.now() - messageStartedAtRef.current
+                    : 0,
+                });
                 if (payload) {
                   const finished = normalizeNotes9AgentResponse(payload);
                   donePayload = finished;

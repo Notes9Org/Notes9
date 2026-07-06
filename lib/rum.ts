@@ -30,3 +30,24 @@ export function recordRumEvent(
     // Analytics must never break the app.
   }
 }
+
+/**
+ * Capture a client-side exception into PostHog Error Tracking (stack traces,
+ * grouping, alerting) as a structured `$exception` — richer than the free-text
+ * `page_error` product event. Callers should keep firing `recordRumEvent` too
+ * where existing dashboards reference it.
+ *
+ * `context` MUST contain only opaque ids / enums / routes — never free text/PII.
+ * Inert when PostHog is unconfigured; never throws.
+ */
+export function captureClientException(
+  error: unknown,
+  context: Record<string, unknown> = {}
+): void {
+  try {
+    if (typeof window === 'undefined' || !isPostHogConfigured()) return
+    posthog.captureException(error, context)
+  } catch {
+    // Error tracking must never break the app.
+  }
+}

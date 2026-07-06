@@ -20,6 +20,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { LogOut, Sun, Moon, Monitor, Loader2 } from 'lucide-react'
 import { ChangePasswordDialog } from "@/components/change-password-dialog"
+import { UsagePanel } from "@/components/settings/usage-panel"
 import { PageHeading } from "@/components/ui/page-heading"
 import { useToast } from "@/hooks/use-toast"
 import { USER_STORAGE_BUCKET, createProfileAvatarStoragePath } from "@/lib/user-storage-bucket"
@@ -327,6 +328,9 @@ export default function SettingsPage(): ReactNode {
             <TabsTrigger value="preferences" className="flex-1 px-4 py-2 text-sm sm:text-base">
               Preferences
             </TabsTrigger>
+            <TabsTrigger value="usage" className="flex-1 px-4 py-2 text-sm sm:text-base">
+              Usage
+            </TabsTrigger>
           </TabsList>
 
           <div className="relative grid w-full min-w-0 grid-cols-1">
@@ -573,6 +577,15 @@ export default function SettingsPage(): ReactNode {
                 </span>
               </SettingsRow>
             </div>
+          </SettingsPanelCard>
+        </TabsContent>
+
+        <TabsContent value="usage" className={cn(SETTINGS_PANEL_SHELL, "col-start-1 row-start-1")}>
+          <SettingsPanelCard
+            title="Usage"
+            description="Your AI usage on the Free plan"
+          >
+            <UsagePanel />
           </SettingsPanelCard>
         </TabsContent>
           </div>
