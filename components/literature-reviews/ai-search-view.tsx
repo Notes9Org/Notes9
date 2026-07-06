@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Telescope, Loader2, AlertCircle, RotateCcw } from 'lucide-react'
 import { useAiLiteratureSearch } from '@/hooks/use-ai-literature-search'
+import { SearchLimitNotice } from '@/components/limits/search-limit-notice'
 import { AiPaperCard } from './ai-paper-card'
 import { AiSearchFilters } from './ai-search-filters'
 import { AnimatePresence, MotionResultCard } from './motion'
@@ -14,6 +15,8 @@ import type { GroundingResource } from '@/lib/agent-stream-types'
 import { renumberCitations } from '@/lib/citation-renumber'
 import { applyAiFilters, DEFAULT_AI_FILTERS, journalOptions, yearBounds, type AiResultFilters } from '@/lib/ai-search-filters'
 import { stripHtmlToText } from '@/lib/literature-abstract-display'
+import { recordRumEvent } from '@/lib/rum'
+import { AnalyticsEvent } from '@/lib/analytics/events'
 import type { SearchPaper } from '@/types/paper-search'
 import type { AiSearchResult } from '@/types/ai-search'
 
@@ -110,6 +113,7 @@ export function AiSearchView({
     isStreaming,
     papersLoading,
     error,
+    limitInfo,
     stop,
   } = useAiLiteratureSearch({ query })
 
@@ -167,7 +171,13 @@ export function AiSearchView({
   // "Load more" is a pure client-side reveal of the already-fetched, deeply
   // ranked set — no network page-2 (that path caused duplicates/latency).
   const showLoadMore = visibleCount < displayed.length
-  const onLoadMore = useCallback(() => setVisibleCount((c) => c + PAGE_SIZE), [])
+  const onLoadMore = useCallback(() => {
+    setVisibleCount((c) => {
+      const next = c + PAGE_SIZE
+      recordRumEvent(AnalyticsEvent.LITERATURE_LOAD_MORE, { visible_count: next })
+      return next
+    })
+  }, [])
   // Filter options grounded in the actual result set (not hardcoded).
   const journalChoices = useMemo(() => journalOptions(results), [results])
   const yearHint = useMemo(() => yearBounds(results), [results])
@@ -273,6 +283,14 @@ export function AiSearchView({
 
   return (
     <div className="space-y-4">
+      {limitInfo && (
+        <SearchLimitNotice
+          code={limitInfo.code}
+          used={limitInfo.used}
+          limit={limitInfo.limit}
+          resetAt={limitInfo.resetAt}
+        />
+      )}
       {error && (
         <div className="flex items-start justify-between gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
           <span className="flex items-center gap-2">

@@ -67,6 +67,8 @@ import {
   AtSign,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { recordRumEvent } from '@/lib/rum';
+import { AnalyticsEvent } from '@/lib/analytics/events';
 import {
   ATTACHMENT_MAX_FILE_SIZE,
   ATTACHMENT_ACCEPT,
@@ -1956,12 +1958,22 @@ export function RightSidebar({
     const validFiles = files.filter((file) => {
       if (file.size > MAX_FILE_SIZE) {
         toast.error(`${file.name} is too large`);
+        recordRumEvent(AnalyticsEvent.ATTACHMENT_REJECTED, {
+          reason: 'too_large',
+          file_type: file.type || 'unknown',
+          file_size: file.size,
+        });
         return false;
       }
       // Accept by declared MIME OR filename extension — browsers report a blank
       // or generic type for .docx/.xlsx on some OS/browser combos.
       if (!isAcceptedAttachment(file)) {
         toast.error(`${file.name} type not supported`);
+        recordRumEvent(AnalyticsEvent.ATTACHMENT_REJECTED, {
+          reason: 'unsupported_type',
+          file_type: file.type || 'unknown',
+          file_size: file.size,
+        });
         return false;
       }
       return true;
@@ -1970,6 +1982,11 @@ export function RightSidebar({
     setUploadQueue(validFiles.map((f) => f.name));
     const results = await Promise.all(validFiles.map((f) => uploadFile(f)));
     const successful = results.filter((r): r is Attachment => r !== null);
+    successful.forEach((att) =>
+      recordRumEvent(AnalyticsEvent.ATTACHMENT_ADDED, {
+        file_type: att.contentType || 'unknown',
+      })
+    );
     setAttachments((prev) => [...prev, ...successful]);
     setUploadQueue([]);
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -1979,12 +1996,22 @@ export function RightSidebar({
     const validFiles = dropFiles.filter((file) => {
       if (file.size > MAX_FILE_SIZE) {
         toast.error(`${file.name} is too large`);
+        recordRumEvent(AnalyticsEvent.ATTACHMENT_REJECTED, {
+          reason: 'too_large',
+          file_type: file.type || 'unknown',
+          file_size: file.size,
+        });
         return false;
       }
       // Accept by declared MIME OR filename extension — browsers report a blank
       // or generic type for .docx/.xlsx on some OS/browser combos.
       if (!isAcceptedAttachment(file)) {
         toast.error(`${file.name} type not supported`);
+        recordRumEvent(AnalyticsEvent.ATTACHMENT_REJECTED, {
+          reason: 'unsupported_type',
+          file_type: file.type || 'unknown',
+          file_size: file.size,
+        });
         return false;
       }
       return true;
@@ -1993,6 +2020,11 @@ export function RightSidebar({
     setUploadQueue(validFiles.map((f) => f.name));
     const results = await Promise.all(validFiles.map((f) => uploadFile(f)));
     const successful = results.filter((r): r is Attachment => r !== null);
+    successful.forEach((att) =>
+      recordRumEvent(AnalyticsEvent.ATTACHMENT_ADDED, {
+        file_type: att.contentType || 'unknown',
+      })
+    );
     setAttachments((prev) => [...prev, ...successful]);
     setUploadQueue([]);
   }, [uploadFile]);
@@ -2007,6 +2039,11 @@ export function RightSidebar({
     const files = imageItems.map((item) => item.getAsFile()).filter((file): file is File => file !== null);
     const results = await Promise.all(files.map((f) => uploadFile(f)));
     const successful = results.filter((r): r is Attachment => r !== null);
+    successful.forEach((att) =>
+      recordRumEvent(AnalyticsEvent.ATTACHMENT_ADDED, {
+        file_type: att.contentType || 'unknown',
+      })
+    );
     setAttachments((prev) => [...prev, ...successful]);
     setUploadQueue([]);
   }, [uploadFile]);

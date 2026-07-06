@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { SearchPaper } from '@/types/paper-search'
 import type { AiSearchMatchKind, AiSearchResult } from '@/types/ai-search'
 import type { CitationsManifest } from '@/hooks/use-agent-stream'
+import { recordRumEvent } from '@/lib/rum'
+import { AnalyticsEvent } from '@/lib/analytics/events'
 
 /**
  * AI literature search — backed by the DEDICATED catalyst orchestrator via
@@ -102,6 +104,14 @@ function toResult(p: SearchPaper, index: number): AiSearchResult {
   }
 }
 
+/** Free-tier quota notice parsed from a 429 problem+json response. */
+export interface AiSearchLimitInfo {
+  code: 'lit_search_weekly' | 'ai_budget_monthly'
+  used: number | null
+  limit: number | null
+  resetAt: string | null
+}
+
 interface SsePapersEvent {
   query: string
   papers: SearchPaper[]
@@ -137,6 +147,9 @@ export function useAiLiteratureSearch({
   const [isStreaming, setIsStreaming] = useState(false)
   const [phase, setPhase] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // A quota limit is a fact, not a failure: rendered as a friendly notice
+  // with a reset date, never through the error path.
+  const [limitInfo, setLimitInfo] = useState<AiSearchLimitInfo | null>(null)
   const [activeQuery, setActiveQuery] = useState<string | null>(query?.trim() || null)
 
   const lastRunQueryRef = useRef<string | null>(null)
@@ -181,6 +194,7 @@ export function useAiLiteratureSearch({
       abortRef.current = null
       setActiveQuery(q)
       setError(null)
+      setLimitInfo(null)
 
       // Restore a completed answer from cache — no network call. Fall back to the
       // sessionStorage layer (survives dashboard round-trips / soft reload) and
@@ -210,6 +224,11 @@ export function useAiLiteratureSearch({
       setPhase('searching')
       setIsStreaming(true)
 
+      const searchStartedAt = Date.now()
+      recordRumEvent(AnalyticsEvent.LITERATURE_SEARCH_STARTED, {
+        query_length: q.length,
+      })
+
       let receivedPapers: SearchPaper[] = []
       let overall = ''
       let receivedManifest: CitationsManifest | null = null
@@ -228,6 +247,35 @@ export function useAiLiteratureSearch({
           body: JSON.stringify({ query: q, limit: 10 }),
           signal: controller.signal,
         })
+        if (res.status === 429) {
+          // Free-tier quota reached — a fact, not a failure. Parse the
+          // problem+json body (used/limit/reset_at) and surface a notice
+          // instead of an error; nothing is cached and the guard clears so
+          // the user can search again after the reset.
+          let body: Record<string, unknown> = {}
+          try {
+            body = (await res.json()) as Record<string, unknown>
+          } catch {
+            /* body optional — defaults below */
+          }
+          setLimitInfo({
+            code:
+              body.limit_code === 'ai_budget_monthly'
+                ? 'ai_budget_monthly'
+                : 'lit_search_weekly',
+            used: typeof body.used === 'number' ? body.used : null,
+            limit: typeof body.limit === 'number' ? body.limit : null,
+            resetAt: typeof body.reset_at === 'string' ? body.reset_at : null,
+          })
+          setIsStreaming(false)
+          setPhase(null)
+          lastRunQueryRef.current = null
+          recordRumEvent(AnalyticsEvent.AI_LIMIT_REACHED, {
+            feature: 'literature_search',
+            limit_code: String(body.limit_code ?? 'lit_search_weekly'),
+          })
+          return
+        }
         if (!res.ok || !res.body) {
           throw new Error(`Literature search failed (${res.status})`)
         }
@@ -304,13 +352,26 @@ export function useAiLiteratureSearch({
           // on every retry and across reloads via sessionStorage.
           if (activeRequestIdRef.current === requestId) {
             lastRunQueryRef.current = null
+            recordRumEvent(AnalyticsEvent.LITERATURE_SEARCH_FAILED, {
+              reason: 'stream_error',
+              duration_ms: Date.now() - searchStartedAt,
+            })
           }
-        } else if (receivedPapers.length > 0) {
-          // Key by cacheKey (not raw q) so the in-memory entry is found by the
-          // same key the read path + sessionStorage layer use.
-          const entry: CachedAi = { summary: overall, papers: receivedPapers, manifest: receivedManifest }
-          aiSearchCache.set(cacheKey, entry)
-          writeSessionSearch(cacheKey, entry)
+        } else {
+          if (receivedPapers.length > 0) {
+            // Key by cacheKey (not raw q) so the in-memory entry is found by the
+            // same key the read path + sessionStorage layer use.
+            const entry: CachedAi = { summary: overall, papers: receivedPapers, manifest: receivedManifest }
+            aiSearchCache.set(cacheKey, entry)
+            writeSessionSearch(cacheKey, entry)
+          }
+          if (activeRequestIdRef.current === requestId) {
+            recordRumEvent(AnalyticsEvent.LITERATURE_SEARCH_COMPLETED, {
+              paper_count: receivedPapers.length,
+              has_summary: overall.trim().length > 0,
+              duration_ms: Date.now() - searchStartedAt,
+            })
+          }
         }
       } catch (e) {
         // Only the still-active request may touch shared state — a superseded
@@ -319,6 +380,10 @@ export function useAiLiteratureSearch({
           // Clear the guard so the user can retry the same query.
           lastRunQueryRef.current = null
           setError(e instanceof Error ? e.message : 'The AI search failed. Please try again.')
+          recordRumEvent(AnalyticsEvent.LITERATURE_SEARCH_FAILED, {
+            reason: 'exception',
+            duration_ms: Date.now() - searchStartedAt,
+          })
         }
       } finally {
         if (abortRef.current === controller) abortRef.current = null
@@ -367,6 +432,8 @@ export function useAiLiteratureSearch({
     /** Current pipeline phase while streaming (e.g. "searching"), else null. */
     phase: inSync ? phase : null,
     error: inSync ? error : null,
+    /** Free-tier quota notice (429) — a fact with a reset date, not an error. */
+    limitInfo,
     activeQuery,
     stop,
   }
