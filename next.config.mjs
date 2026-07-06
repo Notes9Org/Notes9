@@ -26,6 +26,14 @@ const nextConfig = {
    * larger POST bodies can fail in dev/proxy with a client-side "Failed to fetch".
    */
   experimental: {
+    /**
+     * Persist Turbopack's dev compilation on disk so routes compiled once stay
+     * warm across `next dev` restarts. Without this, every restart makes the
+     * first visit to each route block for its full on-demand compile (measured
+     * 7-14s per route), during which navigation appears frozen or bounces back
+     * to the current page.
+     */
+    turbopackFileSystemCacheForDev: true,
     proxyClientMaxBodySize: "20mb",
     serverActions: {
       bodySizeLimit: "20mb",

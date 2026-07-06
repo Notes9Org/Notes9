@@ -3,6 +3,7 @@ import "./globals.css"
 import "katex/dist/katex.min.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster as Sonner } from "@/components/ui/sonner"
+import HolyLoader from "holy-loader"
 import { NavigationLoader } from "@/components/navigation-loader"
 import { PostHogProvider } from "@/components/analytics/posthog-provider"
 
@@ -105,6 +106,14 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <PostHogProvider>
+            {/*
+              Slim top progress bar tied to real navigation lifecycle: starts on
+              link click, only stops when the route actually commits. Unlike the
+              full-screen NavigationLoader (which must bail out on a safety
+              timeout and can reveal the old page mid-navigation), a lingering
+              bar is harmless — so it stays honest through slow compiles/fetches.
+            */}
+            <HolyLoader color="var(--primary)" height="3px" zIndex={2147483647} />
             <NavigationLoader />
             {children}
             <Sonner />

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react"
-import Link from "next/link"
+import Link, { useLinkStatus } from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import Image from "next/image"
 import {
@@ -10,6 +10,7 @@ import {
   ChevronUp,
   FlaskConical,
   Folder,
+  Loader2,
   FolderOpen,
   MoreHorizontal,
   NotebookPen,
@@ -135,6 +136,20 @@ type SearchResultItem = {
   title: string
   subtitle?: string
   href: string
+}
+
+// Spinner shown on a nav link while its navigation is pending (RSC fetch or
+// dev-mode route compile in flight). Must be rendered INSIDE a <Link> —
+// useLinkStatus reads the pending state of the enclosing link.
+function NavLinkSpinner() {
+  const { pending } = useLinkStatus()
+  if (!pending) return null
+  return (
+    <Loader2
+      className="ml-auto size-3.5 shrink-0 animate-spin text-muted-foreground"
+      aria-label="Loading page"
+    />
+  )
 }
 
 export function AppSidebar() {
@@ -672,6 +687,7 @@ export function AppSidebar() {
                                 <span className={cn("truncate", isActive && "font-semibold")}>
                                   {item.name} / {scope.projectName}
                                 </span>
+                                <NavLinkSpinner />
                               </div>
                             </Link>
                           ) : (
@@ -689,6 +705,7 @@ export function AppSidebar() {
                                 <span className={cn("truncate", isActive && "font-semibold")}>
                                   {item.name}
                                 </span>
+                                <NavLinkSpinner />
                               </span>
                             </Link>
                           )}
@@ -732,6 +749,7 @@ export function AppSidebar() {
                                           ? ` / ${scope.experimentName}`
                                           : ""}
                                       </span>
+                                      <NavLinkSpinner />
                                     </Link>
                                   </SidebarMenuSubButton>
 

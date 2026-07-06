@@ -263,6 +263,9 @@ importers:
       highlight.js:
         specifier: ^11.11.1
         version: 11.11.1
+      holy-loader:
+        specifier: ^2.3.14
+        version: 2.3.14(react@19.2.4)
       html-docx-js:
         specifier: ^0.3.1
         version: 0.3.1
@@ -5148,6 +5151,11 @@ packages:
   highlight.js@11.11.1:
     resolution: {integrity: sha512-Xwwo44whKBVCYoliBQwaPvtd/2tYFkRQtXDWj1nackaV2JPXx3L0+Jvd8/qCJ2p+ML0/XVkJ2q+Mr+UVdpJK5w==}
     engines: {node: '>=12.0.0'}
+
+  holy-loader@2.3.14:
+    resolution: {integrity: sha512-V7z6jXKy/CZfZY6EAVxMFGbLfE7/TLhYWgpMhODvZPpAL2JTkfjmZhYd0TiZIdZiychtCL5tA5sRN0MUwjRNjA==}
+    peerDependencies:
+      react: '>= 16.0.0'
 
   html-docx-js@0.3.1:
     resolution: {integrity: sha512-QSrMiRhxesqxYCa3f+2Z3ttIHPzSjDOL1tCOmIDIEET7HdabxXND6tAbsFMXAgRG4RADQ3wbl74ydMmjidaDPA==}
@@ -13361,6 +13369,10 @@ snapshots:
       space-separated-tokens: 2.0.2
 
   highlight.js@11.11.1: {}
+
+  holy-loader@2.3.14(react@19.2.4):
+    dependencies:
+      react: 19.2.4
 
   html-docx-js@0.3.1:
     dependencies:
