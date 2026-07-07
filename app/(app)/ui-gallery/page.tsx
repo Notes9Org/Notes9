@@ -25,6 +25,10 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import { Checkbox } from "@/components/ui/checkbox"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Switch } from "@/components/ui/switch"
+import { Progress } from "@/components/ui/progress"
 import { Icon } from "@/components/ui/icon"
 import {
   Flask, TestTube, Notebook, FolderOpen, Sparkle, Trash, Plus, DownloadSimple, MagnifyingGlass,
@@ -162,6 +166,25 @@ export default function UiGalleryPage() {
             <TabsContent value="two" className="text-sm text-muted-foreground">Details panel.</TabsContent>
             <TabsContent value="three" className="text-sm text-muted-foreground">History panel.</TabsContent>
           </Tabs>
+        </Section>
+
+        <Section title="Controls" hint="Hover: border warms. Click: presses in + the check/dot animates in. Switch and progress glide on the token curve.">
+          <div className="flex flex-wrap items-center gap-8">
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox defaultChecked /> Checkbox
+            </label>
+            <RadioGroup defaultValue="a" className="flex gap-4">
+              <label className="flex items-center gap-2 text-sm"><RadioGroupItem value="a" /> Option A</label>
+              <label className="flex items-center gap-2 text-sm"><RadioGroupItem value="b" /> Option B</label>
+            </RadioGroup>
+            <label className="flex items-center gap-2 text-sm">
+              <Switch defaultChecked /> Switch
+            </label>
+            <div className="w-48 space-y-1.5">
+              <span className="text-sm">Progress</span>
+              <Progress value={64} />
+            </div>
+          </div>
         </Section>
 
         <Section title="Overlays" hint="Dialogs use a frosted (blurred) scrim, not flat black.">
