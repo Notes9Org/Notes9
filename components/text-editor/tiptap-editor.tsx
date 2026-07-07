@@ -587,8 +587,8 @@ function CommentSidebar({ editor, open, onClose }: { editor: any; open: boolean;
   return (
     <div className="absolute right-0 top-0 z-50 h-full w-72 max-w-full p-2 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-right-4 motion-safe:duration-300">
       {/* Floating glass card — matches the AI chat-history sidebar. */}
-      <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-[color:var(--glass-border)] bg-sidebar shadow-[0_10px_34px_-18px_rgba(20,14,8,0.4)] dark:shadow-[0_12px_38px_-16px_rgba(0,0,0,0.6)]">
-        <div className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-[color:var(--glass-border)] px-3">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-[0_10px_34px_-18px_rgba(20,14,8,0.4)] dark:shadow-[0_12px_38px_-16px_rgba(0,0,0,0.6)]">
+        <div className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-border px-3">
           <span className="flex items-center gap-1.5 text-[0.7rem] font-semibold uppercase tracking-wider text-sidebar-foreground/70">
             <MessageSquare className="h-3.5 w-3.5" /> Comments
           </span>
@@ -603,7 +603,7 @@ function CommentSidebar({ editor, open, onClose }: { editor: any; open: boolean;
             comments.map((comment) => (
               <div
                 key={`${comment.id}-${comment.pos}`}
-                className="group cursor-pointer rounded-lg border border-border/50 bg-card/60 p-2.5 transition-colors hover:border-primary/40 hover:bg-sidebar-accent/40"
+                className="group cursor-pointer rounded-lg border border-border bg-card p-2.5 transition-colors hover:border-primary/40 hover:bg-sidebar-accent"
                 onClick={() => {
                   if (comment.kind === "image") {
                     editor.chain().focus().setNodeSelection(comment.pos).run()
@@ -6038,7 +6038,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
               the document reflows by the live panel width (set above). */}
           <div
             className={cn(
-              "absolute bottom-2 right-2 top-2 z-50 flex max-w-full flex-col overflow-hidden rounded-2xl border border-[color:var(--glass-border)] bg-sidebar shadow-[0_10px_34px_-18px_rgba(20,14,8,0.4)] dark:shadow-[0_12px_38px_-16px_rgba(0,0,0,0.6)]",
+              "absolute bottom-2 right-2 top-2 z-50 flex max-w-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-[0_10px_34px_-18px_rgba(20,14,8,0.4)] dark:shadow-[0_12px_38px_-16px_rgba(0,0,0,0.6)]",
               !citationSidebar.isResizing && "transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
               citationModalOpen ? "translate-x-0" : "pointer-events-none translate-x-full",
             )}
@@ -6055,7 +6055,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
 
             <TooltipProvider delayDuration={300}>
               {/* Header: source tabs · density toggle + close (all icon buttons) */}
-              <div className="flex items-center justify-between gap-1 border-b border-[color:var(--glass-border)] py-1.5 pl-2.5 pr-1.5">
+              <div className="flex items-center justify-between gap-1 border-b border-border py-1.5 pl-2.5 pr-1.5">
                 <div className="flex items-center gap-0.5">
                   <Tooltip>
                     <TooltipTrigger asChild>
