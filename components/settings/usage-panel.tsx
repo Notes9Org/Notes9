@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useState } from "react"
-import { Loader2, RefreshCw } from "lucide-react"
+import { CircleNotch as Loader2, ArrowsClockwise as RefreshCw } from "@phosphor-icons/react/ssr"
 
 import { Button } from "@/components/ui/button"
 import { UsageMeter } from "@/components/limits/usage-meter"

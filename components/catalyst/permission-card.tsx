@@ -1,6 +1,6 @@
 'use client';
 
-import { ShieldCheck, Database, FileText, FolderOpen, Brain, Search } from 'lucide-react';
+import { ShieldCheck, Database, FileText, FolderOpen, Brain, MagnifyingGlass as Search } from "@phosphor-icons/react/ssr";
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';

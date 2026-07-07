@@ -16,7 +16,7 @@
  */
 
 import { useEffect, useState } from "react"
-import { Loader2, ShieldCheck, Database, FileText, FolderOpen, Brain } from "lucide-react"
+import { CircleNotch as Loader2, ShieldCheck, Database, FileText, FolderOpen, Brain } from "@phosphor-icons/react/ssr"
 
 import { createClient } from "@/lib/supabase/client"
 import { useAuthUser } from "@/components/auth/auth-provider"

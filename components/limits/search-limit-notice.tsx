@@ -8,7 +8,7 @@
  * iconography ("a limit is a fact, not a failure").
  */
 
-import { CalendarClock } from "lucide-react"
+import { CalendarDot as CalendarClock } from "@phosphor-icons/react/ssr"
 
 import { UsageMeter } from "@/components/limits/usage-meter"
 import { getMessage, type LimitCode } from "@/lib/limits/messages"
