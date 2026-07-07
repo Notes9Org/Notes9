@@ -90,7 +90,18 @@ export interface AgentStreamParams {
     debug?: boolean;
     max_retries?: number;
     web_search?: 'on' | 'off';
+    /** Persisted internal-data permission: 'ask' (default) | 'always' | 'never'. */
+    internal_data_permission?: 'ask' | 'always' | 'never';
+    /** True after the user clicks "Allow" for their private data this session. */
+    internal_data_session_granted?: boolean;
   };
+}
+
+/** A pending tool-permission prompt: the agent paused before reading the user's
+ * private data (SQL/RAG/files/memory) and is waiting for allow/always/deny. */
+export interface PermissionPrompt {
+  runId: string;
+  tools: Array<{ name: string; label: string; summary: string }>;
 }
 
 /** One resolved citation in the manifest. Keyed in `manifest` by its full
@@ -281,6 +292,8 @@ export interface AgentStreamState {
    * emitted when NOTES9_AGENT_HITL is enabled). Null ⇒ no server-side cancel
    * available, so the Stop button stays hidden. */
   runId: string | null;
+  /** Set when the agent is paused awaiting a tool-permission decision. */
+  pendingPermission: PermissionPrompt | null;
   donePayload: DonePayload | null;
   error: string | null;
   isStreaming: boolean;
@@ -441,6 +454,7 @@ export function useAgentStream() {
     thinkingTokenBuffer: '',
     liveCitationCount: 0,
     runId: null,
+    pendingPermission: null,
     donePayload: null,
     error: null,
     isStreaming: false,
@@ -516,6 +530,7 @@ export function useAgentStream() {
         thinkingTokenBuffer: '',
         liveCitationCount: 0,
         runId: null,
+        pendingPermission: null,
         donePayload: null,
         error: null,
         isStreaming: true,
@@ -645,6 +660,26 @@ export function useAgentStream() {
                   if (typeof rid === 'string' && rid) {
                     runIdRef.current = rid;
                     setState((s) => ({ ...s, runId: rid }));
+                  }
+                }
+                break;
+              }
+              case 'permission_request': {
+                // The agent paused before reading the user's private data and is
+                // waiting for allow/always/deny. Surface the prompt; the stream
+                // stays open and resumes once resolvePermission() POSTs a choice.
+                if (payload && typeof payload === 'object') {
+                  const p = payload as Record<string, unknown>;
+                  const rid = typeof p.run_id === 'string' ? p.run_id : runIdRef.current;
+                  const tools = Array.isArray(p.tools)
+                    ? (p.tools as Array<Record<string, unknown>>).map((t) => ({
+                        name: String(t?.name ?? ''),
+                        label: String(t?.label ?? t?.name ?? ''),
+                        summary: String(t?.summary ?? ''),
+                      }))
+                    : [];
+                  if (rid) {
+                    setState((s) => ({ ...s, pendingPermission: { runId: rid, tools } }));
                   }
                 }
                 break;
@@ -1178,7 +1213,34 @@ export function useAgentStream() {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
+    setState((s) => ({ ...s, pendingPermission: null }));
   }, []);
+
+  /** Answer a pending tool-permission prompt. POSTs the decision so the paused
+   * run resumes: allow/always → the agent reads the private data; deny → it
+   * degrades gracefully. Clears the prompt immediately and returns the decision
+   * so the caller can update its own session/persisted state. */
+  const resolvePermission = useCallback(
+    (decision: 'allow' | 'always' | 'deny'): 'allow' | 'always' | 'deny' => {
+      const rid = runIdRef.current;
+      const tok = tokenRef.current;
+      setState((s) => ({ ...s, pendingPermission: null }));
+      if (rid && tok) {
+        fetch(`/api/agent/runs/${encodeURIComponent(rid)}/permission`, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            Authorization: `Bearer ${tok}`,
+          },
+          body: JSON.stringify({ decision }),
+        }).catch(() => {
+          /* if this fails the run times out to a safe deny on the backend */
+        });
+      }
+      return decision;
+    },
+    [],
+  );
 
   const reset = useCallback(() => {
     setState({
@@ -1200,6 +1262,7 @@ export function useAgentStream() {
       thinkingTokenBuffer: '',
       liveCitationCount: 0,
       runId: null,
+      pendingPermission: null,
       donePayload: null,
       error: null,
       isStreaming: false,
@@ -1209,6 +1272,7 @@ export function useAgentStream() {
 
   return {
     ...state,
+    resolvePermission,
     runStream,
     abort,
     cancel,

@@ -248,6 +248,15 @@ export interface RunStartedPayload {
   [key: string]: unknown;
 }
 
+/** Emitted when the agent pauses to ask permission before reading the user's
+ * private data (SQL/RAG/files/memory). The run resumes once the client POSTs a
+ * decision to /api/agent/runs/{run_id}/permission. */
+export interface PermissionRequestPayload {
+  run_id?: string;
+  tools?: Array<{ name?: string; label?: string; summary?: string }>;
+  [key: string]: unknown;
+}
+
 // ── Legacy payload types (old LangGraph pipeline — kept for back-compat) ──────
 
 /** @deprecated LangGraph pipeline removed; kept so old imports compile */
@@ -290,6 +299,7 @@ export interface ToolOutputPayload {
 
 export type SseEvent =
   | { event: "run_started"; data: RunStartedPayload }
+  | { event: "permission_request"; data: PermissionRequestPayload }
   | { event: "thinking"; data: ThinkingPayload }
   | { event: "thinking_token"; data: ThinkingTokenPayload }
   | { event: "token"; data: TokenPayload }
@@ -374,6 +384,7 @@ export function sourceNamesFromEvent(
 
 const KNOWN_EVENT_TYPES = new Set([
   "run_started",
+  "permission_request",
   "thinking",
   "thinking_token",
   "token",
