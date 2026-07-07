@@ -21,6 +21,7 @@ import { createHash } from "crypto"
 
 import type { SearchPaper } from "@/types/paper-search"
 import type { PdfMatchSource } from "@/types/literature-pdf"
+import { LITERATURE_MAX_PDF_SIZE } from "@/types/literature-pdf"
 import {
   clampText,
   createLiteraturePdfPath,
@@ -125,6 +126,10 @@ const NOTES9_CONTACT = process.env.NOTES9_CONTACT_URL ?? "https://notes9.com"
  */
 const NCBI_USER_AGENT = `Mozilla/5.0 (compatible; Notes9/1.0; +${NOTES9_CONTACT})`
 
+/** Hard cap on each NCBI metadata round trip (elink / oa.fcgi). These endpoints
+ * sit on the interactive attach path, so a hang must fail fast, not stall it. */
+const NCBI_METADATA_TIMEOUT_MS = 5_000
+
 /**
  * Plain real-browser UA for **publisher PDF byte fetches**. Cloudflare-fronted
  * hosts (MDPI, Frontiers, Wiley, …) challenge requests whose UA self-identifies
@@ -144,7 +149,7 @@ function isPolitePoolHost(host: string): boolean {
   )
 }
 
-function pdfFetchHeaders(pdfUrl: string): Record<string, string> {
+export function pdfFetchHeaders(pdfUrl: string): Record<string, string> {
   let host = ""
   try {
     host = new URL(pdfUrl).hostname.toLowerCase()
@@ -214,13 +219,9 @@ export async function fetchPmcIdFromPmid(pmid: string): Promise<string | null> {
   const apiKey = process.env.NCBI_API_KEY
   if (apiKey) url.searchParams.set("api_key", apiKey)
 
-  const res = await fetch(url.toString(), {
-    headers: { "User-Agent": NCBI_USER_AGENT },
-    next: { revalidate: 0 },
-  })
-  if (!res.ok) return null
-
-  const data = (await res.json()) as {
+  // Bounded + non-throwing: a hung eutils endpoint must degrade to "no PMC id"
+  // (→ abstract fallback downstream), never stall the caller's request.
+  let data: {
     linksets?: Array<{
       linksetdbs?: Array<{
         dbto?: string
@@ -228,6 +229,17 @@ export async function fetchPmcIdFromPmid(pmid: string): Promise<string | null> {
         links?: Array<string | { id?: string }>
       }>
     }>
+  }
+  try {
+    const res = await fetch(url.toString(), {
+      headers: { "User-Agent": NCBI_USER_AGENT },
+      next: { revalidate: 0 },
+      signal: AbortSignal.timeout(NCBI_METADATA_TIMEOUT_MS),
+    })
+    if (!res.ok) return null
+    data = await res.json()
+  } catch {
+    return null
   }
 
   function pmcDigitsFromLinks(links: Array<string | { id?: string }> | undefined): string | null {
@@ -305,6 +317,7 @@ async function queryPmcOpenAccessSubset(pmcNumeric: string): Promise<
     const res = await fetch(requestUrl, {
       headers: { "User-Agent": NCBI_USER_AGENT },
       next: { revalidate: 0 },
+      signal: AbortSignal.timeout(NCBI_METADATA_TIMEOUT_MS),
     })
     if (!res.ok) return { ok: false }
     const xml = await res.text()
@@ -395,16 +408,7 @@ export async function resolvePmcOaPdfUrls(paper: SearchPaper): Promise<{
   }
 }
 
-/**
- * URLs for automatic PDF download: **PMC Open Access Subset only** (confirmed via NLM
- * `oa.fcgi`), then NLM/Europe PMC mirrors. Non-OA PMC and publisher links are excluded.
- */
-export async function collectLiteraturePdfFetchUrls(paper: SearchPaper): Promise<string[]> {
-  const { urls } = await resolvePmcOaPdfUrls(paper)
-  return urls
-}
-
-async function fetchPdfFromOaPackageTgz(tgzHttpsUrl: string): Promise<{ buffer: ArrayBuffer; usedUrl: string } | null> {
+export async function fetchPdfFromOaPackageTgz(tgzHttpsUrl: string): Promise<{ buffer: ArrayBuffer; usedUrl: string } | null> {
   const response = await fetch(tgzHttpsUrl, {
     headers: pdfFetchHeaders(tgzHttpsUrl),
     redirect: "follow",
@@ -420,41 +424,161 @@ async function fetchPdfFromOaPackageTgz(tgzHttpsUrl: string): Promise<{ buffer: 
   }
 }
 
-async function fetchFirstPdfBuffer(urls: string[]): Promise<{ buffer: ArrayBuffer; usedUrl: string }> {
-  let lastIssue = "Source did not return a PDF"
+export type PdfDownloadResult = { buffer: ArrayBuffer; usedUrl: string }
 
-  for (const pdfUrl of urls) {
-    try {
-      const response = await fetch(pdfUrl, {
-        headers: pdfFetchHeaders(pdfUrl),
-        redirect: "follow",
-      })
-      if (!response.ok) {
-        lastIssue = `Failed to fetch PDF (${response.status})`
-        continue
-      }
+/** The single literature PDF downloader used by every path (Ask Catalyst attach,
+ *  Read/stage import, PMC OA proxy). Candidates race in parallel — first valid
+ *  PDF wins and aborts the losers — each fetch is streamed so an HTML bot/POW
+ *  interstitial is rejected from its first bytes and an over-cap body is aborted
+ *  mid-download instead of buffered whole. Bounded by a per-fetch timeout and a
+ *  total budget so no leg can hang the caller. Returns null when nothing yields
+ *  a PDF (callers decide whether that's a tgz fallback or a hard failure). */
+const PDF_DEFAULT_PER_FETCH_TIMEOUT_MS = 15_000
+const PDF_DEFAULT_TOTAL_BUDGET_MS = 20_000
 
-      const buffer = await response.arrayBuffer()
-      const len = buffer.byteLength
-      const head = new Uint8Array(buffer.slice(0, 8))
-      // A 200 that returns an HTML bot/POW/Cloudflare interstitial is not the
-      // paper — skip it (don't store the challenge page) and try the next mirror.
-      if (looksLikeHtmlInterstitial(response.headers.get("content-type"), head)) {
-        lastIssue = "Source returned an HTML bot/verification page instead of a PDF"
-        console.warn("[literature-pdf-import] skipped non-PDF interstitial:", pdfUrl)
-        continue
-      }
-      const headerErr = validatePdfBuffer(len, head)
-      if (!headerErr) {
-        return { buffer, usedUrl: pdfUrl }
-      }
-      lastIssue = headerErr
-    } catch (e) {
-      lastIssue = e instanceof Error ? e.message : "Fetch failed"
-    }
+/** Combine a parent AbortSignal with a timeout without assuming AbortSignal.any. */
+function pdfDownloadSignal(
+  parent: AbortSignal | undefined,
+  timeoutMs: number,
+): { signal: AbortSignal; dispose: () => void } {
+  const controller = new AbortController()
+  const abort = () => controller.abort()
+  const timer = setTimeout(abort, timeoutMs)
+  if (parent?.aborted) abort()
+  else parent?.addEventListener("abort", abort)
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      clearTimeout(timer)
+      parent?.removeEventListener("abort", abort)
+    },
   }
+}
 
-  throw new Error(lastIssue)
+function isPdfMagic(bytes: Uint8Array): boolean {
+  return bytes.length >= 4 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46
+}
+
+async function tryDownloadOnePdf(
+  url: string,
+  parentSignal: AbortSignal,
+  maxBytes: number,
+  perFetchTimeoutMs: number,
+): Promise<PdfDownloadResult | null> {
+  const { signal, dispose } = pdfDownloadSignal(parentSignal, perFetchTimeoutMs)
+  try {
+    const res = await fetch(url, { headers: pdfFetchHeaders(url), redirect: "follow", signal })
+    if (!res.ok || !res.body) return null
+    const ct = (res.headers.get("content-type") || "").toLowerCase()
+
+    const reader = res.body.getReader()
+    const chunks: Uint8Array[] = []
+    let total = 0
+    let sniffed = false
+    try {
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        if (!value || value.length === 0) continue
+        chunks.push(value)
+        total += value.length
+        if (!sniffed && total >= 8) {
+          sniffed = true
+          const head = new Uint8Array(8)
+          let filled = 0
+          for (const c of chunks) {
+            const take = Math.min(c.length, 8 - filled)
+            head.set(c.subarray(0, take), filled)
+            filled += take
+            if (filled >= 8) break
+          }
+          // Reject an HTML bot/verification page before downloading its whole body.
+          if (looksLikeHtmlInterstitial(ct, head)) return null
+        }
+        if (total > maxBytes) return null
+      }
+    } finally {
+      reader.cancel().catch(() => {})
+    }
+
+    if (total === 0) return null
+    const buf = new Uint8Array(total)
+    let offset = 0
+    for (const c of chunks) {
+      buf.set(c, offset)
+      offset += c.length
+    }
+    if (ct.includes("application/pdf") || isPdfMagic(buf)) {
+      return { buffer: buf.buffer as ArrayBuffer, usedUrl: url }
+    }
+    return null
+  } catch {
+    return null
+  } finally {
+    dispose()
+  }
+}
+
+export async function downloadFirstPdf(
+  urls: string[],
+  opts?: {
+    signal?: AbortSignal
+    maxBytes?: number
+    perFetchTimeoutMs?: number
+    totalBudgetMs?: number
+    /** URLs that arrive after the race starts (e.g. a resolver running in
+     *  parallel) — they JOIN the race instead of blocking its start. */
+    lateUrls?: Promise<string[]>
+  },
+): Promise<PdfDownloadResult | null> {
+  const maxBytes = opts?.maxBytes ?? LITERATURE_MAX_PDF_SIZE
+  const perFetchTimeoutMs = opts?.perFetchTimeoutMs ?? PDF_DEFAULT_PER_FETCH_TIMEOUT_MS
+  const totalBudgetMs = opts?.totalBudgetMs ?? PDF_DEFAULT_TOTAL_BUDGET_MS
+  if (urls.length === 0 && !opts?.lateUrls) return null
+
+  const controller = new AbortController()
+  const onParentAbort = () => controller.abort()
+  if (opts?.signal?.aborted) controller.abort()
+  else opts?.signal?.addEventListener("abort", onParentAbort)
+  const budget = setTimeout(() => controller.abort(), totalBudgetMs)
+  try {
+    return await new Promise<PdfDownloadResult | null>((resolve) => {
+      const seen = new Set<string>()
+      let pending = 0
+      let moreComing = Boolean(opts?.lateUrls)
+      const settleIfDrained = () => {
+        if (pending === 0 && !moreComing) resolve(null)
+      }
+      const enter = (url: string) => {
+        if (!url || seen.has(url)) return
+        seen.add(url)
+        pending++
+        void tryDownloadOnePdf(url, controller.signal, maxBytes, perFetchTimeoutMs).then((r) => {
+          pending--
+          if (r) {
+            resolve(r)
+            controller.abort() // cancel the losers
+          } else {
+            settleIfDrained()
+          }
+        })
+      }
+      for (const url of urls) enter(url)
+      if (opts?.lateUrls) {
+        void opts.lateUrls.then((late) => {
+          moreComing = false
+          for (const url of late) enter(url)
+          settleIfDrained()
+        })
+      } else {
+        settleIfDrained()
+      }
+    })
+  } finally {
+    clearTimeout(budget)
+    controller.abort()
+    opts?.signal?.removeEventListener("abort", onParentAbort)
+  }
 }
 
 function searchPaperFromPmidOrPmc(pmid: string | null, pmcRaw: string | null): SearchPaper | null {
@@ -494,14 +618,15 @@ export async function fetchOpenAccessPdfBufferByIds(params: {
   if (resolution !== "open_access_urls_ready" || urls.length === 0) {
     throw new Error("Could not resolve any PDF URL for this id")
   }
-  try {
-    return await fetchFirstPdfBuffer(urls)
-  } catch (e) {
-    if (!oaPackageTgzUrl) throw e
+  // Background import (not the interactive attach): allow generous budgets so a
+  // large legitimate PDF still completes, matching the old unbounded behavior.
+  const direct = await downloadFirstPdf(urls, { perFetchTimeoutMs: 30_000, totalBudgetMs: 45_000 })
+  if (direct) return direct
+  if (oaPackageTgzUrl) {
     const fromTgz = await fetchPdfFromOaPackageTgz(oaPackageTgzUrl)
-    if (!fromTgz) throw e
-    return fromTgz
+    if (fromTgz) return fromTgz
   }
+  throw new Error("Could not download a PDF from any resolved URL")
 }
 
 export async function importLiteraturePdfFromRemote(params: {
@@ -558,14 +683,14 @@ export async function importLiteraturePdfFromRemote(params: {
   let buffer: ArrayBuffer
   let usedUrl: string
   if (pdfUrlsToTry.length > 0) {
-    try {
-      const r = await fetchFirstPdfBuffer(pdfUrlsToTry)
+    const r = await downloadFirstPdf(pdfUrlsToTry, { perFetchTimeoutMs: 30_000, totalBudgetMs: 45_000 })
+    if (r) {
       buffer = r.buffer
       usedUrl = r.usedUrl
-    } catch (e) {
-      if (!params.oaPackageTgzUrl) throw e
+    } else {
+      if (!params.oaPackageTgzUrl) throw new Error("Could not download a PDF from any resolved URL")
       const fromTgz = await fetchPdfFromOaPackageTgz(params.oaPackageTgzUrl)
-      if (!fromTgz) throw e
+      if (!fromTgz) throw new Error("Could not download a PDF from any resolved URL")
       buffer = fromTgz.buffer
       usedUrl = fromTgz.usedUrl
     }

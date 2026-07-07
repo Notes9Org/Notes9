@@ -8,8 +8,7 @@ import { BookOpen, BookmarkCheck, BookmarkPlus, ExternalLink, FileText, Loader2,
 import { stripHtmlToText, formatLiteratureAbstractPlain } from '@/lib/literature-abstract-display'
 import { cn } from '@/lib/utils'
 import { savePaperToLibrary } from '@/app/(app)/literature-reviews/actions'
-import { openCatalystPanel, attachToCatalyst, notifyCatalyst } from '@/lib/catalyst-launch'
-import { flyToCatalyst } from '@/lib/fly-to-catalyst'
+import { openCatalystPanel, attachToCatalyst } from '@/lib/catalyst-launch'
 import { citationToSearchPaper } from '@/lib/ai-search-match'
 import { MotionTabPanel } from './motion'
 import type { AiSearchResult } from '@/types/ai-search'
@@ -291,21 +290,43 @@ function AiPaperCardImpl({
     }
   }
 
-  const handleAsk = async (e?: React.MouseEvent<HTMLElement>) => {
+  const handleAsk = async () => {
     if (asking) return
-    const target = e?.currentTarget ?? null
     const paper = result.paper
+    // Citable abstract-backed source, built up front so it can be attached the
+    // moment the panel opens: the first turn upgrades to the full PDF when the
+    // fetch lands, but a send that beats it (or a fetch that fails) is still
+    // grounded on the abstract instead of going out empty-handed.
+    const litSource = paper?.title
+      ? [{
+          title: paper.title,
+          abstract: paper.abstract ?? undefined,
+          doi: paper.doi ?? undefined,
+          pmid: paper.pmid ?? undefined,
+          journal: paper.journal ?? undefined,
+          year: paper.year ?? undefined,
+          url: readUrl(result) ?? undefined,
+        }]
+      : undefined
     // Open the panel first (empty composer = landing pad). Inject NO text: the
     // paper rides in as a tag (like a normal @-mention), so the composer is left
     // exactly as the user left it — no `About the paper "…":` prefill to delete.
+    // Same normalization the server applies, so the optimistic chip's name matches
+    // the real attachment and the sidebar can swap one for the other.
+    const expectedName = paper
+      ? `${(paper.title || 'paper').slice(0, 80).replace(/[^a-zA-Z0-9._ -]/g, '_').trim() || 'paper'}.pdf`
+      : undefined
     openCatalystPanel({
       scope: 'literature',
       webSearch: false,
       autoSend: false,
+      literatureSources: litSource,
       // A paper attachment is being fetched — gate Send until it lands so the user
       // can't fire the first message before the paper attaches (cleared on attach,
       // on the fallback re-open below, or by the sidebar's timeout).
       expectAttachment: !!paper,
+      // Shows an optimistic spinner chip in the composer while the PDF fetches.
+      expectedAttachmentName: expectedName,
     })
     if (!paper) {
       // Web-only hit with no paper record — fall back to web search.
@@ -323,6 +344,10 @@ function AiPaperCardImpl({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ paper }),
+        // The server bounds its own fetch phases, but if the request itself hangs
+        // (proxy, cold start) bail to the web-search fallback instead of leaving
+        // the card in `asking` forever. The abstract is already attached.
+        signal: AbortSignal.timeout(30_000),
       })
       const data = await res.json().catch(() => null)
       if (res.ok && data?.url && !data?.fallback) {
@@ -340,26 +365,13 @@ function AiPaperCardImpl({
             chatAttachmentId: (data.chatAttachmentId as string) || undefined,
           },
         ]
-        // Durable citable source: the file chip is cleared after the first send
-        // (setAttachments([])), so also carry the paper's metadata + abstract as a
-        // literature_source. The first turn grounds on the full PDF text; later
-        // follow-ups keep citing the paper via this abstract-backed source.
-        const litSource = paper.title
-          ? [{
-              title: paper.title,
-              abstract: paper.abstract ?? undefined,
-              doi: paper.doi ?? undefined,
-              pmid: paper.pmid ?? undefined,
-              journal: paper.journal ?? undefined,
-              year: paper.year ?? undefined,
-              url: readUrl(result) ?? undefined,
-            }]
-          : undefined
         // Attach immediately (durable state carrier) so the paper is present the
         // instant the user sends; the fly is now purely a cosmetic flourish. This
-        // removes the ~1.4s animation window where a send would drop the paper.
+        // litSource rides along again (deduped sidebar-side): if a send already
+        // consumed the panel-open copy, this re-arms the citable abstract source
+        // for follow-up turns after the file chip is cleared. The composer's
+        // spinner chip swaps to this real attachment in place — no fly animation.
         attachToCatalyst(attachments, litSource)
-        flyToCatalyst(target)
         // No chatAttachmentId means the chat_attachments registration failed
         // server-side: the PDF still works for this message, but the agent
         // can't re-open it by UUID on later turns. Say so instead of letting
@@ -388,6 +400,9 @@ function AiPaperCardImpl({
                 url: readUrl(result) ?? undefined,
               }]
             : undefined,
+          // No PDF landed — resolve THIS paper's optimistic spinner chip so it
+          // stops spinning (without wiping other papers' in-flight chips).
+          expectedAttachmentName: expectedName,
         })
         // The server distinguishes "paper has no open-access link at all" from
         // "links existed but every download failed" — tell the user which.
@@ -400,20 +415,13 @@ function AiPaperCardImpl({
             ? `${reasonLead} — Catalyst will read and cite the abstract. Upload the PDF for full-text analysis.`
             : `${reasonLead}. Catalyst will use web search; upload the PDF for full-text analysis.`
         )
-        notifyCatalyst(
-          abstract
-            ? `${fetchFailed ? `The full text of “${paper.title}” couldn’t be downloaded` : `“${paper.title}” isn’t open access`}, so I could only load its abstract. Upload the PDF here for full-text analysis and passage-level citations.`
-            : `${fetchFailed ? `The full text of “${paper.title}” couldn’t be downloaded` : `“${paper.title}” isn’t open access`} and I couldn’t find readable full text. Upload the PDF here so I can analyze and cite it directly.`,
-          'warning'
-        )
+        // No in-chat notice: a synthetic assistant "couldn't download" bubble
+        // reads as an unprompted Catalyst response. The transient toast above is
+        // the right surface; the abstract is already attached as grounding.
       }
     } catch {
       openCatalystPanel({ scope: 'literature', webSearch: true, autoSend: false })
       toast.error('Couldn’t load the paper into Catalyst. Falling back to web search.')
-      notifyCatalyst(
-        `I couldn’t load “${paper.title}” automatically. Upload the PDF here and I’ll analyze and cite it directly.`,
-        'warning'
-      )
     } finally {
       setAsking(false)
     }
@@ -606,7 +614,7 @@ function AiPaperCardImpl({
               </a>
             </Button>
           )}
-          <Button variant="ghost" size="sm" className="gap-1.5 rounded-lg text-muted-foreground hover:text-foreground" onClick={(e) => handleAsk(e)} title="Ask Catalyst AI about this paper">
+          <Button variant="ghost" size="sm" className="gap-1.5 rounded-lg text-muted-foreground hover:text-foreground" onClick={() => handleAsk()} title="Ask Catalyst AI about this paper">
             <MessageCircle className="size-3.5" />
             Ask Catalyst
           </Button>

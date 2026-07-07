@@ -218,6 +218,53 @@ async function resolveFromEuropePmc(
   }
 }
 
+export type OaSources = { pdfUrls: string[]; oaPackageTgzUrl: string | null; abstract: string | null }
+
+// Short-lived in-process cache of resolved OA candidates, keyed by paper
+// identity (DOI, else PMID). A paper's OA locations don't change minute to
+// minute, and every attach/read/stage re-resolves live against Unpaywall /
+// OpenAlex / Europe PMC / NCBI — so without this a retry (or a second paper
+// from the same upstream) re-races those slow calls under a tight budget, which
+// is exactly the "failed first, worked second" flakiness. Positive hits live
+// 30 min; a resolution that found NOTHING is negative-cached for 5 min so a
+// genuinely non-OA paper doesn't re-hammer upstreams on every click. In-process
+// only (per server instance) and self-bounding — no external store.
+const OA_CACHE_TTL_MS = 30 * 60 * 1000
+const OA_CACHE_NEGATIVE_TTL_MS = 5 * 60 * 1000
+const OA_CACHE_MAX_ENTRIES = 500
+const oaSourcesCache = new Map<string, { value: OaSources; expiresAt: number }>()
+
+function oaCacheKey(paper: SearchPaper): string | null {
+  const doi = normalizeDoi(paper.doi)
+  if (doi) return `doi:${doi}`
+  if (paper.pmid) return `pmid:${String(paper.pmid).trim()}`
+  return null // title/pdfUrl-only papers aren't stably keyable — skip the cache
+}
+
+/**
+ * Cached wrapper over {@link resolveOaSourcesUncached}. This is the entry point
+ * every consumer should use. Papers without a DOI or PMID bypass the cache.
+ */
+export async function resolveOaSources(
+  paper: SearchPaper,
+  opts?: { contactEmail?: string | null }
+): Promise<OaSources> {
+  const key = oaCacheKey(paper)
+  if (key) {
+    const hit = oaSourcesCache.get(key)
+    if (hit && hit.expiresAt > Date.now()) return hit.value
+  }
+  const value = await resolveOaSourcesUncached(paper, opts)
+  if (key) {
+    const foundSomething = value.pdfUrls.length > 0 || value.oaPackageTgzUrl != null
+    const ttl = foundSomething ? OA_CACHE_TTL_MS : OA_CACHE_NEGATIVE_TTL_MS
+    // Cheap bound: clear the whole map when it grows too large (cache, not store).
+    if (oaSourcesCache.size >= OA_CACHE_MAX_ENTRIES) oaSourcesCache.clear()
+    oaSourcesCache.set(key, { value, expiresAt: Date.now() + ttl })
+  }
+  return value
+}
+
 /**
  * Gather OA PDF candidate URLs from every available signal on the paper, plus a best-effort
  * abstract. URLs are de-duped (order preserved) and every one passes the SSRF allowlist check.
@@ -225,10 +272,10 @@ async function resolveFromEuropePmc(
  * `contactEmail` is the signed-in user's email, sent to Unpaywall as the polite-pool
  * contact (it does not need to be registered); falls back to `UNPAYWALL_EMAIL`.
  */
-export async function resolveOaSources(
+export async function resolveOaSourcesUncached(
   paper: SearchPaper,
   opts?: { contactEmail?: string | null }
-): Promise<{ pdfUrls: string[]; oaPackageTgzUrl: string | null; abstract: string | null }> {
+): Promise<OaSources> {
   const normalizedDoi = normalizeDoi(paper.doi)
   const pdfUrls: string[] = []
 

@@ -152,6 +152,7 @@ import {
   setCatalystOrigin,
   getCatalystOrigin,
 } from '@/lib/catalyst-launch';
+import { maybeNotifyCreditThreshold } from '@/lib/limits/credit-notices';
 import {
   getCatalystCoPilot,
   clearCatalystCoPilot,
@@ -166,6 +167,7 @@ import { useLiteratureMentionCandidates } from '@/contexts/literature-mention-co
 import { useLiteratureAgentStream } from '@/hooks/use-literature-agent-stream';
 import type { LiteratureAgentDonePayload } from '@/lib/literature-agent-types';
 import { ClarifyCard } from '@/components/clarify-card';
+import { PermissionCard } from '@/components/catalyst/permission-card';
 import { CatalystSources, litRefsToSourceItems } from '@/components/catalyst/catalyst-sources';
 import {
   AgentCitationsPanel,
@@ -248,6 +250,9 @@ function literatureHistoryTurnContent(msg: {
  *  Send gate. Shared by the arm auto-timeout and the handleSubmit poll-gate so a
  *  slow open-access fetch still lands on the first turn (no ungrounded window). */
 const ASK_CATALYST_ATTACH_TIMEOUT_MS = 8000;
+// Safety ceiling for an optimistic Ask-Catalyst paper chip: matches the paper
+// card's client fetch timeout, so the spinner can't outlive the fetch it mirrors.
+const FETCHING_PAPER_CHIP_TIMEOUT_MS = 30_000;
 
 /** True for synthetic in-chat notices (e.g. the "upload the PDF" bubble) that are
  *  shown to the user but must NEVER be replayed to the model as a prior assistant
@@ -986,6 +991,15 @@ export function RightSidebar({
   // message before the paper attaches.
   const pendingAttachRef = useRef(false);
   const pendingAttachTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Optimistic spinner chips for Ask-Catalyst papers whose PDF is still being
+  // fetched (launch.expectedAttachmentName). Display-only cousins of uploadQueue:
+  // rendered in the same chip row, but deliberately SEPARATE state because
+  // uploadQueue's isUploading disables Send — a pending paper must not (the
+  // abstract literature_source is already attached, so an early send is fine).
+  // Cleared when the real attachment lands (matched by name), when a launch
+  // without expectAttachment supersedes it (the card's no-PDF fallback re-open),
+  // or by a safety timeout aligned with the card's fetch timeout.
+  const [fetchingPaperNames, setFetchingPaperNames] = useState<string[]>([]);
   const clearPendingAttach = useCallback(() => {
     pendingAttachRef.current = false;
     if (pendingAttachTimerRef.current) {
@@ -1062,10 +1076,29 @@ export function RightSidebar({
     webSearchEnabledRef.current = webSearchEnabled;
   }, [webSearchEnabled]);
 
+  // Internal-data permission (NOTES9_TOOL_PERMISSIONS). `internalDataPermission`
+  // is the persisted user setting (loaded below, editable in Settings);
+  // `sessionInternalGranted` flips true once the user clicks "Allow" this
+  // session. Both mirror to refs so buildNotes9StreamOptions (deps []) reads them.
+  const [internalDataPermission, setInternalDataPermission] =
+    useState<'ask' | 'always' | 'never'>('ask');
+  const [sessionInternalGranted, setSessionInternalGranted] = useState(false);
+  const internalDataPermissionRef = useRef<'ask' | 'always' | 'never'>('ask');
+  const sessionInternalGrantedRef = useRef(false);
+
+  useEffect(() => {
+    internalDataPermissionRef.current = internalDataPermission;
+  }, [internalDataPermission]);
+  useEffect(() => {
+    sessionInternalGrantedRef.current = sessionInternalGranted;
+  }, [sessionInternalGranted]);
+
   const buildNotes9StreamOptions = useCallback(
     (tags: Array<{ kind: CatalystMentionKind; id: string; title: string }>) => ({
       tags,
       web_search: webSearchEnabledRef.current ? ('on' as const) : ('off' as const),
+      internal_data_permission: internalDataPermissionRef.current,
+      internal_data_session_granted: sessionInternalGrantedRef.current,
     }),
     []
   );
@@ -1143,6 +1176,33 @@ export function RightSidebar({
     };
     loadUserId();
   }, [supabase]);
+
+  // Load the persisted internal-data permission (user_ai_permissions). Degrades
+  // to 'ask' if migration 097 isn't applied yet, so nothing breaks pre-migration.
+  useEffect(() => {
+    let cancelled = false;
+    const loadPermission = async () => {
+      if (!user?.id) return;
+      try {
+        const { data, error } = await supabase
+          .from('user_ai_permissions')
+          .select('internal_data_access')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        if (cancelled || error) return;
+        const v = (data?.internal_data_access as string) || 'ask';
+        if (v === 'ask' || v === 'always' || v === 'never') {
+          setInternalDataPermission(v);
+        }
+      } catch {
+        /* table may not exist yet — keep default 'ask' */
+      }
+    };
+    void loadPermission();
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, user?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1340,6 +1400,48 @@ export function RightSidebar({
   }, [literature]);
 
   const agentStream = useAgentStream();
+
+  // When a Catalyst turn finishes (busy → idle), check monthly AI-credit usage
+  // and inject a 50%/90% notice bubble if a new threshold was crossed. The
+  // helper self-throttles (once per month per tier) and never throws.
+  const wasBusyRef = useRef(false);
+  useEffect(() => {
+    const busy =
+      status === 'submitted' ||
+      status === 'streaming' ||
+      agentStream.isStreaming;
+    if (wasBusyRef.current && !busy) {
+      void maybeNotifyCreditThreshold();
+    }
+    wasBusyRef.current = busy;
+  }, [status, agentStream.isStreaming]);
+
+  // Answer an inline permission prompt. Allow/Always grant the session so the
+  // paused run resumes and reads the private data; Always also persists so
+  // Settings reflects it and future sessions skip the prompt. Deny is a one-off
+  // block (nothing persisted) — the agent degrades and may ask again next turn.
+  const handleInternalPermissionDecision = useCallback(
+    (decision: 'allow' | 'always' | 'deny') => {
+      agentStream.resolvePermission(decision);
+      if (decision === 'allow' || decision === 'always') {
+        setSessionInternalGranted(true);
+      }
+      if (decision === 'always') {
+        setInternalDataPermission('always');
+        if (user?.id) {
+          void supabase.from('user_ai_permissions').upsert(
+            {
+              user_id: user.id,
+              internal_data_access: 'always',
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'user_id' },
+          );
+        }
+      }
+    },
+    [agentStream, supabase, user?.id],
+  );
   const literatureAgentStream = useLiteratureAgentStream();
   const contextMentionCandidates = useLiteratureMentionCandidates();
   const isLiteratureRoute = isLiteratureRoutePath(pathname ?? null);
@@ -3194,22 +3296,47 @@ export function RightSidebar({
   }, [isPageVariant, router]);
 
   const applyCatalystLaunch = useCallback(
-    (launch: { query?: string; projectId?: string; attachments?: Array<{ url: string; name: string; contentType: string; size?: number }>; literatureSources?: AgentLiteratureSource[]; webSearch?: boolean; autoSend?: boolean; sessionId?: string; expectAttachment?: boolean }) => {
+    (launch: { query?: string; projectId?: string; attachments?: Array<{ url: string; name: string; contentType: string; size?: number }>; literatureSources?: AgentLiteratureSource[]; webSearch?: boolean; autoSend?: boolean; sessionId?: string; expectAttachment?: boolean; expectedAttachmentName?: string }) => {
       // Gate the first Send while a paper attachment is being fetched, so the user
       // can't fire the message before it lands. A later launch (the closed-access
       // fallback re-open) or the attach/notice events release the gate.
       if (launch.expectAttachment) armPendingAttach();
       else clearPendingAttach();
+      // Optimistic spinner chip for the paper being fetched. A launch WITHOUT
+      // expectAttachment supersedes any pending chips (the paper card re-opens
+      // the panel this way when its PDF fetch falls back to web search).
+      if (launch.expectAttachment && launch.expectedAttachmentName) {
+        const name = launch.expectedAttachmentName;
+        setFetchingPaperNames((prev) => (prev.includes(name) ? prev : [...prev, name]));
+        window.setTimeout(
+          () => setFetchingPaperNames((prev) => prev.filter((n) => n !== name)),
+          FETCHING_PAPER_CHIP_TIMEOUT_MS,
+        );
+      } else if (!launch.expectAttachment) {
+        // A launch without expectAttachment resolves a pending chip. When it
+        // names the paper (the card's no-PDF fallback re-open), clear ONLY that
+        // chip so a parallel paper's in-flight chip survives; with no name, it's
+        // a plain panel open — clear all stale chips.
+        const settledName = launch.expectedAttachmentName;
+        setFetchingPaperNames((prev) =>
+          settledName ? prev.filter((n) => n !== settledName) : [],
+        );
+      }
       // Continue an existing conversation (e.g. minimizing the full page back
       // into the docked sidebar) before seeding any new query.
       if (launch.sessionId && launch.sessionId !== currentSessionRef.current) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
         loadSession(launch.sessionId);
       }
-      // Closed-access "Ask Catalyst": the paper has no PDF to attach, so carry its
-      // abstract as a citable literature_source for the next send (Step 7).
+      // "Ask Catalyst" carries the paper's abstract as a citable literature_source
+      // for the next send — attached at panel-open so a send that beats the PDF
+      // fetch is still grounded. MERGE (like the attach event), don't replace:
+      // opening the panel for paper B must not drop paper A's pending source.
       if (launch.literatureSources && launch.literatureSources.length > 0) {
-        pendingLiteratureSourcesRef.current = launch.literatureSources;
+        pendingLiteratureSourcesRef.current = dedupeLiteratureSources([
+          ...pendingLiteratureSourcesRef.current,
+          ...launch.literatureSources,
+        ]);
       }
       const q = launch.query?.trim();
       if (q) {
@@ -3295,6 +3422,11 @@ export function RightSidebar({
       webSearch: pendingLaunch.webSearch,
       autoSend: pendingLaunch.autoSend,
       sessionId: pendingLaunch.sessionId,
+      // Ask-Catalyst always launches with the panel CLOSED, so every launch
+      // reaches applyCatalystLaunch through here — dropping these two fields
+      // silently disabled the send-gate and the optimistic paper chip.
+      expectAttachment: pendingLaunch.expectAttachment,
+      expectedAttachmentName: pendingLaunch.expectedAttachmentName,
     });
     onPendingLaunchConsumed?.();
   }, [
@@ -3313,6 +3445,9 @@ export function RightSidebar({
       const detail = (e as CustomEvent<CatalystAttachDetail>).detail;
       const incoming = detail?.attachments;
       if (!incoming || incoming.length === 0) return;
+      // The real attachment replaces its optimistic spinner chip (matched by the
+      // filename both sides derive from the paper title the same way).
+      setFetchingPaperNames((prev) => prev.filter((n) => !incoming.some((a) => a.name === n)));
       // Fold any durable citable sources (the attached paper's metadata + abstract)
       // into the pending sources so the paper stays grounded on follow-up turns
       // after the transient file chip is cleared post-send. Reuse the shared dedupe.
@@ -3533,7 +3668,7 @@ export function RightSidebar({
         )}
         id="tour-ai-chat"
       >
-        {(attachments.length > 0 || uploadQueue.length > 0) && (
+        {(attachments.length > 0 || uploadQueue.length > 0 || fetchingPaperNames.length > 0) && (
           <div className="flex flex-wrap gap-1.5 px-3 pt-2 pb-0.5">
             {attachments.map((a) => (
               <PreviewAttachment
@@ -3555,6 +3690,20 @@ export function RightSidebar({
                 isUploading
               />
             ))}
+            {/* Ask-Catalyst papers whose PDF is still being fetched: same spinner
+                chip as an upload, but display-only — never blocks Send and never
+                enters the message payload (swapped for the real attachment on
+                arrival, matched by name). */}
+            {fetchingPaperNames
+              .filter((name) => !attachments.some((a) => a.name === name))
+              .map((name) => (
+                <PreviewAttachment
+                  key={`fetching-${name}`}
+                  attachment={{ name, url: '', contentType: 'application/pdf', size: 0 }}
+                  compact
+                  isUploading
+                />
+              ))}
           </div>
         )}
         <FileDropzone
@@ -4788,6 +4937,14 @@ export function RightSidebar({
                             options={literatureAgentStream.clarify.options}
                             onAnswer={handleLiteratureClarifyAnswer}
                             onSkip={handleLiteratureClarifySkip}
+                          />
+                        </div>
+                      )}
+                      {agentStream.pendingPermission && (
+                        <div className="flex w-full justify-start pl-10">
+                          <PermissionCard
+                            tools={agentStream.pendingPermission.tools}
+                            onDecision={handleInternalPermissionDecision}
                           />
                         </div>
                       )}

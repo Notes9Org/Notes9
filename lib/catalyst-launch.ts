@@ -54,6 +54,11 @@ export type CatalystLaunchDetail = {
    *  a follow-up {@link CATALYST_ATTACH_EVENT}. The sidebar uses this to gate Send
    *  so the user can't fire the first message before the paper lands. */
   expectAttachment?: boolean
+  /** Display name for the attachment announced by {@link expectAttachment}. When
+   *  set, the sidebar shows an optimistic spinner chip (like an in-flight upload)
+   *  until the real attachment arrives, fails, or times out — it never blocks
+   *  Send and is never included in a message payload. */
+  expectedAttachmentName?: string
   /** Force docking into the side panel even when currently on `/catalyst`
    *  (otherwise opening from `/catalyst` just re-seeds the full page). */
   dock?: boolean

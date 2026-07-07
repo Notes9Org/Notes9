@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
   buildPmcPdfCandidateUrls,
+  downloadFirstPdf,
   looksLikeHtmlInterstitial,
 } from "@/lib/literature-pdf-import"
 import { extractPdfFromUnpaywallPayload, unpaywallContactEmail } from "@/lib/unpaywall"
@@ -108,5 +109,56 @@ describe("unpaywallContactEmail — prefer the signed-in user's email", () => {
     } finally {
       if (prev !== undefined) process.env.UNPAYWALL_EMAIL = prev
     }
+  })
+})
+
+describe("downloadFirstPdf (shared literature PDF downloader)", () => {
+  const realFetch = globalThis.fetch
+  afterEach(() => {
+    globalThis.fetch = realFetch
+    vi.restoreAllMocks()
+  })
+
+  const PDF_BYTES = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x35, 0x0a, 0x0a])
+  const HTML_BYTES = new TextEncoder().encode("<!doctype html><html><body>Just a moment...</body></html>")
+
+  function streamResponse(bytes: Uint8Array, contentType: string): Response {
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(bytes)
+        controller.close()
+      },
+    })
+    return new Response(body, { status: 200, headers: { "content-type": contentType } })
+  }
+
+  it("rejects an HTML interstitial and returns the first valid PDF in a race", async () => {
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes("bot-wall")) return streamResponse(HTML_BYTES, "text/html; charset=utf-8")
+      if (url.includes("good")) return streamResponse(PDF_BYTES, "application/pdf")
+      return new Response(null, { status: 404 })
+    }) as typeof fetch
+
+    const result = await downloadFirstPdf(
+      ["https://example.org/bot-wall.pdf", "https://example.org/good.pdf"],
+      { perFetchTimeoutMs: 2_000, totalBudgetMs: 4_000 },
+    )
+    expect(result).not.toBeNull()
+    expect(result!.usedUrl).toBe("https://example.org/good.pdf")
+    expect(new Uint8Array(result!.buffer)[0]).toBe(0x25) // "%"
+  })
+
+  it("returns null when every candidate is a non-PDF", async () => {
+    globalThis.fetch = vi.fn(async () => streamResponse(HTML_BYTES, "text/html")) as typeof fetch
+    const result = await downloadFirstPdf(["https://example.org/a", "https://example.org/b"], {
+      perFetchTimeoutMs: 2_000,
+      totalBudgetMs: 4_000,
+    })
+    expect(result).toBeNull()
+  })
+
+  it("returns null for an empty candidate list", async () => {
+    expect(await downloadFirstPdf([])).toBeNull()
   })
 })

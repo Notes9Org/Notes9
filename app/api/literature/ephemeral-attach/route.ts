@@ -2,50 +2,39 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentUser } from "@/lib/auth/current-user"
 import { USER_STORAGE_BUCKET } from "@/lib/user-storage-bucket"
-import { collectLiteraturePdfFetchUrls } from "@/lib/literature-pdf-import"
+import { downloadFirstPdf, fetchPdfFromOaPackageTgz } from "@/lib/literature-pdf-import"
+import { resolveOaSources } from "@/lib/literature-oa-resolve"
 import type { SearchPaper } from "@/types/paper-search"
+
+type OaResolveResult = { pdfUrls: string[]; oaPackageTgzUrl: string | null; abstract: string | null }
 
 // Lightweight, ephemeral "read this not-saved paper in Catalyst" path.
 //
 // A literature search result has no record id and only an abstract (no full
 // text) until it is staged into the heavy `literature_reviews` lifecycle. To let
 // users chat about a paper WITHOUT that save, we fetch its open-access PDF once,
-// store it via the SAME lightweight `chat_attachments` record used by chat file
-// uploads (UUID + 7-day signed URL + auto-purge cron), and hand it to Catalyst as
-// a normal file attachment. The agent reads it inline this turn and — once the
-// returned chatAttachmentId is forwarded — can re-read it by UUID on later turns.
+// store it in the SAME storage layout used by chat file uploads (7-day signed
+// URL), and hand it to Catalyst as a normal file attachment.
+//
+// This route does NOT insert the chat_attachments row itself: Ask Catalyst runs
+// before any chat session exists, and the live table requires a real, owned
+// session_id (NOT NULL + chat_attachments_insert_own RLS). Registration is
+// deferred to the sidebar's send-time back-fill (/api/files/register), which
+// was built for exactly this pre-session gap — it upserts the row with the
+// just-created session_id, giving the file its 7-day TTL and read_document
+// re-reads. We return chatAttachmentId: null so that back-fill picks it up.
 // No Redis, no literature_reviews row.
 
 const MAX_PDF_BYTES = 10 * 1024 * 1024 // 10 MB, matches the chat upload cap
 const SIGNED_URL_TTL_SECONDS = 7 * 24 * 60 * 60 // 7 days, == chat-attachment TTL
 
-// Browser-like headers: many publisher/OA hosts 403 a default fetch UA.
-const BROWSER_FETCH_HEADERS: Record<string, string> = {
-  "User-Agent":
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-  Accept: "application/pdf,text/html;q=0.9,*/*;q=0.8",
-}
-
-function isPdfBytes(bytes: Uint8Array): boolean {
-  // "%PDF" magic.
-  return bytes.length >= 4 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46
-}
-
-async function tryFetchPdf(url: string): Promise<ArrayBuffer | null> {
-  try {
-    const res = await fetch(url, { headers: BROWSER_FETCH_HEADERS, redirect: "follow" })
-    if (!res.ok) return null
-    const ct = (res.headers.get("content-type") || "").toLowerCase()
-    const buf = await res.arrayBuffer()
-    if (buf.byteLength === 0 || buf.byteLength > MAX_PDF_BYTES) return null
-    const head = new Uint8Array(buf.slice(0, 8))
-    // Accept either a PDF content-type or PDF magic bytes (some hosts mislabel).
-    if (ct.includes("application/pdf") || isPdfBytes(head)) return buf
-    return null
-  } catch {
-    return null
-  }
-}
+// This route sits behind the "Ask Catalyst" button: the composer's Send is
+// gated on it, so latency here IS perceived UI lag. The shared downloadFirstPdf
+// races candidates in parallel with a hard per-fetch + total deadline; past it
+// we fall back to the abstract instead of keeping the user waiting.
+const RESOLVER_BUDGET_MS = 8_000 // resolveOaSources (Unpaywall/OpenAlex/EuropePMC/NCBI)
+const PER_FETCH_TIMEOUT_MS = 10_000 // one candidate download, connect → last byte
+const PDF_RACE_BUDGET_MS = 15_000 // all candidates together
 
 export async function POST(request: Request) {
   try {
@@ -71,21 +60,41 @@ export async function POST(request: Request) {
     const fileName = `${safeTitle.replace(/[^a-zA-Z0-9._ -]/g, "_").trim() || "paper"}.pdf`
     const sourceUrl = paper.articlePageUrl || paper.sourceUrl || paper.pdfUrl || null
 
-    // Build the candidate OA-PDF URL list: the result's own pdfUrl first, then
-    // the shared resolver (Unpaywall / OA mirrors / PMC) used by the save flow.
-    const candidates: string[] = []
-    if (paper.pdfUrl) candidates.push(paper.pdfUrl)
-    try {
-      const resolved = await collectLiteraturePdfFetchUrls(paper as SearchPaper)
-      for (const u of resolved) if (u && !candidates.includes(u)) candidates.push(u)
-    } catch {
-      // Resolver failure is non-fatal; we may still have paper.pdfUrl.
-    }
+    // Candidate OA-PDF URLs. Use the SAME broad resolver as the "Read paper" /
+    // stage flow (resolveOaSources): Unpaywall + OpenAlex + Europe PMC + PMC OA
+    // subset + preprint mirrors + the card's own pdfUrl — resolves by DOI, so
+    // non-PMC open-access papers (Elsevier/MDPI/Frontiers/...) work here too.
+    // The paper's own pdfUrl still downloads IMMEDIATELY while the resolver runs
+    // concurrently and feeds the rest into the same race as they arrive; the
+    // resolver keeps its own deadline so a hung upstream degrades to "direct URL
+    // only" rather than holding the composer hostage.
+    const directUrls = paper.pdfUrl ? [paper.pdfUrl] : []
+    const oaSources = Promise.race([
+      resolveOaSources(paper as SearchPaper, { contactEmail: user.email ?? undefined }),
+      new Promise<OaResolveResult>((resolve) =>
+        setTimeout(() => resolve({ pdfUrls: [], oaPackageTgzUrl: null, abstract: null }), RESOLVER_BUDGET_MS),
+      ),
+    ]).catch(() => ({ pdfUrls: [], oaPackageTgzUrl: null, abstract: null }) as OaResolveResult)
+    const resolverUrls = oaSources.then((r) => r.pdfUrls)
 
-    let pdfBuffer: ArrayBuffer | null = null
-    for (const url of candidates) {
-      pdfBuffer = await tryFetchPdf(url)
-      if (pdfBuffer) break
+    // Tight interactive budgets (this gates the composer's Send). directUrls
+    // download immediately; resolver URLs join the same race as they resolve.
+    const downloaded = await downloadFirstPdf(directUrls, {
+      lateUrls: resolverUrls,
+      maxBytes: MAX_PDF_BYTES,
+      perFetchTimeoutMs: PER_FETCH_TIMEOUT_MS,
+      totalBudgetMs: PDF_RACE_BUDGET_MS,
+    })
+    let pdfBuffer: ArrayBuffer | null = downloaded?.buffer ?? null
+
+    // Last resort: the PMC Open Access `.tgz` package (same one the stage flow
+    // extracts). Only reached when every direct/mirror PDF URL failed.
+    if (!pdfBuffer) {
+      const tgzUrl = (await oaSources).oaPackageTgzUrl
+      if (tgzUrl) {
+        const fromTgz = await fetchPdfFromOaPackageTgz(tgzUrl).catch(() => null)
+        if (fromTgz) pdfBuffer = fromTgz.buffer
+      }
     }
 
     // Fallback: no OA PDF reachable (paywall / bot wall). Return a metadata-text
@@ -106,7 +115,15 @@ export async function POST(request: Request) {
         // Deterministic reason so the UI can say WHY: no OA link at all
         // (paper isn't open access) vs links existed but every download
         // failed (bot wall / dead link).
-        reason: candidates.length === 0 ? "no_open_access_link" : "fetch_failed",
+        // oaSources has settled by now (its budget < the race budget), so
+        // awaiting it here is instant. No candidate URLs at all → the paper has
+        // no open-access link; URLs existed but every download failed → fetch.
+        reason:
+          directUrls.length === 0 &&
+          (await resolverUrls).length === 0 &&
+          !(await oaSources).oaPackageTgzUrl
+            ? "no_open_access_link"
+            : "fetch_failed",
         sourceUrl,
         name: paper.title ?? "paper",
         text: lines.join("\n"),
@@ -133,38 +150,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Failed to generate paper URL" }, { status: 500 })
     }
 
-    // Register the ephemeral byte store so read_document can re-fetch it by UUID
-    // and the 7-day cleanup cron purges it. session_id is optional.
-    let chatAttachmentId: string | null = null
-    const { data: attRow, error: attErr } = await supabase
-      .from("chat_attachments")
-      .insert({
-        user_id: user.id,
-        session_id: body.sessionId ?? null,
-        message_id: body.messageId ?? null,
-        storage_bucket: USER_STORAGE_BUCKET,
-        storage_path: storagePath,
-        file_name: fileName,
-        mime_type: "application/pdf",
-        size_bytes: pdfBuffer.byteLength,
-      })
-      .select("id")
-      .single()
-    if (attErr) {
-      // Bytes are stored and signed; only the cross-turn re-read record failed.
-      // Still usable same-turn, so return the URL without the id.
-      console.error("ephemeral-attach chat_attachments insert failed:", attErr)
-    } else {
-      chatAttachmentId = attRow?.id ?? null
-    }
-
+    // chatAttachmentId is deliberately null: no chat session exists yet, and the
+    // live chat_attachments schema requires an owned session_id. The sidebar's
+    // send-time back-fill (/api/files/register) registers this file — keyed on
+    // storagePath + a null chatAttachmentId — as soon as the session is created,
+    // which is what gives it the 7-day TTL and later read_document re-reads.
     return NextResponse.json({
       url: signedUrl,
       storagePath,
       name: fileName,
       contentType: "application/pdf",
       size: pdfBuffer.byteLength,
-      chatAttachmentId,
+      chatAttachmentId: null,
       sourceUrl,
     })
   } catch (err) {

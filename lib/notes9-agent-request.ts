@@ -78,6 +78,10 @@ export type Notes9AgentRequestInput = {
     max_retries?: number;
     /** When supported by upstream, enables web search tool alongside SQL/RAG. */
     web_search?: 'on' | 'off';
+    /** Persisted internal-data permission: 'ask' (default) | 'always' | 'never'. */
+    internal_data_permission?: 'ask' | 'always' | 'never';
+    /** True after the user grants access to their private data this session. */
+    internal_data_session_granted?: boolean;
   };
 };
 

@@ -56,11 +56,17 @@ CREATE TABLE IF NOT EXISTS public.ai_usage_ledger (
   cache_read       bigint        NOT NULL DEFAULT 0,
   cache_write      bigint        NOT NULL DEFAULT 0,
   cost_usd         numeric(12,6) NOT NULL DEFAULT 0,
+  web_searches     integer       NOT NULL DEFAULT 0,
   estimated        boolean       NOT NULL DEFAULT false,
   counted_search   boolean       NOT NULL DEFAULT false,
   created_at       timestamptz   NOT NULL DEFAULT now(),
   CONSTRAINT ai_usage_ledger_pkey PRIMARY KEY (id)
 );
+
+-- Idempotent add for databases where ai_usage_ledger already existed before the
+-- web_searches column (CREATE TABLE IF NOT EXISTS above skips such tables).
+ALTER TABLE public.ai_usage_ledger
+  ADD COLUMN IF NOT EXISTS web_searches integer NOT NULL DEFAULT 0;
 
 CREATE INDEX IF NOT EXISTS ai_usage_ledger_user_created_idx
   ON public.ai_usage_ledger (user_id, created_at);
