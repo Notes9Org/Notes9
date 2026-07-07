@@ -80,6 +80,7 @@ export function ProtocolList({
           {protocols.map((item) => (
             <Card
               key={item.id}
+              ribbon="var(--kind-protocol)"
               draggable
               onDragStart={(e) => {
                 e.dataTransfer.setData(

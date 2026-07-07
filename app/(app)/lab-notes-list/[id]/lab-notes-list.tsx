@@ -86,8 +86,9 @@ export default function LabNotesList({
       {effectiveViewMode === "grid" && (
         <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(280px,1fr))]">
           {notes.map((note) => (
-            <Card 
-              key={note.id} 
+            <Card
+              key={note.id}
+              ribbon="var(--kind-note)"
               draggable
               className="bg-card hover:border-primary transition-colors flex flex-col min-w-0 overflow-hidden cursor-pointer"
               onDragStart={(e) => {
