@@ -24,8 +24,8 @@ interface UsageSummary {
     reset_at: string
   }
   ai_budget: {
-    used_usd: number
-    limit_usd: number | null
+    used_credits: number
+    limit_credits: number | null
     window: string
     reset_at: string
   }
@@ -42,12 +42,8 @@ function formatResetDate(iso: string): string {
   })
 }
 
-const formatUsd = (n: number) =>
-  n.toLocaleString(undefined, {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2,
-  })
+const formatCredits = (n: number) =>
+  `${Number.isInteger(n) ? n : Math.round(n)}`
 
 export function UsagePanel() {
   const [summary, setSummary] = useState<UsageSummary | null>(null)
@@ -119,23 +115,25 @@ export function UsagePanel() {
         </section>
       )}
 
-      {budget.limit_usd != null && (
+      {budget.limit_credits != null && (
         <section className="space-y-2">
           <div className="flex items-baseline justify-between gap-3">
-            <h3 className="text-sm font-medium">AI usage</h3>
+            <h3 className="text-sm font-medium">AI credits</h3>
             <span className="text-xs text-muted-foreground">
-              Full capacity returns {formatResetDate(budget.reset_at)}
+              Credits refresh {formatResetDate(budget.reset_at)}
             </span>
           </div>
           <UsageMeter
             code="ai_budget_monthly"
-            used={budget.used_usd}
-            total={budget.limit_usd}
-            formatValue={formatUsd}
+            used={budget.used_credits}
+            total={budget.limit_credits}
+            unit="credits"
+            formatValue={formatCredits}
           />
           <p className="text-xs text-muted-foreground">
-            Covers Catalyst chat, literature summaries, and other AI features
-            this month.
+            You get {budget.limit_credits} free credits each month. Credits cover
+            Catalyst chat, literature summaries, web search, and other AI
+            features.
           </p>
         </section>
       )}

@@ -48,7 +48,7 @@ export function SearchLimitNotice({
         <div className="space-y-1">
           <p className="text-sm font-medium">
             {isBudget
-              ? "This month's AI capacity is fully used"
+              ? "This month's AI credits are fully used"
               : "This week's literature searches are fully used"}
           </p>
           <p className="text-xs text-muted-foreground">
@@ -61,7 +61,7 @@ export function SearchLimitNotice({
         </div>
       </div>
       {used != null && limit != null && limit > 0 && (
-        <UsageMeter code={code} used={used} total={limit} />
+        <UsageMeter code={code} used={used} total={limit} unit={isBudget ? "credits" : "searches"} />
       )}
     </div>
   )

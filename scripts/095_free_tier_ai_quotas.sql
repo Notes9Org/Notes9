@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS public.ai_usage_ledger (
   cache_read       bigint        NOT NULL DEFAULT 0,
   cache_write      bigint        NOT NULL DEFAULT 0,
   cost_usd         numeric(12,6) NOT NULL DEFAULT 0,
+  web_searches     integer       NOT NULL DEFAULT 0,
   estimated        boolean       NOT NULL DEFAULT false,
   counted_search   boolean       NOT NULL DEFAULT false,
   created_at       timestamptz   NOT NULL DEFAULT now(),
