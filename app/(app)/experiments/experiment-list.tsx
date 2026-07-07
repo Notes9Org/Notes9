@@ -234,6 +234,7 @@ export function ExperimentList({
           {experiments.map((experiment) => (
             <Card
               key={experiment.id}
+              ribbon="var(--kind-experiment)"
               draggable
               onDragStart={(e) => {
                 e.dataTransfer.setData(

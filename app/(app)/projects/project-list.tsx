@@ -186,6 +186,8 @@ export function ProjectList({ projects, viewMode: controlledView, setViewMode: s
           {projects.map((project) => (
             <Card
               key={project.id}
+              variant="interactive"
+              ribbon="var(--kind-project)"
               draggable
               onDragStart={(e) => {
                 e.dataTransfer.setData(
@@ -198,7 +200,7 @@ export function ProjectList({ projects, viewMode: controlledView, setViewMode: s
                 )
                 e.dataTransfer.effectAllowed = "copy"
               }}
-              className="hover:border-primary transition-colors flex flex-col min-w-0 overflow-hidden"
+              className="hover:border-primary flex flex-col min-w-0 overflow-hidden"
             >
               <CardHeader className="pb-3 min-w-0">
                 <div className="space-y-2 min-w-0">

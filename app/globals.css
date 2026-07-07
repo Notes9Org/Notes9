@@ -67,6 +67,14 @@
   --sidebar-border: #e6ddd1;
   --sidebar-ring: #c88a67;
   --highlight: #f4d65f;
+  /* Entity kind colors — drive the signature kind-ribbon and kind tinting platform-wide. */
+  --kind-project: var(--primary);
+  --kind-experiment: #2563eb;
+  --kind-protocol: #ca8a04;
+  --kind-note: #dc2626;
+  --kind-sample: #0d9488;
+  --kind-paper: #7c3aed;
+  --kind-literature: #4f46e5;
   --n9-accent: #965034;
   --n9-accent-hover: #7e3a1b;
   --n9-accent-light: #fcf2eb;
@@ -135,6 +143,14 @@
   --sidebar-border: rgba(245, 240, 232, 0.1);
   --sidebar-ring: #b96f48;
   --highlight: #fff59d;
+  /* Entity kind colors — dark theme (lighter for contrast on dark surfaces). */
+  --kind-project: var(--primary);
+  --kind-experiment: #60a5fa;
+  --kind-protocol: #eab308;
+  --kind-note: #f87171;
+  --kind-sample: #2dd4bf;
+  --kind-paper: #a78bfa;
+  --kind-literature: #818cf8;
   --n9-accent: #d4845a;
   --n9-accent-hover: #c07650;
   --n9-accent-light: rgba(212, 132, 90, 0.1);
