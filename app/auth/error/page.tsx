@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { AlertCircle } from 'lucide-react'
+import { WarningCircle as AlertCircle } from "@phosphor-icons/react/ssr"
 
 export default async function AuthErrorPage({
   searchParams,

@@ -7,26 +7,7 @@ import {
   type ChangeEvent,
   type ComponentType,
 } from "react"
-import {
-  Beaker,
-  BookOpen,
-  Download,
-  FileArchive,
-  FlaskConical,
-  FolderInput,
-  FolderKanban,
-  GripVertical,
-  Image as ImageIcon,
-  Layers3,
-  Link2,
-  Loader2,
-  Microscope,
-  TestTube,
-  Upload,
-  Users,
-  FileText,
-  Database,
-} from "lucide-react"
+import { Flask as Beaker, BookOpen, DownloadSimple as Download, FileZip as FileArchive, Flask as FlaskConical, FolderOpen as FolderInput, Kanban as FolderKanban, DotsSixVertical as GripVertical, Image as ImageIcon, Stack as Layers3, LinkSimple as Link2, CircleNotch as Loader2, Microscope, TestTube, UploadSimple as Upload, Users, FileText, Database } from "@phosphor-icons/react/ssr"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"

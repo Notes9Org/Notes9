@@ -3,14 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { MotionTabPanel, motion, useReducedMotion } from "@/components/literature-reviews/motion"
-import {
-  Search as SearchIcon,
-  Database,
-  ChevronLeft,
-  ChevronRight,
-  Loader2,
-  X,
-} from "lucide-react"
+import { MagnifyingGlass as SearchIcon, Database, CaretLeft as ChevronLeft, CaretRight as ChevronRight, CircleNotch as Loader2, X } from "@phosphor-icons/react/ssr"
 import {
   LiteratureSearchForm,
   SearchTab,

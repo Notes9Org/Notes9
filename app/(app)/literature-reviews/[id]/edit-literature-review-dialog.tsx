@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Edit, Star, Loader2 } from "lucide-react";
+import { PencilSimple as Edit, Star, CircleNotch as Loader2 } from "@phosphor-icons/react/ssr";
 import { useToast } from "@/hooks/use-toast";
 import {
   literatureLinkSelectContentClassName,

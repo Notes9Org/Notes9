@@ -4,7 +4,7 @@ import * as React from 'react'
 import * as TabsPrimitive from '@radix-ui/react-tabs'
 
 import { cn } from '@/lib/utils'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { CaretLeft as ChevronLeft, CaretRight as ChevronRight } from "@phosphor-icons/react/ssr"
 
 const TabsContext = React.createContext<{
   scrollContainerRef: React.RefObject<HTMLDivElement | null>

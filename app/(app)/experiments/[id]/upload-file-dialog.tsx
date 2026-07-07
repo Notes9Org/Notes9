@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/select"
 import { Progress } from "@/components/ui/progress"
 import { useToast } from "@/hooks/use-toast"
-import { Upload, File, X, CheckCircle2, AlertCircle, Files } from "lucide-react"
+import { UploadSimple as Upload, File, X, CheckCircle as CheckCircle2, WarningCircle as AlertCircle, Files } from "@phosphor-icons/react/ssr"
 import { Card } from "@/components/ui/card"
 import { FileDropzone } from "@/components/ui/file-dropzone"
 import {

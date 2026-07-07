@@ -26,7 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FileText, Star, ExternalLink, Copy, Check } from "lucide-react";
+import { FileText, Star, ArrowSquareOut as ExternalLink, Copy, Check } from "@phosphor-icons/react/ssr";
 import { toast } from "sonner";
 import Link from "next/link";
 import { LiteratureReviewActions } from "@/app/(app)/literature-reviews/[id]/literature-review-actions";

@@ -4,7 +4,7 @@ import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { useRouter } from 'next/navigation';
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
-import { PanelLeftClose, PanelLeft } from 'lucide-react';
+import { SidebarSimple as PanelLeftClose, SidebarSimple as PanelLeft } from "@phosphor-icons/react/ssr";
 import { Button } from '@/components/ui/button';
 import { useChatSessions } from '@/hooks/use-chat-sessions';
 import { createClient } from '@/lib/supabase/client';

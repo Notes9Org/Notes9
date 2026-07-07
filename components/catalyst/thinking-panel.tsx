@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Activity, ChevronDown } from 'lucide-react';
+import { Pulse as Activity, CaretDown as ChevronDown } from "@phosphor-icons/react/ssr";
 import { cn } from '@/lib/utils';
 import {
   Collapsible,

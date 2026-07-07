@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { LiteratureDetailView } from "./literature-detail-view";
 import { MotionReveal } from "./motion";
-import { Loader2 } from "lucide-react";
+import { CircleNotch as Loader2 } from "@phosphor-icons/react/ssr";
 import { createClient } from "@/lib/supabase/client";
 
 interface LiteratureDetailModalProps {

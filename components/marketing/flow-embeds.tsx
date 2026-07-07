@@ -16,7 +16,7 @@
  */
 
 import { motion, useReducedMotion } from "framer-motion"
-import { BarChart3, BookOpen, ClipboardList, FileText, FlaskConical, FolderKanban, NotebookPen, TestTube } from "lucide-react"
+import { ChartBar as BarChart3, BookOpen, ClipboardText as ClipboardList, FileText, Flask as FlaskConical, Kanban as FolderKanban, NotePencil as NotebookPen, TestTube } from "@phosphor-icons/react/ssr"
 import { cn } from "@/lib/utils"
 
 const dottedBg =

@@ -11,7 +11,7 @@ import {
   TooltipTrigger,
   TooltipProvider,
 } from "@/components/ui/tooltip"
-import { Pencil, Copy, Trash2 } from "lucide-react"
+import { PencilSimple as Pencil, Copy, Trash as Trash2 } from "@phosphor-icons/react/ssr"
 
 interface Project {
   id: string

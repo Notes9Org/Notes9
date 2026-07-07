@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
-import { Play, ArrowRight, Brain, Zap, BookOpen, BarChart3, Users } from "lucide-react"
+import { Play, ArrowRight, Brain, Lightning as Zap, BookOpen, ChartBar as BarChart3, Users } from "@phosphor-icons/react/ssr"
 import { motion } from "framer-motion"
 
 export function HeroSection() {

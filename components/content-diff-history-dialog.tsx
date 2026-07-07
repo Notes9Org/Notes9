@@ -2,16 +2,7 @@
 
 import { useState } from "react"
 import { diffWords } from "diff"
-import {
-  History,
-  Clock,
-  Plus,
-  Minus,
-  User,
-  ChevronDown,
-  ChevronUp,
-  Download,
-} from "lucide-react"
+import { ClockCounterClockwise as History, Clock, Plus, Minus, User, CaretDown as ChevronDown, CaretUp as ChevronUp, DownloadSimple as Download } from "@phosphor-icons/react/ssr"
 import {
   Dialog,
   DialogContent,

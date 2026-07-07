@@ -9,7 +9,7 @@ import LabNotesList from "@/app/(app)/lab-notes-list/[id]/lab-notes-list"
 import { NewLabNoteDialog } from "@/app/(app)/lab-notes/new-lab-note-dialog"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Loader2, Plus, Grid3x3, List, NotebookPen } from "lucide-react"
+import { CircleNotch as Loader2, Plus, SquaresFour as Grid3x3, List, NotePencil as NotebookPen } from "@phosphor-icons/react/ssr"
 import {
   Empty,
   EmptyHeader,

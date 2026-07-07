@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { PageHeading } from "@/components/ui/page-heading"
-import { ArrowLeft, FlaskConical, Link2, Package, TestTube } from "lucide-react"
+import { ArrowLeft, Flask as FlaskConical, LinkSimple as Link2, Package, TestTube } from "@phosphor-icons/react/ssr"
 import { SampleContextPicker, type SampleLinkOption } from "../sample-context-picker"
 import { parseTagInput } from "@/lib/sample-molecular"
 import { replaceSampleContextLinks } from "@/lib/sample-context"

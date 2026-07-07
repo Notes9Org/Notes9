@@ -1,18 +1,7 @@
 "use client"
 
 import { useEffect, useState, type ReactNode } from "react"
-import {
-  BookOpen,
-  ClipboardList,
-  FlaskConical,
-  Microscope,
-  Network,
-  NotebookPen,
-  ScrollText,
-  Search,
-  Sparkles,
-  TestTube2,
-} from "lucide-react"
+import { BookOpen, ClipboardText as ClipboardList, Flask as FlaskConical, Microscope, Graph as Network, NotePencil as NotebookPen, Scroll as ScrollText, MagnifyingGlass as Search, Sparkle as Sparkles, TestTube as TestTube2 } from "@phosphor-icons/react/ssr"
 import { IceMascot } from "@/components/ui/ice-mascot"
 import { cn } from "@/lib/utils"
 

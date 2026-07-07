@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { format } from "date-fns"
-import { Upload, Trash2, Eye, FileStack, Loader2 } from "lucide-react"
+import { UploadSimple as Upload, Trash as Trash2, Eye, Files as FileStack, CircleNotch as Loader2 } from "@phosphor-icons/react/ssr"
 import { Button } from "@/components/ui/button"
 import {
   Table,

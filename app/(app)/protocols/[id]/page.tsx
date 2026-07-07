@@ -15,7 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { PageHeading } from "@/components/ui/page-heading"
-import { ArrowLeft, CheckCircle, Pencil, X } from 'lucide-react'
+import { ArrowLeft, CheckCircle, PencilSimple as Pencil, X } from "@phosphor-icons/react/ssr"
 import Link from 'next/link'
 import { ProtocolActions } from './protocol-actions'
 import { ProtocolEditor } from './protocol-editor'

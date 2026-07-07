@@ -1,5 +1,5 @@
 import type { HTMLAttributes } from "react"
-import { Clipboard, Info } from "lucide-react"
+import { Clipboard, Info } from "@phosphor-icons/react/ssr"
 import { cn } from "@/lib/utils"
 
 export type ClipboardInfoIconProps = HTMLAttributes<HTMLSpanElement>

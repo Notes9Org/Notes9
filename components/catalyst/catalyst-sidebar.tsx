@@ -1,6 +1,6 @@
 'use client';
 
-import { Plus, MessageSquare, Trash2, X } from 'lucide-react';
+import { Plus, Chat as MessageSquare, Trash as Trash2, X } from "@phosphor-icons/react/ssr";
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';

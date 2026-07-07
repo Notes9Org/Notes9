@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Check, ChevronDown, Zap, Brain } from 'lucide-react';
+import { Check, CaretDown as ChevronDown, Lightning as Zap, Brain } from "@phosphor-icons/react/ssr";
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 

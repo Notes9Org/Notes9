@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
-import { Telescope, Loader2, AlertCircle, RotateCcw } from 'lucide-react'
+import { Binoculars as Telescope, CircleNotch as Loader2, WarningCircle as AlertCircle, ArrowCounterClockwise as RotateCcw } from "@phosphor-icons/react/ssr"
 import { useAiLiteratureSearch } from '@/hooks/use-ai-literature-search'
 import { SearchLimitNotice } from '@/components/limits/search-limit-notice'
 import { AiPaperCard } from './ai-paper-card'

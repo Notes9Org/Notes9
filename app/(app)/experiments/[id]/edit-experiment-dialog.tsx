@@ -28,7 +28,7 @@ import { countWordsFromHtml } from "@/components/ui/textarea-with-word-count"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 import { useRouter } from "next/navigation"
-import { Pencil, Loader2 } from "lucide-react"
+import { PencilSimple as Pencil, CircleNotch as Loader2 } from "@phosphor-icons/react/ssr"
 import { getUniqueNameErrorMessage } from "@/lib/unique-name-error"
 import { DATE_ORDER_ERROR, isEndDateBeforeStartDate } from "@/lib/date-order"
 

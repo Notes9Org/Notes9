@@ -3,7 +3,7 @@ import { requireUser } from "@/lib/auth/current-user"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
-import { FlaskConical, Calendar, User, FileText, ChevronDown, Plus, X } from 'lucide-react'
+import { Flask as FlaskConical, CalendarBlank as Calendar, User, FileText, CaretDown as ChevronDown, Plus, X } from "@phosphor-icons/react/ssr"
 import { cn } from "@/lib/utils"
 import { notFound } from 'next/navigation'
 import Link from 'next/link'

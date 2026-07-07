@@ -12,7 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
 import { ViewModeToggle } from "@/components/ui/view-mode-toggle"
-import { FileText, Grid3x3, List, ArrowUpRight, Trash2 } from "lucide-react"
+import { FileText, SquaresFour as Grid3x3, List, ArrowUpRight, Trash as Trash2 } from "@phosphor-icons/react/ssr"
 
 export interface PaperListItem {
   id: string

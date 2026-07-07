@@ -12,7 +12,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
-import { Flag, Loader2 } from "lucide-react"
+import { Flag, CircleNotch as Loader2 } from "@phosphor-icons/react/ssr"
 import { toast } from "sonner"
 import { useAuthUser } from "@/components/auth/auth-provider"
 

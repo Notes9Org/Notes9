@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
-import { Loader2, AlertCircle, Calendar, Clock, Globe } from "lucide-react"
+import { CircleNotch as Loader2, WarningCircle as AlertCircle, CalendarBlank as Calendar, Clock, Globe } from "@phosphor-icons/react/ssr"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"

@@ -4,7 +4,7 @@ import { Node, mergeAttributes } from "@tiptap/core"
 import { NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
-import { Expand, FileSpreadsheet, Minimize } from "lucide-react"
+import { ArrowsOut as Expand, FileText as FileSpreadsheet, ArrowsIn as Minimize } from "@phosphor-icons/react/ssr"
 import { UniverWorkbookView } from "@/components/spreadsheet/univer-workbook-view"
 import { scheduleMicrotask } from "@/components/spreadsheet/spreadsheet-univer-shared"
 

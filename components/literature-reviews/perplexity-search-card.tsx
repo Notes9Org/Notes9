@@ -3,7 +3,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { ExternalLink, Sparkles, Database, Plus, Check, X, Loader2 } from 'lucide-react';
+import { ArrowSquareOut as ExternalLink, Sparkle as Sparkles, Database, Plus, Check, X, CircleNotch as Loader2 } from "@phosphor-icons/react/ssr";
 import { memo, useState } from 'react';
 import { decodeHtmlEntities } from '@/lib/literature-abstract-display';
 import { MotionHoverCard } from './motion';

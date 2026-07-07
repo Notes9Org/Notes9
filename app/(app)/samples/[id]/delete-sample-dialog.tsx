@@ -15,7 +15,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Trash2 } from "lucide-react"
+import { Trash as Trash2 } from "@phosphor-icons/react/ssr"
 import { useToast } from "@/hooks/use-toast"
 
 export function DeleteSampleDialog({

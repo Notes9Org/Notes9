@@ -2,26 +2,8 @@
 
 import { useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
-import {
-  ChevronDown,
-  ChevronRight,
-  CheckCircle2,
-  AlertCircle,
-  Loader2,
-  Database,
-  FileText,
-  Globe,
-  ClipboardList,
-  Microscope,
-  FlaskConical,
-  MessageSquare,
-  BarChart2,
-  Archive,
-  BrainCircuit,
-  Network,
-  Wrench,
-  type LucideIcon,
-} from 'lucide-react';
+import { CaretDown as ChevronDown, CaretRight as ChevronRight, CheckCircle as CheckCircle2, WarningCircle as AlertCircle, CircleNotch as Loader2, Database, FileText, Globe, ClipboardText as ClipboardList, Microscope, Flask as FlaskConical, Chat as MessageSquare, ChartBar as BarChart2, Archive, Brain as BrainCircuit, Graph as Network, Wrench } from "@phosphor-icons/react/ssr"
+import type { Icon as LucideIcon } from "@phosphor-icons/react";
 import type { ToolCard } from '@/hooks/use-agent-stream';
 import { AgentRelationshipGraph, parseRelationshipGraph } from './agent-relationship-graph';
 

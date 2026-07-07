@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useMemo, useState, useEffect } from "react"
-import { AlertTriangle, CheckCircle2, Loader2, Upload } from "lucide-react"
+import { Warning as AlertTriangle, CheckCircle as CheckCircle2, CircleNotch as Loader2, UploadSimple as Upload } from "@phosphor-icons/react/ssr"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"

@@ -13,7 +13,7 @@ import {
   EmptyDescription,
   EmptyContent,
 } from "@/components/ui/empty"
-import { Plus, FileText, Grid3x3, List, PenBox, X } from "lucide-react"
+import { Plus, FileText, SquaresFour as Grid3x3, List, NotePencil as PenBox, X } from "@phosphor-icons/react/ssr"
 import Link from "next/link"
 import { ProtocolList } from "./protocol-list"
 import {

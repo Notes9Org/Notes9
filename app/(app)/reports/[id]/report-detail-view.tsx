@@ -16,15 +16,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { PageHeading } from "@/components/ui/page-heading"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import {
-  Calendar,
-  FileText,
-  User,
-  FlaskConical,
-  FolderOpen,
-  ArrowLeft,
-  Upload,
-} from "lucide-react"
+import { CalendarBlank as Calendar, FileText, User, Flask as FlaskConical, FolderOpen, ArrowLeft, UploadSimple as Upload } from "@phosphor-icons/react/ssr"
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 import { NoteExportMenu, NotePrintButton } from "@/components/note-export-menu"
 import { NoteImportButton } from "@/components/note-import-button"

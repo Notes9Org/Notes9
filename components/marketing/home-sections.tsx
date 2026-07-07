@@ -1,11 +1,5 @@
 import Link from "next/link"
-import {
-  ArrowRight,
-  Check,
-  GraduationCap,
-  Rocket,
-  ShieldCheck,
-} from "lucide-react"
+import { ArrowRight, Check, GraduationCap, Rocket, ShieldCheck } from "@phosphor-icons/react/ssr"
 
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"

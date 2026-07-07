@@ -26,46 +26,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 
-import {
-  Square,
-  ArrowUp,
-  History,
-  Maximize,
-  Minimize,
-  PanelLeft,
-  Plus,
-  Paperclip,
-  Globe,
-  MessageSquare,
-  NotebookPen,
-  PenBox,
-  MoreHorizontal,
-  Pin,
-  PinOff,
-  Pencil,
-  Check,
-  ChevronRight,
-  Folder,
-  FolderPlus,
-  FolderInput,
-  CheckSquare,
-  Search,
-  Trash2,
-  ChevronDown,
-  X,
-  Telescope,
-  Menu,
-  Sun,
-  Moon,
-  CircleHelp,
-  Mic,
-  BookOpen,
-  FlaskConical,
-  FolderOpen,
-  FileText,
-  Loader2,
-  AtSign,
-} from 'lucide-react';
+import { Square, ArrowUp, ClockCounterClockwise as History, ArrowsOut as Maximize, ArrowsIn as Minimize, SidebarSimple as PanelLeft, Plus, Paperclip, Globe, Chat as MessageSquare, NotePencil as NotebookPen, NotePencil as PenBox, DotsThree as MoreHorizontal, PushPin as Pin, PushPinSlash as PinOff, PencilSimple as Pencil, Check, CaretRight as ChevronRight, Folder, FolderPlus, FolderOpen as FolderInput, CheckSquare, MagnifyingGlass as Search, Trash as Trash2, CaretDown as ChevronDown, X, Binoculars as Telescope, List as Menu, Sun, Moon, Question as CircleHelp, Microphone as Mic, BookOpen, Flask as FlaskConical, FolderOpen, FileText, CircleNotch as Loader2, At as AtSign } from "@phosphor-icons/react/ssr";
 import { cn } from '@/lib/utils';
 import { recordRumEvent } from '@/lib/rum';
 import { AnalyticsEvent } from '@/lib/analytics/events';

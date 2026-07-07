@@ -3,7 +3,7 @@
 import { useMemo } from "react"
 import { usePathname } from "next/navigation"
 import { useRouter } from "next/navigation"
-import { Check, ChevronDown, Plus } from "lucide-react"
+import { Check, CaretDown as ChevronDown, Plus } from "@phosphor-icons/react/ssr"
 import {
   DropdownMenu,
   DropdownMenuContent,

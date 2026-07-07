@@ -18,22 +18,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
-import {
-  CheckCircle2,
-  Copy,
-  Download,
-  Loader2,
-  Maximize,
-  Minimize,
-  Palette,
-  Plus,
-  Save,
-  Search,
-  Tag,
-  Target,
-  Trash2,
-  X,
-} from "lucide-react"
+import { CheckCircle as CheckCircle2, Copy, DownloadSimple as Download, CircleNotch as Loader2, ArrowsOut as Maximize, ArrowsIn as Minimize, Palette, Plus, FloppyDisk as Save, MagnifyingGlass as Search, Tag, Target, Trash as Trash2, X } from "@phosphor-icons/react/ssr"
 import {
   alignDnaSequencesAdvanced,
   cleanDnaSequence,

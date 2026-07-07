@@ -4,7 +4,7 @@ import { SearchPaper } from '@/types/paper-search';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Download, ExternalLink, FileText, Lock, Unlock, ChevronDown, ChevronUp, Plus, Database, X, Loader2 } from 'lucide-react';
+import { DownloadSimple as Download, ArrowSquareOut as ExternalLink, FileText, Lock, LockOpen as Unlock, CaretDown as ChevronDown, CaretUp as ChevronUp, Plus, Database, X, CircleNotch as Loader2 } from "@phosphor-icons/react/ssr";
 import { memo, useState } from 'react';
 import { decodeHtmlEntities, formatLiteratureAbstractPlain } from '@/lib/literature-abstract-display';
 import { MotionHoverCard } from './motion';

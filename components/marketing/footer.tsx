@@ -1,6 +1,6 @@
 "use client"
 
-import { Instagram, Linkedin, Mail, MapPin, Youtube } from "lucide-react"
+import { InstagramLogo as Instagram, LinkedinLogo as Linkedin, Envelope as Mail, MapPin, YoutubeLogo as Youtube } from "@phosphor-icons/react/ssr"
 import Link from "next/link"
 import { Notes9Brand } from "@/components/brand/notes9-brand"
 

@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 import { requireUser } from "@/lib/auth/current-user"
 import { Button } from "@/components/ui/button"
 import { PageHeading } from "@/components/ui/page-heading"
-import { Plus } from 'lucide-react'
+import { Plus } from "@phosphor-icons/react/ssr"
 import Link from 'next/link'
 import { LiteratureTabs } from '@/components/literature-reviews/literature-tabs'
 import { MotionReveal } from "@/components/literature-reviews/motion"

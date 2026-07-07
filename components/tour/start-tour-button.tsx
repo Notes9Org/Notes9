@@ -1,6 +1,6 @@
 "use client"
 
-import { Compass } from "lucide-react"
+import { Compass } from "@phosphor-icons/react/ssr"
 import { Button } from "@/components/ui/button"
 import { requestStartTour } from "@/components/tour/app-tour"
 

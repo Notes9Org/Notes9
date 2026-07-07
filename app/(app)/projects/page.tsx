@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 import { requireUser } from "@/lib/auth/current-user"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Plus, FlaskConical, ClipboardList, NotebookPen, Sparkles } from 'lucide-react'
+import { Plus, Flask as FlaskConical, ClipboardText as ClipboardList, NotePencil as NotebookPen, Sparkle as Sparkles } from "@phosphor-icons/react/ssr"
 import Link from 'next/link'
 import { ProjectsPageContent } from './project-list'
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"

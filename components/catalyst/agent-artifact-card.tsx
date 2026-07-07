@@ -1,20 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  Download,
-  FileText,
-  FileSpreadsheet,
-  FileType2,
-  ImageIcon,
-  File as FileIcon,
-  Check,
-  FolderInput,
-  Eye,
-  Loader2,
-  ZoomIn,
-  Code2,
-} from 'lucide-react';
+import { DownloadSimple as Download, FileText, FileText as FileSpreadsheet, FileText as FileType2, Image as ImageIcon, File as FileIcon, Check, FolderOpen as FolderInput, Eye, CircleNotch as Loader2, MagnifyingGlassPlus as ZoomIn, Code as Code2 } from "@phosphor-icons/react/ssr";
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
 import {

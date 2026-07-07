@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useTransition, useCallback, useRef, type FormEvent, type KeyboardEvent } from "react"
 import { usePathname, useRouter } from "next/navigation"
-import { ArrowUp, Paperclip, Mic, X, FileText, ImageIcon, Globe } from "lucide-react"
+import { ArrowUp, Paperclip, Microphone as Mic, X, FileText, Image as ImageIcon, Globe } from "@phosphor-icons/react/ssr"
 import { Switch } from "@/components/ui/switch"
 import { AnimatePresence, motion } from "framer-motion"
 import { useProjectScope } from "@/contexts/project-scope-context"

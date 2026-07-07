@@ -1,27 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react"
-import {
-  X,
-  Loader2,
-  Check,
-  XIcon,
-  Eye,
-  FileText,
-  History,
-  ChevronDown,
-  CornerDownLeft,
-  Trash2,
-  Plus,
-  ArrowUp,
-  Sparkles,
-  MessageSquare,
-  BookOpen,
-  NotebookPen,
-  Minimize,
-  Maximize,
-  RotateCcw,
-} from "lucide-react"
+import { X, CircleNotch as Loader2, Check, X as XIcon, Eye, FileText, ClockCounterClockwise as History, CaretDown as ChevronDown, ArrowElbowDownLeft as CornerDownLeft, Trash as Trash2, Plus, ArrowUp, Sparkle as Sparkles, Chat as MessageSquare, BookOpen, NotePencil as NotebookPen, ArrowsIn as Minimize, ArrowsOut as Maximize, ArrowCounterClockwise as RotateCcw } from "@phosphor-icons/react/ssr"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { MarkdownRenderer } from "@/components/catalyst/markdown-renderer"

@@ -28,17 +28,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
-import {
-  Download,
-  Trash2,
-  FileText,
-  FileImage,
-  FileSpreadsheet,
-  File,
-  Eye,
-  Plus,
-  Loader2,
-} from "lucide-react"
+import { DownloadSimple as Download, Trash as Trash2, FileText, FileImage, FileText as FileSpreadsheet, File, Eye, Plus, CircleNotch as Loader2 } from "@phosphor-icons/react/ssr"
 import { UploadFileDialog } from "./upload-file-dialog"
 import {
   ExperimentDataTabularDialog,

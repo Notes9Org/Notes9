@@ -1,28 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type MouseEvent } from "react"
-import {
-  Activity,
-  ArrowDown,
-  ArrowUp,
-  Circle,
-  CheckCircle2,
-  ChevronRight,
-  Clock3,
-  ImagePlus,
-  Maximize,
-  Minimize,
-  Play,
-  RotateCcw,
-  ShieldCheck,
-  StickyNote,
-  Sparkles,
-  Square,
-  Trash2,
-  Upload,
-  ZoomIn,
-  ZoomOut,
-} from "lucide-react"
+import { Pulse as Activity, ArrowDown, ArrowUp, Circle, CheckCircle as CheckCircle2, CaretRight as ChevronRight, Clock as Clock3, ImageSquare as ImagePlus, ArrowsOut as Maximize, ArrowsIn as Minimize, Play, ArrowCounterClockwise as RotateCcw, ShieldCheck, Note as StickyNote, Sparkle as Sparkles, Square, Trash as Trash2, UploadSimple as Upload, MagnifyingGlassPlus as ZoomIn, MagnifyingGlassMinus as ZoomOut } from "@phosphor-icons/react/ssr"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"

@@ -15,7 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { PageHeading } from "@/components/ui/page-heading"
-import { ArrowLeft, Microscope, MapPin, Calendar, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, Microscope, MapPin, CalendarBlank as Calendar, Warning as AlertTriangle } from "@phosphor-icons/react/ssr"
 import Link from 'next/link'
 import { EquipmentActions } from './equipment-actions'
 

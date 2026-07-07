@@ -7,12 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import {
-  FileText,
-  BookOpen,
-  FolderOpen,
-  ScrollText,
-} from "lucide-react"
+import { FileText, BookOpen, FolderOpen, Scroll as ScrollText } from "@phosphor-icons/react/ssr"
 import { OrgSetupCTA } from "@/components/org/org-setup-cta"
 import {
   DashboardMyLab,

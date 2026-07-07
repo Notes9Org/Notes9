@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
-import { CheckCircle2, Pause, Play, Archive, Loader2, FileEdit, ChevronDown } from "lucide-react"
+import { CheckCircle as CheckCircle2, Pause, Play, Archive, CircleNotch as Loader2, NotePencil as FileEdit, CaretDown as ChevronDown } from "@phosphor-icons/react/ssr"
 
 interface ProjectStatusUpdateButtonsProps {
   projectId: string

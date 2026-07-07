@@ -46,7 +46,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { useToast } from "@/hooks/use-toast"
-import { CheckCircle2, ClipboardCheck, Loader2, Plus, Trash2 } from "lucide-react"
+import { CheckCircle as CheckCircle2, ClipboardText as ClipboardCheck, CircleNotch as Loader2, Plus, Trash as Trash2 } from "@phosphor-icons/react/ssr"
 
 export type SampleQcRecord = {
   id: string

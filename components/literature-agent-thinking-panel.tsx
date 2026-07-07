@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ChevronDown, Sparkles } from 'lucide-react';
+import { CaretDown as ChevronDown, Sparkle as Sparkles } from "@phosphor-icons/react/ssr";
 import { Button } from '@/components/ui/button';
 import {
   Collapsible,

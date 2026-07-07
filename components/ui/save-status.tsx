@@ -1,4 +1,4 @@
-import { Check, Cloud, CloudOff, Loader2 } from "lucide-react"
+import { Check, Cloud, CloudSlash as CloudOff, CircleNotch as Loader2 } from "@phosphor-icons/react/ssr"
 import { SaveStatus } from "@/hooks/use-auto-save"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"

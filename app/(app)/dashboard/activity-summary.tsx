@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useCallback, useRef } from "react"
-import { Activity } from "lucide-react"
+import { Pulse as Activity } from "@phosphor-icons/react/ssr"
 import { useAuthUser } from "@/components/auth/auth-provider"
 
 /** Per-user cache keys. Scoping by user id is required so that signing into a

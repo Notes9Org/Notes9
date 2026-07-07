@@ -10,7 +10,7 @@ import {
   type MouseEvent,
 } from "react"
 import { createPortal } from "react-dom"
-import { Shapes, Type, Trash2, X, Sparkles, Maximize, Minimize } from "lucide-react"
+import { Shapes, TextT as Type, Trash as Trash2, X, Sparkle as Sparkles, ArrowsOut as Maximize, ArrowsIn as Minimize } from "@phosphor-icons/react/ssr"
 import {
   AlertDialog,
   AlertDialogAction,

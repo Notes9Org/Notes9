@@ -1,6 +1,6 @@
 'use client';
 
-import { X, FileText, Image as ImageIcon, Loader2, FileVideo, FileAudio, FileSpreadsheet, FileArchive, FileCode, File } from 'lucide-react';
+import { X, FileText, Image as ImageIcon, CircleNotch as Loader2, FileVideo, FileAudio, FileText as FileSpreadsheet, FileZip as FileArchive, FileCode, File } from "@phosphor-icons/react/ssr";
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 

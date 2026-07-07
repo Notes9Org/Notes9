@@ -4,7 +4,7 @@ import { memo, useState, useDeferredValue } from 'react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Copy, Check, RefreshCw, ChevronDown, ChevronUp, FileText, FileImage, FileCode, FileArchive, FileAudio, FileVideo, FileSpreadsheet, File } from 'lucide-react';
+import { Copy, Check, ArrowsClockwise as RefreshCw, CaretDown as ChevronDown, CaretUp as ChevronUp, FileText, FileImage, FileCode, FileZip as FileArchive, FileAudio, FileVideo, FileText as FileSpreadsheet, File } from "@phosphor-icons/react/ssr";
 import type { Attachment } from './preview-attachment';
 import { cn } from '@/lib/utils';
 import { MarkdownRenderer } from './markdown-renderer';

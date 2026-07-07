@@ -7,14 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import {
-  Loader2,
-  MessageSquare,
-  PanelRightClose,
-  Send,
-  Sparkles,
-  X,
-} from "lucide-react"
+import { CircleNotch as Loader2, Chat as MessageSquare, SidebarSimple as PanelRightClose, PaperPlaneTilt as Send, Sparkle as Sparkles, X } from "@phosphor-icons/react/ssr"
 import type { LiteraturePaperItem } from "./protocol-literature-panel"
 import { cn } from "@/lib/utils"
 

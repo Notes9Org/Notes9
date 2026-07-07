@@ -12,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Send, Square, PanelLeftClose, PanelLeft, Globe, ChevronDown, Paperclip, Mic } from 'lucide-react';
+import { PaperPlaneTilt as Send, Square, SidebarSimple as PanelLeftClose, SidebarSimple as PanelLeft, Globe, CaretDown as ChevronDown, Paperclip, Microphone as Mic } from "@phosphor-icons/react/ssr";
 import { Switch } from '@/components/ui/switch';
 import { useChatSessions } from '@/hooks/use-chat-sessions';
 import { ChatHistory } from './chat-history';

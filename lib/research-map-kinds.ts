@@ -1,16 +1,5 @@
-import {
-  BookOpen,
-  Box,
-  ClipboardList,
-  Database,
-  FileBarChart,
-  FlaskConical,
-  FolderKanban,
-  NotebookPen,
-  PenLine,
-  TestTube,
-  type LucideIcon,
-} from "lucide-react"
+import { BookOpen, Cube as Box, ClipboardText as ClipboardList, Database, FileText as FileBarChart, Flask as FlaskConical, Kanban as FolderKanban, NotePencil as NotebookPen, PencilSimpleLine as PenLine, TestTube } from "@phosphor-icons/react/ssr"
+import type { Icon as LucideIcon } from "@phosphor-icons/react"
 import type { ResearchMapNodeKind } from "@/lib/research-map-types"
 
 /**

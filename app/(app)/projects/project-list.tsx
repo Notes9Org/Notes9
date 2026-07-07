@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Users, ArrowUpRight, Grid3x3, List, Plus, FlaskConical } from 'lucide-react'
+import { Users, ArrowUpRight, SquaresFour as Grid3x3, List, Plus, Flask as FlaskConical } from "@phosphor-icons/react/ssr"
 import { formatEntityTitle } from "@/lib/format-title"
 import {
   FILTER_ALL,

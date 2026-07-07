@@ -18,7 +18,7 @@ import { SidebarProvider, SidebarInset, useSidebar } from "@/components/ui/sideb
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { useResizable } from "@/hooks/use-resizable"
 import { cn } from "@/lib/utils"
-import { Menu, X, Sparkles, MessageSquare, ChevronRight, Sun, Moon, CircleHelp, Flag } from 'lucide-react'
+import { List as Menu, X, Sparkle as Sparkles, Chat as MessageSquare, CaretRight as ChevronRight, Sun, Moon, Question as CircleHelp, Flag } from "@phosphor-icons/react/ssr"
 import { PageTransition } from "./page-transition"
 import { useTheme } from "next-themes"
 import { useMediaQuery } from "@/hooks/use-media-query"

@@ -10,7 +10,7 @@ import {
 } from "@/lib/spreadsheet-workbook"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
-import { FileSpreadsheet, Loader2, Maximize, Minimize, X } from "lucide-react"
+import { FileText as FileSpreadsheet, CircleNotch as Loader2, ArrowsOut as Maximize, ArrowsIn as Minimize, X } from "@phosphor-icons/react/ssr"
 import { appApiUrl } from "@/lib/app-api-url"
 
 export function isTabularExperimentFile(file: {

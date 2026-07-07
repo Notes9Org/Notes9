@@ -29,7 +29,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
-import { ChevronLeft, Upload, FileStack, GitCompare, List, Plus } from "lucide-react"
+import { CaretLeft as ChevronLeft, UploadSimple as Upload, Files as FileStack, GitDiff as GitCompare, List, Plus } from "@phosphor-icons/react/ssr"
 import { ProtocolChangeApprovalBar } from "./protocol-change-approval"
 import { ProtocolSiblingsList } from "./protocol-siblings-list"
 // ProtocolAiSidechat + ProtocolLiteraturePanel are no longer mounted in edit mode.

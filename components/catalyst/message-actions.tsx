@@ -2,14 +2,7 @@
 
 import { memo, useState, type ComponentProps, type ReactNode } from 'react';
 import { toast } from 'sonner';
-import {
-  Copy,
-  Pencil,
-  ThumbsUp,
-  ThumbsDown,
-  RotateCcw,
-  Check,
-} from 'lucide-react';
+import { Copy, PencilSimple as Pencil, ThumbsUp, ThumbsDown, ArrowCounterClockwise as RotateCcw, Check } from "@phosphor-icons/react/ssr";
 import { Button } from '@/components/ui/button';
 import {
   Tooltip,

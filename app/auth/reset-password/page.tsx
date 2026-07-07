@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label"
 import Link from "next/link"
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useState, useEffect, Suspense } from "react"
-import { ArrowLeft, CheckCircle } from "lucide-react"
+import { ArrowLeft, CheckCircle } from "@phosphor-icons/react/ssr"
 import { Notes9Brand } from "@/components/brand/notes9-brand"
 
 function ResetPasswordForm() {

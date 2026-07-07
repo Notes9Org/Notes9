@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ClipboardList, Loader2, MoreVertical, Pencil, Plus, Trash2 } from "lucide-react"
+import { ClipboardText as ClipboardList, CircleNotch as Loader2, DotsThreeVertical as MoreVertical, PencilSimple as Pencil, Plus, Trash as Trash2 } from "@phosphor-icons/react/ssr"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import {

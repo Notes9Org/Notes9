@@ -3,7 +3,7 @@
 import { useRef } from "react"
 import Link from "next/link"
 import { motion, useScroll, useTransform } from "framer-motion"
-import { ArrowRight, Play } from "lucide-react"
+import { ArrowRight, Play } from "@phosphor-icons/react/ssr"
 import { Button } from "@/components/ui/button"
 import { HeroSequence } from "@/components/marketing/hero-sequence"
 import { PretextReveal } from "@/components/ui/fluid-text"

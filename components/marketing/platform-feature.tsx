@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils"
 import { motion } from "framer-motion"
-import { LucideIcon } from "lucide-react"
+import type { Icon as LucideIcon } from "@phosphor-icons/react"
 
 interface FeaturePoint {
     icon: LucideIcon

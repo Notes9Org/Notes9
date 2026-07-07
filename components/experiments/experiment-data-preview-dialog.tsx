@@ -9,17 +9,7 @@ import { USER_STORAGE_BUCKET } from "@/lib/user-storage-bucket"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import { sanitizeHtml } from "@/lib/sanitize-html"
-import {
-  Download,
-  ExternalLink,
-  File as FileIcon,
-  FileImage,
-  FileText,
-  Loader2,
-  Maximize,
-  Minimize,
-  X,
-} from "lucide-react"
+import { DownloadSimple as Download, ArrowSquareOut as ExternalLink, File as FileIcon, FileImage, FileText, CircleNotch as Loader2, ArrowsOut as Maximize, ArrowsIn as Minimize, X } from "@phosphor-icons/react/ssr"
 
 type PreviewKind = "image" | "tiff" | "pdf" | "docx" | "text" | "unsupported"
 

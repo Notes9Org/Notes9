@@ -12,14 +12,16 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Tri-font system.
-     - body:    IBM Plex Sans     (long-form, UI labels, controls)
-     - heading: Familjen Grotesk  (every h1-h6 inside the app)
-     - display: IBM Plex Serif    (hero numbers, editorial titles, empty-state headers)
-     Variables come from next/font in app/layout.tsx. */
-  --font-family-body: var(--font-ibm-sans), "IBM Plex Sans", system-ui, sans-serif;
-  --font-family-heading: var(--font-familjen), "Familjen Grotesk", system-ui, sans-serif;
-  --font-family-display: var(--font-ibm-serif), "IBM Plex Serif", ui-serif, Georgia, serif;
+  /* Tri-font system — journal-grounded (Nature/Elsevier/Cell). See docs/UI_UX_REVAMP_PLAN.md §3.1.
+     - body:    Merriweather Sans  (Nature's web UI face; long-form, UI labels, controls, h1-h6)
+     - heading: Merriweather Sans  (headings stay the humanist sans for dense-UI legibility)
+     - display: Source Serif 4     (scientific-publishing serif: page titles, hero numbers, empty states, editor reading)
+     - mono:    IBM Plex Mono      (sequences, sample IDs, counts, measurements)
+     Faces load via the Google Fonts <link> in app/layout.tsx; the legacy var names
+     (--font-ibm-sans etc.) are retained but now resolve to the faces above. */
+  --font-family-body: var(--font-ibm-sans), "Merriweather Sans", system-ui, sans-serif;
+  --font-family-heading: var(--font-familjen), "Merriweather Sans", system-ui, sans-serif;
+  --font-family-display: var(--font-ibm-serif), "Source Serif 4", ui-serif, Georgia, serif;
   --font-size-xs: 0.75rem;
   --font-size-sm: 0.875rem;
   --font-size-base: 1rem;
@@ -149,18 +151,19 @@
 }
 
 @theme inline {
-  /* Tailwind tokens.
-     - font-sans    → IBM Plex Sans     (body default)
-     - font-heading → Familjen Grotesk  (use .font-heading utility on H1-H6)
-     - font-serif   → IBM Plex Serif    (display face — exposed as `serif` so
-                                          existing `font-serif` callsites in
-                                          marketing pick it up automatically)
-     - font-display → IBM Plex Serif    (explicit alias for product surfaces) */
-  --font-sans: var(--font-ibm-sans), "IBM Plex Sans", system-ui, sans-serif;
-  --font-mono: var(--font-jetbrains-mono), 'Monaco', 'Courier New', monospace;
-  --font-serif: var(--font-ibm-serif), "IBM Plex Serif", ui-serif, Georgia, serif;
-  --font-display: var(--font-ibm-serif), "IBM Plex Serif", ui-serif, Georgia, serif;
-  --font-heading: var(--font-familjen), "Familjen Grotesk", system-ui, sans-serif;
+  /* Tailwind tokens (journal-grounded — see docs/UI_UX_REVAMP_PLAN.md §3.1).
+     - font-sans    → Merriweather Sans  (body default)
+     - font-heading → Merriweather Sans  (.font-heading utility)
+     - font-serif   → Source Serif 4     (display face — exposed as `serif` so
+                                          existing `font-serif` callsites pick it up.
+                                          NOTE: marketing font-serif text now renders
+                                          Source Serif 4; review in the marketing track.)
+     - font-display → Source Serif 4     (explicit alias for product surfaces) */
+  --font-sans: var(--font-ibm-sans), "Merriweather Sans", system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), "IBM Plex Mono", 'Monaco', 'Courier New', monospace;
+  --font-serif: var(--font-ibm-serif), "Source Serif 4", ui-serif, Georgia, serif;
+  --font-display: var(--font-ibm-serif), "Source Serif 4", ui-serif, Georgia, serif;
+  --font-heading: var(--font-familjen), "Merriweather Sans", system-ui, sans-serif;
 
   /* Sub-xs font scale for dense badges, hotkey labels, sequence viewer ticks.
      Use these tokens instead of arbitrary pixel values in className strings. */

@@ -6,7 +6,7 @@ import Link from "next/link"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { FileText, Plus, Trash2, ArrowUpRight, Sparkles } from "lucide-react"
+import { FileText, Plus, Trash as Trash2, ArrowUpRight, Sparkle as Sparkles } from "@phosphor-icons/react/ssr"
 import {
   Table,
   TableBody,

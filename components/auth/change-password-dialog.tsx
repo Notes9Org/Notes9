@@ -15,7 +15,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Eye, EyeOff } from "lucide-react"
+import { Eye, EyeSlash as EyeOff } from "@phosphor-icons/react/ssr"
 import { useToast } from "@/hooks/use-toast"
 
 interface ChangePasswordDialogProps {

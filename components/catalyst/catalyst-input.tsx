@@ -1,15 +1,7 @@
 'use client';
 
 import { useRef, useEffect, useState, useCallback, type ChangeEvent } from 'react';
-import {
-  ArrowUp,
-  Square,
-  Paperclip,
-  Globe,
-  MessageSquare,
-  NotebookPen,
-  Mic,
-} from 'lucide-react';
+import { ArrowUp, Square, Paperclip, Globe, Chat as MessageSquare, NotePencil as NotebookPen, Microphone as Mic } from "@phosphor-icons/react/ssr";
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';

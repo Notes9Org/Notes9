@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Atom, ChevronRight } from 'lucide-react';
+import { Atom, CaretRight as ChevronRight } from "@phosphor-icons/react/ssr";
 import { cn } from '@/lib/utils';
 
 interface AgentReasoningPanelProps {

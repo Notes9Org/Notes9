@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
 import { useToast } from "@/hooks/use-toast"
-import { AlertCircle, CheckCircle2, Mail } from "lucide-react"
+import { WarningCircle as AlertCircle, CheckCircle as CheckCircle2, Envelope as Mail } from "@phosphor-icons/react/ssr"
 import { Notes9Brand } from "@/components/brand/notes9-brand"
 
 type InvitationDetails = {

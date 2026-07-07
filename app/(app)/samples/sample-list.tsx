@@ -26,7 +26,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ViewModeToggle } from "@/components/ui/view-mode-toggle"
-import { TestTube, Package, ArrowUpRight, Grid3x3, List, Trash2 } from "lucide-react"
+import { TestTube, Package, ArrowUpRight, SquaresFour as Grid3x3, List, Trash as Trash2 } from "@phosphor-icons/react/ssr"
 import Link from "next/link"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"

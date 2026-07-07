@@ -11,7 +11,7 @@ import rehypeCitations from '@/lib/rehype-citations';
 import { parseCitationMeta, correctAcademicType } from '@/lib/citation-meta';
 import { resolveTitleFromId, isPlaceholderTitle } from '@/lib/citation-title';
 import { useSourceNavigation } from '@/hooks/use-source-navigation';
-import { Calendar, User } from 'lucide-react';
+import { CalendarBlank as Calendar, User } from "@phosphor-icons/react/ssr";
 import { useRouter } from 'next/navigation';
 import type { CitationsManifest } from '@/hooks/use-agent-stream';
 import {

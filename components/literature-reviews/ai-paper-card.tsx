@@ -4,7 +4,7 @@ import { memo, useCallback, useEffect, useMemo, useState, type ReactNode } from 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { BookOpen, BookmarkCheck, BookmarkPlus, ExternalLink, FileText, Loader2, MessageCircle, Quote, ScrollText, Unlock } from 'lucide-react'
+import { BookOpen, Bookmark as BookmarkCheck, Bookmark as BookmarkPlus, ArrowSquareOut as ExternalLink, FileText, CircleNotch as Loader2, ChatCircle as MessageCircle, Quotes as Quote, Scroll as ScrollText, LockOpen as Unlock } from "@phosphor-icons/react/ssr"
 import { stripHtmlToText, formatLiteratureAbstractPlain } from '@/lib/literature-abstract-display'
 import { cn } from '@/lib/utils'
 import { savePaperToLibrary } from '@/app/(app)/literature-reviews/actions'

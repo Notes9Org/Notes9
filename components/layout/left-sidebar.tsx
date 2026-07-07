@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Home, Folder, FlaskConical, TestTube, Microscope, FileText, BarChart3, Settings, Search, Plus, ChevronRight, X } from 'lucide-react'
+import { House as Home, Folder, Flask as FlaskConical, TestTube, Microscope, FileText, ChartBar as BarChart3, Gear as Settings, MagnifyingGlass as Search, Plus, CaretRight as ChevronRight, X } from "@phosphor-icons/react/ssr"
 import { ClipboardInfoIcon } from "@/components/ui/clipboard-info-icon"
 import { cn } from "@/lib/utils"
 import { formatEntityTitle } from "@/lib/format-title"

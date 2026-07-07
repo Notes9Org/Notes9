@@ -9,15 +9,7 @@ import { TableHeader } from '@tiptap/extension-table-header'
 import { TableCell } from '@tiptap/extension-table-cell'
 import { Placeholder } from '@tiptap/extension-placeholder'
 import { Button } from '@/components/ui/button'
-import {
-  Bold,
-  Italic,
-  List,
-  ListOrdered,
-  Table as TableIcon,
-  Minus,
-  Plus
-} from 'lucide-react'
+import { TextB as Bold, TextItalic as Italic, List, ListNumbers as ListOrdered, Table as TableIcon, Minus, Plus } from "@phosphor-icons/react/ssr"
 import { cn } from '@/lib/utils'
 import '@/styles/rich-text-editor.css'
 

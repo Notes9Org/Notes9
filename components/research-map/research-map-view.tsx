@@ -49,7 +49,7 @@ import {
 import { cn } from "@/lib/utils"
 import { recordRumEvent } from "@/lib/rum"
 import { sortByRecentProjectOrder } from "@/lib/recent-projects"
-import { Loader2 } from "lucide-react"
+import { CircleNotch as Loader2 } from "@phosphor-icons/react/ssr"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"

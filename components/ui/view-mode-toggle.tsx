@@ -1,6 +1,6 @@
 "use client"
 
-import { Grid3x3, List } from 'lucide-react'
+import { SquaresFour as Grid3x3, List } from "@phosphor-icons/react/ssr"
 
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'

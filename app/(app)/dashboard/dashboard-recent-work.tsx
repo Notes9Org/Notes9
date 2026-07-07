@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { FlaskConical, FolderOpen, ArrowRight } from "lucide-react"
+import { Flask as FlaskConical, FolderOpen, ArrowRight } from "@phosphor-icons/react/ssr"
 import { getRecentProjectEntries } from "@/lib/recent-projects"
 
 type ActiveExperiment = {

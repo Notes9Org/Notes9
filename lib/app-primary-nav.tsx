@@ -1,11 +1,5 @@
 import type { ComponentType } from "react"
-import {
-  BookOpen,
-  Folder,
-  Home,
-  Network,
-  Sparkles,
-} from "lucide-react"
+import { BookOpen, Folder, House as Home, Graph as Network, Sparkle as Sparkles } from "@phosphor-icons/react/ssr"
 
 /** Accepts both Lucide icons and our custom SVG-based wrapper icons. */
 type NavIcon = ComponentType<{ className?: string }>

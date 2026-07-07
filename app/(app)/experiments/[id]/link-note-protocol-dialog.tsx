@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
-import { Plus, Loader2 } from "lucide-react"
+import { Plus, CircleNotch as Loader2 } from "@phosphor-icons/react/ssr"
 
 interface Protocol {
     id: string

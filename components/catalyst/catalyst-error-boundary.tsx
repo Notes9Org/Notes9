@@ -1,7 +1,7 @@
 'use client';
 
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { Warning as AlertTriangle, ArrowsClockwise as RefreshCw } from "@phosphor-icons/react/ssr";
 import { Button } from '@/components/ui/button';
 import { recordRumEvent } from '@/lib/rum';
 

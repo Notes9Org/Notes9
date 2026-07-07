@@ -11,7 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { MoreHorizontal, FileCheck, FileEdit, FileDown } from "lucide-react"
+import { DotsThree as MoreHorizontal, FileText as FileCheck, NotePencil as FileEdit, FileArrowDown as FileDown } from "@phosphor-icons/react/ssr"
 import { toast } from "sonner"
 
 interface PaperActionsProps {

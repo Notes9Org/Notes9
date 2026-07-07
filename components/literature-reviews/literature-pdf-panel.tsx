@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
-import { Download, Loader2, PanelRightOpen } from "lucide-react"
+import { DownloadSimple as Download, CircleNotch as Loader2, SidebarSimple as PanelRightOpen } from "@phosphor-icons/react/ssr"
 import { openCatalystPanel } from '@/lib/catalyst-launch'
 
 import { LiteraturePdfAnnotationSidebar } from "@/components/literature-reviews/literature-pdf-annotation-sidebar"

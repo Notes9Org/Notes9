@@ -2,7 +2,8 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { ArrowRight, LucideIcon } from "lucide-react"
+import { ArrowRight } from "@phosphor-icons/react/ssr"
+import type { Icon as LucideIcon } from "@phosphor-icons/react"
 
 import { motion } from "framer-motion"
 

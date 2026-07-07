@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { Braces, FileCode, FileDown, FileText, NotebookPen, Printer, Upload, Download, Loader2 } from "lucide-react"
+import { BracketsCurly as Braces, FileCode, FileArrowDown as FileDown, FileText, NotePencil as NotebookPen, Printer, UploadSimple as Upload, DownloadSimple as Download, CircleNotch as Loader2 } from "@phosphor-icons/react/ssr"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,

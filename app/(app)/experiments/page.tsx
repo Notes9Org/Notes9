@@ -9,7 +9,7 @@ import {
   EmptyDescription,
   EmptyContent,
 } from "@/components/ui/empty"
-import { FlaskConical, Plus } from 'lucide-react'
+import { Flask as FlaskConical, Plus } from "@phosphor-icons/react/ssr"
 import Link from 'next/link'
 import { ExperimentsPageContent } from './experiment-list'
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"

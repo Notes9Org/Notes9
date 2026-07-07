@@ -1,15 +1,7 @@
 import type { ReactNode } from "react"
 import Link from "next/link"
-import type { LucideIcon } from "lucide-react"
-import {
-  BookOpen,
-  Database,
-  FlaskConical,
-  PenLine,
-  BarChart3,
-  ArrowRight,
-  Sparkles,
-} from "lucide-react"
+import type { Icon as LucideIcon } from "@phosphor-icons/react"
+import { BookOpen, Database, Flask as FlaskConical, PencilSimpleLine as PenLine, ChartBar as BarChart3, ArrowRight, Sparkle as Sparkles } from "@phosphor-icons/react/ssr"
 import { Button } from "@/components/ui/button"
 
 export type ProjectWorkspaceLiterature = { id: string; title: string; status: string | null }

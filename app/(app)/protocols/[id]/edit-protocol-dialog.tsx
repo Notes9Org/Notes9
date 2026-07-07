@@ -26,12 +26,12 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { Pencil, Plus } from "lucide-react"
+import { PencilSimple as Pencil, Plus } from "@phosphor-icons/react/ssr"
 import { useToast } from "@/hooks/use-toast"
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 import { NoteExportMenu, NotePrintButton } from "@/components/note-export-menu"
 import { NoteImportButton } from "@/components/note-import-button"
-import { Upload } from "lucide-react"
+import { UploadSimple as Upload } from "@phosphor-icons/react/ssr"
 
 const PROTOCOL_CATEGORIES = [
   "Sample Preparation",

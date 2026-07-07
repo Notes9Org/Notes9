@@ -16,7 +16,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react'
-import { Info, Clock, Zap, Cloud, File, MessageCircle, Calendar } from 'lucide-react'
+import { Info, Clock, Lightning as Zap, Cloud, File, ChatCircle as MessageCircle, CalendarBlank as Calendar } from "@phosphor-icons/react/ssr"
 import { cn } from '@/lib/utils'
 import type { LimitMessage, LimitSeverity } from '@/lib/limits/messages'
 

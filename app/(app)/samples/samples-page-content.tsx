@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from "react"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Plus, Package, Grid3x3, List, Dna, Atom, SearchX } from "lucide-react"
+import { Plus, Package, SquaresFour as Grid3x3, List, Dna, Atom, MagnifyingGlass as SearchX } from "@phosphor-icons/react/ssr"
 import Link from "next/link"
 import { SampleList } from "./sample-list"
 import {

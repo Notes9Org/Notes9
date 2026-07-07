@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { Building2, Users, Shield, Mail, Settings, UserPlus } from "lucide-react"
+import { Buildings as Building2, Users, Shield, Envelope as Mail, Gear as Settings, UserPlus } from "@phosphor-icons/react/ssr"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"

@@ -4,8 +4,8 @@ import { useRef } from "react"
 import Image from "next/image"
 import { useTheme } from "next-themes"
 import { motion, useScroll, useTransform, useMotionValue, useSpring, useMotionTemplate } from "framer-motion"
-import { BookOpen, ClipboardList, PenLine } from "lucide-react"
-import type { LucideIcon } from "lucide-react"
+import { BookOpen, ClipboardText as ClipboardList, PencilSimpleLine as PenLine } from "@phosphor-icons/react/ssr"
+import type { Icon as LucideIcon } from "@phosphor-icons/react"
 import { resolveDemoScreenshot, useStableDemoTheme } from "@/components/marketing/demo-asset"
 
 interface Feature {

@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
 import { useMediaQuery } from "@/hooks/use-media-query"
-import { FileText, ChevronLeft, List, Loader2, Plus, MoreVertical, Trash2, Pencil } from "lucide-react"
+import { FileText, CaretLeft as ChevronLeft, List, CircleNotch as Loader2, Plus, DotsThreeVertical as MoreVertical, Trash as Trash2, PencilSimple as Pencil } from "@phosphor-icons/react/ssr"
 import { cn } from "@/lib/utils"
 import { PaperWorkspace } from "../paper-workspace"
 import {

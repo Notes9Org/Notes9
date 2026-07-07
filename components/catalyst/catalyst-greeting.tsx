@@ -1,7 +1,7 @@
 'use client';
 
-import { ClipboardList, FileText, FlaskConical, LineChart } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { ClipboardText as ClipboardList, FileText, Flask as FlaskConical, ChartLine as LineChart } from "@phosphor-icons/react/ssr";
+import type { Icon as LucideIcon } from "@phosphor-icons/react";
 
 import { IceMascot } from '@/components/ui/ice-mascot';
 

@@ -1,20 +1,5 @@
-import {
-  Atom,
-  BarChart3,
-  BookOpen,
-  Calculator,
-  Dna,
-  FileSpreadsheet,
-  FileText,
-  FlaskConical,
-  FolderOpen,
-  Image as ImageIcon,
-  Microscope,
-  Presentation,
-  Sigma,
-  Workflow,
-  type LucideIcon,
-} from 'lucide-react';
+import { Atom, ChartBar as BarChart3, BookOpen, Calculator, Dna, FileText as FileSpreadsheet, FileText, Flask as FlaskConical, FolderOpen, Image as ImageIcon, Microscope, Presentation, Sigma, FlowArrow as Workflow } from "@phosphor-icons/react/ssr"
+import type { Icon as LucideIcon } from "@phosphor-icons/react";
 
 export interface ThinkingContext {
   /** Contextual progress label, e.g. "Reviewing the literature…". */

@@ -4,28 +4,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import Link, { useLinkStatus } from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import Image from "next/image"
-import {
-  ChevronDown,
-  ChevronLeft,
-  ChevronUp,
-  FlaskConical,
-  Folder,
-  Loader2,
-  FolderOpen,
-  MoreHorizontal,
-  NotebookPen,
-  Package,
-  PanelLeft,
-  Plus,
-  Search,
-  Settings,
-  TestTube,
-  User2,
-  X as XIcon,
-  Database,
-  FileText,
-  FileEdit,
-} from 'lucide-react'
+import { CaretDown as ChevronDown, CaretLeft as ChevronLeft, CaretUp as ChevronUp, Flask as FlaskConical, Folder, FolderOpen, DotsThree as MoreHorizontal, NotePencil as NotebookPen, Package, SidebarSimple as PanelLeft, Plus, MagnifyingGlass as Search, Gear as Settings, TestTube, User as User2, X as XIcon, Database, FileText, NotePencil as FileEdit, CircleNotch as Loader2 } from "@phosphor-icons/react/ssr"
 import {
   Sidebar,
   SidebarContent,

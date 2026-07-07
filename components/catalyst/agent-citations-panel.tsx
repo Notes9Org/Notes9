@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { Streamdown } from 'streamdown';
-import { BookOpen, Calendar, ChevronDown, FolderOpen, Globe, MapPin, ScanSearch, User } from 'lucide-react';
+import { BookOpen, CalendarBlank as Calendar, CaretDown as ChevronDown, FolderOpen, Globe, MapPin, Scan as ScanSearch, User } from "@phosphor-icons/react/ssr";
 import { Button } from '@/components/ui/button';
 import {
   Collapsible,

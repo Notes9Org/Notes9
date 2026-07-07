@@ -8,19 +8,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import {
-  Calendar,
-  Code2,
-  FileSpreadsheet,
-  FileText,
-  FileType2,
-  FolderOpen,
-  Image as ImageIcon,
-  Mail,
-  MessageSquareText,
-  Presentation,
-  StickyNote,
-} from "lucide-react"
+import { CalendarBlank as Calendar, Code as Code2, FileText as FileSpreadsheet, FileText, FileText as FileType2, FolderOpen, Image as ImageIcon, Envelope as Mail, ChatText as MessageSquareText, Presentation, Note as StickyNote } from "@phosphor-icons/react/ssr"
 import {
   motion,
   useAnimationControls,

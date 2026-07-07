@@ -1,7 +1,7 @@
 "use client"
 
 import { memo, useCallback } from "react"
-import { Highlighter, Loader2, MessageSquareText, StickyNote, Trash2, X } from "lucide-react"
+import { HighlighterCircle as Highlighter, CircleNotch as Loader2, ChatText as MessageSquareText, Note as StickyNote, Trash as Trash2, X } from "@phosphor-icons/react/ssr"
 
 import { MotionItem, MotionList } from "@/components/literature-reviews/motion"
 import { Button } from "@/components/ui/button"

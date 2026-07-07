@@ -33,7 +33,7 @@ import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 import { Card, CardContent } from "@/components/ui/card"
 import { NoteExportMenu, NotePrintButton } from "@/components/note-export-menu"
 import { NoteImportButton } from "@/components/note-import-button"
-import { Upload, FlaskConical, FolderOpen, History, Plus, Save } from "lucide-react"
+import { UploadSimple as Upload, Flask as FlaskConical, FolderOpen, ClockCounterClockwise as History, Plus, FloppyDisk as Save } from "@phosphor-icons/react/ssr"
 import { ProtocolDesignMode } from "@/components/protocols/protocol-design-mode"
 import {
   DOCUMENT_HIGHLIGHT_EVENT,

@@ -32,23 +32,7 @@ import { useAutoSave } from "@/hooks/use-auto-save"
 import { useContentDiffs } from "@/hooks/use-content-diffs"
 import { useDocumentVersions, type DocumentVersion } from "@/hooks/use-document-versions"
 import { LabNoteVersionsDialog } from "@/components/lab-notes/lab-note-versions-dialog"
-import {
-  Plus,
-  NotebookPen,
-  FileCode,
-  Globe,
-  Loader2,
-  ChevronLeft,
-  MoreVertical,
-  Trash2,
-  List,
-  Pencil,
-  X,
-  GitCompare,
-  History,
-  MessageSquare,
-  FileDown,
-} from "lucide-react"
+import { Plus, NotePencil as NotebookPen, FileCode, Globe, CircleNotch as Loader2, CaretLeft as ChevronLeft, DotsThreeVertical as MoreVertical, Trash as Trash2, List, PencilSimple as Pencil, X, GitDiff as GitCompare, ClockCounterClockwise as History, Chat as MessageSquare, FileArrowDown as FileDown } from "@phosphor-icons/react/ssr"
 import {
   Table,
   TableBody,

@@ -1,6 +1,6 @@
 'use client';
 
-import { Square } from 'lucide-react';
+import { Square } from "@phosphor-icons/react/ssr";
 import { cn } from '@/lib/utils';
 
 interface AgentStopButtonProps {

@@ -28,25 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import {
-  ArrowLeft,
-  ArrowRight,
-  FileText,
-  FolderOpen,
-  FlaskConical,
-  Pencil,
-  X,
-  ChevronDown,
-  ChevronUp,
-  BookOpen,
-  PanelLeft,
-  PanelRight,
-  Sparkles,
-  FilePlus,
-  Upload,
-  Loader2,
-  Plus,
-} from "lucide-react"
+import { ArrowLeft, ArrowRight, FileText, FolderOpen, Flask as FlaskConical, PencilSimple as Pencil, X, CaretDown as ChevronDown, CaretUp as ChevronUp, BookOpen, SidebarSimple as PanelLeft, SidebarSimple as PanelRight, Sparkle as Sparkles, FilePlus, UploadSimple as Upload, CircleNotch as Loader2, Plus } from "@phosphor-icons/react/ssr"
 import Link from "next/link"
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 import { NoteExportMenu, NotePrintButton } from "@/components/note-export-menu"

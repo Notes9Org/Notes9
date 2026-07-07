@@ -5,7 +5,7 @@ import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Plus } from 'lucide-react'
+import { Plus } from "@phosphor-icons/react/ssr"
 import { HtmlContent } from '@/components/html-content'
 import { LabNotesTab } from './lab-notes-tab'
 import { DataFilesTab } from './data-files-tab'
@@ -16,7 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 import { useToast } from "@/hooks/use-toast"
 import { createClient } from "@/lib/supabase/client"
-import { Loader2, Trash2 } from "lucide-react"
+import { CircleNotch as Loader2, Trash as Trash2 } from "@phosphor-icons/react/ssr"
 import Link from 'next/link'
 
 interface ProtocolRef {

@@ -9,7 +9,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
-import { Compass } from "lucide-react"
+import { Compass } from "@phosphor-icons/react/ssr"
 
 export default function NotFound() {
   return (

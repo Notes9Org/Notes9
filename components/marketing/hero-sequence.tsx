@@ -13,7 +13,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { Check, Clock, CornerDownLeft, MousePointer2, Quote, RotateCcw } from "lucide-react"
+import { Check, Clock, ArrowElbowDownLeft as CornerDownLeft, Cursor as MousePointer2, Quotes as Quote, ArrowCounterClockwise as RotateCcw } from "@phosphor-icons/react/ssr"
 import { ConnectedResearchSystemDiagram } from "@/components/marketing/connected-research-system-diagram"
 
 const QUERY =
