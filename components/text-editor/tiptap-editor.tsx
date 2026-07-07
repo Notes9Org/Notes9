@@ -2255,6 +2255,24 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
       if (commentsToggleRef) commentsToggleRef.current = null
     }
   }, [commentsToggleRef])
+  // The comments sidebar and the citation sidebar are both right-side overlays,
+  // so they must be mutually exclusive or they overlap. Rather than patch every
+  // open path (the comments toggle + the several citation-open call sites), this
+  // single guard enforces the invariant: when both end up open, keep the one the
+  // user just opened and close the one that was already open.
+  const prevRightPanelsRef = useRef({ comments: false, citation: false })
+  useEffect(() => {
+    if (commentsSidebarOpen && citationModalOpen) {
+      if (prevRightPanelsRef.current.comments) {
+        // comments was already open → the citation sidebar is the new one; close comments.
+        setCommentsSidebarOpen(false)
+      } else {
+        // comments just opened (or both opened at once) → close the citation sidebar.
+        setCitationModalOpen(false)
+      }
+    }
+    prevRightPanelsRef.current = { comments: commentsSidebarOpen, citation: citationModalOpen }
+  }, [commentsSidebarOpen, citationModalOpen])
   /* State merge: keeping activeCommentData from origin */
   const [activeCommentData, setActiveCommentData] = useState<{ author: string; content: string; createdAt: number; id: string; rect: DOMRect } | null>(null)
   const [, setToolbarSyncTick] = useState(0)
