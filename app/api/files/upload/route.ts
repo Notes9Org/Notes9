@@ -195,9 +195,20 @@ export async function POST(request: Request) {
             orphan_object_removed: removed,
           }),
         );
-        attachmentWarning = removed
-          ? "Upload could not be registered and was removed. Please try attaching the file again."
-          : "File uploaded but could not be registered for AI access. The assistant may not be able to read it.";
+        if (removed) {
+          // The object is gone, so any signed URL we'd return is dead. Fail the
+          // request so the client drops the attachment instead of keeping a chip
+          // that points at nothing.
+          return NextResponse.json(
+            {
+              error:
+                "Upload could not be registered and was removed. Please try attaching the file again.",
+            },
+            { status: 500 },
+          );
+        }
+        attachmentWarning =
+          "File uploaded but could not be registered for AI access. The assistant may not be able to read it.";
       } else {
         chatAttachmentId = attRow?.id ?? null;
       }
