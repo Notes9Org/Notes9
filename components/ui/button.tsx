@@ -7,7 +7,9 @@ import { cn } from "@/lib/utils"
 const buttonVariants = cva(
   // `n9-press` supplies the unified token-driven transition (color/bg/border/shadow +
   // an active scale press) and is reduced-motion-safe; it replaces the old transition-colors.
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium n9-press disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
+  // Icons scale up on hover and press in on click so every button reads as interactive
+  // (reduced-motion users get the color changes without the movement).
+  "group/btn inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium n9-press disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 [&_svg]:transition-transform [&_svg]:duration-150 [&_svg]:ease-[cubic-bezier(0.22,1,0.36,1)] motion-safe:hover:[&_svg]:scale-110 motion-safe:active:[&_svg]:scale-90 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
   {
     variants: {
       variant: {
