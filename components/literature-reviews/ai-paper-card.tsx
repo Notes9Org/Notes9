@@ -9,7 +9,7 @@ import { stripHtmlToText, formatLiteratureAbstractPlain } from '@/lib/literature
 import { cn } from '@/lib/utils'
 import { savePaperToLibrary } from '@/app/(app)/literature-reviews/actions'
 import { openCatalystPanel, attachToCatalyst } from '@/lib/catalyst-launch'
-import { citationToSearchPaper } from '@/lib/ai-search-match'
+import { citationToSearchPaper, normalizeDoi } from '@/lib/ai-search-match'
 import { MotionTabPanel } from './motion'
 import type { AiSearchResult } from '@/types/ai-search'
 import type { SearchPaper } from '@/types/paper-search'
@@ -354,7 +354,9 @@ function AiPaperCardImpl({
         // Stable identity for dedupe: the signed `url` rotates on every fetch, so
         // the composer dedupes on `paperKey` instead — pressing "Ask Catalyst" on
         // the same paper twice becomes a no-op (matches the @-mention tag pattern).
-        const paperKey = paper.id || paper.doi || title
+        // DOI/title-keyed so the SAME paper dedupes whether attached from search
+        // or from read mode (staged-paper-view uses the same scheme).
+        const paperKey = normalizeDoi(paper.doi) || `title:${title.trim().toLowerCase()}`
         const attachments = [
           {
             url: data.url as string,

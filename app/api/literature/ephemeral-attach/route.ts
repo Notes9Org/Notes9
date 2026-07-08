@@ -2,7 +2,13 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentUser } from "@/lib/auth/current-user"
 import { USER_STORAGE_BUCKET } from "@/lib/user-storage-bucket"
-import { downloadFirstPdf, fetchPdfFromOaPackageTgz } from "@/lib/literature-pdf-import"
+import {
+  downloadFirstPdf,
+  fetchPdfFromOaPackageTgz,
+  oaPdfCacheKey,
+  readOaPdfCache,
+  writeOaPdfCache,
+} from "@/lib/literature-pdf-import"
 import { resolveOaSources } from "@/lib/literature-oa-resolve"
 import type { SearchPaper } from "@/types/paper-search"
 
@@ -68,66 +74,78 @@ export async function POST(request: Request) {
     // concurrently and feeds the rest into the same race as they arrive; the
     // resolver keeps its own deadline so a hung upstream degrades to "direct URL
     // only" rather than holding the composer hostage.
-    const directUrls = paper.pdfUrl ? [paper.pdfUrl] : []
-    const oaSources = Promise.race([
-      resolveOaSources(paper as SearchPaper, { contactEmail: user.email ?? undefined }),
-      new Promise<OaResolveResult>((resolve) =>
-        setTimeout(() => resolve({ pdfUrls: [], oaPackageTgzUrl: null, abstract: null }), RESOLVER_BUDGET_MS),
-      ),
-    ]).catch(() => ({ pdfUrls: [], oaPackageTgzUrl: null, abstract: null }) as OaResolveResult)
-    const resolverUrls = oaSources.then((r) => r.pdfUrls)
+    // Shared OA-PDF cache: if the same paper was already downloaded (by a prior
+    // tag, or by the read/stage flow), reuse those bytes and skip the entire
+    // resolve + download race below — this is what makes a tag-then-read (or a
+    // re-tag) instant instead of re-fetching over the network.
+    const cacheKey = oaPdfCacheKey(paper as SearchPaper)
+    let pdfBuffer: ArrayBuffer | null = cacheKey ? await readOaPdfCache(cacheKey) : null
 
-    // Tight interactive budgets (this gates the composer's Send). directUrls
-    // download immediately; resolver URLs join the same race as they resolve.
-    const downloaded = await downloadFirstPdf(directUrls, {
-      lateUrls: resolverUrls,
-      maxBytes: MAX_PDF_BYTES,
-      perFetchTimeoutMs: PER_FETCH_TIMEOUT_MS,
-      totalBudgetMs: PDF_RACE_BUDGET_MS,
-    })
-    let pdfBuffer: ArrayBuffer | null = downloaded?.buffer ?? null
-
-    // Last resort: the PMC Open Access `.tgz` package (same one the stage flow
-    // extracts). Only reached when every direct/mirror PDF URL failed.
     if (!pdfBuffer) {
-      const tgzUrl = (await oaSources).oaPackageTgzUrl
-      if (tgzUrl) {
-        const fromTgz = await fetchPdfFromOaPackageTgz(tgzUrl).catch(() => null)
-        if (fromTgz) pdfBuffer = fromTgz.buffer
-      }
-    }
+      const directUrls = paper.pdfUrl ? [paper.pdfUrl] : []
+      const oaSources = Promise.race([
+        resolveOaSources(paper as SearchPaper, { contactEmail: user.email ?? undefined }),
+        new Promise<OaResolveResult>((resolve) =>
+          setTimeout(() => resolve({ pdfUrls: [], oaPackageTgzUrl: null, abstract: null }), RESOLVER_BUDGET_MS),
+        ),
+      ]).catch(() => ({ pdfUrls: [], oaPackageTgzUrl: null, abstract: null }) as OaResolveResult)
+      const resolverUrls = oaSources.then((r) => r.pdfUrls)
 
-    // Fallback: no OA PDF reachable (paywall / bot wall). Return a metadata-text
-    // blob so Catalyst still has the paper's abstract + a link to answer from,
-    // satisfying "by any method, load the paper."
-    if (!pdfBuffer) {
-      const lines = [
-        `Title: ${paper.title ?? "(untitled)"}`,
-        paper.authors?.length ? `Authors: ${paper.authors.join(", ")}` : null,
-        paper.year ? `Year: ${paper.year}` : null,
-        paper.journal ? `Journal: ${paper.journal}` : null,
-        paper.doi ? `DOI: ${paper.doi}` : null,
-        sourceUrl ? `Link: ${sourceUrl}` : null,
-        paper.abstract ? `\nAbstract:\n${paper.abstract}` : null,
-      ].filter(Boolean)
-      return NextResponse.json({
-        fallback: true,
-        // Deterministic reason so the UI can say WHY: no OA link at all
-        // (paper isn't open access) vs links existed but every download
-        // failed (bot wall / dead link).
-        // oaSources has settled by now (its budget < the race budget), so
-        // awaiting it here is instant. No candidate URLs at all → the paper has
-        // no open-access link; URLs existed but every download failed → fetch.
-        reason:
-          directUrls.length === 0 &&
-          (await resolverUrls).length === 0 &&
-          !(await oaSources).oaPackageTgzUrl
-            ? "no_open_access_link"
-            : "fetch_failed",
-        sourceUrl,
-        name: paper.title ?? "paper",
-        text: lines.join("\n"),
+      // Tight interactive budgets (this gates the composer's Send). directUrls
+      // download immediately; resolver URLs join the same race as they resolve.
+      const downloaded = await downloadFirstPdf(directUrls, {
+        lateUrls: resolverUrls,
+        maxBytes: MAX_PDF_BYTES,
+        perFetchTimeoutMs: PER_FETCH_TIMEOUT_MS,
+        totalBudgetMs: PDF_RACE_BUDGET_MS,
       })
+      pdfBuffer = downloaded?.buffer ?? null
+
+      // Last resort: the PMC Open Access `.tgz` package (same one the stage flow
+      // extracts). Only reached when every direct/mirror PDF URL failed.
+      if (!pdfBuffer) {
+        const tgzUrl = (await oaSources).oaPackageTgzUrl
+        if (tgzUrl) {
+          const fromTgz = await fetchPdfFromOaPackageTgz(tgzUrl).catch(() => null)
+          if (fromTgz) pdfBuffer = fromTgz.buffer
+        }
+      }
+
+      // Fallback: no OA PDF reachable (paywall / bot wall). Return a metadata-text
+      // blob so Catalyst still has the paper's abstract + a link to answer from,
+      // satisfying "by any method, load the paper."
+      if (!pdfBuffer) {
+        const lines = [
+          `Title: ${paper.title ?? "(untitled)"}`,
+          paper.authors?.length ? `Authors: ${paper.authors.join(", ")}` : null,
+          paper.year ? `Year: ${paper.year}` : null,
+          paper.journal ? `Journal: ${paper.journal}` : null,
+          paper.doi ? `DOI: ${paper.doi}` : null,
+          sourceUrl ? `Link: ${sourceUrl}` : null,
+          paper.abstract ? `\nAbstract:\n${paper.abstract}` : null,
+        ].filter(Boolean)
+        return NextResponse.json({
+          fallback: true,
+          // Deterministic reason so the UI can say WHY: no OA link at all
+          // (paper isn't open access) vs links existed but every download
+          // failed (bot wall / dead link).
+          // oaSources has settled by now (its budget < the race budget), so
+          // awaiting it here is instant. No candidate URLs at all → the paper has
+          // no open-access link; URLs existed but every download failed → fetch.
+          reason:
+            directUrls.length === 0 &&
+            (await resolverUrls).length === 0 &&
+            !(await oaSources).oaPackageTgzUrl
+              ? "no_open_access_link"
+              : "fetch_failed",
+          sourceUrl,
+          name: paper.title ?? "paper",
+          text: lines.join("\n"),
+        })
+      }
+
+      // Fresh download succeeded — populate the shared cache for next time.
+      if (cacheKey) void writeOaPdfCache(cacheKey, pdfBuffer)
     }
 
     const timestamp = Date.now()
