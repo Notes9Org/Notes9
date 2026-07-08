@@ -2,7 +2,7 @@ import { cva, type VariantProps } from 'class-variance-authority'
 
 import { cn } from '@/lib/utils'
 
-const skeletonVariants = cva('bg-accent animate-pulse', {
+const skeletonVariants = cva('bg-accent n9-skeleton-shimmer', {
   variants: {
     variant: {
       default: 'rounded-md',
