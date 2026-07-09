@@ -114,6 +114,7 @@ export function AiSearchView({
     results,
     papers: resultPapers,
     isStreaming,
+    phases,
     papersLoading,
     error,
     limitInfo,
@@ -260,6 +261,7 @@ export function AiSearchView({
         query: q,
         summary,
         streaming: isStreaming,
+        phases,
         references,
         resources,
         manifest: serverManifest,
@@ -281,8 +283,8 @@ export function AiSearchView({
     // results are available; re-computation on each tick is cheap (deterministic).
     const { resources, manifest } = groundingInput.length ? papersToGrounding(groundingInput) : { resources: [], manifest: { manifest: {} } }
     const context = results.length ? buildLiteratureSessionContext(q, results) : null
-    setCatalystLiterature({ query: q, summary: renumberedSummary, streaming: isStreaming, references, resources, manifest, context })
-  }, [query, summary, serverManifest, isStreaming, results])
+    setCatalystLiterature({ query: q, summary: renumberedSummary, streaming: isStreaming, phases, references, resources, manifest, context })
+  }, [query, summary, serverManifest, isStreaming, phases, results])
 
   return (
     <div className="space-y-4">

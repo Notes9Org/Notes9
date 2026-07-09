@@ -547,6 +547,14 @@ function sidebarGetMessageContent(message: UIMessage): string {
 // citations" panel (C4).  "Continue in Catalyst" button opens the persisted
 // session so follow-up questions are grounded by the literature context (C3/C7).
 // ---------------------------------------------------------------------------
+// Friendly labels for the backend pipeline `status` phases, shown as a live
+// progress timeline while the ~2-min search runs (instead of a static spinner).
+const LIT_PHASE_LABELS: Record<string, string> = {
+  searching: 'Searching the literature…',
+  analyzing: 'Reviewing and ranking sources…',
+  summarizing: 'Writing the summary…',
+};
+
 interface LiteratureSummaryInlineProps {
   lit: CatalystLiterature;
   sessionId: string | null | undefined;
@@ -580,6 +588,31 @@ function LiteratureSummaryInline({ lit, sessionId, onContinue }: LiteratureSumma
           </h3>
         )}
       </div>
+      {/* Live pipeline progress while the (~2-min) search runs — turns the static
+          "composing…" state into a visible step timeline fed by SSE `status` events. */}
+      {lit.streaming && (lit.phases?.length ?? 0) > 0 && (
+        <ol className="min-w-0 space-y-1">
+          {lit.phases!.map((p, i) => {
+            const last = i === lit.phases!.length - 1;
+            return (
+              <li
+                key={`${p}-${i}`}
+                className="flex items-center gap-2 text-[12px] text-muted-foreground"
+              >
+                <span
+                  aria-hidden
+                  className={`inline-flex size-1.5 shrink-0 rounded-full ${
+                    last ? 'bg-[var(--n9-accent)] animate-pulse' : 'bg-muted-foreground/40'
+                  }`}
+                />
+                <span className={last ? 'text-foreground' : ''}>
+                  {LIT_PHASE_LABELS[p] ?? p}
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+      )}
       {/* Content: unified ChatMessage so [N] chips and citations panel work */}
       <ChatMessage
         role="assistant"

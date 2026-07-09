@@ -27,6 +27,9 @@ export interface CatalystLiterature {
   summary: string
   /** True while the summary is still composing. */
   streaming: boolean
+  /** Live pipeline progress phases (searching → analyzing → summarizing …), shown as a
+   *  step timeline in the summary panel while streaming. */
+  phases?: string[]
   /** Cited papers, shown under the summary. */
   references: LiteratureRef[]
   /** ID of the persisted chat session for this literature search (set once the

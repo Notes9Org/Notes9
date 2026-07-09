@@ -146,6 +146,10 @@ export function useAiLiteratureSearch({
   const [manifest, setManifest] = useState<CitationsManifest | null>(null)
   const [isStreaming, setIsStreaming] = useState(false)
   const [phase, setPhase] = useState<string | null>(null)
+  // Accumulated pipeline phases (searching → analyzing → summarizing …) so the summary
+  // panel can show a LIVE progress timeline during the ~2-min run instead of a static
+  // spinner. Distinct, in arrival order.
+  const [phases, setPhases] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   // A quota limit is a fact, not a failure: rendered as a friendly notice
   // with a reset date, never through the error path.
@@ -222,6 +226,7 @@ export function useAiLiteratureSearch({
       setSummary('')
       setManifest(null)
       setPhase('searching')
+      setPhases(['searching'])
       setIsStreaming(true)
 
       const searchStartedAt = Date.now()
@@ -299,7 +304,10 @@ export function useAiLiteratureSearch({
             const [event, data] = parsed
             if (event === 'status') {
               const p = (data as { phase?: string }).phase
-              if (p && isActiveRequest()) setPhase(p)
+              if (p && isActiveRequest()) {
+                setPhase(p)
+                setPhases((prev) => (prev[prev.length - 1] === p ? prev : [...prev, p]))
+              }
             } else if (event === 'papers') {
               const payload = data as SsePapersEvent
               receivedPapers = Array.isArray(payload.papers) ? payload.papers : []
@@ -431,6 +439,8 @@ export function useAiLiteratureSearch({
     papersLoading: isStreaming && papers.length === 0,
     /** Current pipeline phase while streaming (e.g. "searching"), else null. */
     phase: inSync ? phase : null,
+    /** Accumulated pipeline phases for a live progress timeline. */
+    phases: inSync ? phases : [],
     error: inSync ? error : null,
     /** Free-tier quota notice (429) — a fact with a reset date, not an error. */
     limitInfo,
