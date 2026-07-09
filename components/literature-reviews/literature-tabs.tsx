@@ -782,6 +782,14 @@ export function LiteratureTabs({
     if (id) openPaperTab(id, paper.title)
   }
 
+  // After a save-to-library, re-fetch the server-rendered library list so
+  // `repositoryReviews` (the membership source of truth) includes the new row —
+  // otherwise the card's "Saved" state reverts from the stale prop. Mirrors what
+  // handleStagePaper already does for staging.
+  const handlePaperSaved = () => {
+    void router.refresh()
+  }
+
   const handleStagePaper = async (paper: SearchPaper) => {
     setStagingPaperId(paper.id)
     try {
@@ -1165,6 +1173,7 @@ export function LiteratureTabs({
                         isPaperStaged={isPaperStaged}
                         getPaperMembership={getPaperMembership}
                         isPaperStaging={(paperId) => stagingPaperId === paperId}
+                        onPaperSaved={handlePaperSaved}
                         sortMode={searchSort}
                         onSortModeChange={handleSearchSortChange}
                         openAccessOnly={openAccessOnlySearch}
@@ -1237,6 +1246,7 @@ export function LiteratureTabs({
               onOpenStaged={handleOpenStaged}
               isPaperStaged={isPaperStaged}
               isPaperStaging={(paperId) => stagingPaperId === paperId}
+              onPaperSaved={handlePaperSaved}
               sortMode={searchSort}
               onSortModeChange={handleSearchSortChange}
               openAccessOnly={openAccessOnlySearch}

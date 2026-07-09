@@ -26,8 +26,10 @@ import {
   clampText,
   createLiteraturePdfPath,
   getLiteratureStorageBucket,
+  normalizeDoi,
   validatePdfBuffer,
 } from "@/lib/literature-pdf-storage"
+import { createServiceRoleClient } from "@/lib/supabase-service-role"
 import { extractFirstPdfFromTarGz } from "@/lib/pmc-oa-package-pdf"
 import {
   callCatalyst,
@@ -40,6 +42,66 @@ import {
 } from "@/lib/literature-pdf-urls"
 import { resolveOaSources } from "@/lib/literature-oa-resolve"
 import type { SupabaseClient } from "@supabase/supabase-js"
+
+// ── Shared OA-PDF download cache ─────────────────────────────────────────────
+// Open-access PDFs are public and identical for every user, so we cache the
+// downloaded bytes once — keyed by the paper's stable identity — and let BOTH
+// the "tag in chat" flow (ephemeral-attach) and the "read/stage" flow reuse
+// them. This removes the redundant re-download (and re-resolve) when the same
+// paper is tagged and then read. Uses the service-role client because the cache
+// object lives outside any per-user path prefix.
+// ponytail: content-addressed, small objects; if the folder grows, add
+// `_oa-pdf-cache/` to the existing staging-cleanup cron. Not blocking.
+const OA_PDF_CACHE_PREFIX = "_oa-pdf-cache"
+
+/** Stable cache key for a paper: normalized DOI → PMID → title|year. Null if none. */
+export function oaPdfCacheKey(paper: {
+  doi?: string | null
+  pmid?: string | null
+  title?: string | null
+  year?: number | null
+}): string | null {
+  const nd = normalizeDoi(paper.doi)
+  const basis = nd
+    ? `doi:${nd}`
+    : paper.pmid
+      ? `pmid:${String(paper.pmid).trim()}`
+      : paper.title && paper.title.trim()
+        ? `t:${paper.title.trim().toLowerCase()}|${paper.year ?? ""}`
+        : null
+  if (!basis) return null
+  return createHash("sha256").update(basis).digest("hex")
+}
+
+/** Read cached OA-PDF bytes for a paper key, or null on any miss/error. */
+export async function readOaPdfCache(cacheKey: string): Promise<ArrayBuffer | null> {
+  try {
+    const svc = createServiceRoleClient()
+    const { data, error } = await svc.storage
+      .from(getLiteratureStorageBucket())
+      .download(`${OA_PDF_CACHE_PREFIX}/${cacheKey}.pdf`)
+    if (error || !data) return null
+    return await data.arrayBuffer()
+  } catch {
+    return null
+  }
+}
+
+/** Best-effort write of downloaded OA-PDF bytes into the shared cache. Never throws. */
+export async function writeOaPdfCache(cacheKey: string, buffer: ArrayBuffer): Promise<void> {
+  try {
+    const svc = createServiceRoleClient()
+    await svc.storage
+      .from(getLiteratureStorageBucket())
+      .upload(`${OA_PDF_CACHE_PREFIX}/${cacheKey}.pdf`, buffer, {
+        cacheControl: "3600",
+        upsert: true,
+        contentType: "application/pdf",
+      })
+  } catch {
+    // Cache population is opportunistic — a failure here must not fail the fetch.
+  }
+}
 
 export class PdfContentVerificationFailedError extends Error {
   constructor(
@@ -649,6 +711,8 @@ export async function importLiteraturePdfFromRemote(params: {
   accessToken?: string | null
   /** Optional override; defaults to catalyst's server-side default (0.55). */
   verifyThreshold?: number
+  /** When set, write the downloaded bytes through to the shared OA-PDF cache. */
+  cacheKey?: string | null
 }) {
   if (params.pdfUrls.length === 0 && !params.oaPackageTgzUrl) {
     throw new Error("No PDF URLs to try")
@@ -701,15 +765,47 @@ export async function importLiteraturePdfFromRemote(params: {
     usedUrl = fromTgz.usedUrl
   }
 
-  const len = buffer.byteLength
   const triedUrls = [...params.pdfUrls, ...(params.oaPackageTgzUrl ? [params.oaPackageTgzUrl] : [])]
+  await persistLiteraturePdfBuffer({
+    supabase: params.supabase,
+    userId: params.userId,
+    literatureId: params.literatureId,
+    buffer,
+    usedUrl,
+    triedUrls,
+    matchSource: params.matchSource,
+    catalogNote: params.catalogNote ?? null,
+    verifyResult,
+    cacheKey: params.cacheKey ?? null,
+  })
+}
 
-  const checksum = createHash("sha256").update(Buffer.from(buffer)).digest("hex")
+/**
+ * Store downloaded PDF bytes for a literature row: upload to the per-user
+ * literature path, checksum, and mark the row `success`. Shared by the remote
+ * import path and the shared-cache reuse path. When `cacheKey` is set, the bytes
+ * are also written through to the shared OA-PDF cache (best-effort) so a later
+ * tag/read of the same paper skips the network.
+ */
+async function persistLiteraturePdfBuffer(params: {
+  supabase: SupabaseClient
+  userId: string
+  literatureId: string
+  buffer: ArrayBuffer
+  usedUrl: string
+  triedUrls: string[]
+  matchSource: PdfMatchSource
+  catalogNote?: string | null
+  verifyResult?: PdfVerifyResponse | null
+  cacheKey?: string | null
+}): Promise<void> {
+  const len = params.buffer.byteLength
+  const checksum = createHash("sha256").update(Buffer.from(params.buffer)).digest("hex")
   const fileName = `${params.literatureId}.pdf`
   const storagePath = createLiteraturePdfPath(params.userId, params.literatureId, fileName)
   const storage = params.supabase.storage.from(getLiteratureStorageBucket())
 
-  const { error: uploadError } = await storage.upload(storagePath, buffer, {
+  const { error: uploadError } = await storage.upload(storagePath, params.buffer, {
     cacheControl: "3600",
     upsert: false,
     contentType: "application/pdf",
@@ -720,15 +816,15 @@ export async function importLiteraturePdfFromRemote(params: {
   }
 
   const pdfMetadata: Record<string, unknown> = {
-    source_url: usedUrl,
-    tried_urls: triedUrls,
+    source_url: params.usedUrl,
+    tried_urls: params.triedUrls,
     ...(params.catalogNote ? { note: params.catalogNote } : {}),
   }
-  if (verifyResult) {
-    pdfMetadata.pdf_match_confidence = verifyResult.confidence
-    pdfMetadata.pdf_match_threshold = verifyResult.threshold
-    if (verifyResult.extracted_title) {
-      pdfMetadata.pdf_extracted_title_snippet = verifyResult.extracted_title
+  if (params.verifyResult) {
+    pdfMetadata.pdf_match_confidence = params.verifyResult.confidence
+    pdfMetadata.pdf_match_threshold = params.verifyResult.threshold
+    if (params.verifyResult.extracted_title) {
+      pdfMetadata.pdf_extracted_title_snippet = params.verifyResult.extracted_title
     }
   }
 
@@ -751,6 +847,10 @@ export async function importLiteraturePdfFromRemote(params: {
   if (updateError) {
     await storage.remove([storagePath])
     throw new Error(updateError.message)
+  }
+
+  if (params.cacheKey) {
+    await writeOaPdfCache(params.cacheKey, params.buffer)
   }
 }
 
@@ -797,6 +897,30 @@ export async function tryImportPdfForPaper(params: {
   /** Signed-in user's email — passed to Unpaywall as the polite-pool contact. */
   contactEmail?: string | null
 }): Promise<TryImportPdfResult> {
+  // Shared OA-PDF cache: if this exact paper was already downloaded (e.g. tagged
+  // into chat first), reuse those bytes instead of re-resolving + re-downloading.
+  const cacheKey = oaPdfCacheKey(params.paper)
+  if (cacheKey) {
+    const cached = await readOaPdfCache(cacheKey)
+    if (cached) {
+      try {
+        await persistLiteraturePdfBuffer({
+          supabase: params.supabase,
+          userId: params.userId,
+          literatureId: params.literatureId,
+          buffer: cached,
+          usedUrl: "oa-pdf-cache",
+          triedUrls: [],
+          matchSource: params.matchSource,
+          catalogNote: "reused_shared_oa_pdf_cache",
+        })
+        return { ok: true as const, resolvedAbstract: params.paper.abstract ?? null }
+      } catch {
+        // Persisting the cached copy failed — fall through to a fresh fetch.
+      }
+    }
+  }
+
   const resolved = await resolveOaSources(params.paper, { contactEmail: params.contactEmail })
   const pdfUrls = resolved.pdfUrls
   const resolvedAbstract = resolved.abstract
@@ -820,6 +944,7 @@ export async function tryImportPdfForPaper(params: {
       pdfUrls,
       oaPackageTgzUrl: resolved.oaPackageTgzUrl,
       matchSource: params.matchSource,
+      cacheKey,
     })
     return { ok: true as const, resolvedAbstract }
   } catch (e: unknown) {
@@ -842,6 +967,7 @@ export async function tryImportPdfForPaper(params: {
           matchSource: params.matchSource,
           catalogNote:
             "after_resolved_urls_non_pdf: OA subset mirrors / OA package (NLM /pdf may return POW interstitial)",
+          cacheKey,
         })
         return { ok: true as const, resolvedAbstract }
       } catch (e2: unknown) {

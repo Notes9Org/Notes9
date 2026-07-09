@@ -78,6 +78,7 @@ export function AiSearchView({
   isPaperStaged,
   getPaperMembership,
   isPaperStaging,
+  onPaperSaved,
   onResults,
   onLoadingChange,
   registerStop,
@@ -94,6 +95,8 @@ export function AiSearchView({
   isPaperStaged?: (id: string) => boolean
   getPaperMembership?: (id: string) => 'saved' | 'staged' | null
   isPaperStaging?: (id: string) => boolean
+  /** Refresh the host's library membership after a successful save-to-library. */
+  onPaperSaved?: () => void
   /** Lift the structured papers to the host (staging detection, count). */
   onResults?: (papers: SearchPaper[]) => void
   /** Report search loading to the host so the search bar spinner stays in sync. */
@@ -367,7 +370,12 @@ export function AiSearchView({
                 (r.paper ? (isPaperStaged?.(r.paper.id) ?? false) : false) ||
                 savedKeysRef.current.has(savedKeyForResult(r))
               }
-              onSaved={() => savedKeysRef.current.add(savedKeyForResult(r))}
+              onSaved={() => {
+                savedKeysRef.current.add(savedKeyForResult(r))
+                // Refresh the host's library source of truth so the card stays
+                // "Saved" across re-renders / new searches (mirrors staging).
+                onPaperSaved?.()
+              }}
               onStage={onStagePaper}
               onOpenStaged={onOpenStaged}
               isStaged={r.paper ? (isPaperStaged?.(r.paper.id) ?? false) : false}

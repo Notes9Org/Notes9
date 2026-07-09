@@ -4,6 +4,7 @@ import {
   buildPmcPdfCandidateUrls,
   downloadFirstPdf,
   looksLikeHtmlInterstitial,
+  oaPdfCacheKey,
 } from "@/lib/literature-pdf-import"
 import { extractPdfFromUnpaywallPayload, unpaywallContactEmail } from "@/lib/unpaywall"
 
@@ -160,5 +161,24 @@ describe("downloadFirstPdf (shared literature PDF downloader)", () => {
 
   it("returns null for an empty candidate list", async () => {
     expect(await downloadFirstPdf([])).toBeNull()
+  })
+})
+
+describe("oaPdfCacheKey", () => {
+  it("is stable for the same paper so tag and read hit the same cache object", () => {
+    const paper = { doi: "10.1/ABC", pmid: "123", title: "Megalin uptake", year: 2020 }
+    expect(oaPdfCacheKey(paper)).toBe(oaPdfCacheKey({ ...paper }))
+  })
+
+  it("keys by normalized DOI (DOI variants collapse to one key)", () => {
+    const a = oaPdfCacheKey({ doi: "10.1/ABC", pmid: "1" })
+    const b = oaPdfCacheKey({ doi: "https://doi.org/10.1/abc", pmid: "2" })
+    expect(a).toBe(b) // DOI wins over PMID and is normalized
+  })
+
+  it("falls back to PMID, then title|year, and is null when no identity", () => {
+    expect(oaPdfCacheKey({ pmid: "555" })).toBe(oaPdfCacheKey({ pmid: "555" }))
+    expect(oaPdfCacheKey({ title: "A", year: 2000 })).not.toBe(oaPdfCacheKey({ title: "A", year: 2001 }))
+    expect(oaPdfCacheKey({})).toBeNull()
   })
 })

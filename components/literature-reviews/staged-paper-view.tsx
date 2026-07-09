@@ -9,7 +9,7 @@ import { LiteraturePdfPanel } from "./literature-pdf-panel"
 import { UploadLiteraturePdfDialog } from "./upload-literature-pdf-dialog"
 import { decodeHtmlEntities } from "@/lib/literature-abstract-display"
 import { openCatalystPanel, attachToCatalyst } from "@/lib/catalyst-launch"
-import { flyToCatalyst } from "@/lib/fly-to-catalyst"
+import { normalizeDoi } from "@/lib/ai-search-match"
 import { MotionReveal } from "@/components/literature-reviews/motion"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -126,8 +126,7 @@ export function StagedPaperView({
   // Ask Catalyst — mirrors the search-result card: open the panel with no text
   // prefill (the paper rides in as an attachment), fly the PDF into the composer,
   // and fall back to web search when there's no stored full text.
-  const askCatalyst = (e?: React.MouseEvent<HTMLElement>) => {
-    const target = e?.currentTarget ?? null
+  const askCatalyst = () => {
     const hasPdf = Boolean(lit.pdf_storage_path)
     openCatalystPanel({ scope: "literature", webSearch: !hasPdf, autoSend: false })
     if (hasPdf) {
@@ -135,12 +134,15 @@ export function StagedPaperView({
       const attachments = [
         {
           url: `/api/literature/${lit.id}/viewer-pdf`,
-          name: lit.pdf_file_name || `${decodedTitle.slice(0, 100)}.pdf`,
+          // Human title, never the UUID storage filename (pdf_file_name is `${id}.pdf`).
+          name: `${decodedTitle.slice(0, 100)}.pdf`,
           contentType: "application/pdf",
-          paperKey: lit.id,
+          // DOI/title key so the SAME paper dedups whether attached from search or read.
+          paperKey: normalizeDoi(lit.doi) || `title:${decodedTitle.trim().toLowerCase()}`,
         },
       ]
-      flyToCatalyst(target, { onLand: () => attachToCatalyst(attachments) })
+      // No fly animation in read mode — attach directly.
+      attachToCatalyst(attachments)
     } else {
       toast.info(
         "No open-access full text found. Catalyst will use the abstract and web search; upload the PDF for full-text analysis.",
@@ -189,7 +191,7 @@ export function StagedPaperView({
             <Button
               variant="ghost"
               size="sm"
-              onClick={(e) => askCatalyst(e)}
+              onClick={() => askCatalyst()}
               title="Ask Catalyst AI about this paper"
               className="gap-1.5 rounded-lg text-muted-foreground hover:text-foreground"
             >
