@@ -24,6 +24,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import { CheckCircle2, Pause, Play, Archive, Loader2, FileEdit, ChevronDown } from "lucide-react"
+import { updateProject } from "@/lib/projects"
 
 interface ProjectStatusUpdateButtonsProps {
   projectId: string
@@ -44,13 +45,7 @@ export function ProjectStatusUpdateButtons({ projectId, currentStatus, compact =
     setIsUpdating(true)
 
     try {
-      const { error } = await supabase
-        .from("projects")
-        .update({
-          status: newStatus,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", projectId)
+      const { error } = await updateProject(supabase, projectId, { status: newStatus })
 
       if (error) throw error
 

@@ -1,16 +1,8 @@
 import { NextResponse } from 'next/server';
 import { verifyBearerToken } from "@/lib/verify-bearer-token"
+import { biomniAgentJsonUrl } from '@/lib/catalyst-client'
 
 export const maxDuration = 60;
-
-/** Full POST URL to JSON biomni literature endpoint (e.g. `…/biomni/literature`). */
-function literatureBiomniJsonUrl(): string {
-  const explicit = process.env.LITERATURE_BIOMNI_AGENT_URL?.replace(/\/$/, '').trim();
-  if (explicit) return explicit;
-  const base = process.env.BIOMNI_FUNCTION_URL?.replace(/\/$/, '').trim();
-  if (base) return `${base}/biomni/literature`;
-  return '';
-}
 
 function upstreamErrorMessage(
   status: number,
@@ -115,7 +107,7 @@ export async function POST(req: Request) {
     options: mergeBiomniOptions(body.options),
   };
 
-  const UPSTREAM = literatureBiomniJsonUrl();
+  const UPSTREAM = biomniAgentJsonUrl();
 
   if (!UPSTREAM) {
     return NextResponse.json({

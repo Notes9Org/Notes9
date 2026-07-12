@@ -27,6 +27,7 @@ import { DATE_ORDER_ERROR, isEndDateBeforeStartDate } from "@/lib/date-order"
 import { recordRumEvent } from "@/lib/rum"
 import { AnalyticsEvent } from "@/lib/analytics/events"
 import { toast } from "sonner"
+import { createExperiment } from "@/lib/experiments"
 
 function NewExperimentForm() {
   const user = useAuthUser();
@@ -117,20 +118,16 @@ function NewExperimentForm() {
       const supabase = createClient()
       if (!user) throw new Error("Not authenticated")
 
-      const { data, error: insertError } = await supabase
-        .from("experiments")
-        .insert({
-          name: formData.name,
-          description: formData.description,
-          project_id: formData.project_id,
-          status: formData.status,
-          start_date: formData.start_date || null,
-          completion_date: formData.completion_date || null,
-          assigned_to: user.id,
-          created_by: user.id,
-        })
-        .select()
-        .single()
+      const { data, error: insertError } = await createExperiment(supabase, {
+        name: formData.name,
+        description: formData.description,
+        projectId: formData.project_id,
+        status: formData.status,
+        startDate: formData.start_date || null,
+        completionDate: formData.completion_date || null,
+        assignedTo: user.id,
+        createdBy: user.id,
+      })
 
       if (insertError) throw insertError
 

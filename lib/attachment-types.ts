@@ -11,13 +11,19 @@
 export const ATTACHMENT_MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 export const MAX_FILE_ATTACHMENTS_PER_REQUEST = 5;
 
-/** Canonical supported MIME types. */
+/**
+ * Canonical supported MIME types.
+ *
+ * `image/svg+xml` is deliberately excluded: files are served from a private
+ * bucket via signed URLs (still same-origin), and a user-supplied SVG can
+ * embed <script>/event-handler payloads — a stored-XSS vector. Every upload
+ * surface (chat, experiments) must agree on this deny.
+ */
 export const ALLOWED_MIME_TYPES = [
   "image/jpeg",
   "image/png",
   "image/gif",
   "image/webp",
-  "image/svg+xml",
   "application/pdf",
   "text/plain",
   "text/csv",
@@ -41,7 +47,6 @@ export const EXTENSION_TO_MIME: Record<string, AllowedMimeType> = {
   ".png": "image/png",
   ".gif": "image/gif",
   ".webp": "image/webp",
-  ".svg": "image/svg+xml",
   ".pdf": "application/pdf",
   ".txt": "text/plain",
   ".csv": "text/csv",
@@ -71,7 +76,6 @@ export const TEXT_SNIFF_MIME_TYPES: readonly AllowedMimeType[] = [
   "text/csv",
   "text/markdown",
   "application/json",
-  "image/svg+xml",
 ];
 
 const ACCEPT_EXTENSIONS = Object.keys(EXTENSION_TO_MIME);

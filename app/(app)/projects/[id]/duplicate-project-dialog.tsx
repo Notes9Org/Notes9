@@ -20,6 +20,7 @@ import { useRouter } from "next/navigation"
 import { Copy, Loader2 } from "lucide-react"
 import { getUniqueNameErrorMessage } from "@/lib/unique-name-error"
 import { Checkbox } from "@/components/ui/checkbox"
+import { createProject } from "@/lib/projects"
 
 interface Project {
   id: string
@@ -78,20 +79,17 @@ export function DuplicateProjectDialog({ project, asMenuItem = false, open: cont
       if (!profile) throw new Error("Profile not found")
 
       // Create duplicate project
-      const { data: newProject, error: projectError } = await supabase
-        .from("projects")
-        .insert({
-          name: newName.trim(),
-          description: project.description,
-          status: "planning", // Reset to planning
-          priority: project.priority,
-          start_date: null, // Reset dates
-          end_date: null,
-          organization_id: profile.organization_id,
-          created_by: user.id,
-        })
-        .select()
-        .single()
+      const { data: newProject, error: projectError } = await createProject(supabase, {
+        name: newName.trim(),
+        description: project.description,
+        status: "planning", // Reset to planning
+        priority: project.priority,
+        startDate: null, // Reset dates
+        endDate: null,
+        organizationId: profile.organization_id,
+        createdBy: user.id,
+        withLeadMembership: false,
+      })
 
       if (projectError) throw projectError
 

@@ -6,10 +6,11 @@ import {
 } from '@/lib/notes9-agent-request';
 import { verifyBearerToken } from "@/lib/verify-bearer-token";
 import { enforceLimits, checkBodyBytes, checkHistory, checkQueryChars, checkAttachments } from '@/lib/limits/guards';
+import { tryCatalystBaseUrl } from '@/lib/catalyst-client';
 
 export const maxDuration = 300;
 
-const NOTES9_API_BASE = process.env.CHAT_API_URL?.replace(/\/$/, '') || '';
+const NOTES9_API_BASE = tryCatalystBaseUrl();
 
 export async function POST(req: Request) {
   // Pre-parse: Content-Length ceiling before the body is buffered.

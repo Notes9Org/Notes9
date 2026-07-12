@@ -42,6 +42,9 @@ export interface CatalystLiterature {
   /** Compact literature context stored in the session's metadata.literature and
    *  injected as a system message for follow-up turns. */
   context?: LiteratureSessionContext | null
+  /** True once the user explicitly chose to continue this literature summary in the
+   *  Catalyst chat (the only case where a chat session is persisted). */
+  dive?: boolean
 }
 
 export const CATALYST_LITERATURE_EVENT = 'notes9:catalyst-literature'

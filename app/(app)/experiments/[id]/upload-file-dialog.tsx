@@ -123,9 +123,12 @@ export function UploadFileDialog({ experimentId, onUploadComplete }: UploadFileD
     const fileExt = '.' + fileName.split('.').pop()
     const hasAllowedExtension = ALLOWED_EXTENSIONS.some(ext => fileExt === ext)
     
-    // Check MIME type OR file extension (more permissive for scientific files)
-    const hasAllowedMimeType = ALLOWED_MIME_TYPES.includes(file.type) || file.type.startsWith('image/') || file.type.startsWith('text/')
-    
+    // Check MIME type OR file extension (extension covers scientific formats
+    // like FASTA whose declared MIME varies by OS/browser). No `image/*` or
+    // `text/*` wildcard escape hatch — that let arbitrary undeclared types
+    // (e.g. image/svg+xml) through the allowlist below.
+    const hasAllowedMimeType = ALLOWED_MIME_TYPES.includes(file.type)
+
     if (!hasAllowedMimeType && !hasAllowedExtension) {
       return `File type "${file.type || fileExt}" is not supported. Allowed: PDF, images, CSV, text, MD, FASTA, JSON, XML.`
     }
@@ -269,7 +272,18 @@ export function UploadFileDialog({ experimentId, onUploadComplete }: UploadFileD
               ...tabularPayload,
             })
 
-          if (dbError) throw dbError
+          if (dbError) {
+            // The object landed in storage but has no experiment_data row, so
+            // it can never be found/reaped (org-scoped paths have no TTL/cron
+            // reaper). Delete it so it doesn't leak. Best-effort — a removal
+            // failure shouldn't mask the original insert error.
+            try {
+              await supabase.storage.from(USER_STORAGE_BUCKET).remove([storagePath])
+            } catch {
+              /* best-effort cleanup */
+            }
+            throw dbError
+          }
 
           // Mark as success
           setSelectedFiles(prev => prev.map((f, idx) => 

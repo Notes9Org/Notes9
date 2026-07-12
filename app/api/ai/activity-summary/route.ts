@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getCurrentUser } from '@/lib/auth/current-user';
+import { tryCatalystBaseUrl } from '@/lib/catalyst-client';
 
 export const maxDuration = 30;
 
-const NOTES9_API_BASE = process.env.CHAT_API_URL?.replace(/\/$/, '') || '';
+const NOTES9_API_BASE = tryCatalystBaseUrl();
 
 /**
  * GET /api/ai/activity-summary

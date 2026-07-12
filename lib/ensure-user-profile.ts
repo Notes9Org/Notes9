@@ -1,6 +1,8 @@
 import "server-only"
 
-import type { SupabaseClient, User } from "@supabase/supabase-js"
+import { cache } from "react"
+import type { User } from "@supabase/supabase-js"
+import { createClient } from "@/lib/supabase/server"
 
 type EnsureResult =
   | { ok: true; profile: { id: string; organization_id: string; first_name: string | null; last_name: string | null } }
@@ -12,17 +14,22 @@ type EnsureResult =
  * so that downstream client components (sidebar, picker, etc.) can assume the
  * profile exists.
  *
- * Returns the profile on success. On failure, returns a reason string suitable
- * for logging; downstream UI should fall back to an empty-workspace state.
+ * Returns the profile (including `organization_id`) on success. On failure,
+ * returns a reason string suitable for logging; downstream UI should fall
+ * back to an empty-workspace state.
+ *
+ * Wrapped in React `cache()` — same dedup technique as `requireUser()` in
+ * lib/auth/current-user.ts — so every page in a request that needs
+ * `organization_id` can call this instead of re-querying `profiles`
+ * independently; within one render pass they share the same result as long
+ * as they're called with the same (cached) `user` object.
  *
  * RLS note: this runs with the user's session via the request-scoped Supabase
  * client, so insert permission is governed by the same row-level policies that
  * gated the previous client-side path. No service-role key is used.
  */
-export async function ensureUserProfile(
-  supabase: SupabaseClient,
-  user: User,
-): Promise<EnsureResult> {
+export const ensureUserProfile = cache(async (user: User): Promise<EnsureResult> => {
+  const supabase = await createClient()
   const existing = await supabase
     .from("profiles")
     .select("id, organization_id, first_name, last_name")
@@ -134,4 +141,4 @@ export async function ensureUserProfile(
       last_name: (retry.data.last_name as string | null) ?? null,
     },
   }
-}
+})

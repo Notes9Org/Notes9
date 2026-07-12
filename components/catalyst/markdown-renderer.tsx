@@ -11,7 +11,7 @@ import rehypeCitations from '@/lib/rehype-citations';
 import { parseCitationMeta, correctAcademicType } from '@/lib/citation-meta';
 import { resolveTitleFromId, isPlaceholderTitle } from '@/lib/citation-title';
 import { useSourceNavigation } from '@/hooks/use-source-navigation';
-import { Calendar, User } from 'lucide-react';
+import { ArrowUpRight, Calendar, User } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import type { CitationsManifest } from '@/hooks/use-agent-stream';
 import {
@@ -250,16 +250,16 @@ function CitationHoverCard({
   // width tracks the container so it's never clipped on a narrow sidebar and
   // grows when the sidebar widens — capped so it stays a tooltip, not a panel.
   const PAD = 8;
-  const cardWidth = Math.max(180, Math.min(320, containerRect.width - PAD * 2));
+  const cardWidth = Math.max(180, Math.min(380, containerRect.width - PAD * 2));
   const half = cardWidth / 2;
   const top = anchor.bottom - containerRect.top + 6;
   const rawCenter = anchor.left - containerRect.left + anchor.width / 2;
   // Keep the (center-anchored) card fully inside the container horizontally.
   const left = Math.max(half + PAD, Math.min(rawCenter, containerRect.width - half - PAD));
-  // Prefer the exact per-claim span; fall back to the document excerpt.
-  const snippetSource = chip.citedText || chip.excerpt;
-  const excerpt =
-    snippetSource.length > 180 ? `${snippetSource.slice(0, 179)}…` : snippetSource;
+  // Prefer the exact per-claim span; fall back to the document excerpt. The
+  // hover card is the sole source surface now, so show the full cited text
+  // (contained by a scroll region below) rather than a truncated preview.
+  const excerpt = chip.citedText || chip.excerpt;
 
   // Cross-link to the actual citation page: a web source opens its URL in a new
   // tab; a workspace record routes to its detail page (/lab-notes/<id>, etc.).
@@ -338,7 +338,7 @@ function CitationHoverCard({
         />
       </div>
       {displayTitle && (
-        <p className="mt-1.5 line-clamp-2 text-xs font-medium text-foreground">
+        <p className="mt-1.5 text-xs font-medium text-foreground">
           {displayTitle}
         </p>
       )}
@@ -348,7 +348,7 @@ function CitationHoverCard({
         </div>
       )}
       {excerpt && (
-        <p className="mt-1.5 line-clamp-3 text-xs leading-snug text-muted-foreground">
+        <p className="mt-1.5 max-h-40 overflow-y-auto text-xs leading-snug text-muted-foreground">
           “{excerpt}”
         </p>
       )}
@@ -364,7 +364,7 @@ function CitationHoverCard({
                 className="inline-flex items-center gap-0.5 rounded-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 Open
-                <span aria-hidden>↗</span>
+                <ArrowUpRight className="size-3" aria-hidden />
               </a>
             ) : onOpenPage ? (
               // Internal source → SPA navigation (keeps the AI sidebar open).
@@ -374,7 +374,7 @@ function CitationHoverCard({
                 className="inline-flex items-center gap-0.5 rounded-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 Open
-                <span aria-hidden>↗</span>
+                <ArrowUpRight className="size-3" aria-hidden />
               </button>
             ) : null)}
         </span>

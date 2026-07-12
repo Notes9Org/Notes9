@@ -42,6 +42,7 @@ export {
   pubMedAuthorHintClause,
 } from "@/lib/paper-query-variants"
 export { citationBoostForSearchRank } from "@/lib/paper-search-citation-boost"
+import { normalizeDoi } from "@/lib/literature-pdf-storage"
 
 /** PubMed IDs retrieved per search (efetch follows with same count). */
 const PUBMED_RETMAX = 80
@@ -87,13 +88,9 @@ function ncbiApiKeyParam(): string {
   return key ? `&api_key=${encodeURIComponent(key)}` : ""
 }
 
+/** Delegates to the canonical DOI normalizer (`lib/literature-pdf-storage.ts`) — the shape actually persisted to `literature_reviews`. */
 function normalizeDoiKey(doi?: string): string | undefined {
-  if (!doi) return undefined
-  const d = doi
-    .replace(/^https?:\/\/(dx\.)?doi\.org\//i, "")
-    .trim()
-    .toLowerCase()
-  return d || undefined
+  return normalizeDoi(doi ?? null) || undefined
 }
 
 function cleanDoiFromPublisher(raw: string | undefined): string | undefined {
@@ -114,18 +111,31 @@ function titleDedupeKey(title: string, year: number): string {
   return `${yPart}|${t}`
 }
 
-function dedupeKeyForPaper(p: SearchPaper): string {
+export function dedupeKeyForPaper(p: SearchPaper): string {
   if (p.pmid) return `pmid:${p.pmid}`
   const dk = normalizeDoiKey(p.doi)
   if (dk) return `doi:${dk}`
   return `title:${titleDedupeKey(p.title, p.year)}`
 }
 
-function stablePublicId(p: SearchPaper): string {
+export function stablePublicId(p: SearchPaper): string {
   if (p.pmid) return p.pmid
   const dk = normalizeDoiKey(p.doi)
   if (dk) return dk
   return p.id
+}
+
+/**
+ * Canonical paper identity key: pmid > normalizedDoi > title+year, matching
+ * `dedupeKeyForPaper`. Prefers a saved library UUID when present so a paper
+ * already in `literature_reviews` keys consistently once persisted.
+ */
+export function paperIdentityKey(
+  p: Pick<SearchPaper, "pmid" | "doi" | "title" | "year">,
+  opts?: { savedId?: string | null },
+): string {
+  if (opts?.savedId) return `id:${opts.savedId}`
+  return dedupeKeyForPaper(p as SearchPaper)
 }
 
 function mergePaperRows(a: SearchPaper, b: SearchPaper): SearchPaper {

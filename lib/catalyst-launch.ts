@@ -1,3 +1,7 @@
+import type { SearchPaper } from "@/types/paper-search"
+import { paperIdentityKey } from "@/lib/paper-search"
+import { toast } from "sonner"
+
 export type CatalystSectionScope =
   | "lab"
   | "project"
@@ -145,4 +149,129 @@ export function notifyCatalyst(message: string, tone: CatalystNoticeDetail["tone
   window.dispatchEvent(
     new CustomEvent<CatalystNoticeDetail>(CATALYST_NOTICE_EVENT, { detail: { message, tone } }),
   )
+}
+
+export type AttachPaperOptions = {
+  scope?: CatalystSectionScope
+  /** Display URL for the abstract-only literature_source (source page / DOI link). */
+  sourceUrl?: string | null
+  /** Already-imported PDF for a saved/staged `literature_reviews` row — skips the
+   *  ephemeral OA fetch and attaches the durable viewer-pdf route directly. */
+  savedPdf?: { id: string; storagePath: string } | null
+}
+
+function litSourceFor(paper: SearchPaper, sourceUrl?: string | null): CatalystLaunchLiteratureSource[] | undefined {
+  if (!paper.title) return undefined
+  return [
+    {
+      title: paper.title,
+      abstract: paper.abstract || undefined,
+      doi: paper.doi || undefined,
+      pmid: paper.pmid || undefined,
+      journal: paper.journal || undefined,
+      year: paper.year || undefined,
+      url: sourceUrl || undefined,
+      authors: paper.authors,
+    },
+  ]
+}
+
+/**
+ * One shared "Ask Catalyst about this paper" flow for every entry point (search
+ * result card, staged/saved paper reader). Always attaches the abstract as a
+ * citable `literature_source` up front, then resolves the best-available PDF:
+ * an already-imported one (`savedPdf`) if present, else an ephemeral open-access
+ * fetch — falling back to web search + the abstract on failure. Web search
+ * defaults off and only flips on when no full text is attachable, and Send is
+ * gated (`expectAttachment`) until the attachment lands or fails.
+ */
+export async function attachPaperToCatalyst(
+  paper: SearchPaper | null | undefined,
+  opts: AttachPaperOptions = {},
+) {
+  const scope = opts.scope ?? "literature"
+  if (!paper) {
+    openCatalystPanel({ scope, webSearch: true, autoSend: false })
+    return
+  }
+  const title = paper.title?.trim() || "paper"
+  const litSource = litSourceFor(paper, opts.sourceUrl)
+  const expectedName = `${title.slice(0, 80).replace(/[^a-zA-Z0-9._ -]/g, "_").trim() || "paper"}.pdf`
+
+  openCatalystPanel({
+    scope,
+    webSearch: false,
+    autoSend: false,
+    literatureSources: litSource,
+    expectAttachment: true,
+    expectedAttachmentName: expectedName,
+  })
+
+  const key = paperIdentityKey(paper, { savedId: opts.savedPdf?.id })
+
+  if (opts.savedPdf) {
+    attachToCatalyst(
+      [
+        {
+          url: `/api/literature/${opts.savedPdf.id}/viewer-pdf`,
+          name: `${title.slice(0, 100)}.pdf`,
+          contentType: "application/pdf",
+          paperKey: key,
+        },
+      ],
+      litSource,
+    )
+    return
+  }
+
+  try {
+    const res = await fetch("/api/literature/ephemeral-attach", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paper }),
+      signal: AbortSignal.timeout(30_000),
+    })
+    const data = await res.json().catch(() => null)
+    if (res.ok && data?.url && !data?.fallback) {
+      attachToCatalyst(
+        [
+          {
+            url: data.url as string,
+            name: (data.name as string) || `${title.slice(0, 100)}.pdf`,
+            contentType: "application/pdf",
+            paperKey: key,
+            storagePath: (data.storagePath as string) || undefined,
+            chatAttachmentId: (data.chatAttachmentId as string) || undefined,
+          },
+        ],
+        litSource,
+      )
+      if (!data.chatAttachmentId) {
+        toast.info(
+          "Paper attached for this message; follow-ups will use its abstract. Re-attach or upload the PDF if you need full text again.",
+        )
+      }
+      return
+    }
+    const abstract = paper.abstract || (typeof data?.text === "string" ? data.text : "")
+    openCatalystPanel({
+      scope,
+      webSearch: true,
+      autoSend: false,
+      literatureSources: abstract ? litSourceFor({ ...paper, abstract }, opts.sourceUrl) : undefined,
+      expectedAttachmentName: expectedName,
+    })
+    const fetchFailed = data?.reason === "fetch_failed"
+    const reasonLead = fetchFailed
+      ? "The open-access link couldn’t be downloaded"
+      : "This paper isn’t open access"
+    toast.info(
+      abstract
+        ? `${reasonLead} — Catalyst will read and cite the abstract. Upload the PDF for full-text analysis.`
+        : `${reasonLead}. Catalyst will use web search; upload the PDF for full-text analysis.`,
+    )
+  } catch {
+    openCatalystPanel({ scope, webSearch: true, autoSend: false })
+    toast.error("Couldn’t load the paper into Catalyst. Falling back to web search.")
+  }
 }

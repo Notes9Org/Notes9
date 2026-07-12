@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { MoreHorizontal, FileCheck, FileEdit, FileDown } from "lucide-react"
 import { toast } from "sonner"
+import { updatePaperMeta } from "@/lib/papers"
 
 interface PaperActionsProps {
   paper: {
@@ -30,10 +31,7 @@ export function PaperActions({ paper, onAfterMutation }: PaperActionsProps) {
   const [deleteOpen, setDeleteOpen] = useState(false)
 
   const updateStatus = async (status: string) => {
-    const { error } = await supabase
-      .from("papers")
-      .update({ status, updated_at: new Date().toISOString() })
-      .eq("id", paper.id)
+    const { error } = await updatePaperMeta(supabase, paper.id, { status })
 
     if (error) {
       toast.error("Failed to update status")

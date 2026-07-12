@@ -15,6 +15,10 @@
  * here no-ops gracefully (returns null) so callers fall back to other resolvers.
  */
 
+import { unstable_cache } from "next/cache"
+
+const FETCH_TIMEOUT_MS = 8000
+
 type UnpaywallOaLocation = {
   url_for_pdf?: string | null
   url?: string | null
@@ -81,6 +85,42 @@ export function extractPdfFromUnpaywallPayload(data: UnpaywallResponse): string 
 }
 
 /**
+ * Raw Unpaywall lookup by (already-normalized) DOI + contact email. Timed out
+ * via AbortController — same pattern as lib/supabase/middleware.ts — so one
+ * slow/hanging Unpaywall response can't stall a request indefinitely.
+ */
+async function fetchUnpaywallPdfUrl(normalizedDoi: string, email: string): Promise<string | null> {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+  try {
+    const apiUrl = `https://api.unpaywall.org/v2/${encodeURIComponent(normalizedDoi)}?email=${encodeURIComponent(email)}`
+    const res = await fetch(apiUrl, {
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+    })
+    if (!res.ok) return null
+    const data = (await res.json()) as UnpaywallResponse
+    if (data.error === true) return null
+    return extractPdfFromUnpaywallPayload(data)
+  } catch (e) {
+    console.warn("[unpaywall] lookup failed for DOI", normalizedDoi, e instanceof Error ? e.message : String(e))
+    return null
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
+// A DOI → OA PDF URL mapping is effectively immutable (it only changes when a
+// new OA copy is deposited, which is rare and not latency-sensitive to pick up
+// same-day). Cache for a day so repeat lookups of the same DOI across users/
+// requests skip the network round-trip entirely.
+const cachedFetchUnpaywallPdfUrl = unstable_cache(
+  fetchUnpaywallPdfUrl,
+  ["unpaywall-doi-lookup"],
+  { revalidate: 60 * 60 * 24 },
+)
+
+/**
  * Resolve a single DOI to its best OA PDF URL via Unpaywall. Returns `null` on any
  * failure (no email configured, network error, not OA, no PDF) — best-effort.
  */
@@ -92,15 +132,5 @@ export async function resolveUnpaywallPdfUrl(
   if (!email) return null
   const normalized = normalizeDoi(doi)
   if (!normalized) return null
-  try {
-    const apiUrl = `https://api.unpaywall.org/v2/${encodeURIComponent(normalized)}?email=${encodeURIComponent(email)}`
-    const res = await fetch(apiUrl, { headers: { Accept: "application/json" }, next: { revalidate: 0 } })
-    if (!res.ok) return null
-    const data = (await res.json()) as UnpaywallResponse
-    if (data.error === true) return null
-    return extractPdfFromUnpaywallPayload(data)
-  } catch (e) {
-    console.warn("[unpaywall] lookup failed for DOI", normalized, e instanceof Error ? e.message : String(e))
-    return null
-  }
+  return cachedFetchUnpaywallPdfUrl(normalized, email)
 }

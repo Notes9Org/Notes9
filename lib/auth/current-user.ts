@@ -4,6 +4,11 @@ import type { User } from "@supabase/supabase-js"
 import { createClient } from "@/lib/supabase/server"
 import { verifyAccessTokenLocally } from "@/lib/auth/verify-token"
 
+// One-time warning, mirroring lib/supabase/middleware.ts, so ops is alerted
+// when SUPABASE_JWT_SECRET is unset and every server-component/route-handler
+// call here falls back to the slower auth-server getUser() round-trip.
+let warnedMissingJwtSecret = false
+
 // Request-scoped, LOCAL verification of the session.
 //
 // Reads the access token from the cookie via getSession() (local; refreshes
@@ -28,6 +33,15 @@ import { verifyAccessTokenLocally } from "@/lib/auth/verify-token"
 export const getCurrentUser = cache(async (): Promise<User | null> => {
   const supabase = await createClient()
   const secret = process.env.SUPABASE_JWT_SECRET
+
+  if (!secret && !warnedMissingJwtSecret) {
+    warnedMissingJwtSecret = true
+    console.warn(
+      "[getCurrentUser] SUPABASE_JWT_SECRET is unset; authenticated requests will " +
+      "fall back to auth-server getUser() round-trips. Set the secret to enable " +
+      "local JWT verification and avoid connection-pool pressure.",
+    )
+  }
 
   if (secret) {
     let session = null;

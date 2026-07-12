@@ -1,4 +1,5 @@
 import { verifyBearerToken } from '@/lib/verify-bearer-token';
+import { tryCatalystBaseUrl } from '@/lib/catalyst-client';
 
 // Regenerate an artifact into a new draft version. The backend may do an LLM
 // patch call plus a sandbox render (and one auto-repair round), so this can take
@@ -6,7 +7,7 @@ import { verifyBearerToken } from '@/lib/verify-bearer-token';
 export const runtime = 'nodejs';
 export const maxDuration = 90;
 
-const NOTES9_API_BASE = process.env.CHAT_API_URL?.replace(/\/$/, '') || '';
+const NOTES9_API_BASE = tryCatalystBaseUrl();
 
 export async function POST(
   req: Request,

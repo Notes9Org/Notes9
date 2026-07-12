@@ -1,12 +1,10 @@
 import { NextResponse } from 'next/server';
 import { verifyBearerToken } from "@/lib/verify-bearer-token"
+import { compareAgentBaseUrl } from '@/lib/catalyst-client'
 
 export const maxDuration = 60;
 
-const NOTES9_BASE = process.env.CHAT_API_URL?.replace(/\/$/, '') ?? '';
-const DEFAULT_PAPER_ANALYZER = NOTES9_BASE ? `${NOTES9_BASE}/paper-analyzer` : '';
-const UPSTREAM =
-  process.env.LITERATURE_COMPARE_AGENT_URL?.replace(/\/$/, '') || DEFAULT_PAPER_ANALYZER;
+const UPSTREAM = compareAgentBaseUrl();
 
 type Body = {
   query?: string;

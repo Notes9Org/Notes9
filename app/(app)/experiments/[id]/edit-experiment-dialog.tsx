@@ -31,6 +31,7 @@ import { useRouter } from "next/navigation"
 import { Pencil, Loader2 } from "lucide-react"
 import { getUniqueNameErrorMessage } from "@/lib/unique-name-error"
 import { DATE_ORDER_ERROR, isEndDateBeforeStartDate } from "@/lib/date-order"
+import { updateExperiment } from "@/lib/experiments"
 
 interface Experiment {
   id: string
@@ -129,20 +130,16 @@ export function EditExperimentDialog({
     setIsSaving(true)
 
     try {
-      const { error } = await supabase
-        .from("experiments")
-        .update({
-          name: name.trim(),
-          description: description.trim() || null,
-          hypothesis: hypothesis.trim() || null,
-          status,
-          start_date: startDate || null,
-          completion_date: completionDate || null,
-          project_id: projectId,
-          assigned_to: assignedTo || null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", experiment.id)
+      const { error } = await updateExperiment(supabase, experiment.id, {
+        name: name.trim(),
+        description: description.trim() || null,
+        hypothesis: hypothesis.trim() || null,
+        status,
+        startDate: startDate || null,
+        completionDate: completionDate || null,
+        projectId,
+        assignedTo: assignedTo || null,
+      })
 
       if (error) throw error
 

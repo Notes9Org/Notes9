@@ -18,6 +18,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft } from "lucide-react"
 import { toast } from "sonner"
+import { createPaper } from "@/lib/papers"
 
 function NewPaperPageInner() {
   const user = useAuthUser();
@@ -63,17 +64,11 @@ function NewPaperPageInner() {
       const supabase = createClient()
       if (!user) throw new Error("Not authenticated")
 
-      const { data, error } = await supabase
-        .from("papers")
-        .insert({
-          title: title.trim(),
-          content: "",
-          status: "draft",
-          project_id: projectId,
-          created_by: user.id,
-        })
-        .select("id")
-        .single()
+      const { data, error } = await createPaper(supabase, {
+        title: title.trim(),
+        projectId,
+        createdBy: user.id,
+      })
 
       if (error) throw error
 
