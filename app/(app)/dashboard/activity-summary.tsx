@@ -137,12 +137,12 @@ export function ActivitySummary() {
     void fetchSummary(userId)
   }, [userId, fetchSummary])
 
-  // ─── Loading skeleton ────────────────────────────────────────────
+  // ─── Loading skeleton (matches the chip's footprint) ─────────────
   if (isLoading && !summary) {
     return (
-      <div className="mx-auto flex w-full max-w-3xl items-center justify-center gap-2.5 px-4 pt-1">
-        <div className="h-5 w-5 shrink-0 animate-pulse rounded-full bg-muted" />
-        <div className="h-4 w-72 animate-pulse rounded-md bg-muted" />
+      <div className="relative w-full max-w-xl rounded-xl border border-[color:var(--glass-border)] bg-background/50 px-3.5 py-2.5 md:ml-auto">
+        <div className="mb-1.5 h-2.5 w-16 animate-pulse rounded bg-muted" />
+        <div className="h-3.5 w-full max-w-[18rem] animate-pulse rounded bg-muted" />
       </div>
     )
   }
@@ -150,21 +150,36 @@ export function ActivitySummary() {
   // ─── Empty / error → hide completely ─────────────────────────────
   if (!summary) return null
 
+  // "Lab pulse" chip: a raised glass inset with an accent-tinted hairline and
+  // a gradient micro-label — the AI summary reads as a signed insight, not a
+  // stray line of body text.
   return (
     <div
       className={`
-        mx-auto flex w-full max-w-3xl items-start justify-center gap-2 px-4 pt-1
+        relative w-full max-w-xl overflow-hidden rounded-xl border
+        border-[color:color-mix(in_oklab,var(--primary)_22%,var(--glass-border))]
+        bg-background/55 px-3.5 py-2.5 shadow-sm backdrop-blur-sm md:ml-auto
         transition-all duration-700 ease-out
         ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"}
       `}
     >
-      <Activity
+      {/* Accent glow rising from the label corner */}
+      <div
         aria-hidden
-        className="mt-1 size-4 shrink-0 text-[color:var(--n9-accent)] opacity-80"
-        strokeWidth={1.5}
+        className="pointer-events-none absolute -left-6 -top-8 size-24 rounded-full bg-[color:var(--n9-accent)]/10 blur-2xl"
       />
+      <div className="flex items-center gap-1.5">
+        <Activity
+          aria-hidden
+          className="size-3 shrink-0 text-[color:var(--n9-accent)]"
+          weight="bold"
+        />
+        <span className="bg-gradient-to-r from-[color:var(--n9-accent)] to-[color:color-mix(in_oklab,var(--n9-accent)_45%,#d9a24a)] bg-clip-text text-[9px] font-semibold uppercase tracking-[0.16em] text-transparent">
+          Lab pulse
+        </span>
+      </div>
       <p
-        className="min-w-0 text-pretty text-center text-base leading-snug text-muted-foreground/90 italic"
+        className="mt-1 min-w-0 text-pretty text-[13px] italic leading-snug text-muted-foreground"
         style={{ fontFamily: "var(--font-family-display)" }}
       >
         {summary}

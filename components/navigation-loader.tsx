@@ -54,18 +54,51 @@ function getActionLabel(target: HTMLElement) {
   return rawLabel.replace(/\s+/g, " ").trim()
 }
 
+/** Destination-path → loader variant, most specific first. Matching is STRICT
+ * on the pathname: the query string is never consulted (sidebar links carry
+ * `?project=<id>`, which used to fuzzy-match every section to the "projects"
+ * loader). `/data` shows the experiments loader — data lives inside an
+ * experiment tab and the route redirects there. */
+const PATH_VARIANTS: ReadonlyArray<readonly [string, Notes9LoaderVariant]> = [
+  ["/research-map", "research-map"],
+  ["/protocols", "protocols"],
+  ["/literature-reviews", "literature"],
+  ["/papers", "writing"],
+  ["/experiments", "experiments"],
+  ["/data", "experiments"],
+  ["/lab-notes", "notes"],
+  ["/samples", "samples"],
+  ["/equipment", "equipment"],
+  ["/projects", "projects"],
+  ["/search", "search"],
+]
+
+function variantFromPath(path: string): Notes9LoaderVariant | null {
+  for (const [prefix, variant] of PATH_VARIANTS) {
+    if (path === prefix || path.startsWith(prefix + "/")) return variant
+  }
+  return null
+}
+
 function inferLoaderVariant(actionLabel: string, href?: string | null): Notes9LoaderVariant {
-  const source = `${href ?? ""} ${actionLabel}`.toLowerCase()
-  if (source.includes("/research-map") || source.includes("research map")) return "research-map"
+  // The destination path is what the user actually selected — it wins.
+  if (href) {
+    const fromPath = variantFromPath(extractPathname(href))
+    if (fromPath) return fromPath
+  }
+  // Label keywords only as a fallback for hrefless triggers (buttons, custom
+  // navigation events with no path).
+  const source = actionLabel.toLowerCase()
+  if (source.includes("research map")) return "research-map"
   if (source.includes("protocol")) return "protocols"
   if (source.includes("literature") || source.includes("book")) return "literature"
-  if (source.includes("writing") || source.includes("/papers")) return "writing"
+  if (source.includes("writing") || source.includes("paper")) return "writing"
   if (source.includes("search")) return "search"
-  if (source.includes("/projects") || source.includes("project")) return "projects"
-  if (source.includes("/experiments") || source.includes("experiment")) return "experiments"
-  if (source.includes("/samples") || source.includes("sample")) return "samples"
-  if (source.includes("/equipment") || source.includes("equipment") || source.includes("microscope")) return "equipment"
-  if (source.includes("/lab-notes") || source.includes("note")) return "notes"
+  if (source.includes("experiment")) return "experiments"
+  if (source.includes("sample")) return "samples"
+  if (source.includes("equipment") || source.includes("microscope")) return "equipment"
+  if (source.includes("note")) return "notes"
+  if (source.includes("project")) return "projects"
   return "default"
 }
 
@@ -221,20 +254,29 @@ export function NavigationLoader() {
   useEffect(() => {
     if (!isLoading || loadingStartedAt == null) return
 
-    // Redirect chains (e.g. /data → /experiments/[id]?tab=data) change the
-    // pathname more than once. Hiding on the FIRST change let the outgoing
-    // page flash back mid-navigation — only settle once we've reached the
-    // destination recorded at click time. When the destination is unknown
-    // (custom navigation events), settle after leaving the origin path.
+    // Settle = hand off from the mascot overlay to the destination's
+    // loading.tsx skeleton, which has already committed beneath us (that's
+    // what flipped the pathname). The overlay is deliberately the SHORT
+    // phase — the route skeleton owns the rest of the wait while data
+    // streams, so the skeleton always shows longer than the overlay.
     const destination = destinationPathRef.current
-    if (destination) {
-      if (pathname !== destination) return
-    } else if (originPathRef.current && pathname === originPathRef.current) {
-      return
-    }
+    const origin = originPathRef.current
+
+    // Still on the page the user clicked from → route not committed yet.
+    if (origin != null && pathname === origin) return
+
+    // Redirect chains (e.g. /data → /experiments?project=…) never reach the
+    // recorded destination. Once we've LEFT the origin, treat a path that
+    // stays stable through a short grace window as the real destination —
+    // this effect re-runs (and cancels the timer) on every pathname hop, so
+    // an intermediate route never dismisses the overlay early. Previously the
+    // overlay waited for the unreachable destination until the 8s safety
+    // timeout fired.
+    const reachedDestination = destination == null || pathname === destination
+    const redirectGraceMs = reachedDestination ? 0 : 450
 
     const elapsed = Date.now() - loadingStartedAt
-    const remaining = Math.max(0, MIN_LOADER_DURATION_MS - elapsed)
+    const remaining = Math.max(redirectGraceMs, MIN_LOADER_DURATION_MS - elapsed)
     let raf1 = 0
     let raf2 = 0
     const timeoutId = window.setTimeout(() => {
