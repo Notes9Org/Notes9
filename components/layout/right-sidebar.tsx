@@ -92,6 +92,7 @@ import {
 import { useAgentStream, type AgentFileAttachment, type AgentLiteratureSource, type CitationsManifest, type CitationsManifestEntry, type AgentGraph } from '@/hooks/use-agent-stream';
 import { useResolvedCitationTitles, type ResolvableCite } from '@/hooks/use-resolved-citation-titles';
 import { isPlaceholderTitle } from '@/lib/citation-title';
+import { resolveLiteratureTitle } from '@/lib/literature-title';
 import { AgentGraphList } from '@/components/catalyst/agent-graph-view';
 import { usePinnedAutoScroll } from '@/hooks/use-pinned-auto-scroll';
 import { deleteTrailingMessages } from '@/app/(app)/catalyst/actions';
@@ -1263,7 +1264,7 @@ export function RightSidebar({
             supabase.from('protocols').select('id,name').order('created_at', { ascending: false }).limit(120),
           ]);
           const merged: MentionItem[] = [
-            ...(lit ?? []).map((r: { id: string; title: string | null }) => ({ kind: 'literature_review' as const, id: r.id, title: r.title ?? 'Untitled literature' })),
+            ...(lit ?? []).map((r: { id: string; title: string | null }) => ({ kind: 'literature_review' as const, id: r.id, title: resolveLiteratureTitle(r) })),
             ...(notes ?? []).map((r: { id: string; title: string | null }) => ({ kind: 'lab_note' as const, id: r.id, title: r.title ?? 'Untitled note' })),
             ...(experiments ?? []).map((r: { id: string; name: string | null }) => ({ kind: 'experiment' as const, id: r.id, title: r.name ?? 'Untitled experiment' })),
             ...(projects ?? []).map((r: { id: string; name: string | null }) => ({ kind: 'project' as const, id: r.id, title: r.name ?? 'Untitled project' })),
@@ -1388,7 +1389,7 @@ export function RightSidebar({
   // context in metadata.literature so follow-up turns are grounded server-side.
   const persistedLiteratureSigRef = useRef<Set<string>>(new Set());
   useEffect(() => {
-    if (!literature || literature.streaming) return;
+    if (!literature || literature.streaming || !literature.dive) return;
     const summary = literature.summary?.trim();
     const query = literature.query?.trim();
     if (!summary || !query) return;
@@ -1407,15 +1408,18 @@ export function RightSidebar({
         tool_used: 'literature',
       };
       const formatted = formatNotes9AssistantMarkdown(donePayload, literature.manifest ?? null);
-      const sessionId = await createSession(query.slice(0, 80), {
-        kind: 'literature',
-        // Persist the summary prose alongside the paper context so follow-ups
-        // in a reopened session keep the summary text (capped to keep the
-        // metadata row small; the full text lives in the assistant message).
-        metadata: literature.context
-          ? { literature: { ...literature.context, summary: summary.slice(0, 6000) } }
-          : {},
-      });
+      const title = query.slice(0, 80);
+      const metadata = literature.context
+        ? { literature: { ...literature.context, summary: summary.slice(0, 6000) } }
+        : {};
+      // Dedupe against the plain history row the search engine already wrote
+      // on completion (lib/literature-search-engine.ts persistHistory) — reuse
+      // it (with dive's richer metadata + real chat messages) instead of
+      // inserting a second row for the same query.
+      const existing = sessions.find((s) => s.kind === 'literature' && s.title === title);
+      const sessionId = existing
+        ? (await updateSessionMetadata(existing.id, metadata), existing.id)
+        : await createSession(title, { kind: 'literature', metadata });
       if (!sessionId || cancelled) return;
       await saveMessage(sessionId, 'user', query);
       await saveMessage(sessionId, 'assistant', formatted);
@@ -1811,7 +1815,7 @@ export function RightSidebar({
       setFallbackMentionCandidates(
         data.map((row: { id: string; title: string | null; authors: string | null; catalog_placement: string | null }) => ({
           id: row.id,
-          title: row.title ?? '',
+          title: resolveLiteratureTitle(row),
           authors: row.authors,
           catalog_placement: row.catalog_placement ?? null,
         }))
