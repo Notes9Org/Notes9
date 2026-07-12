@@ -1,11 +1,18 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ClipboardText as ClipboardList, CircleNotch as Loader2, DotsThreeVertical as MoreVertical, PencilSimple as Pencil, Plus, Trash as Trash2 } from "@phosphor-icons/react/ssr"
+import { ClipboardText as ClipboardList, DotsThreeVertical as MoreVertical, PencilSimple as Pencil, Plus, Trash as Trash2 } from "@phosphor-icons/react/ssr"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
+import {
+  SideRailBody,
+  SideRailEmpty,
+  SideRailHeader,
+  SideRailList,
+  SideRailRow,
+  SideRailSkeleton,
+} from "@/components/patterns/side-rail"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,7 +32,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { buttonVariants } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
-import { cn } from "@/lib/utils"
+import { useSkeletonGate } from "@/hooks/use-skeleton-gate"
 
 interface ProtocolSibling {
   id: string
@@ -66,6 +73,7 @@ export function ProtocolSiblingsList({
   const supabase = useMemo(() => createClient(), [])
   const [rows, setRows] = useState<ProtocolSibling[]>([])
   const [loading, setLoading] = useState(true)
+  const showSkeleton = useSkeletonGate(loading)
   const [deleteTarget, setDeleteTarget] = useState<ProtocolSibling | null>(null)
   const [busy, setBusy] = useState(false)
   const [renameTargetId, setRenameTargetId] = useState<string | null>(null)
@@ -167,107 +175,100 @@ export function ProtocolSiblingsList({
 
   return (
     <>
-      <div className="flex h-full min-h-0 w-52 min-w-[13rem] flex-col gap-0 p-2">
-        <div className="flex h-9 shrink-0 items-center justify-between gap-2 px-1">
-          <span className="truncate text-xs font-medium text-muted-foreground">Protocols</span>
+      <div className="flex h-full min-h-0 flex-col gap-1">
+        <SideRailHeader label="Protocols">
           <Button
             type="button"
             variant="ghost"
-            size="icon-sm"
+            size="icon"
+            className="h-7 w-7 shrink-0"
             onClick={handleCreate}
             disabled={busy}
             aria-label="New protocol"
             title="New protocol in this project"
           >
-            <Plus className="h-4 w-4" />
+            <Plus className="size-4" />
           </Button>
-        </div>
+        </SideRailHeader>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-auto mt-1">
-          {loading ? (
-            <div className="flex flex-1 items-center justify-center py-6 text-xs text-muted-foreground">
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Loading…
-            </div>
-          ) : rows.length === 0 ? (
-            <p className="px-2 py-3 text-center text-xs text-muted-foreground">
-              No other protocols in this scope.
-            </p>
+        <SideRailBody>
+          {showSkeleton ? (
+            <SideRailSkeleton label="Loading protocols" />
+          ) : loading ? null : rows.length === 0 ? (
+            <SideRailEmpty>No other protocols in this scope.</SideRailEmpty>
           ) : (
-            <ul className="flex w-full min-w-0 flex-col gap-0.5">
+            <SideRailList>
               {rows.map((row) => {
                 const isActive = row.id === currentProtocolId
                 const editing = renameTargetId === row.id
                 return (
-                  <li key={row.id} className="group/list-item relative">
-                    <div
-                      className={cn(
-                        "grid min-h-8 w-full grid-cols-[auto_1fr_auto] items-center gap-2 rounded-md px-2 py-1 text-left text-sm outline-none transition-colors hover:bg-muted/80",
-                        isActive && "bg-muted font-medium"
-                      )}
-                    >
-                      <ClipboardList className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      {editing ? (
-                        <input
-                          autoFocus
-                          value={renameDraft}
-                          onChange={(e) => setRenameDraft(e.target.value)}
-                          onBlur={commitRename}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault()
-                              ;(e.target as HTMLInputElement).blur()
-                            }
-                            if (e.key === "Escape") {
-                              setRenameTargetId(null)
-                            }
-                          }}
-                          className="min-w-0 truncate border-b border-primary bg-transparent text-sm text-foreground outline-none"
-                          aria-label="Rename protocol"
-                        />
-                      ) : (
-                        <Link
-                          href={`/protocols/${row.id}`}
-                          className="min-w-0 truncate"
-                          title={row.name}
-                        >
-                          {row.name || "Untitled protocol"}
-                        </Link>
-                      )}
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            className="size-7 shrink-0 opacity-70 hover:opacity-100"
-                            onClick={(e) => e.stopPropagation()}
-                            aria-label="Protocol options"
-                          >
-                            <MoreVertical className="h-3.5 w-3.5" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                          <DropdownMenuItem onClick={() => startRename(row)}>
-                            <Pencil className="mr-2 h-4 w-4" />
-                            Rename
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            className="text-destructive focus:text-destructive"
-                            onClick={() => setDeleteTarget(row)}
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Delete protocol
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </li>
+                  <SideRailRow
+                    key={row.id}
+                    active={isActive}
+                    title={editing ? undefined : row.name}
+                    icon={<ClipboardList />}
+                    onSelect={editing ? undefined : () => router.push(`/protocols/${row.id}`)}
+                    actions={
+                      !editing && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              className="size-7 shrink-0"
+                              onClick={(e) => e.stopPropagation()}
+                              aria-label="Protocol options"
+                            >
+                              <MoreVertical className="size-3.5" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                            <DropdownMenuItem onClick={() => startRename(row)}>
+                              <Pencil className="mr-2 size-4" />
+                              Rename
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={() => setDeleteTarget(row)}
+                            >
+                              <Trash2 className="mr-2 size-4" />
+                              Delete protocol
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )
+                    }
+                  >
+                    {editing ? (
+                      <input
+                        autoFocus
+                        value={renameDraft}
+                        onChange={(e) => setRenameDraft(e.target.value)}
+                        onBlur={commitRename}
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => {
+                          e.stopPropagation()
+                          if (e.key === "Enter") {
+                            e.preventDefault()
+                            ;(e.target as HTMLInputElement).blur()
+                          }
+                          if (e.key === "Escape") {
+                            setRenameTargetId(null)
+                          }
+                        }}
+                        className="w-full min-w-0 border-b border-primary bg-transparent text-sm text-foreground outline-none"
+                        aria-label="Rename protocol"
+                      />
+                    ) : (
+                      row.name || "Untitled protocol"
+                    )}
+                  </SideRailRow>
                 )
               })}
-            </ul>
+            </SideRailList>
           )}
-        </div>
+        </SideRailBody>
       </div>
 
       <AlertDialog open={deleteTarget !== null} onOpenChange={(o) => !o && setDeleteTarget(null)}>

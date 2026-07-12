@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { DownloadSimple as Download, FileText, FileText as FileSpreadsheet, FileText as FileType2, Image as ImageIcon, File as FileIcon, Check, FolderOpen as FolderInput, Eye, CircleNotch as Loader2, MagnifyingGlassPlus as ZoomIn, Code as Code2 } from "@phosphor-icons/react/ssr";
+import { DownloadSimple as Download, FileText, FileText as FileSpreadsheet, FileText as FileType2, Image as ImageIcon, File as FileIcon, Check, FolderOpen as FolderInput, ArrowUpRight, CircleNotch as Loader2, MagnifyingGlassPlus as ZoomIn, Code as Code2 } from "@phosphor-icons/react/ssr";
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -426,7 +426,7 @@ export function AgentArtifactCard({ artifact: artifactProp }: AgentArtifactCardP
               title="Preview"
               className="text-muted-foreground hover:text-foreground"
             >
-              <Eye className="size-4" aria-hidden="true" />
+              <ArrowUpRight className="size-4" aria-hidden="true" />
             </Button>
           )}
 

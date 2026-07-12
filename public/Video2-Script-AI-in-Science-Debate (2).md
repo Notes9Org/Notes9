@@ -1,3 +1,4 @@
+
 # VIDEO 2 — "Should Scientists use AI?"
 
 **Project:** Notes9 YouTube series · Video 2
@@ -82,15 +83,9 @@ To ask: where’s the evidence?
 
 
 
-So when a tool moves this quickly through the research world, it usually means one of two things.
+So when a tool moves this quickly through the research world, it usually means 
 
-
-
-Either everyone has lost their mind at the same time…
-
-
-
-Or the tool is actually useful.
+the tool is actually useful.
 
 
 

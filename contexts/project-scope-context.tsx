@@ -38,6 +38,8 @@ export type ProjectScope = {
   projectName: string | null
   projectColor: string | null
   experimentId: string | null
+  /** Experiment present in the CURRENT url only (never the persisted one). */
+  liveExperimentId: string | null
   experimentName: string | null
   loading: boolean
   clearScope: () => void
@@ -208,15 +210,20 @@ export function ProjectScopeProvider({ children }: { children: ReactNode }) {
     setExperimentName(null)
   }, [])
 
+  // An experiment is only "live" when it's part of the CURRENT url (path or
+  // query). The persisted last-experiment id is kept for display fallbacks,
+  // but must never be carried into nav links — that silently reopened the
+  // previous experiment when clicking Lab notes / Protocols / Samples / Data
+  // with no experiment actually selected.
+  const liveExperimentId = pathExperimentId ?? queryExperimentId
+
   const scopedQueryString = useMemo(() => {
     const params = new URLSearchParams()
     if (projectId) params.set("project", projectId)
-    const activeExperiment =
-      experimentId ?? queryExperimentId ?? persistedExperimentId
-    if (activeExperiment) params.set("experiment", activeExperiment)
+    if (liveExperimentId) params.set("experiment", liveExperimentId)
     const qs = params.toString()
     return qs ? `?${qs}` : ""
-  }, [projectId, experimentId, queryExperimentId, persistedExperimentId])
+  }, [projectId, liveExperimentId])
 
   const value = useMemo<ProjectScope>(
     () => ({
@@ -224,6 +231,7 @@ export function ProjectScopeProvider({ children }: { children: ReactNode }) {
       projectName,
       projectColor: projectId ? colorFromId(projectId) : null,
       experimentId: experimentId ?? queryExperimentId ?? persistedExperimentId,
+      liveExperimentId,
       experimentName,
       loading,
       clearScope,
@@ -235,6 +243,7 @@ export function ProjectScopeProvider({ children }: { children: ReactNode }) {
       experimentId,
       queryExperimentId,
       persistedExperimentId,
+      liveExperimentId,
       experimentName,
       loading,
       clearScope,
@@ -257,6 +266,7 @@ export function useProjectScope(): ProjectScope {
       projectName: null,
       projectColor: null,
       experimentId: null,
+      liveExperimentId: null,
       experimentName: null,
       loading: false,
       clearScope: () => {},

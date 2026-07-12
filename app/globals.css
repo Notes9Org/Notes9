@@ -85,6 +85,15 @@
   --glass-bg: rgba(255, 253, 250, 0.72);
   --glass-border: rgba(150, 80, 52, 0.14);
   --glass-blur: 14px;
+  /* Sandglass layers: deep blur for hero surfaces, a top edge highlight, a
+     soft sheen wash, and the grain ("sand") intensity. `--glass-grain-img`
+     is the same noise tile with opacity baked in, for surfaces that layer it
+     via background-blend-mode instead of a ::before overlay. */
+  --glass-blur-strong: 22px;
+  --glass-highlight: rgba(255, 255, 255, 0.55);
+  --glass-sheen: rgba(255, 255, 255, 0.28);
+  --glass-grain-opacity: 0.09;
+  --glass-grain-img: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='140'%20height='140'%3E%3Cfilter%20id='n'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.7'%20numOctaves='2'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='saturate'%20values='0'/%3E%3C/filter%3E%3Crect%20width='100%25'%20height='100%25'%20filter='url(%23n)'%20opacity='0.09'/%3E%3C/svg%3E");
   /* ── Catalyst design language (G) ─────────────────────────────────── */
   /* G1 · one spring-like curve + three durations. */
   --n9-ease: cubic-bezier(0.22, 1, 0.36, 1);
@@ -160,6 +169,12 @@
   --glass-bg: rgba(34, 29, 24, 0.66);
   --glass-border: rgba(245, 240, 232, 0.12);
   --glass-blur: 14px;
+  /* Sandglass layers — dark: weaker highlight/sheen, slightly stronger grain. */
+  --glass-blur-strong: 22px;
+  --glass-highlight: rgba(255, 255, 255, 0.07);
+  --glass-sheen: rgba(255, 255, 255, 0.05);
+  --glass-grain-opacity: 0.14;
+  --glass-grain-img: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='140'%20height='140'%3E%3Cfilter%20id='n'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.7'%20numOctaves='2'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='saturate'%20values='0'/%3E%3C/filter%3E%3Crect%20width='100%25'%20height='100%25'%20filter='url(%23n)'%20opacity='0.14'/%3E%3C/svg%3E");
   /* G2 · elevation scale — deeper shadows for dark. */
   --n9-elev-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 1px rgba(0, 0, 0, 0.3);
   --n9-elev-2: 0 1px 2px rgba(0, 0, 0, 0.4), 0 14px 34px -14px rgba(0, 0, 0, 0.6);
@@ -419,23 +434,49 @@
   background: transparent !important;
 }
 
-/* Custom scrollbar styling */
+/* ── Ghost scrollbars (global) ─────────────────────────────────────────────
+   The platform scroll pattern: no permanent track/gutter chrome — a thin
+   (6px) pill thumb that is invisible at rest and fades in when the scroll
+   container is hovered or focused. To scroll with a pointer you're hovering
+   the container, so the affordance appears exactly when it's actionable;
+   compact regions (glass rails) add edge-fade overflow hints on top
+   (SideRailBody). Standard properties cover Chrome 121+/Firefox; the
+   -webkit rules cover Safari. `.n9-scrollbar-ghost` opts a container in
+   explicitly — it matches these defaults and survives local overrides. */
+* {
+  scrollbar-width: thin; /* Firefox / Chrome 121+ */
+  scrollbar-color: transparent transparent;
+}
+*:hover,
+*:focus-within {
+  scrollbar-color: color-mix(in srgb, var(--muted-foreground) 35%, transparent) transparent;
+}
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
-
 ::-webkit-scrollbar-track {
-  @apply bg-background;
+  background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
-  @apply bg-muted;
-  border-radius: 6px;
+  background: transparent;
+  border-radius: 9999px;
+}
+:hover::-webkit-scrollbar-thumb,
+:focus-within::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted-foreground) 35%, transparent);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--muted-foreground) 55%, transparent);
 }
 
-::-webkit-scrollbar-thumb:hover {
-  @apply bg-muted-foreground/50;
+.n9-scrollbar-ghost {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.n9-scrollbar-ghost:hover,
+.n9-scrollbar-ghost:focus-within {
+  scrollbar-color: color-mix(in srgb, var(--muted-foreground) 35%, transparent) transparent;
 }
 
 /* Ensure proper color scheme detection */
@@ -1547,6 +1588,11 @@ body > [data-radix-popper-content-wrapper] {
 /* ------------------------------------------------------------------ */
 .glass-panel {
   background-color: var(--glass-bg);
+  /* Sandglass grain, blended into the fill (background-blend-mode instead of
+     a ::before overlay so positioned/shadowed consumers are unaffected). */
+  background-image: var(--glass-grain-img);
+  background-size: 140px 140px;
+  background-blend-mode: overlay;
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
   backdrop-filter: blur(var(--glass-blur)) saturate(140%);
   border: 1px solid var(--glass-border);
@@ -1592,6 +1638,9 @@ body > [data-radix-popper-content-wrapper] {
 /* G4 · control-grade glass (popovers, menus, floating chips). */
 .n9-glass {
   background-color: var(--glass-bg);
+  background-image: var(--glass-grain-img);
+  background-size: 140px 140px;
+  background-blend-mode: overlay;
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
   backdrop-filter: blur(var(--glass-blur)) saturate(150%);
   border: 1px solid var(--glass-border);
@@ -1606,27 +1655,128 @@ body > [data-radix-popper-content-wrapper] {
   box-shadow: 0 6px 20px -8px var(--n9-accent-glow);
 }
 
-/* 11.1 · unified composer deck — one elevated glass shell (hero + docked). */
-.n9-composer {
-  border-radius: 1rem;
-  border: 1px solid var(--glass-border);
-  background-color: var(--glass-bg);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
-  backdrop-filter: blur(var(--glass-blur)) saturate(150%);
-  box-shadow: var(--n9-elev-2);
-  transition:
-    border-color var(--n9-dur-base) var(--n9-ease),
-    box-shadow var(--n9-dur-base) var(--n9-ease);
-}
-.n9-composer:focus-within {
-  border-color: color-mix(in srgb, var(--n9-accent) 42%, var(--border));
-  box-shadow: var(--n9-elev-2), 0 0 0 3px color-mix(in srgb, var(--n9-accent) 14%, transparent);
+/* 11.1 · unified composer deck — THE glass shell for every chat input
+   (dashboard/list-page hero, docked Catalyst drawer, popup chat, paper AI).
+   Readability rule: translucent glass at rest; while focused the surface
+   solidifies toward the card color so typed text always sits on a stable,
+   high-contrast background. Lives in @layer components so call-site
+   utilities (e.g. drag-over highlights) can override it. */
+@layer components {
+  /* Sand grain — a static fractal-noise wash that gives glass surfaces the
+     coarse "frosted sand" texture. Opt-in via .n9-grain, baked into
+     .n9-composer. Kept at token-driven low opacity so text stays perfectly
+     readable (it reads as paper tooth, not visual noise). */
+  .n9-grain {
+    position: relative;
+  }
+  .n9-grain::before,
+  .n9-composer::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='140'%20height='140'%3E%3Cfilter%20id='n'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.7'%20numOctaves='2'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='saturate'%20values='0'/%3E%3C/filter%3E%3Crect%20width='100%25'%20height='100%25'%20filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 140px 140px;
+    opacity: var(--glass-grain-opacity);
+    mix-blend-mode: overlay;
+  }
+
+  /* Sheen sweep — a one-shot diagonal light streak on hover. Pointer devices
+     only; removed entirely under reduced motion (see G7 block). */
+  .n9-sheen {
+    position: relative;
+    overflow: hidden;
+  }
+  .n9-sheen::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(115deg, transparent 32%, rgba(255, 255, 255, 0.25) 48%, transparent 62%);
+    transform: translateX(-130%);
+  }
+  @media (hover: hover) {
+    .n9-sheen:hover::after {
+      transform: translateX(130%);
+      transition: transform 600ms var(--n9-ease);
+    }
+  }
+
+  .n9-composer {
+    position: relative;
+    border-radius: 1rem;
+    border: 1px solid var(--glass-border);
+    background-color: var(--glass-bg);
+    /* Sheen wash: a soft light sweep across the top of the pane. */
+    background-image: linear-gradient(to bottom, var(--glass-sheen), transparent 42%);
+    -webkit-backdrop-filter: blur(var(--glass-blur-strong)) saturate(160%);
+    backdrop-filter: blur(var(--glass-blur-strong)) saturate(160%);
+    /* Inner top highlight = the polished glass edge; then ambient elevation. */
+    box-shadow:
+      inset 0 1px 0 var(--glass-highlight),
+      var(--n9-elev-2);
+    transition:
+      border-color var(--n9-dur-base) var(--n9-ease),
+      background-color var(--n9-dur-base) var(--n9-ease),
+      box-shadow var(--n9-dur-base) var(--n9-ease);
+  }
+  .n9-composer:focus-within {
+    /* Solidify while typing — input text always sits on a stable surface. */
+    background-color: color-mix(in srgb, var(--card) 90%, transparent);
+    border-color: color-mix(in srgb, var(--n9-accent) 42%, var(--border));
+    box-shadow:
+      inset 0 1px 0 var(--glass-highlight),
+      var(--n9-elev-2),
+      0 0 0 3px color-mix(in srgb, var(--n9-accent) 14%, transparent);
+  }
+  /* AI identity modifier — the Catalyst signature: sienna ring + apricot glow. */
+  .n9-composer-ai {
+    border-color: color-mix(in srgb, var(--primary) 25%, var(--glass-border));
+    box-shadow:
+      inset 0 1px 0 var(--glass-highlight),
+      0 1px 2px var(--n9-accent-glow),
+      0 8px 28px -8px var(--n9-accent-glow);
+  }
+  .n9-composer-ai:focus-within {
+    border-color: color-mix(in srgb, var(--primary) 50%, var(--glass-border));
+    box-shadow:
+      inset 0 1px 0 var(--glass-highlight),
+      0 8px 28px -8px var(--n9-accent-glow),
+      0 0 0 3px var(--n9-accent-glow);
+  }
 }
 
 @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
   .n9-glass,
   .n9-composer {
     background-color: var(--card);
+  }
+}
+
+/* Sandglass readability fallbacks (GLASS_REVAMP_PLAN §1.4): users who opt out
+   of transparency, or ask for more contrast, get near-opaque panes with no
+   grain or sheen — the layout and chrome stay identical, only the frost goes. */
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  :root {
+    --glass-bg: rgba(255, 253, 250, 0.97);
+    --glass-sheen: transparent;
+    --glass-grain-opacity: 0;
+    --glass-grain-img: none;
+  }
+  .dark {
+    --glass-bg: rgba(34, 29, 24, 0.97);
+    --glass-sheen: transparent;
+    --glass-grain-opacity: 0;
+    --glass-grain-img: none;
+  }
+}
+@media (prefers-contrast: more) {
+  :root {
+    --glass-border: rgba(150, 80, 52, 0.5);
+  }
+  .dark {
+    --glass-border: rgba(245, 240, 232, 0.45);
   }
 }
 
@@ -1637,6 +1787,9 @@ body > [data-radix-popper-content-wrapper] {
   }
   .n9-press:active {
     transform: none;
+  }
+  .n9-sheen::after {
+    display: none;
   }
 }
 

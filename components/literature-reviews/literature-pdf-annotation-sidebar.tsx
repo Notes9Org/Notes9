@@ -1,12 +1,13 @@
 "use client"
 
 import { memo, useCallback } from "react"
-import { HighlighterCircle as Highlighter, CircleNotch as Loader2, ChatText as MessageSquareText, Note as StickyNote, Trash as Trash2, X } from "@phosphor-icons/react/ssr"
+import { HighlighterCircle as Highlighter, ChatText as MessageSquareText, Note as StickyNote, Trash as Trash2, X } from "@phosphor-icons/react/ssr"
 
 import { MotionItem, MotionList } from "@/components/literature-reviews/motion"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useToast } from "@/hooks/use-toast"
+import { useSkeletonGate } from "@/hooks/use-skeleton-gate"
 import { cn } from "@/lib/utils"
 import { sanitizeHtml } from "@/lib/sanitize-html"
 import type { LiteraturePdfAnnotation } from "@/types/literature-pdf"
@@ -100,6 +101,7 @@ export function LiteraturePdfAnnotationSidebar({
   onNavigateToAnnotation,
 }: LiteraturePdfAnnotationSidebarProps) {
   const { toast } = useToast()
+  const showSkeleton = useSkeletonGate(loading ?? false)
 
   // Stable so the memoized AnnotationRow isn't invalidated on every render.
   const deleteAnnotation = useCallback(
@@ -121,7 +123,10 @@ export function LiteraturePdfAnnotationSidebar({
   return (
     <div
       className={cn(
-        "glass-panel flex min-h-0 flex-col gap-4 rounded-lg p-4 shadow-sm",
+        // Glass-rail shell — same surface as the Catalyst chat-history rail
+        // (see components/patterns/side-rail.tsx SideRailPanel).
+        "flex min-h-0 flex-col gap-4 rounded-2xl border border-[color:var(--glass-border)] bg-sidebar/80 p-4 backdrop-blur-md",
+        "shadow-[0_10px_34px_-18px_rgba(20,14,8,0.4)] dark:bg-sidebar/60 dark:shadow-[0_12px_38px_-16px_rgba(0,0,0,0.6)]",
         className
       )}
     >
@@ -140,12 +145,20 @@ export function LiteraturePdfAnnotationSidebar({
         ) : null}
       </div>
 
-      <div className="rounded-md border">
+      <div className="rounded-xl border border-[color:var(--glass-border)]">
         <ScrollArea className="h-[min(20rem,52dvh)] lg:h-[min(32rem,calc(100dvh-9rem))]">
           <MotionList className="space-y-3 p-3">
-            {loading && (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            {showSkeleton && (
+              <div className="flex flex-col gap-2" aria-hidden aria-label="Loading annotations">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="flex items-start gap-2 rounded-md p-2">
+                    <div className="n9-skeleton-shimmer size-8 shrink-0 rounded" />
+                    <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                      <div className="n9-skeleton-shimmer h-3.5 w-1/2 rounded" />
+                      <div className="n9-skeleton-shimmer h-3 w-full rounded" />
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
             {!loading && annotations.length === 0 && (

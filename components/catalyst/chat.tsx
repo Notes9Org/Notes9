@@ -901,8 +901,8 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
                   </div>
                 )}
 
-                {/* Composer — elevated with soft glow on focus */}
-                <div className="relative rounded-2xl border border-border/60 bg-background shadow-sm focus-within:border-primary/40 focus-within:shadow-md focus-within:shadow-primary/5 transition-all duration-200">
+                {/* Composer — unified glass shell (.n9-composer, globals.css) */}
+                <div className="n9-composer relative">
                   <Textarea
                     ref={textareaRef}
                     value={input}

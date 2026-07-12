@@ -6,6 +6,13 @@ import { createClient } from "@/lib/supabase/client"
 import { useAuthUser } from "@/components/auth/auth-provider"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import {
+  SideRail,
+  SideRailBody,
+  SideRailHeader,
+  SideRailList,
+  SideRailRow,
+} from "@/components/patterns/side-rail"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -1456,81 +1463,67 @@ export function LabNotesTab({
             data-editor-workspace-shell=""
             className="flex h-full min-h-0 min-w-0 flex-1 flex-row items-stretch overflow-hidden"
           >
-            {/* Notes list - inside card, left side (hidden on mobile; use Sheet instead) */}
-            <aside
+            {/* Notes list — desktop glass rail, Catalyst-history look (hidden on
+                mobile; use Sheet instead). Width animates so it slides, not snaps. */}
+            <SideRail
               ref={notesAsideRef}
-              className={cn(
-                "flex min-h-0 shrink-0 flex-col self-stretch overflow-hidden bg-muted/30 relative",
-                !isMobile && notebookPanelOpen
-                  ? cn(
-                      "border-r border-border bg-card",
-                      /* Above editor column (z-0) and TipTap chrome — critical when workspace is fullscreen z-110 */
-                      noteEditorFullscreen ? "z-[120]" : "z-10",
-                    )
-                  : "border-r-0",
-              )}
-              /* Animate the rail width (matches the left + Catalyst sidebars) instead of
-                 snapping w-52 ↔ w-0. The fixed-width inner content stays mounted and is
-                 clipped by overflow-hidden, so it slides smoothly rather than reflowing. */
-              style={{
-                width: !isMobile && notebookPanelOpen ? "13rem" : 0,
-                minWidth: 0,
-                transition: "width 0.5s cubic-bezier(0.22, 1, 0.36, 1)",
-              }}
-              aria-hidden={!notebookPanelOpen || isMobile}
+              open={!isMobile && notebookPanelOpen}
+              /* Above editor column (z-0) and TipTap chrome — critical when workspace is fullscreen z-110 */
+              className={noteEditorFullscreen ? "z-[120]" : "z-10"}
             >
               {!isMobile && (
-                <div className="flex h-full min-h-0 w-52 min-w-[13rem] flex-col gap-0 p-2">
-                  <div className="flex h-9 shrink-0 items-center px-1">
-                    <span className="truncate text-xs font-medium text-muted-foreground">Notes</span>
-                  </div>
-                  <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-auto mt-1">
+                <>
+                  <SideRailHeader label="Notes">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 shrink-0"
+                      onClick={handleNewNote}
+                      disabled={isCreatingNew}
+                      aria-label="New note"
+                      title="New lab note"
+                    >
+                      {isCreatingNew ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Plus className="size-4" />
+                      )}
+                    </Button>
+                  </SideRailHeader>
+                  <SideRailBody>
                     {notes.length > 0 ? (
-                      <ul className="flex w-full min-w-0 flex-col gap-0.5">
+                      <SideRailList>
                         {notes.map((note) => {
                           const isActive = selectedNote?.id === note.id && !isCreating;
                           const createdStr = new Date(note.created_at).toLocaleString();
                           const updatedStr = new Date(note.updated_at).toLocaleString();
                           return (
-                            <li key={note.id} className="group/list-item relative">
-                              <div
-                                role="button"
-                                tabIndex={0}
-                                onClick={() => handleSelectNote(note)}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter" || e.key === " ") {
-                                    e.preventDefault();
-                                    handleSelectNote(note);
-                                  }
-                                }}
-                                data-note-id={note.id}
-                                data-created-at={note.created_at}
-                                data-updated-at={note.updated_at}
-                                title={`Created: ${createdStr} · Updated: ${updatedStr}`}
-                                className={cn(
-                                  "grid w-full min-h-8 grid-cols-[auto_1fr_auto] items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-muted/80",
-                                  isActive && "bg-muted font-medium"
-                                )}
-                              >
-                                <NotebookPen className="h-4 w-4 shrink-0 text-muted-foreground" />
-                                <p className="min-w-0 truncate font-medium m-0 text-sm">
-                                  {note.title || "New Lab Note"}
-                                </p>
+                            <SideRailRow
+                              key={note.id}
+                              active={isActive}
+                              onSelect={() => handleSelectNote(note)}
+                              icon={<NotebookPen />}
+                              data-note-id={note.id}
+                              data-created-at={note.created_at}
+                              data-updated-at={note.updated_at}
+                              title={`Created: ${createdStr} · Updated: ${updatedStr}`}
+                              actions={
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
                                     <Button
                                       variant="ghost"
                                       size="icon"
-                                      className="size-7 shrink-0 opacity-70 hover:opacity-100"
+                                      className="size-7 shrink-0"
                                       onClick={(e) => e.stopPropagation()}
                                       aria-label="Note options"
                                     >
-                                      <MoreVertical className="h-3.5 w-3.5" />
+                                      <MoreVertical className="size-3.5" />
                                     </Button>
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
                                     <DropdownMenuItem onClick={(e) => openRenameNote(e, note)}>
-                                      <Pencil className="mr-2 h-4 w-4" />
+                                      <Pencil className="mr-2 size-4" />
                                       Rename
                                     </DropdownMenuItem>
                                     <DropdownMenuSeparator />
@@ -1538,16 +1531,18 @@ export function LabNotesTab({
                                       className="text-destructive focus:text-destructive"
                                       onClick={(e) => handleDeleteNote(e, note)}
                                     >
-                                      <Trash2 className="mr-2 h-4 w-4" />
+                                      <Trash2 className="mr-2 size-4" />
                                       Delete note
                                     </DropdownMenuItem>
                                   </DropdownMenuContent>
                                 </DropdownMenu>
-                              </div>
-                            </li>
+                              }
+                            >
+                              {note.title || "New Lab Note"}
+                            </SideRailRow>
                           );
                         })}
-                      </ul>
+                      </SideRailList>
                     ) : (
                       <div className="flex flex-col items-center justify-center gap-2 px-2 py-6">
                         <p className="text-center text-xs text-muted-foreground w-3/4">Create your first lab notebook by clicking "+" button</p>
@@ -1567,10 +1562,10 @@ export function LabNotesTab({
                         </Button>
                       </div>
                     )}
-                  </div>
-                </div>
+                  </SideRailBody>
+                </>
               )}
-            </aside>
+            </SideRail>
 
             {/* Mobile: notes list in a Sheet overlay so it doesn't squeeze the editor */}
             {isMobile && (
@@ -1603,53 +1598,39 @@ export function LabNotesTab({
                   <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                     <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overscroll-y-contain px-3 pb-[max(1rem,env(safe-area-inset-bottom,0px))] pt-2">
                     {notes.length > 0 ? (
-                      <ul className="flex w-full min-w-0 flex-col gap-0.5">
+                      <SideRailList className="w-full pr-0">
                         {notes.map((note) => {
                           const isActive = selectedNote?.id === note.id && !isCreating;
                           const createdStr = new Date(note.created_at).toLocaleString();
                           const updatedStr = new Date(note.updated_at).toLocaleString();
                           return (
-                            <li key={note.id} className="group/list-item relative">
-                              <div
-                                role="button"
-                                tabIndex={0}
-                                onClick={() => {
-                                  handleSelectNote(note);
-                                  setNotebookPanelOpen(false);
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter" || e.key === " ") {
-                                    e.preventDefault();
-                                    handleSelectNote(note);
-                                    setNotebookPanelOpen(false);
-                                  }
-                                }}
-                                data-note-id={note.id}
-                                title={`Created: ${createdStr} · Updated: ${updatedStr}`}
-                                className={cn(
-                                  "grid w-full min-h-10 grid-cols-[auto_1fr_auto] items-center gap-2 rounded-md px-2 py-2 text-left text-sm outline-none transition-colors hover:bg-muted/80 active:bg-muted/90",
-                                  isActive && "bg-muted font-medium"
-                                )}
-                              >
-                                <NotebookPen className="h-4 w-4 shrink-0 text-muted-foreground" />
-                                <p className="min-w-0 truncate font-medium m-0 text-sm">
-                                  {note.title || "New Lab Note"}
-                                </p>
+                            <SideRailRow
+                              key={note.id}
+                              active={isActive}
+                              onSelect={() => {
+                                handleSelectNote(note);
+                                setNotebookPanelOpen(false);
+                              }}
+                              icon={<NotebookPen />}
+                              data-note-id={note.id}
+                              title={`Created: ${createdStr} · Updated: ${updatedStr}`}
+                              className="min-h-10"
+                              actions={
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
                                     <Button
                                       variant="ghost"
                                       size="icon"
-                                      className="size-8 shrink-0 touch-manipulation opacity-70 hover:opacity-100"
+                                      className="size-8 shrink-0 touch-manipulation"
                                       onClick={(e) => e.stopPropagation()}
                                       aria-label="Note options"
                                     >
-                                      <MoreVertical className="h-3.5 w-3.5" />
+                                      <MoreVertical className="size-3.5" />
                                     </Button>
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
                                     <DropdownMenuItem onClick={(e) => { openRenameNote(e, note); setNotebookPanelOpen(false); }}>
-                                      <Pencil className="mr-2 h-4 w-4" />
+                                      <Pencil className="mr-2 size-4" />
                                       Rename
                                     </DropdownMenuItem>
                                     <DropdownMenuSeparator />
@@ -1657,16 +1638,18 @@ export function LabNotesTab({
                                       className="text-destructive focus:text-destructive"
                                       onClick={(e) => handleDeleteNote(e, note)}
                                     >
-                                      <Trash2 className="mr-2 h-4 w-4" />
+                                      <Trash2 className="mr-2 size-4" />
                                       Delete note
                                     </DropdownMenuItem>
                                   </DropdownMenuContent>
                                 </DropdownMenu>
-                              </div>
-                            </li>
+                              }
+                            >
+                              {note.title || "New Lab Note"}
+                            </SideRailRow>
                           );
                         })}
-                      </ul>
+                      </SideRailList>
                     ) : (
                       <div className="flex flex-col items-center justify-center gap-2 px-2 py-6">
                         <p className="text-center text-xs text-muted-foreground w-3/4">Create your first lab notebook by clicking "+" button</p>

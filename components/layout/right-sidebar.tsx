@@ -69,6 +69,7 @@ import { createClient } from '@/lib/supabase/client';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { useAuthUser } from "@/components/auth/auth-provider"
 import { useResizable } from '@/hooks/use-resizable';
+import { useSkeletonGate } from '@/hooks/use-skeleton-gate';
 import { ResizeHandle } from '@/components/ui/resize-handle';
 import { useSidebar } from '@/components/ui/sidebar';
 import { useTheme } from 'next-themes';
@@ -1292,6 +1293,8 @@ export function RightSidebar({
     deleteFolder,
     moveSessionToFolder,
   } = useChatSessions();
+  // Anti-flicker gate: history skeleton waits 150ms, then holds ≥350ms.
+  const showHistorySkeleton = useSkeletonGate(sessionsLoading && sessions.length === 0);
 
   const currentSessionRef = useRef<string | null>(null);
 
@@ -3482,13 +3485,8 @@ export function RightSidebar({
 
   // --- Render Components ---
 
-  const catalystHeroComposerShell = cn(
-    'rounded-2xl border border-white/70 bg-white/75 backdrop-blur-xl supports-[backdrop-filter]:bg-white/60',
-    'shadow-[0_1px_2px_rgba(44,36,24,0.05),0_16px_44px_-18px_rgba(44,36,24,0.22)]',
-    'transition-[border-color,box-shadow] duration-200',
-    'focus-within:border-[color:color-mix(in_srgb,var(--n9-accent)_35%,var(--border))]',
-    'focus-within:shadow-[0_1px_2px_rgba(44,36,24,0.05),0_12px_32px_-8px_rgba(44,36,24,0.14),0_0_0_3px_color-mix(in_srgb,var(--n9-accent)_12%,transparent)]',
-  );
+  // The unified glass composer (`.n9-composer`, globals.css) + AI identity ring.
+  const catalystHeroComposerShell = 'n9-composer n9-composer-ai';
 
   const renderCursorInput = (opts?: { heroStyle?: boolean }) => {
     const heroStyle = opts?.heroStyle ?? false;
@@ -3621,10 +3619,8 @@ export function RightSidebar({
     <div className="group/input relative flex flex-col w-full">
       <div
         className={cn(
-          'overflow-hidden transition-all',
-          heroStyle
-            ? catalystHeroComposerShell
-            : 'rounded-2xl border border-border/35 bg-card/70 backdrop-blur-md shadow-[0_2px_8px_rgba(44,36,24,0.06),0_14px_38px_-16px_rgba(44,36,24,0.30)] dark:shadow-[0_2px_10px_rgba(0,0,0,0.35),0_18px_44px_-16px_rgba(0,0,0,0.65)] transition-shadow focus-within:border-ring/50 focus-within:ring-1 focus-within:ring-ring/40 focus-within:shadow-[0_2px_10px_rgba(44,36,24,0.08),0_18px_46px_-14px_rgba(44,36,24,0.34)]',
+          'overflow-hidden',
+          heroStyle ? catalystHeroComposerShell : 'n9-composer',
           isDraggingContext && 'border-primary bg-primary/5 ring-2 ring-primary',
         )}
         id="tour-ai-chat"
@@ -4462,7 +4458,7 @@ export function RightSidebar({
                 {/* Fixed-width inner content so it's clipped (not reflowed) while
                     the panel collapses to 0. */}
                 <div
-                  className="m-2 flex h-[calc(100%-1rem)] min-h-0 flex-col gap-1 rounded-2xl border border-[color:var(--glass-border)] bg-sidebar/80 p-2 shadow-[0_10px_34px_-18px_rgba(20,14,8,0.4)] backdrop-blur-md dark:bg-sidebar/60 dark:shadow-[0_12px_38px_-16px_rgba(0,0,0,0.6)]"
+                  className="n9-grain m-2 flex h-[calc(100%-1rem)] min-h-0 flex-col gap-1 rounded-2xl border border-[color:var(--glass-border)] bg-sidebar/80 p-2 shadow-[0_10px_34px_-18px_rgba(20,14,8,0.4)] backdrop-blur-md dark:bg-sidebar/60 dark:shadow-[0_12px_38px_-16px_rgba(0,0,0,0.6)]"
                   style={{ width: historySidebar.width - 16 }}
                 >
                   {/* Header row — close button + "Chats" label on the top-left,
@@ -4533,7 +4529,7 @@ export function RightSidebar({
                   </div>
                   {/* List - same structure as lab notes */}
                   <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-                    {sessionsLoading && sessions.length === 0 ? (
+                    {showHistorySkeleton ? (
                       <div className="flex flex-col gap-0.5 pr-1" aria-hidden aria-label="Loading conversations">
                         {[...Array(5)].map((_, i) => (
                           <div key={i} className="grid min-h-9 grid-cols-[auto_1fr_auto] items-center gap-2 rounded-md px-2 py-1.5">
@@ -4543,7 +4539,7 @@ export function RightSidebar({
                           </div>
                         ))}
                       </div>
-                    ) : sessions.length === 0 ? (
+                    ) : sessionsLoading && sessions.length === 0 ? null : sessions.length === 0 ? (
                     <div className="px-2 py-6 text-center text-sidebar-foreground/70 text-xs">No previous conversations.</div>
                     ) : (
                       <div className="flex min-w-0 flex-col gap-1 pr-1">

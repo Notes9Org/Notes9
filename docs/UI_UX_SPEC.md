@@ -249,6 +249,7 @@ transition; `:active` → `scale(0.96)` tactile press), `.n9-glass` (backdrop bl
 - _Page:_ `page-transition` (360ms — fade + 6px lift).
 - _Streamdown modal:_ `n9-sd-overlay-in`, `n9-sd-card-in`.
 
+
 **Enter/exit (tw-animate-css, imported `globals.css:2`):** Radix surfaces use
 `animate-in`/`animate-out` with `fade-in-0`/`fade-out-0` + `zoom-in-95`/`zoom-out-95` +
 side-aware `slide-in-from-*-2`, typically `duration-200`. Sheets use `slide-in-from-{side}` at
@@ -551,3 +552,4 @@ headings, and `Empty*` zero-states.
 - **The user's mental model of "10 pages" ≠ the nav** — experiments/lab-notes/protocols/samples/data
   are project-scoped, not top-level. Any IA revamp should decide deliberately whether to keep that
   nesting or promote them.
+

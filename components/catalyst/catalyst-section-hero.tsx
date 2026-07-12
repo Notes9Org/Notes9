@@ -23,20 +23,10 @@ const ALLOWED_TYPES = [
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ]
 
-// In-palette "AI" treatment: a burnt-sienna identity ring + soft apricot glow so
-// the composer reads unmistakably as the Catalyst AI surface while staying native
-// to the warm Notes9 brand (the old violet read as a bolted-on 3rd-party widget).
-const composerShell = cn(
-  "flex flex-col overflow-hidden rounded-2xl border-2 p-3",
-  // Light: warm cream tint. Dark: the 10%-accent token is near-transparent and
-  // bled the content behind it, so use an opaque card surface and let the accent
-  // come from the border + glow (keeps legibility + the AI signature).
-  "border-primary/25 bg-[var(--n9-accent-light)] dark:border-primary/30 dark:bg-card",
-  "shadow-[0_1px_2px_var(--n9-accent-glow),0_8px_28px_-8px_var(--n9-accent-glow)]",
-  "transition-[border-color,box-shadow] duration-200",
-  "focus-within:border-primary/50",
-  "focus-within:shadow-[0_8px_28px_-8px_var(--n9-accent-glow),0_0_0_3px_var(--n9-accent-glow)]",
-)
+// The unified glass composer (`.n9-composer`, globals.css) with the Catalyst
+// AI identity modifier (sienna ring + apricot glow). Glass at rest, solidifies
+// on focus so typed text stays readable.
+const composerShell = cn("n9-composer n9-composer-ai flex flex-col overflow-hidden p-3")
 
 type Props = {
   size?: "sm" | "lg"

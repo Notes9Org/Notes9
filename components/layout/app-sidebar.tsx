@@ -68,8 +68,9 @@ type ProjectScopedNavItem = {
   children?: { name: string; basePath: string; icon: typeof Folder }[]
 }
 
-// Lab notes / Protocols / Samples / Data are nested under Experiments.
-// Literature is top-level nav (see APP_PRIMARY_NAV) — not project-scoped in the sidebar.
+// Lab notes / Samples / Data are nested under Experiments.
+// Literature and Protocols are top-level nav (see APP_PRIMARY_NAV) — cross-
+// project libraries, not project-scoped in the sidebar tree.
 const PROJECT_SCOPED_NAV: ProjectScopedNavItem[] = [
   {
     name: "Experiments",
@@ -77,7 +78,6 @@ const PROJECT_SCOPED_NAV: ProjectScopedNavItem[] = [
     icon: FlaskConical,
     children: [
       { name: "Lab notes", basePath: "/lab-notes", icon: NotebookPen },
-      { name: "Protocols", basePath: "/protocols", icon: ClipboardInfoIcon as unknown as typeof Folder },
       { name: "Samples", basePath: "/samples", icon: TestTube },
       { name: "Data", basePath: "/data", icon: Database },
     ],
@@ -671,7 +671,7 @@ export function AppSidebar() {
                             </Link>
                           ) : (
                             <Link
-                              href={(mounted && item.name === "Literature" && scope.projectId) ? `${item.href}${scope.scopedQueryString}` : item.href}
+                              href={(mounted && (item.name === "Literature" || item.name === "Protocols") && scope.projectId) ? `${item.href}${scope.scopedQueryString}` : item.href}
                               aria-label={isIconMode ? item.name : undefined}
                               // In the collapsed rail, navigating also expands the
                               // sidebar so the user lands on the page with the full
@@ -724,7 +724,7 @@ export function AppSidebar() {
                                       <ScopedIcon />
                                       <span className={cn("truncate", isScopedActive && "font-semibold")}>
                                         {scopedItem.name}
-                                        {scopedItem.name === "Experiments" && scope.experimentName
+                                        {scopedItem.name === "Experiments" && scope.liveExperimentId && scope.experimentName
                                           ? ` / ${scope.experimentName}`
                                           : ""}
                                       </span>

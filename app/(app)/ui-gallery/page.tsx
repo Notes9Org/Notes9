@@ -31,6 +31,15 @@ import { Switch } from "@/components/ui/switch"
 import { Progress } from "@/components/ui/progress"
 import { Icon } from "@/components/ui/icon"
 import {
+  SideRail,
+  SideRailBody,
+  SideRailHeader,
+  SideRailList,
+  SideRailRow,
+  SideRailSearch,
+  SideRailSkeleton,
+} from "@/components/patterns/side-rail"
+import {
   Flask, TestTube, Notebook, FolderOpen, Sparkle, Trash, Plus, DownloadSimple, MagnifyingGlass,
 } from "@phosphor-icons/react/ssr"
 
@@ -57,6 +66,9 @@ function Section({ title, hint, children }: { title: string; hint: string; child
 
 export default function UiGalleryPage() {
   const [tab, setTab] = useState("one")
+  const [railOpen, setRailOpen] = useState(true)
+  const [railQuery, setRailQuery] = useState("")
+  const [railActive, setRailActive] = useState(0)
   return (
     <TooltipProvider>
       <div className="mx-auto flex max-w-5xl flex-col gap-8 pb-16">
@@ -216,6 +228,94 @@ export default function UiGalleryPage() {
               <TooltipTrigger asChild><Button variant="ghost">Hover for tooltip</Button></TooltipTrigger>
               <TooltipContent>Inverted, instant tooltip.</TooltipContent>
             </Tooltip>
+          </div>
+        </Section>
+
+        <Section
+          title="Sandglass surfaces"
+          hint="The platform glass recipe: translucent fill + blur + top sheen + edge highlight + sand grain. Composers solidify to 90% card on focus so typed text is always readable. (docs/GLASS_REVAMP_PLAN.md)"
+        >
+          {/* Busy backdrop so blur/grain are actually visible in the demo */}
+          <div className="relative overflow-hidden rounded-xl p-6" style={{ background: "linear-gradient(120deg, var(--chart-1), var(--chart-3) 45%, var(--chart-4) 80%)" }}>
+            <div className="pointer-events-none absolute -left-8 -top-10 size-40 rounded-full bg-[var(--chart-5)] opacity-70 blur-2xl" />
+            <div className="relative grid gap-4 sm:grid-cols-2">
+              <div className="n9-composer n9-composer-ai flex flex-col gap-2 p-3">
+                <textarea
+                  rows={2}
+                  placeholder="Type here — the glass solidifies while you write…"
+                  className="w-full resize-none border-0 bg-transparent px-1 text-sm text-foreground outline-none placeholder:text-muted-foreground/80"
+                  aria-label="Sandglass composer demo"
+                />
+                <div className="flex items-center justify-between">
+                  <span className="text-2xs text-muted-foreground">n9-composer + n9-composer-ai</span>
+                  <Button size="icon-sm" aria-label="Send"><Icon icon={Sparkle} /></Button>
+                </div>
+              </div>
+              <div className="glass-panel n9-grain flex flex-col justify-center gap-1 rounded-2xl p-4">
+                <p className="text-sm font-medium text-foreground">Panel glass (G1)</p>
+                <p className="text-xs text-muted-foreground">
+                  glass-panel + n9-grain — rails, menus, popovers. Grain stays under 10% so it reads
+                  as paper tooth, never noise.
+                </p>
+              </div>
+              <Card variant="glass" className="py-4 sm:col-span-2">
+                <CardHeader>
+                  <CardTitle className="text-base">Card variant=&quot;glass&quot;</CardTitle>
+                  <CardDescription>
+                    The G1 widget surface — grained glass for cards that float on the canvas.
+                    Long-form reading surfaces stay opaque (the readability contract).
+                  </CardDescription>
+                </CardHeader>
+              </Card>
+            </div>
+          </div>
+        </Section>
+
+        <Section
+          title="Side rail (glass)"
+          hint="The shared docked-list pattern (Catalyst chat history, lab notes, protocols, papers, reports): floating glass panel, width-animated open/close, hover-reveal row actions, ghost scrollbar with edge fades."
+        >
+          <div className="flex h-72 items-stretch gap-2 overflow-hidden rounded-lg bg-background/60">
+            <SideRail open={railOpen}>
+              <SideRailHeader label="Documents">
+                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" aria-label="New document">
+                  <Icon icon={Plus} className="size-4" />
+                </Button>
+              </SideRailHeader>
+              <SideRailSearch value={railQuery} onChange={setRailQuery} placeholder="Search…" />
+              <SideRailBody>
+                <SideRailList>
+                  {["Buffer prep protocol", "PCR run 12 notes", "Plasmid map v3", "Western blot report", "Lit review draft", "Sequencing QC", "Gel images"]
+                    .filter((t) => t.toLowerCase().includes(railQuery.toLowerCase()))
+                    .map((t, i) => (
+                      <SideRailRow
+                        key={t}
+                        active={i === railActive}
+                        onSelect={() => setRailActive(i)}
+                        icon={<Icon icon={Notebook} />}
+                        actions={
+                          <Button variant="ghost" size="icon" className="size-7 shrink-0" aria-label="Delete">
+                            <Icon icon={Trash} className="size-3.5" />
+                          </Button>
+                        }
+                      >
+                        {t}
+                      </SideRailRow>
+                    ))}
+                </SideRailList>
+              </SideRailBody>
+            </SideRail>
+            <div className="flex flex-1 flex-col items-start gap-3 p-4">
+              <Button variant="outline" size="sm" onClick={() => setRailOpen((v) => !v)}>
+                {railOpen ? "Collapse rail" : "Expand rail"}
+              </Button>
+              <p className="text-sm text-muted-foreground">
+                The rail clips (not reflows) while animating — toggle it. Loading state below:
+              </p>
+              <div className="w-56 rounded-2xl border border-[color:var(--glass-border)] bg-sidebar/80 p-2 backdrop-blur-md">
+                <SideRailSkeleton rows={3} />
+              </div>
+            </div>
           </div>
         </Section>
       </div>

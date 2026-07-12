@@ -314,7 +314,7 @@ export function ProtocolDraftBiomniPanel({
       </ScrollArea>
 
       <div className="border-t p-2 space-y-2 shrink-0 bg-background">
-        <div className="flex gap-1.5">
+        <div className="n9-composer flex gap-1.5 overflow-hidden">
           <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -323,7 +323,7 @@ export function ProtocolDraftBiomniPanel({
                 ? "Select papers on the left first…"
                 : "Ask Cat-Bio to draft a section, list steps, or refine the protocol…"
             }
-            className="min-h-[72px] text-xs resize-none"
+            className="min-h-[72px] resize-none border-0 bg-transparent text-xs shadow-none focus-visible:ring-0"
             disabled={literatureIds.length === 0 || isStreaming}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {

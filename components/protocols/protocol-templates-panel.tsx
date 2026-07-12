@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { format } from "date-fns"
-import { UploadSimple as Upload, Trash as Trash2, Eye, Files as FileStack, CircleNotch as Loader2 } from "@phosphor-icons/react/ssr"
+import { UploadSimple as Upload, Trash as Trash2, ArrowUpRight, Files as FileStack, CircleNotch as Loader2 } from "@phosphor-icons/react/ssr"
 import { Button } from "@/components/ui/button"
 import {
   Table,
@@ -361,7 +361,7 @@ export function ProtocolTemplatesPanel() {
               const sections = ex?.sectionHeadings?.length ?? 0
               const logos = ex?.logos?.length ?? 0
               return (
-                <TableRow key={t.id}>
+                <TableRow key={t.id} className="cursor-pointer" onClick={() => setPreview(t)}>
                   <TableCell className="font-medium">{t.name}</TableCell>
                   <TableCell className="hidden sm:table-cell text-muted-foreground text-xs truncate max-w-[200px]">
                     {t.source_filename}
@@ -371,7 +371,7 @@ export function ProtocolTemplatesPanel() {
                   <TableCell className="hidden md:table-cell text-muted-foreground text-xs whitespace-nowrap">
                     {format(new Date(t.updated_at), "MMM d, yyyy")}
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                     <div className="flex justify-end gap-1">
                       <Button
                         type="button"
@@ -381,7 +381,7 @@ export function ProtocolTemplatesPanel() {
                         aria-label="Preview sections"
                         onClick={() => setPreview(t)}
                       >
-                        <Eye className="h-4 w-4" />
+                        <ArrowUpRight className="h-4 w-4" />
                       </Button>
                       <Button
                         type="button"

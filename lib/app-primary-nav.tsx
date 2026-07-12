@@ -1,5 +1,6 @@
 import type { ComponentType } from "react"
 import { BookOpen, Folder, House as Home, Graph as Network, Sparkle as Sparkles } from "@phosphor-icons/react/ssr"
+import { ClipboardInfoIcon } from "@/components/ui/clipboard-info-icon"
 
 /** Accepts both Lucide icons and our custom SVG-based wrapper icons. */
 type NavIcon = ComponentType<{ className?: string }>
@@ -17,6 +18,9 @@ export const APP_PRIMARY_NAV: { name: string; href: string; icon: NavIcon }[] = 
   { name: "Dashboard", href: "/dashboard", icon: Home },
   { name: "Projects", href: "/projects", icon: Folder },
   { name: "Literature", href: "/literature-reviews", icon: BookOpen },
+  // Protocols is a top-level library like Literature (the SOP library spans
+  // projects); it still appears project-filtered when a project is scoped.
+  { name: "Protocols", href: "/protocols", icon: ClipboardInfoIcon as unknown as NavIcon },
   { name: "Catalyst", href: "/catalyst", icon: Sparkles },
   { name: "Research map", href: "/research-map", icon: Network },
 ]

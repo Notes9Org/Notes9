@@ -26,7 +26,15 @@ export function ViewModeToggle({
   className,
 }: ViewModeToggleProps) {
   return (
-    <div data-tour="view-mode" className={cn('inline-flex gap-1 rounded-lg border p-1', className)}>
+    <div
+      data-tour="view-mode"
+      className={cn(
+        // Sandglass strip — matches TabsList so every switch control shares
+        // the same rounded glass look.
+        'n9-grain inline-flex gap-1 rounded-xl border border-[color:var(--glass-border)] bg-[color:var(--glass-bg)] p-1 backdrop-blur-md',
+        className,
+      )}
+    >
       <Button
         variant={value === 'grid' ? 'default' : 'ghost'}
         size="sm"

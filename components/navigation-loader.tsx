@@ -208,6 +208,9 @@ export function NavigationLoader() {
   ])
   const [loadingStartedAt, setLoadingStartedAt] = useState<number | null>(null)
   const destinationPathRef = useRef<string | null>(null)
+  // Pathname at trigger time — when no destination is known (custom events),
+  // we settle only after we've actually LEFT this path.
+  const originPathRef = useRef<string | null>(null)
   const pathname = usePathname()
 
   // Prevent hydration mismatch by only rendering after mount
@@ -218,15 +221,41 @@ export function NavigationLoader() {
   useEffect(() => {
     if (!isLoading || loadingStartedAt == null) return
 
+    // Redirect chains (e.g. /data → /experiments/[id]?tab=data) change the
+    // pathname more than once. Hiding on the FIRST change let the outgoing
+    // page flash back mid-navigation — only settle once we've reached the
+    // destination recorded at click time. When the destination is unknown
+    // (custom navigation events), settle after leaving the origin path.
+    const destination = destinationPathRef.current
+    if (destination) {
+      if (pathname !== destination) return
+    } else if (originPathRef.current && pathname === originPathRef.current) {
+      return
+    }
+
     const elapsed = Date.now() - loadingStartedAt
     const remaining = Math.max(0, MIN_LOADER_DURATION_MS - elapsed)
+    let raf1 = 0
+    let raf2 = 0
     const timeoutId = window.setTimeout(() => {
-      setIsLoading(false)
-      setLoadingStartedAt(null)
+      // Two rAFs = the new route has committed AND painted beneath the
+      // overlay, so removing it can never reveal a stale frame of the old page.
+      raf1 = requestAnimationFrame(() => {
+        raf2 = requestAnimationFrame(() => {
+          setIsLoading(false)
+          setLoadingStartedAt(null)
+          destinationPathRef.current = null
+          originPathRef.current = null
+        })
+      })
     }, remaining)
 
-    return () => window.clearTimeout(timeoutId)
-  }, [pathname])
+    return () => {
+      window.clearTimeout(timeoutId)
+      cancelAnimationFrame(raf1)
+      cancelAnimationFrame(raf2)
+    }
+  }, [pathname, isLoading, loadingStartedAt])
 
   useEffect(() => {
     if (!mounted) return
@@ -265,6 +294,7 @@ export function NavigationLoader() {
           
           if (!samePage && !isHashLink) {
             destinationPathRef.current = destinationPath
+            originPathRef.current = pathname
             const label = getActionLabel(target)
             const variant = inferLoaderVariant(label, href)
             triggerLoader(label, variant, setLoaderTitle, setLoaderCaptions, setLoaderVariant, setIsLoading, setLoadingStartedAt)
@@ -279,6 +309,8 @@ export function NavigationLoader() {
       if (button) {
         // Look for data attribute that indicates navigation
         if (button.hasAttribute("data-navigate")) {
+          destinationPathRef.current = null
+          originPathRef.current = pathname
           const label = getActionLabel(target)
           const variant = inferLoaderVariant(label)
           triggerLoader(label, variant, setLoaderTitle, setLoaderCaptions, setLoaderVariant, setIsLoading, setLoadingStartedAt)
@@ -290,6 +322,8 @@ export function NavigationLoader() {
     const handleCustomNavigation = (event: Event) => {
       const detail = (event as CustomEvent<{ label?: string; href?: string; kind?: Notes9LoaderVariant }>).detail
       const label = detail?.label ?? ""
+      destinationPathRef.current = detail?.href ? extractPathname(detail.href) : null
+      originPathRef.current = pathname
       const variant = detail?.kind ?? inferLoaderVariant(label, detail?.href)
       triggerLoader(label, variant, setLoaderTitle, setLoaderCaptions, setLoaderVariant, setIsLoading, setLoadingStartedAt)
       startSafetyTimeout(variant)

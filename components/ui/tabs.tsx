@@ -115,7 +115,9 @@ function TabsList({
   const list = (
     <TabsPrimitive.List
       className={cn(
-        'inline-flex min-w-max h-9 items-center bg-muted rounded-md p-1 gap-1',
+        // Sandglass strip: translucent, blurred, grained container; the active
+        // trigger stays a solid raised pill for readability.
+        'n9-grain inline-flex min-w-max h-9 items-center rounded-xl border border-[color:var(--glass-border)] bg-[color:var(--glass-bg)] p-1 gap-1 backdrop-blur-md',
         className
       )}
       {...props}
@@ -178,7 +180,7 @@ function TabsTrigger({
   return (
     <TabsPrimitive.Trigger
       className={cn(
-        'inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ring-offset-background transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] text-muted-foreground hover:text-foreground data-[state=inactive]:hover:bg-background/60 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm',
+        'inline-flex items-center justify-center whitespace-nowrap rounded-lg px-3 py-1 text-sm font-medium ring-offset-background transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] text-muted-foreground hover:text-foreground data-[state=inactive]:hover:bg-background/60 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm active:scale-[0.97] motion-reduce:active:scale-100',
         className
       )}
       {...props}
@@ -193,7 +195,11 @@ function TabsContent({
   return (
     <TabsPrimitive.Content
       className={cn(
+        // Glassy switch: each panel fades + lifts in as it becomes active
+        // (the animation restarts on display toggle, so it also covers
+        // forceMount + hidden-based tab hosts). Honors reduced motion.
         'mt-2 w-full min-w-0 ring-offset-background focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-offset-2',
+        'data-[state=active]:animate-in data-[state=active]:fade-in-0 data-[state=active]:slide-in-from-bottom-1 data-[state=active]:duration-200 motion-reduce:data-[state=active]:animate-none',
         className
       )}
       {...props}

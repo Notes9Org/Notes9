@@ -463,7 +463,7 @@ function AppLayoutBody({ children }: AppLayoutProps) {
               Skip to main content
             </a>
             {!isCatalystRoute && (
-            <header className="flex h-12 shrink-0 items-center justify-between border-b border-[color:var(--glass-border)] bg-[color:var(--n9-header-bg)]/70 px-3 backdrop-blur-xl saturate-[1.4] sm:h-14 sm:px-4">
+            <header className="n9-grain flex h-12 shrink-0 items-center justify-between border-b border-[color:var(--glass-border)] bg-[color:var(--n9-header-bg)]/70 px-3 backdrop-blur-xl saturate-[1.4] sm:h-14 sm:px-4">
               <div className="flex items-center gap-2 min-w-0 flex-1 truncate">
                 <MobileMenuButton />
                 <div className="min-w-0 flex-1 truncate">

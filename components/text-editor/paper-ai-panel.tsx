@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react"
-import { X, CircleNotch as Loader2, Check, X as XIcon, Eye, FileText, ClockCounterClockwise as History, CaretDown as ChevronDown, ArrowElbowDownLeft as CornerDownLeft, Trash as Trash2, Plus, ArrowUp, Sparkle as Sparkles, Chat as MessageSquare, BookOpen, NotePencil as NotebookPen, ArrowsIn as Minimize, ArrowsOut as Maximize, ArrowCounterClockwise as RotateCcw } from "@phosphor-icons/react/ssr"
+import { X, CircleNotch as Loader2, Check, X as XIcon, ArrowUpRight, FileText, ClockCounterClockwise as History, CaretDown as ChevronDown, ArrowElbowDownLeft as CornerDownLeft, Trash as Trash2, Plus, ArrowUp, Sparkle as Sparkles, Chat as MessageSquare, BookOpen, NotePencil as NotebookPen, ArrowsIn as Minimize, ArrowsOut as Maximize, ArrowCounterClockwise as RotateCcw } from "@phosphor-icons/react/ssr"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { MarkdownRenderer } from "@/components/catalyst/markdown-renderer"
@@ -573,7 +573,7 @@ export function PaperAIPanel({
                         {extractInsertableContent(msg.content).hasMarkers && (
                           <Button variant="ghost" size="sm" className="h-6 text-micro gap-1 text-muted-foreground hover:text-foreground px-2"
                             onClick={() => handleShowDiff(msg.id, msg.content)}>
-                            <Eye className="h-3 w-3" />Review & Insert
+                            <ArrowUpRight className="h-3 w-3" />Review & Insert
                           </Button>
                         )}
                         <Button variant="ghost" size="sm" className="h-6 text-micro gap-1 text-muted-foreground hover:text-foreground px-2 opacity-0 group-hover/msg:opacity-100"
@@ -596,12 +596,7 @@ export function PaperAIPanel({
           {/* Composer — Cursor-style card + agent row (matches main Catalyst sidebar) */}
           <div className="flex-shrink-0 border-t border-border bg-background/95 p-4 backdrop-blur">
             <div className="mx-auto min-w-0 max-w-3xl">
-              <div
-                className={cn(
-                  "rounded-xl border bg-card/50 shadow-sm transition-all focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/50",
-                  "overflow-hidden"
-                )}
-              >
+              <div className={cn("n9-composer", "overflow-hidden")}>
                 <Textarea
                   ref={textareaRef}
                   value={input}
