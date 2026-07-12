@@ -137,12 +137,13 @@ export function ActivitySummary() {
     void fetchSummary(userId)
   }, [userId, fetchSummary])
 
-  // ─── Loading skeleton (matches the strip's footprint) ────────────
+  // ─── Loading skeleton (matches the annotation's footprint) ───────
   if (isLoading && !summary) {
     return (
-      <div className="relative w-full rounded-xl border border-[color:var(--glass-border)] bg-background/50 px-3.5 py-2.5">
+      <div className="relative w-full py-0.5 pl-3.5">
+        <div className="absolute inset-y-0.5 left-0 w-[3px] rounded-full bg-muted" />
         <div className="mb-1.5 h-2.5 w-16 animate-pulse rounded bg-muted" />
-        <div className="h-3.5 w-full max-w-[28rem] animate-pulse rounded bg-muted" />
+        <div className="h-3 w-full max-w-[30rem] animate-pulse rounded bg-muted" />
       </div>
     )
   }
@@ -150,37 +151,44 @@ export function ActivitySummary() {
   // ─── Empty / error → hide completely ─────────────────────────────
   if (!summary) return null
 
-  // "Lab pulse" strip: a raised glass inset anchored full-width under the
-  // greeting, with an accent-tinted hairline and a gradient micro-label — the
-  // AI summary reads as a signed insight, not a stray line of body text.
+  // "Lab pulse" annotation: no box — a gradient accent rail on the left (like
+  // a signed margin note) with a LIVE-pulsing dot beside the label, so it
+  // clearly reads as "a summary of the work happening in your lab right now"
+  // while costing barely two lines of height.
   return (
     <div
       className={`
-        relative w-full overflow-hidden rounded-xl border
-        border-[color:color-mix(in_oklab,var(--primary)_22%,var(--glass-border))]
-        bg-background/55 px-3.5 py-2.5 shadow-sm backdrop-blur-sm
+        relative w-full py-0.5 pl-3.5
         transition-all duration-700 ease-out
         ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"}
       `}
     >
-      {/* Accent glow rising from the label corner */}
+      {/* Accent rail: quote-bar orientation, fading out toward the bottom */}
       <div
         aria-hidden
-        className="pointer-events-none absolute -left-6 -top-8 size-24 rounded-full bg-[color:var(--n9-accent)]/10 blur-2xl"
+        className="absolute inset-y-0.5 left-0 w-[3px] rounded-full bg-gradient-to-b from-[color:var(--n9-accent)] via-[color:var(--n9-accent)]/45 to-transparent"
       />
       <div className="flex items-center gap-1.5">
-        <Activity
-          aria-hidden
-          className="size-3 shrink-0 text-[color:var(--n9-accent)]"
-          weight="bold"
-        />
+        <span aria-hidden className="relative flex size-2 shrink-0 items-center justify-center">
+          <span className="absolute inline-flex size-full animate-ping rounded-full bg-[color:var(--n9-accent)]/50 motion-reduce:hidden" />
+          <span className="relative inline-flex size-1.5 rounded-full bg-[color:var(--n9-accent)]" />
+        </span>
         <span className="bg-gradient-to-r from-[color:var(--n9-accent)] to-[color:color-mix(in_oklab,var(--n9-accent)_45%,#d9a24a)] bg-clip-text text-[9px] font-semibold uppercase tracking-[0.16em] text-transparent">
           Lab pulse
         </span>
+        <Activity
+          aria-hidden
+          className="size-3 shrink-0 text-[color:var(--n9-accent)]/70"
+          weight="bold"
+        />
+        <span className="text-[9px] font-medium uppercase tracking-[0.14em] text-muted-foreground/60">
+          what's moving in your lab
+        </span>
       </div>
       <p
-        className="mt-1 min-w-0 text-pretty text-[13px] italic leading-snug text-muted-foreground"
+        className="mt-1 line-clamp-2 min-w-0 text-pretty text-[13px] italic leading-snug text-muted-foreground"
         style={{ fontFamily: "var(--font-family-display)" }}
+        title={summary}
       >
         {summary}
       </p>
