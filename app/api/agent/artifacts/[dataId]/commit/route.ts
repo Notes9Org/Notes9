@@ -1,4 +1,5 @@
 import { verifyBearerToken } from '@/lib/verify-bearer-token';
+import { tryCatalystBaseUrl } from '@/lib/catalyst-client';
 
 // Proxies "Save to Data files" to the agent backend's commit endpoint. The
 // backend re-checks the chosen experiment against the user's AccessScope, so the
@@ -6,7 +7,7 @@ import { verifyBearerToken } from '@/lib/verify-bearer-token';
 // no streaming.
 export const runtime = 'nodejs';
 
-const NOTES9_API_BASE = process.env.CHAT_API_URL?.replace(/\/$/, '') || '';
+const NOTES9_API_BASE = tryCatalystBaseUrl();
 
 export async function POST(
   req: Request,

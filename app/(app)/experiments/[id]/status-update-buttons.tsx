@@ -23,6 +23,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import { CheckCircle2, Pause, Play, Ban, Loader2, ChevronDown } from "lucide-react"
+import { updateExperiment } from "@/lib/experiments"
 
 interface StatusUpdateButtonsProps {
   experimentId: string
@@ -43,13 +44,7 @@ export function StatusUpdateButtons({ experimentId, currentStatus }: StatusUpdat
     setIsUpdating(true)
 
     try {
-      const { error } = await supabase
-        .from("experiments")
-        .update({
-          status: newStatus,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", experimentId)
+      const { error } = await updateExperiment(supabase, experimentId, { status: newStatus })
 
       if (error) throw error
 

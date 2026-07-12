@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
+import { deletePaper } from "@/lib/papers"
 import { ViewModeToggle } from "@/components/ui/view-mode-toggle"
 import { FileText, Grid3x3, List, ArrowUpRight, Trash2 } from "lucide-react"
 
@@ -213,7 +214,7 @@ function PaperTableView({ papers, onSelectPaper, onDeleted }: { papers: PaperLis
     setIsDeleting(true)
     try {
       const supabase = createClient()
-      const { error } = await supabase.from("papers").delete().in("id", selectedIds)
+      const { error } = await deletePaper(supabase, selectedIds)
       if (error) {
         toast.error(`Failed to delete: ${error.message}`)
         return

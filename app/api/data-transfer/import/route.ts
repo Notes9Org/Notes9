@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server"
 import { getCurrentUser } from "@/lib/auth/current-user"
 import { normalizeRequestedTables, type BackupPayload, type ExportTable } from "@/lib/data-transfer"
 import { escapeHtml } from "@/lib/sanitize-html"
+import { upsertProjectByName } from "@/lib/projects"
+import { upsertExperimentByName, findExperimentByName } from "@/lib/experiments"
 import {
   USER_STORAGE_BUCKET,
   createExperimentDataStoragePath,
@@ -254,6 +256,14 @@ async function importResearchFolder({
       })
       report.inserted.files = (report.inserted.files ?? 0) + 1
     } catch (error: any) {
+      // Metadata row failed after the object was already uploaded — the object
+      // has no owning row and org-scoped paths have no TTL/cron reaper, so it
+      // would leak forever. Delete it (best-effort; don't mask the real error).
+      try {
+        await supabase.storage.from(USER_STORAGE_BUCKET).remove([storagePath])
+      } catch {
+        /* best-effort cleanup */
+      }
       report.failed.push({
         table: "files",
         reason: error.message || `Failed to persist metadata for ${file.name}`,
@@ -399,35 +409,7 @@ async function ensureProjectId({
   organizationId: string
   userId: string
 }) {
-  const inserted = await supabase
-    .from("projects")
-    .insert({
-      name,
-      organization_id: organizationId,
-      created_by: userId,
-      status: "planning",
-      priority: "medium",
-    })
-    .select("id")
-    .single()
-
-  if (!inserted.error && inserted.data?.id) {
-    await supabase.from("project_members").insert({
-      project_id: inserted.data.id,
-      user_id: userId,
-      role: "lead",
-    })
-    return inserted.data.id
-  }
-
-  const existing = await supabase
-    .from("projects")
-    .select("id")
-    .eq("organization_id", organizationId)
-    .eq("name", name)
-    .maybeSingle()
-
-  return existing.data?.id ?? null
+  return upsertProjectByName(supabase, { name, organizationId, createdBy: userId })
 }
 
 async function ensureExperimentId({
@@ -441,30 +423,7 @@ async function ensureExperimentId({
   projectId: string
   userId: string
 }) {
-  const inserted = await supabase
-    .from("experiments")
-    .insert({
-      name,
-      project_id: projectId,
-      status: "planned",
-      created_by: userId,
-      assigned_to: userId,
-    })
-    .select("id")
-    .single()
-
-  if (!inserted.error && inserted.data?.id) {
-    return inserted.data.id
-  }
-
-  const existing = await supabase
-    .from("experiments")
-    .select("id")
-    .eq("project_id", projectId)
-    .eq("name", name)
-    .maybeSingle()
-
-  return existing.data?.id ?? null
+  return upsertExperimentByName(supabase, { name, projectId, userId })
 }
 
 async function ensureDefaultExperiment({
@@ -741,10 +700,7 @@ async function importFromBackup({
     }
 
     if (table === "experiments" && row.name) {
-      let query = supabase.from("experiments").select("id").eq("name", row.name)
-      if (row.project_id) query = query.eq("project_id", row.project_id)
-      const { data } = await query.maybeSingle()
-      return data?.id ?? null
+      return findExperimentByName(supabase, row.name, row.project_id)
     }
 
     if (table === "protocols" && row.name) {

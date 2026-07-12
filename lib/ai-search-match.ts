@@ -1,12 +1,19 @@
 import type { SearchPaper } from "@/types/paper-search"
 import { fuzzyFindExcerpt } from "@/lib/fuzzy-text-match"
+import { normalizeDoi as normalizeDoiCanonical } from "@/lib/literature-pdf-storage"
 
-/** Normalize a DOI for comparison (lowercase, strip resolver prefix + trailing punctuation). */
+/**
+ * Extract a DOI-like substring from a raw value or arbitrary URL, then format it
+ * via the canonical normalizer (`lib/literature-pdf-storage.ts`) — the shape
+ * actually persisted to `literature_reviews`. Extraction stays local because
+ * callers here also pass non-DOI URLs, which the canonical normalizer alone
+ * would (wrongly) accept as-is.
+ */
 export function normalizeDoi(raw: string | null | undefined): string | null {
   if (!raw) return null
   const m = raw.match(/10\.\d{4,9}\/[^\s"'<>]+/i)
   if (!m) return null
-  return m[0].toLowerCase().replace(/[.,;]+$/, "")
+  return normalizeDoiCanonical(m[0])
 }
 
 /** Extract a PMID from a value or a PubMed URL. */

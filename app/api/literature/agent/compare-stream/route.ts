@@ -1,20 +1,8 @@
 import { verifyBearerToken } from "@/lib/verify-bearer-token"
+import { compareAgentStreamUrl } from '@/lib/catalyst-client'
 
 /** Paper-analyzer SSE can run long on large batches; align with Vercel Pro max unless you use Fluid. */
 export const maxDuration = 300;
-
-const NOTES9_BASE = process.env.CHAT_API_URL?.replace(/\/$/, '') ?? '';
-const DEFAULT_PAPER_ANALYZER = NOTES9_BASE ? `${NOTES9_BASE}/paper-analyzer` : '';
-
-/** Upstream `POST …/paper-analyzer/stream` (same request body as `POST …/paper-analyzer`). */
-function paperAnalyzerStreamUrl(): string {
-  const explicit = process.env.LITERATURE_COMPARE_STREAM_URL?.replace(/\/$/, '').trim();
-  if (explicit) return explicit;
-  const compareBase =
-    process.env.LITERATURE_COMPARE_AGENT_URL?.replace(/\/$/, '').trim() || DEFAULT_PAPER_ANALYZER;
-  if (!compareBase) return '';
-  return `${compareBase}/stream`;
-}
 
 type Body = {
   query?: string;
@@ -75,7 +63,7 @@ export async function POST(req: Request) {
         : undefined,
   };
 
-  const UPSTREAM = paperAnalyzerStreamUrl();
+  const UPSTREAM = compareAgentStreamUrl();
 
   if (!UPSTREAM) {
     return new Response(

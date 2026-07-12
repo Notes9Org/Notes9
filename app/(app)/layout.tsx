@@ -1,5 +1,4 @@
 import { Suspense } from 'react'
-import { createClient } from "@/lib/supabase/server"
 import { requireUser } from "@/lib/auth/current-user"
 import { ensureUserProfile } from "@/lib/ensure-user-profile"
 import { AppLayout } from "@/components/layout/app-layout"
@@ -16,12 +15,11 @@ export default async function AppGroupLayout({
   children: React.ReactNode
 }) {
   const user = await requireUser()
-  const supabase = await createClient()
 
   // Bootstrap profile + organization on the server so every client component
   // downstream (sidebar, project picker, etc.) can assume they exist instead
   // of re-running create-on-miss logic in the navigation chrome.
-  const profileResult = await ensureUserProfile(supabase, user)
+  const profileResult = await ensureUserProfile(user)
   if (!profileResult.ok) {
     // Don't block render — sidebar will show an empty-workspace state and a
     // retry affordance. Emit a structured event so the failure is queryable

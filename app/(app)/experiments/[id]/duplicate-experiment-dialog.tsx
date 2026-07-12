@@ -20,6 +20,7 @@ import { Copy, Loader2 } from "lucide-react"
 import { getUniqueNameErrorMessage } from "@/lib/unique-name-error"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useAuthUser } from "@/components/auth/auth-provider"
+import { createExperiment } from "@/lib/experiments"
 
 interface Experiment {
   id: string
@@ -85,21 +86,17 @@ export function DuplicateExperimentDialog({
       if (!currentUser) throw new Error("Not authenticated")
 
       // Create duplicate experiment
-      const { data: newExperiment, error: experimentError } = await supabase
-        .from("experiments")
-        .insert({
-          name: newName.trim(),
-          description: experiment.description,
-          hypothesis: experiment.hypothesis,
-          status: "planned", // Reset to planned
-          project_id: experiment.project_id,
-          assigned_to: experiment.assigned_to,
-          start_date: null, // Reset dates
-          completion_date: null,
-          created_by: currentUser.id,
-        })
-        .select()
-        .single()
+      const { data: newExperiment, error: experimentError } = await createExperiment(supabase, {
+        name: newName.trim(),
+        description: experiment.description,
+        hypothesis: experiment.hypothesis,
+        status: "planned", // Reset to planned
+        projectId: experiment.project_id,
+        assignedTo: experiment.assigned_to,
+        startDate: null, // Reset dates
+        completionDate: null,
+        createdBy: currentUser.id,
+      })
 
       if (experimentError) throw experimentError
 

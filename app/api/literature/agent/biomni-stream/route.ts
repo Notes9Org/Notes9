@@ -1,16 +1,8 @@
 import { verifyBearerToken } from "@/lib/verify-bearer-token"
+import { biomniAgentStreamUrl } from '@/lib/catalyst-client'
 
 /** Long Biomni design-mode runs can exceed 120s; 300s matches typical Vercel Pro serverless max (raise on Fluid/self-host if needed). */
 export const maxDuration = 300;
-
-/** Full POST URL to SSE biomni literature endpoint (`…/biomni/literature/stream`). */
-function literatureBiomniStreamUrl(): string {
-  const explicit = process.env.LITERATURE_BIOMNI_STREAM_URL?.replace(/\/$/, '').trim();
-  if (explicit) return explicit;
-  const base = process.env.BIOMNI_FUNCTION_URL?.replace(/\/$/, '').trim();
-  if (base) return `${base}/biomni/literature/stream`;
-  return '';
-}
 
 /** Defaults aligned with `POST /biomni/literature/stream`. */
 const DEFAULT_BIOMNI_OPTIONS = {
@@ -96,7 +88,7 @@ export async function POST(req: Request) {
     options: mergeBiomniOptions(body.options),
   };
 
-  const UPSTREAM = literatureBiomniStreamUrl();
+  const UPSTREAM = biomniAgentStreamUrl();
 
   if (!UPSTREAM) {
     return new Response(

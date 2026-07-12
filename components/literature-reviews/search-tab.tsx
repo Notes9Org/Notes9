@@ -16,9 +16,12 @@ import {
   Highlighter,
   NotebookPen,
   ArrowRight,
+  Clock,
+  RotateCcw,
   type LucideIcon,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { formatDistanceToNow } from 'date-fns'
 import { cn } from '@/lib/utils'
 import { AiSearchView } from './ai-search-view'
 import { AiSearchFilters } from './ai-search-filters'
@@ -26,6 +29,14 @@ import { MotionList, MotionItem } from './motion'
 import { DEFAULT_AI_FILTERS, type AiResultFilters } from '@/lib/ai-search-filters'
 import { useAwsTranscribe } from '@/hooks/use-aws-transcribe'
 import { VoiceWaveform } from '@/components/text-editor/voice-waveform'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+
+/** One past literature search, for the history dropdown. */
+export interface LiteratureHistoryEntry {
+  id: string
+  query: string
+  updatedAt: string
+}
 
 /** What the AI literature search offers — shown on the empty (pre-search) state. */
 const SEARCH_FEATURES: { Icon: LucideIcon; title: string; desc: string }[] = [
@@ -123,6 +134,12 @@ interface LiteratureSearchFormProps {
   /** When provided, a Filters control is shown inside the search bar. */
   filters?: AiResultFilters
   onFiltersChange?: (next: AiResultFilters) => void
+  /** Last 10 literature searches (newest first), for the history dropdown. */
+  history?: LiteratureHistoryEntry[]
+  /** Restore (instant, from cache) or re-run live a past search. */
+  onSelectHistory?: (query: string, opts: { refresh: boolean }) => void
+  /** Opens the full history view ("See all"). */
+  onSeeAllHistory?: () => void
 }
 
 export function LiteratureSearchForm({
@@ -133,9 +150,14 @@ export function LiteratureSearchForm({
   onStop,
   filters,
   onFiltersChange,
+  history,
+  onSelectHistory,
+  onSeeAllHistory,
 }: LiteratureSearchFormProps) {
   const showFilters = !!(filters && onFiltersChange)
+  const showHistory = !!(history && onSelectHistory)
   const [focused, setFocused] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
 
   // `setQuery` is a parent-owned setter that only accepts a string (no functional
   // updater). Mirror the live query in a ref so the mic's onFinal callback — which
@@ -220,6 +242,71 @@ export function LiteratureSearchForm({
         </button>
         {isListening && (
           <VoiceWaveform getWaveformData={getWaveformData} className="shrink-0" />
+        )}
+        {showHistory && (
+          <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                aria-label="Search history"
+                title="Search history"
+                className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <Clock className="size-4" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-72 p-1.5">
+              {history && history.length > 0 ? (
+                <>
+                  <div className="max-h-72 overflow-y-auto">
+                    {history.map((h) => (
+                      <div
+                        key={h.id}
+                        className="group flex items-center gap-1 rounded-md px-2 py-1.5 hover:bg-accent"
+                      >
+                        <button
+                          type="button"
+                          className="min-w-0 flex-1 truncate text-left text-sm"
+                          onClick={() => {
+                            setHistoryOpen(false)
+                            onSelectHistory?.(h.query, { refresh: false })
+                          }}
+                        >
+                          <span className="block truncate">{h.query}</span>
+                          <span className="block text-xs text-muted-foreground">
+                            {formatDistanceToNow(new Date(h.updatedAt), { addSuffix: true })}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Refresh this search"
+                          title="Refresh — re-run live"
+                          className="shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
+                          onClick={() => {
+                            setHistoryOpen(false)
+                            onSelectHistory?.(h.query, { refresh: true })
+                          }}
+                        >
+                          <RotateCcw className="size-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  {onSeeAllHistory && (
+                    <button
+                      type="button"
+                      className="mt-1 w-full rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+                      onClick={onSeeAllHistory}
+                    >
+                      See all →
+                    </button>
+                  )}
+                </>
+              ) : (
+                <div className="px-2 py-3 text-sm text-muted-foreground">No searches yet.</div>
+              )}
+            </PopoverContent>
+          </Popover>
         )}
         <Input
           /* type="text" (not "search") so the browser's native clear "×" never

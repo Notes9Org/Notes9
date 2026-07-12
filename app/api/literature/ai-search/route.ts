@@ -3,6 +3,7 @@ import type { PaperSearchSortMode } from '@/types/paper-search'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentUser } from '@/lib/auth/current-user'
 import { searchPapersWithMeta } from '@/lib/paper-search'
+import { tryCatalystBaseUrl } from '@/lib/catalyst-client'
 
 /**
  * Dedicated AI literature-search endpoint — proxies the catalyst orchestrator
@@ -24,11 +25,6 @@ import { searchPapersWithMeta } from '@/lib/paper-search'
 // The web-search agent + summary fan-out can run well over a minute on a cold
 // catalyst. Allow enough wall-clock (Vercel clamps to the plan limit).
 export const maxDuration = 200
-
-function catalystBaseUrl(): string | null {
-  const raw = (process.env.CATALYST_URL?.trim() || process.env.CHAT_API_URL?.trim()) ?? ''
-  return raw ? raw.replace(/\/+$/, '') : null
-}
 
 function parseSort(v: unknown): PaperSearchSortMode {
   return v === 'recent' || v === 'cited' ? v : 'relevance'
@@ -91,7 +87,7 @@ export async function POST(request: NextRequest) {
     })
   }
 
-  const base = catalystBaseUrl()
+  const base = tryCatalystBaseUrl() || null
 
   // Legacy fallback: in-process search → single `papers` + `done` SSE.
   const legacyStream = async (): Promise<Response> => {

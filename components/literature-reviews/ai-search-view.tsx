@@ -9,7 +9,9 @@ import { AiPaperCard } from './ai-paper-card'
 import { AiSearchFilters } from './ai-search-filters'
 import { AnimatePresence, MotionResultCard } from './motion'
 import { openCatalystPanel } from '@/lib/catalyst-launch'
-import { setCatalystLiterature, type LiteratureRef } from '@/lib/catalyst-literature'
+import { paperIdentityKey } from '@/lib/paper-search'
+import { setCatalystLiterature, type CatalystLiterature, type LiteratureRef } from '@/lib/catalyst-literature'
+import { LiteratureAiOverview } from '@/components/literature-reviews/literature-ai-overview'
 import { papersToGrounding, buildLiteratureSessionContext } from '@/lib/literature-citations'
 import type { GroundingResource } from '@/lib/agent-stream-types'
 import { renumberCitations } from '@/lib/citation-renumber'
@@ -39,9 +41,13 @@ function refHref(r: AiSearchResult): string | null {
 const PAGE_SIZE = 10
 
 // Stable per-paper identity for saved-state tracking — never list position.
+// Routed through the canonical pmid > doi > title ordering (`lib/paper-search.ts`)
+// so the same paper keys identically here, in `ai-paper-card.tsx`, and in
+// `staged-paper-view.tsx`.
 function savedKeyForResult(r: AiSearchResult): string {
   const p = r.paper
-  return String(p?.id || p?.doi || p?.pmid || p?.title || r.citeLabel)
+  if (!p) return `citelabel:${r.citeLabel}`
+  return paperIdentityKey(p)
 }
 
 function refMeta(r: AiSearchResult): string {
@@ -114,14 +120,17 @@ export function AiSearchView({
     results,
     papers: resultPapers,
     isStreaming,
+    phases,
     papersLoading,
     error,
     limitInfo,
     stop,
   } = useAiLiteratureSearch({ query })
 
-  // Track saved papers by identity (id|doi|pmid|title) across re-renders so cards
-  // don't revert on remount — never by list position, which leaks across queries.
+  // Optimistic "just saved" hint, keyed by paper identity, additive only — never
+  // reset. The real source of truth is the `isPaperStaged`/`getPaperMembership`
+  // props (backed by `literature_reviews`); this ref only bridges the gap between
+  // a save action and the next `router.refresh()` landing those props.
   const savedKeysRef = useRef(new Set<string>())
 
   // Pagination: one deeply-ranked fetch; "Load more" reveals the rest of the
@@ -131,7 +140,6 @@ export function AiSearchView({
   useEffect(() => {
     if (query.trim()) void run(query)
     setVisibleCount(PAGE_SIZE)
-    savedKeysRef.current = new Set<string>()
   }, [query, run])
 
   // Reset the visible window when filters change so the reveal math stays sane.
@@ -188,23 +196,29 @@ export function AiSearchView({
   // any shown card's abstract still resolving.
   const processing = loading || displayed.some((r) => r.abstractPending)
 
-  // Tracks the previous streaming state so we auto-open the sidebar exactly once
-  // per search run (on false→true), and re-open on every fresh search.
+  // Tracks the previous streaming state so we clear the stale Catalyst bridge
+  // exactly once per search run (on false→true).
   const wasStreamingRef = useRef(false)
 
-  // Stream the AI summary (and its references) into the Catalyst sidebar, and
-  // auto-open the sidebar the moment a search starts — so the summary shows up
-  // there immediately and composes live. Follow-up questions continue in the
-  // sidebar via the stream endpoint (the summary is in the co-pilot context).
+  // Inline "AI Overview" state — the summary renders below the search, and the
+  // Catalyst bridge is only populated when the user explicitly dives deeper.
+  const [overview, setOverview] = useState<CatalystLiterature | null>(null)
+
+  // Compose the AI summary (and its references) into local `overview` state so it
+  // renders inline below the search as an "AI Overview". Nothing opens the chat or
+  // persists a session here — that happens only when the user clicks "Dive deeper"
+  // (see diveDeeper), which hands the summary to the sidebar via setCatalystLiterature.
   useEffect(() => {
     const q = query.trim()
-    if (!q) return
-    // Auto-open the sidebar once per SEARCH RUN (on the false→true streaming
-    // transition), not once-per-query-string-forever. This way re-running the
-    // same query after the user closed the panel re-opens it. (Previously a
-    // module-level Set meant a repeated query never re-opened the sidebar.)
+    if (!q) {
+      setOverview(null)
+      return
+    }
+    // On each fresh search run (false→true streaming edge), clear any stale
+    // literature bridge from a previous dive so a later manual sidebar open
+    // never shows an old summary. The sidebar no longer auto-opens.
     if (isStreaming && !wasStreamingRef.current) {
-      openCatalystPanel({ scope: 'literature' })
+      setCatalystLiterature(null)
     }
     wasStreamingRef.current = isStreaming
     // Renumber citations by order of first appearance so the prose [N], the
@@ -256,10 +270,11 @@ export function AiSearchView({
         support_status: e.support_status ?? null,
       })) as GroundingResource[]
       const context = results.length ? buildLiteratureSessionContext(q, results) : null
-      setCatalystLiterature({
+      setOverview({
         query: q,
         summary,
         streaming: isStreaming,
+        phases,
         references,
         resources,
         manifest: serverManifest,
@@ -281,8 +296,15 @@ export function AiSearchView({
     // results are available; re-computation on each tick is cheap (deterministic).
     const { resources, manifest } = groundingInput.length ? papersToGrounding(groundingInput) : { resources: [], manifest: { manifest: {} } }
     const context = results.length ? buildLiteratureSessionContext(q, results) : null
-    setCatalystLiterature({ query: q, summary: renumberedSummary, streaming: isStreaming, references, resources, manifest, context })
-  }, [query, summary, serverManifest, isStreaming, results])
+    setOverview({ query: q, summary: renumberedSummary, streaming: isStreaming, phases, references, resources, manifest, context })
+  }, [query, summary, serverManifest, isStreaming, phases, results])
+
+  // Explicit handoff to the Catalyst chat: populate the bridge (dive: true so the
+  // sidebar persists a session) and open the panel.
+  const diveDeeper = () => {
+    if (overview) setCatalystLiterature({ ...overview, dive: true })
+    openCatalystPanel({ scope: 'literature' })
+  }
 
   return (
     <div className="space-y-4">
@@ -339,8 +361,7 @@ export function AiSearchView({
         </div>
       )}
 
-      {/* The AI summary streams into the Catalyst sidebar only — no inline copy
-          under the search bar (the sidebar surface is sufficient). */}
+      {overview && <LiteratureAiOverview lit={overview} onDive={diveDeeper} />}
 
       {showSkeletons && (
         <>

@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import { Trash2, Loader2, AlertTriangle } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { deleteExperiment } from "@/lib/experiments"
 
 interface DeleteExperimentDialogProps {
   experimentId: string
@@ -50,10 +51,7 @@ export function DeleteExperimentDialog({
     setIsDeleting(true)
 
     try {
-      const { error } = await supabase
-        .from("experiments")
-        .delete()
-        .eq("id", experimentId)
+      const { error } = await deleteExperiment(supabase, experimentId)
 
       if (error) throw error
 

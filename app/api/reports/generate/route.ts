@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentUser } from '@/lib/auth/current-user'
+import { aiServiceBaseUrl, tryCatalystBaseUrl } from '@/lib/catalyst-client'
 
 export const maxDuration = 60
 
-const NOTES9_API_BASE =
-  process.env.CHAT_API_URL?.replace(/\/$/, '') ||
-  ''
-const AI_SERVICE_URL = process.env.AI_SERVICE_URL?.replace(/\/$/, '') || ''
+const NOTES9_API_BASE = tryCatalystBaseUrl()
+const AI_SERVICE_URL = aiServiceBaseUrl()
 const AI_SERVICE_BEARER_TOKEN = process.env.AI_SERVICE_BEARER_TOKEN || ''
 
 const USER_CONTENT_START = '[USER_CONTENT_START]'

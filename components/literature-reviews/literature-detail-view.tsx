@@ -513,9 +513,9 @@ ER  - `;
             <div ref={pdfSectionRef} className="scroll-mt-4">
               <LiteraturePdfPanel
                 literatureId={literature.id}
-                pdfUrl={`/api/literature/${literature.id}/viewer-pdf`}
+                pdfUrl={`/api/literature/${literature.id}/viewer-pdf?v=${literature.pdf_uploaded_at ?? ""}`}
                 pdfFileName={literature.pdf_file_name}
-                openInNewTabFallbackUrl={`/api/literature/${literature.id}/viewer-pdf`}
+                openInNewTabFallbackUrl={`/api/literature/${literature.id}/viewer-pdf?v=${literature.pdf_uploaded_at ?? ""}`}
                 highlightExcerpt={
                   activeLitHighlight && highlightSurface === "pdf"
                     ? activeLitHighlight.excerpt

@@ -23,6 +23,7 @@ import { ArrowLeft } from 'lucide-react'
 import { getUniqueNameErrorMessage } from "@/lib/unique-name-error"
 import { recordRumEvent } from "@/lib/rum"
 import { DATE_ORDER_ERROR, isEndDateBeforeStartDate } from "@/lib/date-order"
+import { createProject } from "@/lib/projects"
 
 export default function NewProjectPage() {
   const user = useAuthUser();
@@ -64,29 +65,18 @@ export default function NewProjectPage() {
         .eq("id", user.id)
         .single()
 
-      const { data, error: insertError } = await supabase
-        .from("projects")
-        .insert({
-          name: formData.name,
-          description: formData.description,
-          status: formData.status,
-          priority: formData.priority,
-          start_date: formData.start_date || null,
-          end_date: formData.end_date || null,
-          created_by: user.id,
-          organization_id: profile?.organization_id,
-        })
-        .select()
-        .single()
+      const { data, error: insertError } = await createProject(supabase, {
+        name: formData.name,
+        description: formData.description,
+        status: formData.status,
+        priority: formData.priority,
+        startDate: formData.start_date || null,
+        endDate: formData.end_date || null,
+        createdBy: user.id,
+        organizationId: profile?.organization_id,
+      })
 
       if (insertError) throw insertError
-
-      // Add creator as project member
-      await supabase.from("project_members").insert({
-        project_id: data.id,
-        user_id: user.id,
-        role: "lead",
-      })
 
       recordRumEvent('project_created', {})
 

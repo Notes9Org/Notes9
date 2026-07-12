@@ -17,6 +17,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import { Trash2, Loader2, AlertTriangle } from "lucide-react"
+import { deleteProject } from "@/lib/projects"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -48,10 +49,7 @@ export function DeleteProjectDialog({ projectId, projectName, experimentCount = 
     setIsDeleting(true)
 
     try {
-      const { error } = await supabase
-        .from("projects")
-        .delete()
-        .eq("id", projectId)
+      const { error } = await deleteProject(supabase, projectId)
 
       if (error) throw error
 
