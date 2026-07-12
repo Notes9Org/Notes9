@@ -1,27 +1,69 @@
 import type { ComponentType } from "react"
-import { BookOpen, Folder, House as Home, Graph as Network, Sparkle as Sparkles } from "@phosphor-icons/react/ssr"
+import {
+  BookOpen,
+  Database,
+  FileText,
+  Flask as FlaskConical,
+  Folder,
+  Graph as Network,
+  House as Home,
+  NotePencil as NotebookPen,
+  PenNib,
+  Sparkle as Sparkles,
+  TestTube,
+} from "@phosphor-icons/react/ssr"
 import { ClipboardInfoIcon } from "@/components/ui/clipboard-info-icon"
 
-/** Accepts both Lucide icons and our custom SVG-based wrapper icons. */
-type NavIcon = ComponentType<{ className?: string }>
+/** Accepts Phosphor icons and our custom SVG-based wrapper icons. `weight`
+ * lets the sidebar render the active item's icon filled. */
+type NavIcon = ComponentType<{ className?: string; weight?: "regular" | "fill" }>
 
-/** Single source of truth: primary app nav (mirrors [components/layout/app-sidebar](components/layout/app-sidebar)).
+export type NavItem = {
+  name: string
+  href: string
+  icon: NavIcon
+  /** Rendered as indented sub-rows under the parent (flattened in the icon rail). */
+  children?: NavItem[]
+}
+
+/**
+ * Single source of truth: primary app nav (mirrors
+ * [components/layout/app-sidebar](components/layout/app-sidebar)).
+ *
+ * One flat, minimal list ordered by the research loop our marketing tells
+ * (read → method → run → materials → publish): Literature → Protocols →
+ * Experiments (lab notes / data inside) → Samples → Writing → Reports, with
+ * Catalyst reasoning over all of it. The only nesting is Lab notes / Data
+ * under Experiments. The active project/experiment context lives in the
+ * sidebar's dedicated context card (see app-sidebar), not in this list.
+ *
+ * Lab notes / Data nest strictly under Experiments (they only exist inside an
+ * experiment): with an experiment open they land inside that experiment's
+ * tab; otherwise they show the pick-a-context list. Protocols / Literature /
+ * Samples are lab-wide libraries and always open unscoped from the sidebar;
+ * `?project=` deep links still filter.
  *
  * Dashboard / Planner are deliberately separate after the 2026-05 split:
  *   - Dashboard = lab status overview (active experiments, recently edited, today).
  *   - Planner   = self-organized workspace (schedule, tasks, whiteboard).
  */
-export const APP_PRIMARY_NAV: { name: string; href: string; icon: NavIcon }[] = [
-  // Writing (/papers) and Reports (/reports) intentionally omitted from the
-  // primary nav — they're surfaced as cards inside each project workspace.
-  // The routes still exist and are reachable from those cards.
+export const APP_PRIMARY_NAV: NavItem[] = [
   { name: "Dashboard", href: "/dashboard", icon: Home },
   { name: "Projects", href: "/projects", icon: Folder },
   { name: "Literature", href: "/literature-reviews", icon: BookOpen },
-  // Protocols is a top-level library like Literature (the SOP library spans
-  // projects). The sidebar link is always unscoped — `?project=` deep links
-  // (e.g. from a project workspace card) still show the project-filtered view.
   { name: "Protocols", href: "/protocols", icon: ClipboardInfoIcon as unknown as NavIcon },
+  {
+    name: "Experiments",
+    href: "/experiments",
+    icon: FlaskConical,
+    children: [
+      { name: "Lab notes", href: "/lab-notes", icon: NotebookPen },
+      { name: "Data", href: "/data", icon: Database },
+    ],
+  },
+  { name: "Samples", href: "/samples", icon: TestTube },
+  { name: "Writing", href: "/papers", icon: PenNib },
+  { name: "Reports", href: "/reports", icon: FileText },
   { name: "Catalyst", href: "/catalyst", icon: Sparkles },
   { name: "Research map", href: "/research-map", icon: Network },
 ]

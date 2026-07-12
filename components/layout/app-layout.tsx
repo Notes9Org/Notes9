@@ -45,7 +45,7 @@ function HeaderTitle() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const { segments } = useBreadcrumb()
-  const { projectId, projectName, projectColor } = useProjectScope()
+  const { projectId, projectName } = useProjectScope()
   const isMobile = useMediaQuery("(max-width: 768px)")
   const scrollRef = useRef<HTMLElement>(null)
   const [scrollState, setScrollState] = useState({ canScrollLeft: false, canScrollRight: false })
@@ -59,19 +59,6 @@ function HeaderTitle() {
   })
   const filtered = resolveHeaderBreadcrumbs(autoSegments, pageSegments)
   const fallbackTitle = getHeaderTitleFromPath(pathname ?? "")
-
-  // When in project scope, render a small project-color dot before the breadcrumb.
-  // Only show it if the first crumb is the project (avoids double-rendering).
-  const showProjectDot =
-    Boolean(projectId && projectColor) &&
-    (filtered.length === 0 || filtered[0]?.label === projectName)
-  const ProjectDot = showProjectDot ? (
-    <span
-      aria-hidden
-      className="inline-block size-2 rounded-full shrink-0"
-      style={{ background: projectColor ?? undefined }}
-    />
-  ) : null
 
   const updateScrollState = useCallback(() => {
     const el = scrollRef.current
@@ -111,7 +98,6 @@ function HeaderTitle() {
   if (filtered.length === 0) {
     return (
       <h1 className="flex items-center gap-2 text-base sm:text-lg font-semibold truncate min-w-0">
-        {ProjectDot}
         <span className="truncate">{fallbackTitle}</span>
       </h1>
     )
@@ -139,7 +125,6 @@ function HeaderTitle() {
           aria-label={`Breadcrumb: ${fullPathAria}`}
           className="flex flex-nowrap items-center gap-1.5 text-sm text-muted-foreground min-w-0 flex-1 overflow-x-auto overflow-y-hidden scroll-smooth hide-scrollbar"
         >
-          {ProjectDot && <span className="shrink-0">{ProjectDot}</span>}
           {filtered.map((seg, i) => (
             <span key={seg.href ?? `${seg.label}-${i}`} className="inline-flex items-center gap-1.5 shrink-0">
               {i > 0 && <ChevronRight className="size-3.5 shrink-0" aria-hidden />}
@@ -168,7 +153,6 @@ function HeaderTitle() {
   // Desktop: full breadcrumb path
   return (
     <nav aria-label="breadcrumb" className="flex flex-nowrap items-center gap-1.5 text-sm text-muted-foreground sm:gap-2.5 min-w-0 overflow-hidden">
-      {ProjectDot}
       {filtered.map((seg, i) => (
         <span key={seg.href ?? `${seg.label}-${i}`} className="inline-flex items-center gap-1.5 shrink-0 min-w-0">
           {i > 0 && <ChevronRight className="size-3.5 shrink-0" aria-hidden />}

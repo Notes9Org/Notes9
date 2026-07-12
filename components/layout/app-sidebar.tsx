@@ -4,40 +4,32 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import Link, { useLinkStatus } from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import Image from "next/image"
-import { CaretDown as ChevronDown, CaretLeft as ChevronLeft, CaretUp as ChevronUp, Flask as FlaskConical, Folder, FolderOpen, DotsThree as MoreHorizontal, NotePencil as NotebookPen, Package, SidebarSimple as PanelLeft, Plus, MagnifyingGlass as Search, Gear as Settings, TestTube, User as User2, X as XIcon, Database, FileText, NotePencil as FileEdit, CircleNotch as Loader2 } from "@phosphor-icons/react/ssr"
+import { motion } from "framer-motion"
+import { CaretUp as ChevronUp, CaretUpDown, Check, Flask as FlaskConical, Folder, FolderOpen, NotePencil as NotebookPen, SidebarSimple as PanelLeft, Plus, MagnifyingGlass as Search, Gear as Settings, TestTube, FileText, NotePencil as FileEdit, CircleNotch as Loader2 } from "@phosphor-icons/react/ssr"
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
-  SidebarGroupAction,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarInput,
   SidebarMenu,
-  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
-  SidebarSeparator,
-  SidebarMenuSkeleton,
   useSidebar,
 } from "@/components/ui/sidebar"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible"
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
 import { createClient } from "@/lib/supabase/client"
 import { useAuthUser } from "@/components/auth/auth-provider"
@@ -46,45 +38,62 @@ import { Notes9Brand } from "@/components/brand/notes9-brand"
 import { ClipboardInfoIcon } from "@/components/ui/clipboard-info-icon"
 import { APP_PRIMARY_NAV } from "@/lib/app-primary-nav"
 import { TOUR, navTourKey } from "@/lib/tour/anchors"
-import { colorFromId as projectDotColor, useProjectScope } from "@/contexts/project-scope-context"
+import { useProjectScope } from "@/contexts/project-scope-context"
+import { sortByRecentProjectOrder } from "@/lib/recent-projects"
 import { toast } from "sonner"
 import { Button } from "../ui/button"
 import { NewLabNoteDialog } from "@/app/(app)/lab-notes/new-lab-note-dialog"
 import { withFromDashboard } from "@/lib/from-dashboard"
 
-const navigation = APP_PRIMARY_NAV
+/**
+ * Nav items that carry the active scope forward (`?project=` always; plus
+ * `?experiment=` while the user is ON an experiment page — so Lab notes /
+ * Data land inside the current experiment's context instead of a bare list).
+ * Library items (Protocols, Samples) are deliberately absent — they're
+ * lab-wide libraries and always open unscoped from the sidebar.
+ */
+const SCOPED_NAV_HREFS = new Set([
+  "/experiments",
+  "/lab-notes",
+  "/data",
+  "/literature-reviews",
+  "/papers",
+  "/reports",
+])
 
 /**
- * Section nav rendered as nested children when a project is active in the URL
- * (`?project=<id>` or `/projects/<id>`). These are the previously-orphaned
- * "global" section pages that the IA #1 audit flagged — they exist as routes
- * but were not discoverable from the sidebar. When scoped, each link carries
- * `?project=<id>` forward so the project filter persists across navigations.
+ * Shared row treatment for primary nav: quiet by default (muted icon, 13px
+ * label); the sliding pill supplies the active background, the row only
+ * switches type color/weight. Icons get a gentle scale-up on hover.
  */
-type ProjectScopedNavItem = {
-  name: string
-  basePath: string
-  icon: typeof Folder
-  children?: { name: string; basePath: string; icon: typeof Folder }[]
+type SwitcherExperiment = { id: string; name: string; project_id: string | null }
+
+/** Same effect as TabsTrigger: its easing + press-scale, and while the menu is
+ * open the row lifts as a solid raised tab (bg + shadow), like an active tab. */
+const SWITCHER_TAB_EFFECT_CLASS =
+  "duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-[0.97] motion-reduce:active:scale-100 data-[state=open]:bg-background data-[state=open]:text-foreground data-[state=open]:shadow-sm"
+
+/** Frosted switcher panel: thinner fill + stronger blur than the default menu
+ * glass, with an inner top highlight so it reads as a lifted glass pane. */
+const SWITCHER_MENU_CLASS =
+  "w-60 rounded-xl p-1.5 bg-[color:color-mix(in_srgb,var(--glass-bg)_72%,transparent)] backdrop-blur-2xl backdrop-saturate-150 shadow-xl shadow-black/10 ring-1 ring-inset ring-white/25 dark:ring-white/[0.07] dark:shadow-black/40"
+
+/** Switcher affordance: a quiet ⇅ caret (no box/outline) so the row visibly
+ * reads as "opens a picker", lighting up primary on hover/open. The whole row
+ * is the click target. */
+function SwitcherKeycap() {
+  return (
+    <span aria-hidden className="ml-auto flex size-5 shrink-0 items-center justify-center">
+      <CaretUpDown
+        weight="bold"
+        className="size-3.5 !text-muted-foreground/80 transition-colors group-hover:!text-primary group-data-[state=open]:!text-primary"
+      />
+    </span>
+  )
 }
 
-// Lab notes / Samples / Data are nested under Experiments.
-// Literature and Protocols are top-level nav (see APP_PRIMARY_NAV) — cross-
-// project libraries, not project-scoped in the sidebar tree.
-const PROJECT_SCOPED_NAV: ProjectScopedNavItem[] = [
-  {
-    name: "Experiments",
-    basePath: "/experiments",
-    icon: FlaskConical,
-    children: [
-      { name: "Lab notes", basePath: "/lab-notes", icon: NotebookPen },
-      { name: "Samples", basePath: "/samples", icon: TestTube },
-      { name: "Data", basePath: "/data", icon: Database },
-    ],
-  },
-  { name: "Reports", basePath: "/reports", icon: FileText },
-  { name: "Writing", basePath: "/papers", icon: FileEdit },
-]
+const NAV_ROW_CLASS =
+  "group relative z-[1] h-8 rounded-lg text-[13px] text-sidebar-foreground/75 transition-all duration-150 [&_svg]:text-sidebar-foreground/55 [&_svg]:transition-transform [&_svg]:duration-200 hover:bg-background/60 hover:text-sidebar-foreground hover:[&_svg]:scale-110 hover:[&_svg]:text-sidebar-foreground/80 active:scale-[0.985] active:bg-background/80 dark:hover:bg-background/40 dark:active:bg-background/60 data-[active=true]:bg-transparent data-[active=true]:font-medium data-[active=true]:text-sidebar-foreground data-[active=true]:[&_svg]:text-primary"
 
 interface Project {
   id: string
@@ -151,11 +160,64 @@ export function AppSidebar() {
   const [searchError, setSearchError] = useState(false)
   const [fetchError, setFetchError] = useState(false)
   const [labNoteOpen, setLabNoteOpen] = useState(false)
-  const [isProjectExpanded, setIsProjectExpanded] = useState(true)
   const supabase = useMemo(() => createClient(), [])
 
   const isIconMode = !open
   const searchInputRef = useRef<HTMLInputElement>(null)
+
+  // Experiment-switcher list, fetched lazily when the dropdown opens (the
+  // sidebar shouldn't pay for it on every load). Scoped to the active project.
+  const [experimentsForSwitcher, setExperimentsForSwitcher] = useState<SwitcherExperiment[]>([])
+  const [experimentsLoading, setExperimentsLoading] = useState(false)
+  const loadSwitcherExperiments = useCallback(async () => {
+    setExperimentsLoading(true)
+    try {
+      let query = supabase
+        .from("experiments")
+        .select("id, name, project_id")
+        .order("updated_at", { ascending: false })
+        .limit(8)
+      if (scope.projectId) query = query.eq("project_id", scope.projectId)
+      const { data } = await query
+      setExperimentsForSwitcher((data ?? []) as SwitcherExperiment[])
+    } finally {
+      setExperimentsLoading(false)
+    }
+  }, [supabase, scope.projectId])
+
+  // Always include the experiment the user is standing in, even if it isn't
+  // among the fetched most-recent (or the fetch is still in flight).
+  const switcherExperiments = useMemo(() => {
+    if (
+      scope.liveExperimentId &&
+      scope.experimentName &&
+      !experimentsForSwitcher.some((e) => e.id === scope.liveExperimentId)
+    ) {
+      return [
+        {
+          id: scope.liveExperimentId,
+          name: scope.experimentName,
+          project_id: scope.projectId,
+        },
+        ...experimentsForSwitcher,
+      ]
+    }
+    return experimentsForSwitcher
+  }, [experimentsForSwitcher, scope.liveExperimentId, scope.experimentName, scope.projectId])
+
+  // Project-switcher list: recently opened first; always includes the scoped
+  // project even when it fell out of the fetched top-5.
+  const switcherProjects = useMemo(() => {
+    const list = sortByRecentProjectOrder(projects)
+    if (
+      scope.projectId &&
+      scope.projectName &&
+      !list.some((p) => p.id === scope.projectId)
+    ) {
+      return [{ id: scope.projectId, name: scope.projectName, status: "" }, ...list]
+    }
+    return list
+  }, [projects, scope.projectId, scope.projectName])
 
   const toggleSidebarOpen = (e?: React.MouseEvent<HTMLButtonElement>) => {
     setOpen(!open)
@@ -177,6 +239,21 @@ export function AppSidebar() {
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  // ⌘K / Ctrl+K focuses the sidebar search from anywhere (expanding the
+  // collapsed rail first). Skips when the user is typing in another field.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "k") return
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return
+      e.preventDefault()
+      setOpen(true)
+      setTimeout(() => searchInputRef.current?.focus(), open ? 0 : 120)
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [open, setOpen])
 
   // Debounced sidebar search (file/document level)
   useEffect(() => {
@@ -356,8 +433,14 @@ export function AppSidebar() {
       // this custom resizable container (leftover gap element + odd collapsed).
       variant="sidebar"
       collapsible="icon"
-      className="border-r-0 transition-all duration-200 ease-in-out [&_[data-slot=sidebar-container]]:border-r-0"
+      className="border-r-0 transition-all duration-200 ease-in-out [&_[data-slot=sidebar-container]]:border-r-0 [&_[data-sidebar=sidebar]]:bg-[color:color-mix(in_oklab,var(--sidebar)_86%,transparent)] [&_[data-sidebar=sidebar]]:backdrop-blur-xl [&_[data-sidebar=sidebar]]:backdrop-saturate-[1.3]"
     >
+      {/* Ambient top glow — a soft warm radial wash that gives the panel depth.
+          First child on purpose: everything after paints above it. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-44 bg-[radial-gradient(120%_100%_at_50%_0%,color-mix(in_oklab,var(--primary)_8%,transparent),transparent_70%)]"
+      />
       {/* Header with Workspace Dropdown */}
       <SidebarHeader
         className={cn(
@@ -469,9 +552,9 @@ export function AppSidebar() {
                   <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 select-none text-muted-foreground" />
                   <SidebarInput
                     ref={searchInputRef}
-                    placeholder="Search..."
+                    placeholder="Search"
                     className={cn(
-                      "pl-9",
+                      "h-8 rounded-lg border-transparent bg-[color:color-mix(in_oklab,var(--sidebar)_72%,var(--sidebar-accent)_28%)] pl-9 pr-12 shadow-none transition-colors placeholder:text-muted-foreground/80 hover:bg-sidebar-accent/70 focus-visible:bg-sidebar focus-visible:ring-1",
                       searchQuery.length === 0 &&
                         "caret-transparent selection:bg-transparent",
                     )}
@@ -481,6 +564,11 @@ export function AppSidebar() {
                       if (e.key === "Escape") setSearchQuery("")
                     }}
                   />
+                  {searchQuery.length === 0 && (
+                    <kbd className="pointer-events-none absolute right-2 top-1/2 hidden h-5 -translate-y-1/2 select-none items-center rounded-[5px] border border-sidebar-border/80 bg-sidebar px-1.5 font-sans text-[10px] font-medium tracking-wide text-muted-foreground sm:flex">
+                      ⌘K
+                    </kbd>
+                  )}
                 </div>
               </PopoverAnchor>
               <PopoverContent
@@ -559,9 +647,9 @@ export function AppSidebar() {
               <SidebarMenuItem>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <SidebarMenuButton data-tour={TOUR.createNew} className="w-full justify-start gap-2 bg-[#e4ecd9] text-[#4f5f42] hover:bg-[#d6e3c7] hover:text-[#3d4a35] dark:bg-[#3d4a35] dark:text-[#e4ecd9] dark:hover:bg-[#4f5f42] transition-colors font-semibold shadow-sm">
+                    <SidebarMenuButton data-tour={TOUR.createNew} className="h-8 w-full justify-start gap-2 rounded-lg bg-[#e4ecd9] text-[13px] font-medium text-[#4f5f42] shadow-none ring-1 ring-inset ring-black/[0.04] transition-all duration-150 hover:bg-[#d6e3c7] hover:text-[#3d4a35] active:scale-[0.985] dark:bg-[#3d4a35] dark:text-[#e4ecd9] dark:ring-white/[0.06] dark:hover:bg-[#4f5f42]">
                       <Plus className="size-4 shrink-0" />
-                      <span>Create new...</span>
+                      <span>New</span>
                     </SidebarMenuButton>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent className="w-56 rounded-lg ml-2" side="right" align="start">
@@ -612,205 +700,299 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Main Navigation - icons only when collapsed; align centered in icon mode */}
+        {/* Context card: WHERE AM I. The active project + experiment switchers,
+            pinned to the BOTTOM of the sidebar (order-last + mt-auto), just
+            above the account footer — the nav list stays clean, and the
+            current context sits in a stable, glanceable home. Same sandglass
+            material as the nav strip; triggers behave like TabsTriggers
+            (raised solid tab while open). */}
+        {!isIconMode && mounted && scope.projectId && (
+          <SidebarGroup className="order-last mt-auto pb-2">
+            <SidebarGroupContent className="n9-grain rounded-xl border border-[color:var(--glass-border)] bg-[color:var(--glass-bg)] p-1 backdrop-blur-md">
+              <div className="px-2 pb-0.5 pt-1 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                Context
+              </div>
+              <SidebarMenu className="gap-0.5">
+                <SidebarMenuItem>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <SidebarMenuButton
+                        className={cn(NAV_ROW_CLASS, SWITCHER_TAB_EFFECT_CLASS)}
+                        aria-label={`Project: ${scope.projectName}. Open project switcher`}
+                      >
+                        <FolderOpen className="size-4 shrink-0" weight="fill" />
+                        <span className="flex-1 flex items-center min-w-0">
+                          <span className="truncate">{scope.projectName}</span>
+                        </span>
+                        <SwitcherKeycap />
+                      </SidebarMenuButton>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      side="right"
+                      align="start"
+                      sideOffset={10}
+                      className={SWITCHER_MENU_CLASS}
+                    >
+                      <DropdownMenuLabel className="px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                        Switch project
+                      </DropdownMenuLabel>
+                      {switcherProjects.map((p) => {
+                        const isCurrent = p.id === scope.projectId
+                        return (
+                          <DropdownMenuItem
+                            key={p.id}
+                            onSelect={() => router.push(`/projects/${p.id}`)}
+                            className="cursor-pointer gap-2.5 rounded-lg py-2"
+                          >
+                            <Folder
+                              className="size-4 shrink-0 text-muted-foreground"
+                              weight={isCurrent ? "fill" : "regular"}
+                            />
+                            <span className="min-w-0 flex-1 truncate text-[13px]">{p.name}</span>
+                            {isCurrent && (
+                              <Check className="size-4 shrink-0 text-primary" weight="bold" />
+                            )}
+                          </DropdownMenuItem>
+                        )
+                      })}
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onSelect={() => {
+                          scope.clearScope()
+                          router.push("/projects")
+                        }}
+                        className="cursor-pointer gap-2.5 rounded-lg py-2 text-[13px]"
+                      >
+                        <Folder className="size-4 shrink-0 text-muted-foreground" />
+                        All projects
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild className="cursor-pointer gap-2.5 rounded-lg py-2 text-[13px]">
+                        <Link href={withFromDashboard("/projects/new")}>
+                          <Plus className="size-4 shrink-0 text-muted-foreground" />
+                          New project
+                        </Link>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </SidebarMenuItem>
+
+                {scope.liveExperimentId && scope.experimentName && (
+                  <SidebarMenuItem>
+                    <DropdownMenu
+                      onOpenChange={(o) => {
+                        if (o) loadSwitcherExperiments()
+                      }}
+                    >
+                      <DropdownMenuTrigger asChild>
+                        <SidebarMenuButton
+                          className={cn(NAV_ROW_CLASS, SWITCHER_TAB_EFFECT_CLASS)}
+                          aria-label={`Experiment: ${scope.experimentName}. Open experiment switcher`}
+                        >
+                          <FlaskConical className="size-4 shrink-0" weight="fill" />
+                          <span className="flex-1 flex items-center min-w-0">
+                            <span className="truncate">{scope.experimentName}</span>
+                          </span>
+                          <SwitcherKeycap />
+                        </SidebarMenuButton>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent
+                        side="right"
+                        align="start"
+                        sideOffset={10}
+                        className={SWITCHER_MENU_CLASS}
+                      >
+                        <DropdownMenuLabel className="px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                          Switch experiment
+                        </DropdownMenuLabel>
+                        {switcherExperiments.map((exp) => {
+                          const isCurrent = exp.id === scope.liveExperimentId
+                          return (
+                            <DropdownMenuItem
+                              key={exp.id}
+                              onSelect={() =>
+                                router.push(
+                                  exp.project_id
+                                    ? `/experiments/${exp.id}?project=${exp.project_id}`
+                                    : `/experiments/${exp.id}`,
+                                )
+                              }
+                              className="cursor-pointer gap-2.5 rounded-lg py-2"
+                            >
+                              <FlaskConical
+                                className="size-4 shrink-0 text-muted-foreground"
+                                weight={isCurrent ? "fill" : "regular"}
+                              />
+                              <span className="min-w-0 flex-1 truncate text-[13px]">{exp.name}</span>
+                              {isCurrent && (
+                                <Check className="size-4 shrink-0 text-primary" weight="bold" />
+                              )}
+                            </DropdownMenuItem>
+                          )
+                        })}
+                        {experimentsLoading && switcherExperiments.length <= 1 && (
+                          <div className="flex items-center gap-2 px-2 py-2 text-[13px] text-muted-foreground">
+                            <Loader2 className="size-3.5 animate-spin" />
+                            Loading experiments…
+                          </div>
+                        )}
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onSelect={() =>
+                            router.push(
+                              scope.projectId
+                                ? `/experiments?project=${scope.projectId}`
+                                : "/experiments",
+                            )
+                          }
+                          className="cursor-pointer gap-2.5 rounded-lg py-2 text-[13px]"
+                        >
+                          <FlaskConical className="size-4 shrink-0 text-muted-foreground" />
+                          All experiments
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild className="cursor-pointer gap-2.5 rounded-lg py-2 text-[13px]">
+                          <Link
+                            href={withFromDashboard(
+                              scope.projectId
+                                ? `/experiments/new?project=${scope.projectId}`
+                                : "/experiments/new",
+                            )}
+                          >
+                            <Plus className="size-4 shrink-0 text-muted-foreground" />
+                            New experiment
+                          </Link>
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </SidebarMenuItem>
+                )}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {/* Main navigation: one flat, minimal list. Icons only when collapsed. */}
         <SidebarGroup
           className={cn(
             isIconMode && "flex flex-col items-center px-1.5 pb-1 pt-0 gap-0.5"
           )}
         >
-          <SidebarGroupContent className={cn(isIconMode && "w-full flex flex-col items-center")}>
-            <SidebarMenu className={cn(isIconMode && "flex w-full flex-col items-center gap-0.5")} id="tour-main-nav" data-tour={TOUR.sidebarNav}>
-              {navigation.map((item) => {
-                const Icon = item.icon
-                const pathMatches =
-                  pathname === item.href || pathname.startsWith(item.href + "/")
-                const isActive = mounted && pathMatches
-                // `scope` is a client-only store (empty during SSR), so gating on
-                // `mounted` keeps the server and first client render identical —
-                // both emit the plain Projects link — and the scoped row appears
-                // only after hydration. Without this the branch flips <a>→<div>
-                // and React throws a hydration mismatch.
-                const isProjectItemWithScope = mounted && item.name === "Projects" && !!scope.projectId;
-                const ActiveIcon = isProjectItemWithScope ? (isProjectExpanded ? FolderOpen : Folder) : Icon;
+          <SidebarGroupContent
+            // Sandglass strip, same grammar as TabsList: translucent, blurred,
+            // grained container; the sliding active pill is the solid raised
+            // "tab" inside it.
+            className={cn(
+              "n9-grain rounded-xl border border-[color:var(--glass-border)] bg-[color:var(--glass-bg)] p-1 backdrop-blur-md",
+              isIconMode && "w-full flex flex-col items-center",
+            )}
+          >
+            <SidebarMenu
+              className={cn("gap-0.5", isIconMode && "flex w-full flex-col items-center")}
+              id="tour-main-nav"
+              data-tour={TOUR.sidebarNav}
+            >
+              {/* In the collapsed rail, nested children (Lab notes / Data)
+                  flatten into the icon stack so they stay one click away. */}
+              {APP_PRIMARY_NAV.flatMap((item) =>
+                isIconMode ? [item, ...(item.children ?? [])] : [item],
+              ).map((item) => {
+                    const Icon = item.icon
+                    const pathMatches =
+                      pathname === item.href || pathname.startsWith(item.href + "/")
+                    const isActive = mounted && pathMatches
+                    // `mounted` gate: `scope` is client-only (empty during SSR),
+                    // so scoped hrefs appear only after hydration — server and
+                    // first client render stay identical.
+                    const carriesScope =
+                      mounted && !!scope.projectId && SCOPED_NAV_HREFS.has(item.href)
 
                     return (
                       <SidebarMenuItem key={item.name} data-tour={navTourKey(item.href)}>
+                        {/* Sliding active pill: one shared framer-motion layoutId,
+                            so the highlight glides between rows on navigation. */}
+                        {isActive && (
+                          <motion.span
+                            aria-hidden
+                            layoutId="sidebar-active-pill"
+                            transition={{ type: "spring", stiffness: 480, damping: 42 }}
+                            className="absolute inset-0 rounded-lg bg-background shadow-sm ring-1 ring-inset ring-black/[0.04] dark:ring-white/[0.06]"
+                          />
+                        )}
                         <SidebarMenuButton
                           asChild
                           isActive={isActive}
-                          className="group transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90 data-[active=true]:bg-transparent data-[active=true]:text-sidebar-foreground"
+                          tooltip={item.name}
+                          className={NAV_ROW_CLASS}
                         >
-                          {isProjectItemWithScope && !isIconMode ? (
-                            <Link href={`/projects/${scope.projectId}`} className="flex items-center w-full">
-                              <div
-                                role="button"
-                                tabIndex={0}
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  setIsProjectExpanded(!isProjectExpanded);
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter' || e.key === ' ') {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    setIsProjectExpanded(!isProjectExpanded);
-                                  }
-                                }}
-                                className="shrink-0 rounded-sm hover:bg-sidebar-accent p-0.5 -ml-0.5 transition-colors cursor-pointer text-sidebar-foreground z-20"
-                                aria-label={isProjectExpanded ? "Collapse project menu" : "Expand project menu"}
-                              >
-                                <ActiveIcon className="size-4" />
-                              </div>
-                              <div className="flex-1 flex items-center min-w-0 pr-6 h-full ml-1.5">
-                                <span className={cn("truncate", isActive && "font-semibold")}>
-                                  {item.name} / {scope.projectName}
-                                </span>
-                                <NavLinkSpinner />
-                              </div>
-                            </Link>
-                          ) : (
-                            <Link
-                              // Literature keeps the project scope as a soft default
-                              // filter. Protocols deliberately does NOT: it's a
-                              // cross-project SOP library, and carrying `?project=`
-                              // hard-filtered it down to (often zero) project
-                              // protocols when clicked from the sidebar.
-                              href={(mounted && item.name === "Literature" && scope.projectId) ? `${item.href}${scope.scopedQueryString}` : item.href}
-                              aria-label={isIconMode ? item.name : undefined}
-                              // In the collapsed rail, navigating also expands the
-                              // sidebar so the user lands on the page with the full
-                              // nav open (per request: clicking an icon opens it).
-                              onClick={() => { if (isIconMode) setOpen(true) }}
-                              className="flex-1 flex items-center pr-6"
-                            >
-                              <ActiveIcon />
-                              <span className={cn(isIconMode && "hidden", "flex-1 flex items-center")}>
-                                <span className={cn("truncate", isActive && "font-semibold")}>
-                                  {item.name}
-                                </span>
-                                <NavLinkSpinner />
-                              </span>
-                            </Link>
-                          )}
+                          <Link
+                            href={carriesScope ? `${item.href}${scope.scopedQueryString}` : item.href}
+                            aria-label={isIconMode ? item.name : undefined}
+                            // In the collapsed rail, navigating also expands the
+                            // sidebar so the user lands on the page with the full
+                            // nav open (per request: clicking an icon opens it).
+                            onClick={() => { if (isIconMode) setOpen(true) }}
+                            className="flex-1 flex items-center pr-6"
+                          >
+                            <Icon weight={isActive ? "fill" : "regular"} />
+                            <span className={cn(isIconMode && "hidden", "flex-1 flex items-center")}>
+                              <span className="truncate">{item.name}</span>
+                              <NavLinkSpinner />
+                            </span>
+                          </Link>
                         </SidebarMenuButton>
 
-                        {isProjectItemWithScope && !isIconMode && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              scope.clearScope();
-                              const url = new URL(window.location.href);
-                              url.searchParams.delete("project");
-                              url.searchParams.delete("experiment");
-                              const target = pathname?.startsWith("/projects/") ? "/dashboard" : `${url.pathname}${url.search}`;
-                              router.push(target);
-                            }}
-                            className="absolute right-2 top-1.5 z-10 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-                            title="Clear project scope"
-                            aria-label="Clear project scope"
-                          >
-                            <XIcon className="size-3.5" />
-                          </button>
-                        )}
-
-                        {isProjectItemWithScope && !isIconMode && isProjectExpanded && (
-                          <SidebarMenuSub>
-                            {PROJECT_SCOPED_NAV.map((scopedItem) => {
-                              const ScopedIcon = scopedItem.icon;
-                              const scopedHref = `${scopedItem.basePath}${scope.scopedQueryString}`;
-                              const isScopedActive = mounted && (pathname === scopedItem.basePath || pathname.startsWith(scopedItem.basePath + "/"));
-
+                        {/* Strictly-nested children (Lab notes / Data live only
+                            inside experiments): indented tree rows sharing the
+                            same sliding pill as the top level. */}
+                        {!isIconMode && item.children && item.children.length > 0 && (
+                          <SidebarMenuSub className="mx-0 my-0.5 ml-[1.05rem] gap-0.5 border-l border-sidebar-border/70 py-0 pl-2 pr-0">
+                            {item.children.map((child) => {
+                              const ChildIcon = child.icon
+                              const childActive =
+                                mounted &&
+                                (pathname === child.href || pathname.startsWith(child.href + "/"))
+                              const childCarriesScope =
+                                mounted && !!scope.projectId && SCOPED_NAV_HREFS.has(child.href)
                               return (
-                                <SidebarMenuSubItem key={scopedItem.basePath}>
-                                  <SidebarMenuSubButton asChild isActive={isScopedActive}>
-                                    <Link href={scopedHref}>
-                                      <ScopedIcon />
-                                      <span className={cn("truncate", isScopedActive && "font-semibold")}>
-                                        {scopedItem.name}
-                                        {scopedItem.name === "Experiments" && scope.liveExperimentId && scope.experimentName
-                                          ? ` / ${scope.experimentName}`
-                                          : ""}
+                                <SidebarMenuSubItem key={child.name}>
+                                  {childActive && (
+                                    <motion.span
+                                      aria-hidden
+                                      layoutId="sidebar-active-pill"
+                                      transition={{ type: "spring", stiffness: 480, damping: 42 }}
+                                      className="absolute inset-0 rounded-lg bg-background shadow-sm ring-1 ring-inset ring-black/[0.04] dark:ring-white/[0.06]"
+                                    />
+                                  )}
+                                  <SidebarMenuSubButton
+                                    asChild
+                                    isActive={childActive}
+                                    className="relative z-[1] h-7 rounded-lg text-[13px] text-sidebar-foreground/70 transition-all duration-150 [&_svg]:text-sidebar-foreground/50 [&_svg]:transition-transform [&_svg]:duration-200 hover:bg-background/60 hover:text-sidebar-foreground hover:[&_svg]:scale-110 dark:hover:bg-background/40 data-[active=true]:bg-transparent data-[active=true]:font-medium data-[active=true]:text-sidebar-foreground data-[active=true]:[&_svg]:text-primary"
+                                  >
+                                    <Link
+                                      href={
+                                        childCarriesScope
+                                          ? `${child.href}${scope.scopedQueryString}`
+                                          : child.href
+                                      }
+                                      className="flex items-center"
+                                    >
+                                      <ChildIcon weight={childActive ? "fill" : "regular"} />
+                                      <span className="flex-1 flex items-center min-w-0">
+                                        <span className="truncate">{child.name}</span>
+                                        <NavLinkSpinner />
                                       </span>
-                                      <NavLinkSpinner />
                                     </Link>
                                   </SidebarMenuSubButton>
-
-                                  {scopedItem.children && scopedItem.children.length > 0 && (
-                                    <SidebarMenuSub className="pl-4 pr-0 mr-0 mt-1 border-l border-border/40">
-                                      {scopedItem.children.map((child) => {
-                                        const ChildIcon = child.icon;
-                                        const childHref = `${child.basePath}${scope.scopedQueryString}`;
-                                        const childActive = mounted && (pathname === child.basePath || pathname.startsWith(child.basePath + "/"));
-                                        return (
-                                          <SidebarMenuSubItem key={child.basePath}>
-                                            <SidebarMenuSubButton asChild isActive={childActive} size="sm">
-                                              <Link href={childHref}>
-                                                <ChildIcon />
-                                                <span className={cn("truncate", childActive && "font-semibold")}>
-                                                  {child.name}
-                                                </span>
-                                              </Link>
-                                            </SidebarMenuSubButton>
-                                          </SidebarMenuSubItem>
-                                        );
-                                      })}
-                                    </SidebarMenuSub>
-                                  )}
                                 </SidebarMenuSubItem>
-                              );
+                              )
                             })}
                           </SidebarMenuSub>
-                        )}
-
-                        {/* Collapsed rail: surface the project's sub-pages
-                            (Experiments, Lab notes, Protocols, Samples, …) as a
-                            flat stack of icons. Clicking one navigates AND expands
-                            the sidebar so the full nav is visible on arrival. */}
-                        {isProjectItemWithScope && isIconMode && (
-                          <div className="mt-0.5 flex w-full flex-col items-center gap-0.5">
-                            {PROJECT_SCOPED_NAV.flatMap((s) => [
-                              s,
-                              ...(s.children ?? []),
-                            ]).map((sub) => {
-                              const SubIcon = sub.icon;
-                              const subHref = `${sub.basePath}${scope.scopedQueryString}`;
-                              const subActive =
-                                mounted &&
-                                (pathname === sub.basePath ||
-                                  pathname.startsWith(sub.basePath + "/"));
-                              return (
-                                <SidebarMenuButton
-                                  key={sub.basePath}
-                                  asChild
-                                  isActive={subActive}
-                                  tooltip={sub.name}
-                                  className="group transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground data-[active=true]:bg-transparent data-[active=true]:text-sidebar-foreground"
-                                >
-                                  <Link
-                                    href={subHref}
-                                    aria-label={sub.name}
-                                    onClick={() => setOpen(true)}
-                                  >
-                                    <SubIcon />
-                                    <span className="hidden">{sub.name}</span>
-                                  </Link>
-                                </SidebarMenuButton>
-                              );
-                            })}
-                          </div>
                         )}
                       </SidebarMenuItem>
                     );
               })}
-
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-
-
-
       </SidebarContent>
 
       {/* Footer with Catalyst and User Dropdown */}
@@ -837,11 +1019,11 @@ export function AppSidebar() {
                         "justify-center [&>span:not(:first-child)]:hidden"
                     )}
                   >
-                    <div className="flex aspect-square size-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-accent text-sidebar-accent-foreground">
-                      <span className="text-xs font-semibold">{getUserInitials()}</span>
+                    <div className="flex aspect-square size-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[color:color-mix(in_oklab,var(--primary)_85%,white_15%)] to-[color:color-mix(in_oklab,var(--primary)_70%,black_10%)] text-primary-foreground shadow-sm">
+                      <span className="text-[11px] font-semibold">{getUserInitials()}</span>
                     </div>
                     <span
-                      className="min-w-0 flex-1 truncate text-left text-sm font-semibold"
+                      className="min-w-0 flex-1 truncate text-left text-[13px] font-medium"
                       title={getUserDisplayName()}
                     >
                       {getUserDisplayName()}
@@ -874,10 +1056,10 @@ export function AppSidebar() {
               </DropdownMenu>
             ) : (
               <SidebarMenuButton size={isIconMode ? "default" : "lg"} className={isIconMode ? "justify-center" : undefined}>
-                <div className="flex aspect-square size-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-accent text-sidebar-accent-foreground">
-                  <span className="text-xs font-semibold">...</span>
+                <div className="flex aspect-square size-7 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-sidebar-accent-foreground">
+                  <span className="text-[11px] font-semibold">...</span>
                 </div>
-                <span className={cn("min-w-0 flex-1 truncate text-left text-sm font-semibold", isIconMode && "hidden")}>
+                <span className={cn("min-w-0 flex-1 truncate text-left text-[13px] font-medium", isIconMode && "hidden")}>
                   Loading...
                 </span>
               </SidebarMenuButton>

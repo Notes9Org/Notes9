@@ -12,7 +12,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { colorFromId } from "@/contexts/project-scope-context"
 import { sortByRecentProjectOrder } from "@/lib/recent-projects"
 import { cn } from "@/lib/utils"
 
@@ -30,7 +29,6 @@ type Props = {
 export function ProjectPicker({ currentProject, projects }: Props) {
   const router = useRouter()
   const pathname = usePathname()
-  const currentColor = colorFromId(currentProject.id)
 
   const sortedProjects = useMemo(
     () => sortByRecentProjectOrder(projects),
@@ -46,11 +44,6 @@ export function ProjectPicker({ currentProject, projects }: Props) {
           className="group/picker inline-flex max-w-full items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-sm transition-colors hover:bg-muted/60 data-[state=open]:bg-muted"
         >
           <span className="font-medium text-muted-foreground">Project</span>
-          <span
-            aria-hidden
-            className="size-2 shrink-0 rounded-full"
-            style={{ background: currentColor }}
-          />
           <span className="min-w-0 max-w-[200px] truncate font-medium text-foreground sm:max-w-[280px]">
             {currentProject.name}
           </span>
@@ -81,11 +74,6 @@ export function ProjectPicker({ currentProject, projects }: Props) {
                   isCurrent && "bg-muted/60",
                 )}
               >
-                <span
-                  aria-hidden
-                  className="size-2 shrink-0 rounded-full"
-                  style={{ background: colorFromId(p.id) }}
-                />
                 <span className="min-w-0 flex-1 truncate">{p.name}</span>
                 {isCurrent ? (
                   <Check
