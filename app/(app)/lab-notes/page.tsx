@@ -162,6 +162,15 @@ export default function LabNotesPage() {
     setProjectFilter(resolved ?? FILTER_ALL)
   }, [searchParams, projectOptions])
 
+  // Same URL-sync for `?experiment=` — set when arriving from an experiment
+  // page's "Lab notes" sidebar link, so the list opens pre-filtered to the
+  // experiment the user was just looking at (clearable via the filter row).
+  useEffect(() => {
+    const raw = searchParams.get("experiment")
+    const valid = raw && experimentOptions.some((e) => e.value === raw)
+    setExperimentFilter(valid ? raw : FILTER_ALL)
+  }, [searchParams, experimentOptions])
+
   useEffect(() => {
     if (projectFilter === FILTER_ALL) return
     setExperimentFilter((current) => {

@@ -210,12 +210,13 @@ export function ProjectScopeProvider({ children }: { children: ReactNode }) {
     setExperimentName(null)
   }, [])
 
-  // An experiment is only "live" when it's part of the CURRENT url (path or
-  // query). The persisted last-experiment id is kept for display fallbacks,
-  // but must never be carried into nav links — that silently reopened the
-  // previous experiment when clicking Lab notes / Protocols / Samples / Data
-  // with no experiment actually selected.
-  const liveExperimentId = pathExperimentId ?? queryExperimentId
+  // An experiment is only "live" while the user is ON its page (`/experiments/
+  // <id>` in the path). Query params don't count: every scoped sidebar link
+  // re-forwarded `?experiment=`, so after leaving an experiment the id rode
+  // along in the URL indefinitely and clicking Data silently reopened the
+  // previous experiment. The persisted last-experiment id is likewise display-
+  // only and must never be carried into nav links.
+  const liveExperimentId = pathExperimentId
 
   const scopedQueryString = useMemo(() => {
     const params = new URLSearchParams()

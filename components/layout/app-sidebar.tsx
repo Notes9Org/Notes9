@@ -671,7 +671,12 @@ export function AppSidebar() {
                             </Link>
                           ) : (
                             <Link
-                              href={(mounted && (item.name === "Literature" || item.name === "Protocols") && scope.projectId) ? `${item.href}${scope.scopedQueryString}` : item.href}
+                              // Literature keeps the project scope as a soft default
+                              // filter. Protocols deliberately does NOT: it's a
+                              // cross-project SOP library, and carrying `?project=`
+                              // hard-filtered it down to (often zero) project
+                              // protocols when clicked from the sidebar.
+                              href={(mounted && item.name === "Literature" && scope.projectId) ? `${item.href}${scope.scopedQueryString}` : item.href}
                               aria-label={isIconMode ? item.name : undefined}
                               // In the collapsed rail, navigating also expands the
                               // sidebar so the user lands on the page with the full

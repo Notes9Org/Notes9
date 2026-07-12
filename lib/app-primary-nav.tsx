@@ -19,7 +19,8 @@ export const APP_PRIMARY_NAV: { name: string; href: string; icon: NavIcon }[] = 
   { name: "Projects", href: "/projects", icon: Folder },
   { name: "Literature", href: "/literature-reviews", icon: BookOpen },
   // Protocols is a top-level library like Literature (the SOP library spans
-  // projects); it still appears project-filtered when a project is scoped.
+  // projects). The sidebar link is always unscoped — `?project=` deep links
+  // (e.g. from a project workspace card) still show the project-filtered view.
   { name: "Protocols", href: "/protocols", icon: ClipboardInfoIcon as unknown as NavIcon },
   { name: "Catalyst", href: "/catalyst", icon: Sparkles },
   { name: "Research map", href: "/research-map", icon: Network },
