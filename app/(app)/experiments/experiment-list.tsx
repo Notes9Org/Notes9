@@ -46,9 +46,16 @@ interface Experiment {
   } | null
 }
 
-function experimentDetailHref(experimentId: string, linkProjectId?: string | null) {
-  if (linkProjectId) return `/experiments/${experimentId}?project=${linkProjectId}`
-  return `/experiments/${experimentId}`
+function experimentDetailHref(
+  experimentId: string,
+  linkProjectId?: string | null,
+  detailTab?: string | null,
+) {
+  const params = new URLSearchParams()
+  if (linkProjectId) params.set("project", linkProjectId)
+  if (detailTab) params.set("tab", detailTab)
+  const qs = params.toString()
+  return qs ? `/experiments/${experimentId}?${qs}` : `/experiments/${experimentId}`
 }
 
 /** Client wrapper: single-line header (description + Grid/Table toggle + New button) + list */
@@ -56,10 +63,14 @@ export function ExperimentsPageContent({
   experiments,
   projectContext = null,
   linkProjectId = null,
+  detailTab = null,
 }: {
   experiments: Experiment[]
   projectContext?: ExperimentsProjectContext | null
   linkProjectId?: string | null
+  /** Deep-link tab for experiment rows (e.g. "data" when arriving via the
+   * sidebar's Data link — the row then opens the Data & Files tab directly). */
+  detailTab?: string | null
 }) {
   const isMobile = useMediaQuery("(max-width: 768px)")
   const [viewMode, setViewMode] = useState<"grid" | "table">("table")
@@ -163,6 +174,7 @@ export function ExperimentsPageContent({
           experiments={filteredExperiments}
           viewMode={viewMode}
           linkProjectId={linkProjectId}
+          detailTab={detailTab}
         />
       ) : (
         <Card>
@@ -197,12 +209,14 @@ interface ExperimentListProps {
   experiments: Experiment[]
   viewMode?: "grid" | "table"
   linkProjectId?: string | null
+  detailTab?: string | null
 }
 
 export function ExperimentList({
   experiments,
   viewMode: controlledView,
   linkProjectId = null,
+  detailTab = null,
 }: ExperimentListProps) {
   const isMobile = useMediaQuery("(max-width: 768px)")
   const viewMode = controlledView ?? "table"
@@ -302,7 +316,7 @@ export function ExperimentList({
                   />
                 </div>
                 <Button variant="outline" size="sm" className="w-full mt-auto shrink-0" asChild>
-                  <Link href={experimentDetailHref(experiment.id, linkProjectId)}>
+                  <Link href={experimentDetailHref(experiment.id, linkProjectId, detailTab)}>
                     <ArrowUpRight className="h-4 w-4 mr-2" />
                     <span className="truncate">View Details</span>
                   </Link>
@@ -315,13 +329,21 @@ export function ExperimentList({
 
       {/* Table View */}
       {effectiveViewMode === "table" && (
-        <ExperimentTableView experiments={experiments} linkProjectId={linkProjectId} />
+        <ExperimentTableView experiments={experiments} linkProjectId={linkProjectId} detailTab={detailTab} />
       )}
     </>
   )
 }
 
-function ExperimentTableView({ experiments, linkProjectId }: { experiments: Experiment[]; linkProjectId?: string | null }) {
+function ExperimentTableView({
+  experiments,
+  linkProjectId,
+  detailTab = null,
+}: {
+  experiments: Experiment[]
+  linkProjectId?: string | null
+  detailTab?: string | null
+}) {
   const router = useRouter()
   return (
     <Card>
@@ -356,7 +378,7 @@ function ExperimentTableView({ experiments, linkProjectId }: { experiments: Expe
                     )
                     e.dataTransfer.effectAllowed = "copy"
                   }}
-                  onClick={() => router.push(experimentDetailHref(experiment.id, linkProjectId))}
+                  onClick={() => router.push(experimentDetailHref(experiment.id, linkProjectId, detailTab))}
                 >
                   <TableCell className="font-medium text-foreground">
                     <div className="flex items-center gap-2">
@@ -375,7 +397,7 @@ function ExperimentTableView({ experiments, linkProjectId }: { experiments: Expe
                       onClick={(e: React.MouseEvent) => e.stopPropagation()}
                       aria-label={`Open experiment ${experiment.name}`}
                     >
-                      <Link href={experimentDetailHref(experiment.id, linkProjectId)}>
+                      <Link href={experimentDetailHref(experiment.id, linkProjectId, detailTab)}>
                         <ArrowUpRight className="h-4 w-4" />
                       </Link>
                     </Button>

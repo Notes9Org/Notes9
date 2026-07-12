@@ -17,6 +17,11 @@ export default async function ProjectDataRedirect({
   // Data lives per-experiment. With no experiment explicitly selected, land on
   // the experiments list so the user picks one — never auto-open the most
   // recently updated experiment (it read as "my previous experiment reopened
-  // itself" when clicking Data in the sidebar).
-  redirect(projectId ? `/experiments?project=${projectId}` : "/experiments")
+  // itself" when clicking Data in the sidebar). `intent=data` makes the
+  // experiments page explain the hop, so it doesn't look like a glitch.
+  redirect(
+    projectId
+      ? `/experiments?project=${projectId}&intent=data`
+      : "/experiments?intent=data",
+  )
 }
