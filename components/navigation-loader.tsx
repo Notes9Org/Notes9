@@ -65,7 +65,7 @@ const PATH_VARIANTS: ReadonlyArray<readonly [string, Notes9LoaderVariant]> = [
   ["/literature-reviews", "literature"],
   ["/papers", "writing"],
   ["/experiments", "experiments"],
-  ["/data", "experiments"],
+  ["/data", "data"],
   ["/lab-notes", "notes"],
   ["/samples", "samples"],
   ["/equipment", "equipment"],
@@ -95,6 +95,7 @@ function inferLoaderVariant(actionLabel: string, href?: string | null): Notes9Lo
   if (source.includes("writing") || source.includes("paper")) return "writing"
   if (source.includes("search")) return "search"
   if (source.includes("experiment")) return "experiments"
+  if (source.includes("data")) return "data"
   if (source.includes("sample")) return "samples"
   if (source.includes("equipment") || source.includes("microscope")) return "equipment"
   if (source.includes("note")) return "notes"
@@ -116,6 +117,8 @@ function buildLoaderCopy(actionLabel: string, variant: Notes9LoaderVariant) {
           ? "Opening Projects"
           : variant === "experiments"
             ? "Opening Experiments"
+            : variant === "data"
+            ? "Opening Data"
             : variant === "samples"
             ? "Opening Samples"
               : variant === "equipment"
@@ -165,6 +168,12 @@ function buildLoaderCopy(actionLabel: string, variant: Notes9LoaderVariant) {
               "Reviewing your last brilliant hypothesis.",
               "Whispering encouragement to the bench.",
             ]
+          : variant === "data"
+            ? [
+                "Lining up datasets row by row.",
+                "Warming up the plots and readouts.",
+                "Fetching files fresh from the instrument.",
+              ]
           : variant === "samples"
             ? [
                 "Sample tubes spinning into place.",

@@ -137,12 +137,12 @@ export function ActivitySummary() {
     void fetchSummary(userId)
   }, [userId, fetchSummary])
 
-  // ─── Loading skeleton (matches the chip's footprint) ─────────────
+  // ─── Loading skeleton (matches the strip's footprint) ────────────
   if (isLoading && !summary) {
     return (
-      <div className="relative w-full max-w-xl rounded-xl border border-[color:var(--glass-border)] bg-background/50 px-3.5 py-2.5 md:ml-auto">
+      <div className="relative w-full rounded-xl border border-[color:var(--glass-border)] bg-background/50 px-3.5 py-2.5">
         <div className="mb-1.5 h-2.5 w-16 animate-pulse rounded bg-muted" />
-        <div className="h-3.5 w-full max-w-[18rem] animate-pulse rounded bg-muted" />
+        <div className="h-3.5 w-full max-w-[28rem] animate-pulse rounded bg-muted" />
       </div>
     )
   }
@@ -150,15 +150,15 @@ export function ActivitySummary() {
   // ─── Empty / error → hide completely ─────────────────────────────
   if (!summary) return null
 
-  // "Lab pulse" chip: a raised glass inset with an accent-tinted hairline and
-  // a gradient micro-label — the AI summary reads as a signed insight, not a
-  // stray line of body text.
+  // "Lab pulse" strip: a raised glass inset anchored full-width under the
+  // greeting, with an accent-tinted hairline and a gradient micro-label — the
+  // AI summary reads as a signed insight, not a stray line of body text.
   return (
     <div
       className={`
-        relative w-full max-w-xl overflow-hidden rounded-xl border
+        relative w-full overflow-hidden rounded-xl border
         border-[color:color-mix(in_oklab,var(--primary)_22%,var(--glass-border))]
-        bg-background/55 px-3.5 py-2.5 shadow-sm backdrop-blur-sm md:ml-auto
+        bg-background/55 px-3.5 py-2.5 shadow-sm backdrop-blur-sm
         transition-all duration-700 ease-out
         ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"}
       `}

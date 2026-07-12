@@ -265,11 +265,11 @@ export default async function DashboardPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 md:gap-8 pb-8 min-w-0">
-      {/* Compact glass masthead: greeting + date on the left, the AI "lab
-          pulse" chip on the right — replaces the old centered hero stack
-          (avatar sphere + date + separate summary row) that burned a lot of
-          vertical space. */}
-      <header className="n9-grain relative flex shrink-0 flex-col gap-3 overflow-hidden rounded-2xl border border-[color:var(--glass-border)] bg-[color:var(--glass-bg)] px-4 py-3.5 backdrop-blur-md md:flex-row md:items-center md:justify-between md:gap-6 md:px-6 md:py-4">
+      {/* Compact glass masthead: date + greeting, with the AI "lab pulse"
+          strip anchored full-width beneath them — replaces the old centered
+          hero stack (avatar sphere + date + separate summary row) that burned
+          a lot of vertical space. */}
+      <header className="n9-grain relative flex shrink-0 flex-col gap-2.5 overflow-hidden rounded-2xl border border-[color:var(--glass-border)] bg-[color:var(--glass-bg)] px-4 py-3.5 backdrop-blur-md md:px-6 md:py-4">
         {/* Ambient warm wash for depth; paints under the content. */}
         <div
           aria-hidden

@@ -12,6 +12,7 @@ export type Notes9LoaderVariant =
   | "search"
   | "projects"
   | "experiments"
+  | "data"
   | "samples"
   | "equipment"
   | "notes"
@@ -457,7 +458,9 @@ export function Notes9VideoLoader({
       return <LiteratureScene compact={sceneCompact} horizontal={horizontal} inline={inline} />
     if (variant === "search") return <SearchScene compact={sceneCompact} horizontal={horizontal} inline={inline} />
     if (variant === "projects") return <ProjectsScene compact={sceneCompact} horizontal={horizontal} inline={inline} />
-    if (variant === "experiments") return <ExperimentsScene compact={sceneCompact} horizontal={horizontal} inline={inline} />
+    // Data shares the experiments scene (data lives inside an experiment) —
+    // the loader COPY is data-specific, see navigation-loader.
+    if (variant === "experiments" || variant === "data") return <ExperimentsScene compact={sceneCompact} horizontal={horizontal} inline={inline} />
     if (variant === "samples") return <SamplesScene compact={sceneCompact} horizontal={horizontal} inline={inline} />
     if (variant === "equipment") return <EquipmentScene compact={sceneCompact} horizontal={horizontal} inline={inline} />
     if (variant === "notes") return <NotesScene compact={sceneCompact} horizontal={horizontal} inline={inline} />
