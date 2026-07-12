@@ -78,15 +78,18 @@ const SWITCHER_TAB_EFFECT_CLASS =
 const SWITCHER_MENU_CLASS =
   "w-60 rounded-xl p-1.5 bg-[color:color-mix(in_srgb,var(--glass-bg)_72%,transparent)] backdrop-blur-2xl backdrop-saturate-150 shadow-xl shadow-black/10 ring-1 ring-inset ring-white/25 dark:ring-white/[0.07] dark:shadow-black/40"
 
-/** Switcher affordance: a quiet ⇅ caret (no box/outline) so the row visibly
- * reads as "opens a picker", lighting up primary on hover/open. The whole row
- * is the click target. */
+/** Switcher affordance: a soft raised ⇅ chip — shadow only, no outline — so
+ * the row visibly reads as "opens a picker", lighting up primary on
+ * hover/open. The whole row is the click target. */
 function SwitcherKeycap() {
   return (
-    <span aria-hidden className="ml-auto flex size-5 shrink-0 items-center justify-center">
+    <span
+      aria-hidden
+      className="ml-auto flex size-5 shrink-0 items-center justify-center rounded-[6px] bg-background shadow-sm transition-shadow duration-150 group-hover:shadow-md dark:bg-sidebar-accent"
+    >
       <CaretUpDown
         weight="bold"
-        className="size-3.5 !text-muted-foreground/80 transition-colors group-hover:!text-primary group-data-[state=open]:!text-primary"
+        className="size-3 !text-muted-foreground transition-colors group-hover:!text-primary group-data-[state=open]:!text-primary"
       />
     </span>
   )
