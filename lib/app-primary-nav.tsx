@@ -6,10 +6,10 @@ import {
   Flask as FlaskConical,
   Folder,
   Graph as Network,
+  HeadCircuit,
   House as Home,
   NotePencil as NotebookPen,
   PenNib,
-  Sparkle as Sparkles,
   TestTube,
 } from "@phosphor-icons/react/ssr"
 import { ClipboardInfoIcon } from "@/components/ui/clipboard-info-icon"
@@ -64,6 +64,8 @@ export const APP_PRIMARY_NAV: NavItem[] = [
   { name: "Samples", href: "/samples", icon: TestTube },
   { name: "Writing", href: "/papers", icon: PenNib },
   { name: "Reports", href: "/reports", icon: FileText },
-  { name: "Catalyst", href: "/catalyst", icon: Sparkles },
+  // HeadCircuit (not the generic sparkles): Catalyst is the lab's AI mind,
+  // and the head-with-circuitry glyph reads "AI assistant" at a glance.
+  { name: "Catalyst", href: "/catalyst", icon: HeadCircuit },
   { name: "Research map", href: "/research-map", icon: Network },
 ]

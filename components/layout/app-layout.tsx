@@ -18,7 +18,7 @@ import { SidebarProvider, SidebarInset, useSidebar } from "@/components/ui/sideb
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { useResizable } from "@/hooks/use-resizable"
 import { cn } from "@/lib/utils"
-import { List as Menu, X, Sparkle as Sparkles, Chat as MessageSquare, Sun, Moon, Question as CircleHelp, Flag } from "@phosphor-icons/react/ssr"
+import { List as Menu, X, HeadCircuit, Chat as MessageSquare, Sun, Moon, Question as CircleHelp, Flag } from "@phosphor-icons/react/ssr"
 import { PageTransition } from "./page-transition"
 import { useTheme } from "next-themes"
 import { useMediaQuery } from "@/hooks/use-media-query"
@@ -523,7 +523,7 @@ function AppLayoutBody({ children }: AppLayoutProps) {
                     aria-label={headerAi.ariaLabel ?? "Toggle protocol AI"}
                     title={headerAi.title ?? "Toggle protocol AI"}
                   >
-                    <Sparkles className="size-4" />
+                    <HeadCircuit className="size-4" />
                   </Button>
                 ) : null}
               <Button
@@ -542,8 +542,8 @@ function AppLayoutBody({ children }: AppLayoutProps) {
                 aria-label={catalystVisible ? "Close Catalyst" : "Ask Catalyst"}
                 title={catalystVisible ? "Close Catalyst" : "Ask Catalyst"}
               >
-                {/* MessageSquare (not Sparkles) so this stays visually distinct
-                    when the protocol-AI Sparkles button also appears next to it. */}
+                {/* MessageSquare (not HeadCircuit) so this stays visually distinct
+                    when the protocol-AI HeadCircuit button also appears next to it. */}
                 <MessageSquare className="size-4" />
               </Button>
             </div>
