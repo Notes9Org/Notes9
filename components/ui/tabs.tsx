@@ -199,7 +199,13 @@ function TabsContent({
         // (the animation restarts on display toggle, so it also covers
         // forceMount + hidden-based tab hosts). Honors reduced motion.
         'mt-2 w-full min-w-0 ring-offset-background focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-offset-2',
-        'data-[state=active]:animate-in data-[state=active]:fade-in-0 data-[state=active]:slide-in-from-bottom-1 data-[state=active]:duration-200 motion-reduce:data-[state=active]:animate-none',
+        // fill-mode none (not tw-animate's forwards): a forwards-filling
+        // transform animation makes this element a containing block for
+        // position:fixed descendants FOREVER (even at computed transform:
+        // none), re-basing e.g. the TipTap fullscreen shell into the tab panel.
+        // The enter animation's implicit "to" is the base style, so fill none
+        // is visually identical.
+        'data-[state=active]:animate-in data-[state=active]:fade-in-0 data-[state=active]:slide-in-from-bottom-1 data-[state=active]:duration-200 ![animation-fill-mode:none] motion-reduce:data-[state=active]:animate-none',
         className
       )}
       {...props}

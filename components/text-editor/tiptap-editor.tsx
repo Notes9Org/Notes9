@@ -1827,9 +1827,12 @@ export function TiptapEditor({
       return
     }
 
-    // SidebarInset's right edge is where the right sidebar begins, and its left edge
-    // is where the left sidebar ends. The fullscreen shell spans exactly this inset
-    // area, covering the header bar but leaving both sidebars visible (or space for them).
+    // Full height (covers the header bar), horizontally bounded by
+    // SidebarInset: the collapsed left icon rail stays visible for navigation
+    // (the sidebar auto-collapses on fullscreen entry, and the ResizeObserver
+    // below re-syncs as it animates), and an open right sidebar (Catalyst)
+    // stays usable. With the rail collapsed and Catalyst closed this is
+    // effectively the whole page minus the 48px rail.
     const insetRect = sidebarInset.getBoundingClientRect()
     setEditorFullscreenStyle({
       position: "fixed",
@@ -1888,15 +1891,116 @@ export function TiptapEditor({
     // Ignore error if not inside a SidebarProvider
   }
 
+  // Collapse the left sidebar ONCE when entering fullscreen (maximize canvas),
+  // but let the user reopen it from the icon rail — the shell's ResizeObserver
+  // tracks SidebarInset and slides the editor over as the sidebar expands.
+  // (Previously this re-collapsed on every state change, making the sidebar
+  // impossible to open in fullscreen.)
+  const collapsedForFullscreenRef = useRef(false)
   useEffect(() => {
-    if (editorRegionFullscreen && sidebarContext?.state === "expanded") {
-      sidebarContext.setOpen(false)
+    if (!editorRegionFullscreen) {
+      collapsedForFullscreenRef.current = false
+      return
+    }
+    if (!collapsedForFullscreenRef.current) {
+      collapsedForFullscreenRef.current = true
+      if (sidebarContext?.state === "expanded") sidebarContext.setOpen(false)
     }
   }, [editorRegionFullscreen, sidebarContext])
 
   useEffect(() => {
     onEditorFullscreenChange?.(editorRegionFullscreen)
   }, [editorRegionFullscreen, onEditorFullscreenChange])
+
+  /** Ancestors with `transform`, `filter` or `backdrop-filter` (glass panels,
+   * motion wrappers) establish a CSS containing block, which re-bases
+   * `position: fixed` — the "fullscreen" shell then spans that card instead of
+   * the viewport, and its top-right controls (exit fullscreen) fall off-screen.
+   * While fullscreen, flatten those properties on the ancestor chain; the shell
+   * covers the whole page, so the visual change is invisible. Everything is
+   * restored verbatim on exit. */
+  useLayoutEffect(() => {
+    if (!editorRegionFullscreen) return
+    const el = fullscreenWorkspaceRef?.current ?? editorShellRef.current
+    if (!el) return
+
+    const neutralized: { node: HTMLElement; props: [string, string][] }[] = []
+    let node = el.parentElement
+    while (node && node !== document.body) {
+      const cs = getComputedStyle(node)
+      const props: [string, string][] = []
+      if (cs.transform !== "none") props.push(["transform", node.style.getPropertyValue("transform")])
+      if (cs.filter && cs.filter !== "none") props.push(["filter", node.style.getPropertyValue("filter")])
+      const backdrop =
+        cs.getPropertyValue("backdrop-filter") || cs.getPropertyValue("-webkit-backdrop-filter")
+      if (backdrop && backdrop !== "none") {
+        props.push(["backdrop-filter", node.style.getPropertyValue("backdrop-filter")])
+        props.push(["-webkit-backdrop-filter", node.style.getPropertyValue("-webkit-backdrop-filter")])
+      }
+      if (/transform|filter|perspective/.test(cs.willChange)) {
+        props.push(["will-change", node.style.getPropertyValue("will-change")])
+      }
+      if (cs.perspective !== "none") props.push(["perspective", node.style.getPropertyValue("perspective")])
+      // `contain: layout/paint/strict/content` and `content-visibility` also
+      // create containing blocks for fixed descendants.
+      if (/layout|paint|strict|content/.test(cs.contain)) {
+        props.push(["contain", node.style.getPropertyValue("contain")])
+      }
+      const cv = cs.getPropertyValue("content-visibility")
+      if (cv && cv !== "visible") {
+        props.push(["content-visibility", node.style.getPropertyValue("content-visibility")])
+      }
+      // A running OR fill-mode-retained animation of transform-like properties
+      // makes the element a containing block even at computed transform:none
+      // (spec: treated as will-change:transform) — invisible to the checks
+      // above. tw-animate's `animate-in ... forwards` on tab panels did this.
+      if (cs.animationName && cs.animationName !== "none") {
+        props.push(["animation", node.style.getPropertyValue("animation")])
+      }
+      // STACKING contexts on the ancestor chain cap the shell's z-index inside
+      // them — sticky page chrome (experiment header, tabs bar, z-10..z-50)
+      // then paints OVER the "fullscreen" editor. Flatten them so the shell's
+      // z-130 competes at the root and genuinely tops every layer. All of this
+      // sits under the fullscreen shell, so the temporary change is invisible.
+      if (cs.zIndex !== "auto") {
+        props.push(["z-index", node.style.getPropertyValue("z-index")])
+      }
+      if (parseFloat(cs.opacity) < 1) {
+        props.push(["opacity", node.style.getPropertyValue("opacity")])
+      }
+      if (cs.isolation === "isolate") {
+        props.push(["isolation", node.style.getPropertyValue("isolation")])
+      }
+      if (cs.mixBlendMode && cs.mixBlendMode !== "normal") {
+        props.push(["mix-blend-mode", node.style.getPropertyValue("mix-blend-mode")])
+      }
+      if (props.length) {
+        const NEUTRAL_VALUES: Record<string, string> = {
+          "will-change": "auto",
+          "content-visibility": "visible",
+          "z-index": "auto",
+          opacity: "1",
+          isolation: "auto",
+          "mix-blend-mode": "normal",
+          animation: "none",
+        }
+        for (const [prop] of props) {
+          node.style.setProperty(prop, NEUTRAL_VALUES[prop] ?? "none", "important")
+        }
+        neutralized.push({ node, props })
+      }
+      node = node.parentElement
+    }
+
+    return () => {
+      for (const { node: n, props } of neutralized) {
+        for (const [prop, original] of props) {
+          if (original) n.style.setProperty(prop, original)
+          else n.style.removeProperty(prop)
+        }
+      }
+    }
+  }, [editorRegionFullscreen, fullscreenWorkspaceRef])
 
   /** Apply fixed bounds to workspace shell or editor card (not both). */
   useLayoutEffect(() => {
@@ -1941,6 +2045,23 @@ export function TiptapEditor({
       if (s.width != null) el.style.width = String(s.width)
       if (s.height != null) el.style.height = String(s.height)
     }
+    // Catch-all for any containing block the neutralizer missed: measure where
+    // the shell actually landed and shift by the drift, so (0,0) is ALWAYS the
+    // viewport corner — covering the app header — never a card's corner.
+    // Only for plain-px coords (the desktop path); the mobile fallback uses
+    // env() safe-area expressions we must not fight.
+    const isPx = (v: unknown): v is string =>
+      typeof v === "string" && /^-?\d+(\.\d+)?px$/.test(v)
+    if (isPx(s.top) && isPx(s.left)) {
+      const rect = el.getBoundingClientRect()
+      const wantTop = parseFloat(s.top)
+      const wantLeft = parseFloat(s.left)
+      const driftTop = rect.top - wantTop
+      const driftLeft = rect.left - wantLeft
+      if (Math.abs(driftTop) > 1) el.style.top = `${wantTop - driftTop}px`
+      if (Math.abs(driftLeft) > 1) el.style.left = `${wantLeft - driftLeft}px`
+    }
+
     el.setAttribute("data-n9-editor-fullscreen", "")
     return reset
   }, [editorRegionFullscreen, editorFullscreenStyle, fullscreenWorkspaceRef])
@@ -5755,7 +5876,11 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
             {/* Row 1 (merged surfaces only): document title + actions on their own full-width line */}
             {toolbarMergedLayout && (
               <div className="flex min-w-0 items-center gap-2">
-                <div className="flex min-w-0 flex-1 items-center gap-0.5 sm:gap-1">
+                {/* overflow-x-auto: a wide leading slot (note title + actions)
+                    must scroll, not push the trailing cluster — with the
+                    fullscreen toggle in it — past the shell's overflow-hidden
+                    right edge, where it was unreachable in fullscreen. */}
+                <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto hide-scrollbar sm:gap-1">
                   {leadingToolbarSlot}
                   {showFullscreenDocTitleInToolbar && renderFullscreenDocumentTitle("toolbar")}
                 </div>
