@@ -12,7 +12,7 @@ import {
   TestTube,
 } from "@phosphor-icons/react/ssr"
 import { ClipboardInfoIcon } from "@/components/ui/clipboard-info-icon"
-import { GalaxyIcon } from "@/components/ui/galaxy-icon"
+import { FlareIcon } from "@/components/ui/flare-icon"
 
 /** Accepts Phosphor icons and our custom SVG-based wrapper icons. `weight`
  * lets the sidebar render the active item's icon filled. */
@@ -64,9 +64,10 @@ export const APP_PRIMARY_NAV: NavItem[] = [
   { name: "Samples", href: "/samples", icon: TestTube },
   { name: "Writing", href: "/papers", icon: PenNib },
   { name: "Reports", href: "/reports", icon: FileText },
-  // Spiral galaxy (custom SVG, brush-stroke arms) — Catalyst's glyph after
-  // ruling out sparkles, brain/head-circuit, lightning and atom: an original
-  // orbital mark that reads scientific intelligence with zero AI cliché.
-  { name: "Catalyst", href: "/catalyst", icon: GalaxyIcon as unknown as NavIcon },
+  // Concave four-point flare (custom SVG) — Catalyst's glyph after ruling
+  // out sparkles, brain/head-circuit, lightning, atom and galaxy: a single
+  // sculpted spark, the current visual shorthand for AI, without the
+  // multi-star sparkles cluster.
+  { name: "Catalyst", href: "/catalyst", icon: FlareIcon as unknown as NavIcon },
   { name: "Research map", href: "/research-map", icon: Network },
 ]

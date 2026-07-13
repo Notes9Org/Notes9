@@ -20,7 +20,7 @@ import { useResizable } from "@/hooks/use-resizable"
 import { cn } from "@/lib/utils"
 import { List as Menu, X, Sun, Moon, Question as CircleHelp, Flag } from "@phosphor-icons/react/ssr"
 import { ClipboardInfoIcon } from "@/components/ui/clipboard-info-icon"
-import { GalaxyIcon } from "@/components/ui/galaxy-icon"
+import { FlareIcon } from "@/components/ui/flare-icon"
 import { PageTransition } from "./page-transition"
 import { useTheme } from "next-themes"
 import { useMediaQuery } from "@/hooks/use-media-query"
@@ -526,7 +526,7 @@ function AppLayoutBody({ children }: AppLayoutProps) {
                     title={headerAi.title ?? "Toggle protocol AI"}
                   >
                     {/* Protocol glyph — keeps this AI toggle visually distinct
-                        from the Catalyst galaxy button beside it. */}
+                        from the Catalyst flare button beside it. */}
                     <ClipboardInfoIcon className="size-4" />
                   </Button>
                 ) : null}
@@ -546,9 +546,9 @@ function AppLayoutBody({ children }: AppLayoutProps) {
                 aria-label={catalystVisible ? "Close Catalyst" : "Ask Catalyst"}
                 title={catalystVisible ? "Close Catalyst" : "Ask Catalyst"}
               >
-                {/* Galaxy — same glyph as the left sidebar's Catalyst item,
+                {/* Flare — same glyph as the left sidebar's Catalyst item,
                     so the top-right toggle reads as the same feature. */}
-                <GalaxyIcon className="size-4" />
+                <FlareIcon className="size-4" />
               </Button>
             </div>
           </header>
