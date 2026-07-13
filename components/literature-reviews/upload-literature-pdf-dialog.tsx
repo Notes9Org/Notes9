@@ -219,12 +219,13 @@ export function UploadLiteraturePdfDialog({
   const finalize = async (action: "attach_existing" | "replace_existing_pdf" | "create_record_and_attach") => {
     if (!analysis || !file) return
 
-    // Validation for new records
+    // Validation for new records: project is REQUIRED for library papers,
+    // the experiment link is optional.
     if (action === "create_record_and_attach") {
-      if (!createDraft.project_id || !createDraft.experiment_id) {
+      if (!createDraft.project_id) {
         toast({
-          title: "Missing association",
-          description: "Please link this paper to a Project and an Experiment before saving.",
+          title: "Project required",
+          description: "Please link this paper to a Project before saving (experiment is optional).",
           variant: "destructive",
         })
         return
@@ -246,7 +247,7 @@ export function UploadLiteraturePdfDialog({
                   ? Number.parseInt(createDraft.publication_year, 10)
                   : null,
                 project_id: createDraft.project_id,
-                experiment_id: createDraft.experiment_id,
+                experiment_id: createDraft.experiment_id || null,
               }
             : undefined,
         tempUploadPath: analysis.tempUploadPath,

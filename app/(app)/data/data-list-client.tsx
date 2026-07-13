@@ -1,0 +1,369 @@
+"use client"
+
+import { useEffect, useMemo, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
+import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
+import { useProjectScope } from "@/contexts/project-scope-context"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  Empty,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+  EmptyDescription,
+} from "@/components/ui/empty"
+import {
+  FILTER_ALL,
+  ResourceFilterRow,
+  ResourceListFilter,
+} from "@/components/ui/resource-list-filters"
+import {
+  Database,
+  File,
+  FileImage,
+  FileText,
+  FileText as FileSpreadsheet,
+} from "@phosphor-icons/react/ssr"
+import { UploadFileDialog } from "@/app/(app)/experiments/[id]/upload-file-dialog"
+
+export type DataFileRow = {
+  id: string
+  file_name: string
+  file_type: string | null
+  file_size: number | null
+  data_type: string | null
+  created_at: string
+  experiment_id: string
+  project_id: string | null
+  experiment_name: string | null
+  project_name: string | null
+}
+
+type Option = { id: string; name: string }
+type ExperimentOption = Option & { project_id: string | null }
+
+function getFileIcon(fileName: string, fileType: string | null) {
+  const type = fileType || ""
+  const lower = fileName.toLowerCase()
+  if (type.startsWith("image/")) return <FileImage className="size-4" />
+  if (type.includes("pdf")) return <FileText className="size-4" />
+  if (
+    type.includes("spreadsheet") ||
+    type.includes("csv") ||
+    type.includes("excel") ||
+    lower.endsWith(".csv") ||
+    lower.endsWith(".xlsx") ||
+    lower.endsWith(".xls")
+  ) {
+    return <FileSpreadsheet className="size-4" />
+  }
+  return <File className="size-4" />
+}
+
+function formatFileSize(bytes: number | null): string {
+  if (!bytes) return "—"
+  const k = 1024
+  const sizes = ["Bytes", "KB", "MB"]
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i]
+}
+
+export function DataFilesListClient({
+  files,
+  projects,
+  experiments,
+}: {
+  files: DataFileRow[]
+  projects: Option[]
+  experiments: ExperimentOption[]
+}) {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const scope = useProjectScope()
+
+  const [projectFilter, setProjectFilter] = useState(FILTER_ALL)
+  const [experimentFilter, setExperimentFilter] = useState(FILTER_ALL)
+
+  // Read-only URL sync (same pattern as lab-notes): the sidebar context
+  // arrives as ?project=/?experiment= and prefills the filters; changing a
+  // filter here is a LOCAL viewing choice — it deliberately does not write
+  // back to the URL, so browsing another project's files never flips the
+  // global sidebar context.
+  useEffect(() => {
+    const raw = searchParams.get("project")
+    const resolved = resolveInitialProjectIdParam(
+      raw ?? undefined,
+      projects.map((p) => p.id),
+    )
+    setProjectFilter(resolved ?? FILTER_ALL)
+  }, [searchParams, projects])
+
+  useEffect(() => {
+    const raw = searchParams.get("experiment")
+    const valid = raw && experiments.some((e) => e.id === raw)
+    setExperimentFilter(valid ? raw : FILTER_ALL)
+  }, [searchParams, experiments])
+
+  // Keep the experiment filter consistent with the selected project.
+  useEffect(() => {
+    if (projectFilter === FILTER_ALL) return
+    setExperimentFilter((current) => {
+      if (current === FILTER_ALL) return current
+      const exp = experiments.find((e) => e.id === current)
+      if (!exp || exp.project_id !== projectFilter) return FILTER_ALL
+      return current
+    })
+  }, [projectFilter, experiments])
+
+  const experimentFilterOptions = useMemo(() => {
+    const pool =
+      projectFilter === FILTER_ALL
+        ? experiments
+        : experiments.filter((e) => e.project_id === projectFilter)
+    return pool.map((e) => ({ value: e.id, label: e.name }))
+  }, [experiments, projectFilter])
+
+  const filteredFiles = useMemo(() => {
+    return files.filter((f) => {
+      if (projectFilter !== FILTER_ALL && f.project_id !== projectFilter) return false
+      if (experimentFilter !== FILTER_ALL && f.experiment_id !== experimentFilter) return false
+      return true
+    })
+  }, [files, projectFilter, experimentFilter])
+
+  // ——— Upload scoping (context-prefilled, editable, both REQUIRED) ————
+  // experiment_data.experiment_id is NOT NULL, so unlike docs the target
+  // experiment is mandatory. Prefill order: active filter → sidebar context.
+  const [uploadProjectId, setUploadProjectId] = useState<string | null>(null)
+  const [uploadExperimentId, setUploadExperimentId] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fromFilter = projectFilter !== FILTER_ALL ? projectFilter : null
+    setUploadProjectId(fromFilter ?? scope.projectId)
+  }, [projectFilter, scope.projectId])
+
+  useEffect(() => {
+    const fromFilter = experimentFilter !== FILTER_ALL ? experimentFilter : null
+    const pinned = scope.pinnedExperimentId
+    const pinnedValid =
+      pinned &&
+      experiments.some(
+        (e) => e.id === pinned && (!uploadProjectId || e.project_id === uploadProjectId),
+      )
+    setUploadExperimentId(fromFilter ?? (pinnedValid ? pinned : null))
+  }, [experimentFilter, scope.pinnedExperimentId, experiments, uploadProjectId])
+
+  const uploadExperimentOptions = useMemo(
+    () =>
+      uploadProjectId
+        ? experiments.filter((e) => e.project_id === uploadProjectId)
+        : experiments,
+    [experiments, uploadProjectId],
+  )
+
+  const uploadPicker = (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="upload-project">Project (required)</Label>
+        <Select
+          value={uploadProjectId ?? ""}
+          onValueChange={(v) => {
+            setUploadProjectId(v)
+            setUploadExperimentId((current) => {
+              const exp = experiments.find((e) => e.id === current)
+              return exp && exp.project_id === v ? current : null
+            })
+          }}
+        >
+          <SelectTrigger id="upload-project">
+            <SelectValue placeholder="Choose a project" />
+          </SelectTrigger>
+          <SelectContent>
+            {projects.map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="upload-experiment">Experiment (required)</Label>
+        <Select
+          value={uploadExperimentId ?? ""}
+          onValueChange={(v) => {
+            setUploadExperimentId(v)
+            const exp = experiments.find((e) => e.id === v)
+            if (exp?.project_id) setUploadProjectId(exp.project_id)
+          }}
+          disabled={!uploadProjectId && uploadExperimentOptions.length === 0}
+        >
+          <SelectTrigger id="upload-experiment">
+            <SelectValue
+              placeholder={
+                uploadProjectId ? "Choose an experiment" : "Choose a project first"
+              }
+            />
+          </SelectTrigger>
+          <SelectContent>
+            {uploadExperimentOptions.map((e) => (
+              <SelectItem key={e.id} value={e.id}>
+                {e.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          Data files always live inside an experiment — both selections are required.
+        </p>
+      </div>
+    </div>
+  )
+
+  const openFileRow = (file: DataFileRow) => {
+    const qs = new URLSearchParams({ tab: "data" })
+    if (file.project_id) qs.set("project", file.project_id)
+    router.push(`/experiments/${file.experiment_id}?${qs.toString()}`)
+  }
+
+  return (
+    <>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <p className="text-muted-foreground">
+          Every data file across your experiments. Change the filters to browse other
+          projects and experiments.
+        </p>
+        <div className="shrink-0">
+          <UploadFileDialog
+            experimentId={uploadExperimentId}
+            onUploadComplete={() => router.refresh()}
+            contextPicker={uploadPicker}
+          />
+        </div>
+      </div>
+
+      <ResourceFilterRow>
+        <ResourceListFilter
+          label="Project"
+          value={projectFilter}
+          onValueChange={setProjectFilter}
+          options={projects.map((p) => ({ value: p.id, label: p.name }))}
+          allLabel="All projects"
+        />
+        <ResourceListFilter
+          label="Experiment"
+          value={experimentFilter}
+          onValueChange={setExperimentFilter}
+          options={experimentFilterOptions}
+          allLabel="All experiments"
+        />
+      </ResourceFilterRow>
+
+      {files.length === 0 ? (
+        <Empty className="border border-dashed">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <Database aria-hidden />
+            </EmptyMedia>
+            <EmptyTitle>No data files yet</EmptyTitle>
+            <EmptyDescription>
+              Upload raw data, spreadsheets, and images to an experiment and they'll
+              show up here, browsable across every project.
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      ) : filteredFiles.length === 0 ? (
+        <div className="flex flex-col items-center gap-3 py-10 text-center text-sm text-muted-foreground">
+          <p>No data files match the selected filters.</p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setProjectFilter(FILTER_ALL)
+              setExperimentFilter(FILTER_ALL)
+            }}
+          >
+            Clear filters
+          </Button>
+        </div>
+      ) : (
+        <div className="rounded-xl border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead className="hidden md:table-cell">Type</TableHead>
+                <TableHead>Experiment</TableHead>
+                <TableHead className="hidden lg:table-cell">Project</TableHead>
+                <TableHead className="hidden md:table-cell">Size</TableHead>
+                <TableHead className="hidden lg:table-cell">Uploaded</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredFiles.map((file) => (
+                <TableRow
+                  key={file.id}
+                  className="cursor-pointer"
+                  onClick={() => openFileRow(file)}
+                >
+                  <TableCell>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="shrink-0 text-muted-foreground">
+                        {getFileIcon(file.file_name, file.file_type)}
+                      </span>
+                      <span className="truncate font-medium" title={file.file_name}>
+                        {file.file_name}
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="hidden md:table-cell">
+                    {file.data_type ? (
+                      <Badge variant="secondary" className="capitalize">
+                        {file.data_type}
+                      </Badge>
+                    ) : (
+                      "—"
+                    )}
+                  </TableCell>
+                  <TableCell className="max-w-[180px]">
+                    <span className="truncate block" title={file.experiment_name ?? undefined}>
+                      {file.experiment_name ?? "—"}
+                    </span>
+                  </TableCell>
+                  <TableCell className="hidden lg:table-cell max-w-[160px]">
+                    <span className="truncate block" title={file.project_name ?? undefined}>
+                      {file.project_name ?? "—"}
+                    </span>
+                  </TableCell>
+                  <TableCell className="hidden md:table-cell whitespace-nowrap">
+                    {formatFileSize(file.file_size)}
+                  </TableCell>
+                  <TableCell className="hidden lg:table-cell whitespace-nowrap text-muted-foreground">
+                    {new Date(file.created_at).toLocaleDateString()}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </>
+  )
+}

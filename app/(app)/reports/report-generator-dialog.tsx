@@ -134,13 +134,8 @@ export function ReportGeneratorDialog({
   const { isGenerating, content, error, generate, reset } =
     useReportGeneration()
 
-  // If the user is already inside a project, that project is the only sensible
-  // choice — pre-select it and present the picker as locked instead of asking again.
-  const lockedProject = useMemo(
-    () => (scopedProjectId ? projects.find((p) => p.id === scopedProjectId) ?? null : null),
-    [projects, scopedProjectId],
-  )
-
+  // If the user is already inside a project, pre-select it — the picker stays
+  // editable so they can still target another project.
   const [selectedProjectId, setSelectedProjectId] = useState<string>(scopedProjectId ?? "")
   const [selectedExperimentIds, setSelectedExperimentIds] = useState<string[]>(
     [],
@@ -306,35 +301,28 @@ export function ReportGeneratorDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Project select — hidden when the user is already scoped to a project */}
-          {lockedProject ? (
-            <div className="space-y-2">
-              <Label>Project</Label>
-              <div className="flex h-9 items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-foreground">
-                {lockedProject.name}
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <Label htmlFor="project-select">Project *</Label>
-              <Select
-                value={selectedProjectId}
-                onValueChange={handleProjectChange}
-                disabled={isGenerating}
-              >
-                <SelectTrigger id="project-select">
-                  <SelectValue placeholder="Select a project" />
-                </SelectTrigger>
-                <SelectContent>
-                  {projects.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+          {/* Project select — prefilled from the sidebar context but always
+              editable; required because the analysis runs over one project's
+              data. */}
+          <div className="space-y-2">
+            <Label htmlFor="project-select">Project (required)</Label>
+            <Select
+              value={selectedProjectId}
+              onValueChange={handleProjectChange}
+              disabled={isGenerating}
+            >
+              <SelectTrigger id="project-select">
+                <SelectValue placeholder="Select a project" />
+              </SelectTrigger>
+              <SelectContent>
+                {projects.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
           {/* Experiment multi-select via checkboxes */}
           {filteredExperiments.length > 0 && (

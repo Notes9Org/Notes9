@@ -55,7 +55,7 @@ export default async function ProjectsPage() {
             <p className="text-muted-foreground">
               Manage your research initiatives and experiments
             </p>
-            <Button id="tour-create-project" asChild size="icon" variant="ghost" className="shrink-0 size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" aria-label="New project">
+            <Button id="tour-create-project" asChild size="icon" className="n9-new-btn shrink-0 size-8 rounded-md transition-colors" aria-label="New project">
               <Link href="/projects/new">
                 <Plus className="size-4" />
               </Link>
@@ -66,7 +66,7 @@ export default async function ProjectsPage() {
               <p className="text-sm text-muted-foreground max-w-xl mb-6">
                 Projects organize your experiments, lab notes, protocols, samples, and reports into a single research effort.
               </p>
-              <Button asChild id="tour-create-project" size="lg">
+              <Button asChild id="tour-create-project" size="lg" className="n9-new-btn">
                 <Link href="/projects/new">
                   <Plus className="h-4 w-4 mr-2" />
                   Create First Project

@@ -4,17 +4,17 @@ export function BreadcrumbSkeleton({ className }: { className?: string }) {
   return <div className={cn("h-4 w-40 bg-muted rounded-md", className)} />
 }
 
-/** Centered sparkle + greeting line (dashboard). */
-export function CenteredGreetingSkeleton({ className }: { className?: string }) {
+/** Glass masthead: date + greeting (dashboard header). */
+export function DashboardMastheadSkeleton({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "mx-auto flex w-full max-w-3xl items-center justify-center gap-3 md:gap-4 pt-2 md:pt-6",
+        "flex shrink-0 flex-col gap-2.5 rounded-2xl border border-[color:var(--glass-border)] bg-[color:var(--glass-bg)] px-4 py-3.5 md:px-6 md:py-4",
         className,
       )}
     >
-      <div className="size-7 md:size-9 shrink-0 rounded-full bg-muted" />
-      <div className="h-9 md:h-12 flex-1 max-w-md bg-muted rounded-md" />
+      <div className="h-3 w-32 rounded bg-muted" />
+      <div className="h-7 w-64 max-w-full rounded-md bg-muted md:h-8" />
     </div>
   )
 }
@@ -43,7 +43,8 @@ export function CatalystComposerSkeleton({
   className?: string
   size?: "sm" | "lg"
 }) {
-  const maxWidth = size === "lg" ? "max-w-4xl" : "max-w-3xl"
+  // One notch narrower to match the slimmed CatalystSectionHero widths.
+  const maxWidth = size === "lg" ? "max-w-3xl" : "max-w-2xl"
   const minHeight = size === "lg" ? "min-h-[132px]" : "min-h-[112px]"
 
   return (
@@ -141,15 +142,10 @@ export function ProjectWorkspaceGridSkeleton() {
   )
 }
 
-/** Three-column lab overview (dashboard). */
+/** 2×2 dashboard grid (schedule / whiteboard / recent work / recently edited). */
 export function DashboardLabGridSkeleton() {
-  const card = (colClass: string) => (
-    <div
-      className={cn(
-        "flex h-72 flex-col rounded-xl border border-border bg-card",
-        colClass,
-      )}
-    >
+  const card = (key: number) => (
+    <div key={key} className="flex h-full flex-col rounded-xl border border-border bg-card">
       <div className="border-b border-border px-6 py-4">
         <div className="h-5 w-24 bg-muted rounded-md" />
       </div>
@@ -162,10 +158,8 @@ export function DashboardLabGridSkeleton() {
   )
 
   return (
-    <div className="grid flex-1 grid-cols-1 gap-4 md:gap-5 xl:grid-cols-12">
-      {card("xl:col-span-4")}
-      {card("xl:col-span-5")}
-      {card("xl:col-span-3")}
+    <div className="grid grid-cols-1 gap-4 md:gap-5 xl:grid-cols-2 auto-rows-[400px]">
+      {[1, 2, 3, 4].map(card)}
     </div>
   )
 }

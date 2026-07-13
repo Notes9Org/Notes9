@@ -150,6 +150,9 @@ function highlightTerms(text: string, query: string): ReactNode {
 function AiPaperCardImpl({
   result,
   projectId,
+  experimentId,
+  scopeLabel,
+  onRequestSave,
   query = '',
   summaryLoading = false,
   relevanceSummary,
@@ -163,6 +166,12 @@ function AiPaperCardImpl({
 }: {
   result: AiSearchResult
   projectId?: string | null
+  /** Experiment (e.g. sidebar pin) the save should also link to. */
+  experimentId?: string | null
+  /** Human-readable "Project / Experiment" the save links to — named in the toast. */
+  scopeLabel?: string | null
+  /** Invoked instead of saving when no project context exists (project is required). */
+  onRequestSave?: (paper: SearchPaper) => void
   /** The user's search query — used to pull the most query-relevant passage out
    *  of this paper's text. */
   query?: string
@@ -188,8 +197,11 @@ function AiPaperCardImpl({
   const [showAbstract, setShowAbstract] = useState(false)
   const [tab, setTab] = useState<'ai' | 'abstract'>('ai')
 
+  // Sync upward only: `initialSaved` can lag behind an optimistic save (e.g.
+  // router.refresh() re-rendering with a momentarily stale library list), so a
+  // `false` must never stomp a card the user just saved.
   useEffect(() => {
-    setSaved(initialSaved)
+    if (initialSaved) setSaved(true)
   }, [initialSaved])
   const abstractRaw = result.paper?.abstract?.trim() || result.abstract?.trim() || ''
   const abstractPlain = abstractRaw ? formatLiteratureAbstractPlain(abstractRaw) : ''
@@ -273,12 +285,27 @@ function AiPaperCardImpl({
   }
 
   const handleSave = async () => {
+    // Library papers must link to a project (experiment optional). With no
+    // project context, hand off to the host's link dialog instead of saving
+    // unscoped.
+    if (!projectId && onRequestSave) {
+      onRequestSave(paper)
+      return
+    }
+    // Fire immediately on click — the save never waits on summaries or other
+    // results still loading.
     setSaving(true)
     try {
-      const res = await savePaperToLibrary(paper, { projectId: projectId ?? undefined })
+      const res = await savePaperToLibrary(paper, {
+        projectId: projectId ?? undefined,
+        experimentId: experimentId ?? undefined,
+      })
       if (res.success) {
         setSaved(true)
-        toast.success('Saved to library' + ('warning' in res && res.warning ? ` (${res.warning})` : ''))
+        toast.success(
+          `Saved to library${scopeLabel ? ` — linked to ${scopeLabel}` : ''}` +
+            ('warning' in res && res.warning ? ` (${res.warning})` : ''),
+        )
         onSaved?.()
       } else {
         toast.error(res.error || 'Could not save paper')

@@ -1280,6 +1280,93 @@ body > [data-radix-popper-content-wrapper] {
   animation: flow-pipeline 1.6s linear infinite;
 }
 
+/* Catalyst neon ring — a thin accent arc orbiting the OUTLINE of AI input
+   surfaces (section composer, right-sidebar composer, Ask Catalyst button).
+   The ::after overlay is masked down to a 1.5px border band, so only the
+   outline moves — the glass fill and inner highlight underneath stay put.
+   Without @property support (Safari <16.4) the angle can't interpolate, so
+   the arc simply sits still on the existing static Catalyst border. */
+@property --n9-orbit {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+@keyframes n9-orbit-spin {
+  to { --n9-orbit: 360deg; }
+}
+
+/* Signals (dashboard activity briefing) — tiny equalizer bars breathing in
+   the badge: reads as "live lab activity" without a literal loading spinner. */
+@keyframes n9-eq {
+  0%, 100% { transform: scaleY(0.35); }
+  50%      { transform: scaleY(1); }
+}
+.n9-eq-bar {
+  transform-origin: bottom;
+  animation: n9-eq 1.6s ease-in-out infinite;
+}
+.n9-neon-ring {
+  position: relative;
+}
+
+/* Green "create" identity — the same sage pill as the sidebar's New button,
+   so every New/plus action across list pages reads as one affordance.
+   Unlayered on purpose: it must win over button-variant utility classes. */
+.n9-new-btn {
+  background-color: #e4ecd9;
+  color: #4f5f42;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.04);
+}
+.n9-new-btn:hover {
+  background-color: #d6e3c7;
+  color: #3d4a35;
+}
+.dark .n9-new-btn {
+  background-color: #3d4a35;
+  color: #e4ecd9;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
+}
+.dark .n9-new-btn:hover {
+  background-color: #4f5f42;
+  color: #e4ecd9;
+}
+.n9-neon-ring::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  /* Slim band: two soft, symmetric brand-accent arcs drifting slowly
+     around the outline — a quiet "alive" signal, not a loading spinner.
+     Long transparent gaps + low-opacity shoulders keep it refined. */
+  padding: 1.5px;
+  background: conic-gradient(
+    from var(--n9-orbit),
+    transparent 0deg,
+    color-mix(in srgb, var(--n9-accent) 40%, transparent) 55deg,
+    color-mix(in srgb, var(--n9-accent) 85%, white) 90deg,
+    color-mix(in srgb, var(--n9-accent) 40%, transparent) 125deg,
+    transparent 180deg,
+    color-mix(in srgb, var(--n9-accent) 30%, transparent) 235deg,
+    color-mix(in srgb, var(--n9-accent) 65%, white) 270deg,
+    color-mix(in srgb, var(--n9-accent) 30%, transparent) 305deg,
+    transparent 360deg
+  );
+  opacity: 0.8;
+  /* The glow travels WITH the arcs (drop-shadow follows the masked shape). */
+  filter: drop-shadow(0 0 5px var(--n9-accent-glow));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: n9-orbit-spin 8s linear infinite;
+  transition: opacity 300ms ease;
+}
+/* Typing = full presence; idle stays understated. */
+.n9-neon-ring:focus-within::after {
+  opacity: 1;
+}
+
 /* Page transition — soft fade + tiny lift when the route changes. Driven by
    components/layout/page-transition.tsx. A slow, refined ease so route changes
    (e.g. maximising Catalyst to its full page) settle smoothly; two GPU-cheap
@@ -1322,12 +1409,18 @@ body > [data-radix-popper-content-wrapper] {
   .tour-mascot-animate,
   .rag-chunk-highlight,
   .pdf-rag-highlight,
+  .n9-neon-ring::after,
+  .n9-eq-bar,
   .ai-shimmer::after {
     animation: none !important;
   }
+  .n9-eq-bar {
+    transform: none !important;
+  }
   /* Reduced motion: drop the shimmer overlay entirely rather than freeze it
      mid-sweep (a static diagonal wash reads as a rendering glitch). */
-  .ai-shimmer::after {
+  .ai-shimmer::after,
+  .n9-neon-ring::after {
     display: none !important;
   }
   .notes9-md--streaming > p:last-child::after,

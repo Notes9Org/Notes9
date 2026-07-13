@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useState, useCallback, useRef } from "react"
-import { Pulse as Activity } from "@phosphor-icons/react/ssr"
 import { useAuthUser } from "@/components/auth/auth-provider"
 
 /** Per-user cache keys. Scoping by user id is required so that signing into a
@@ -137,13 +136,12 @@ export function ActivitySummary() {
     void fetchSummary(userId)
   }, [userId, fetchSummary])
 
-  // ─── Loading skeleton (matches the annotation's footprint) ───────
+  // ─── Loading skeleton (matches the Signals footprint) ────────────
   if (isLoading && !summary) {
     return (
-      <div className="relative w-full py-0.5 pl-3.5">
-        <div className="absolute inset-y-0.5 left-0 w-[3px] rounded-full bg-muted" />
-        <div className="mb-1.5 h-2.5 w-16 animate-pulse rounded bg-muted" />
-        <div className="h-3 w-full max-w-[30rem] animate-pulse rounded bg-muted" />
+      <div className="w-full py-0.5">
+        <div className="h-[22px] w-24 animate-pulse rounded-full bg-muted" />
+        <div className="mt-2 h-3 w-full max-w-[30rem] animate-pulse rounded bg-muted" />
       </div>
     )
   }
@@ -151,43 +149,40 @@ export function ActivitySummary() {
   // ─── Empty / error → hide completely ─────────────────────────────
   if (!summary) return null
 
-  // "Lab pulse" annotation: no box — a gradient accent rail on the left (like
-  // a signed margin note) with a LIVE-pulsing dot beside the label, so it
-  // clearly reads as "a summary of the work happening in your lab right now"
-  // while costing barely two lines of height.
+  // "Signals": a quiet AI briefing of what's moving in the lab. A soft accent
+  // pill with tiny breathing equalizer bars carries the "live" feeling; the
+  // summary itself stays plain, readable prose — two lines max.
   return (
     <div
       className={`
-        relative w-full py-0.5 pl-3.5
+        w-full py-0.5
         transition-all duration-700 ease-out
         ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"}
       `}
     >
-      {/* Accent rail: quote-bar orientation, fading out toward the bottom */}
-      <div
-        aria-hidden
-        className="absolute inset-y-0.5 left-0 w-[3px] rounded-full bg-gradient-to-b from-[color:var(--n9-accent)] via-[color:var(--n9-accent)]/45 to-transparent"
-      />
-      <div className="flex items-center gap-1.5">
-        <span aria-hidden className="relative flex size-2 shrink-0 items-center justify-center">
-          <span className="absolute inline-flex size-full animate-ping rounded-full bg-[color:var(--n9-accent)]/50 motion-reduce:hidden" />
-          <span className="relative inline-flex size-1.5 rounded-full bg-[color:var(--n9-accent)]" />
+      <div className="flex items-center gap-2">
+        <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[color:var(--n9-accent)]/20 bg-[color:var(--n9-accent)]/[0.07] px-2.5 py-[3px]">
+          <span aria-hidden className="flex h-2.5 items-end gap-[2.5px]">
+            <span className="n9-eq-bar h-full w-[2.5px] rounded-full bg-[color:var(--n9-accent)]" />
+            <span
+              className="n9-eq-bar h-full w-[2.5px] rounded-full bg-[color:var(--n9-accent)]/80"
+              style={{ animationDelay: "220ms" }}
+            />
+            <span
+              className="n9-eq-bar h-full w-[2.5px] rounded-full bg-[color:var(--n9-accent)]/60"
+              style={{ animationDelay: "440ms" }}
+            />
+          </span>
+          <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--n9-accent)]">
+            Signals
+          </span>
         </span>
-        <span className="bg-gradient-to-r from-[color:var(--n9-accent)] to-[color:color-mix(in_oklab,var(--n9-accent)_45%,#d9a24a)] bg-clip-text text-[9px] font-semibold uppercase tracking-[0.16em] text-transparent">
-          Lab pulse
-        </span>
-        <Activity
-          aria-hidden
-          className="size-3 shrink-0 text-[color:var(--n9-accent)]/70"
-          weight="bold"
-        />
-        <span className="text-[9px] font-medium uppercase tracking-[0.14em] text-muted-foreground/60">
+        <span className="truncate text-[11px] font-medium text-muted-foreground/65">
           what's moving in your lab
         </span>
       </div>
       <p
-        className="mt-1 line-clamp-2 min-w-0 text-pretty text-[13px] italic leading-snug text-muted-foreground"
-        style={{ fontFamily: "var(--font-family-display)" }}
+        className="mt-1.5 line-clamp-2 min-w-0 text-pretty text-[13px] leading-snug text-muted-foreground"
         title={summary}
       >
         {summary}

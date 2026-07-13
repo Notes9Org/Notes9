@@ -5,8 +5,14 @@ import { usePathname } from "next/navigation"
 import { Notes9LoaderVariant, Notes9VideoLoader } from "@/components/brand/notes9-video-loader"
 
 export const MIN_LOADER_DURATION_MS = 350
-export const MAX_LOADER_DURATION_MS = 8000
-export const AUTH_MAX_LOADER_DURATION_MS = 12000
+// Hard failsafe only. This used to be 8s, which slow routes (dev compiles,
+// heavy RSC fetches) regularly exceeded — the overlay force-dismissed while
+// the route was still in flight, dumping the user back onto the PREVIOUS
+// page until the new one landed (read as a glitch). Successful navigations
+// are dismissed by the settle effect; this timer only rescues genuinely
+// stuck/cancelled ones, so it can afford to be long.
+export const MAX_LOADER_DURATION_MS = 20000
+export const AUTH_MAX_LOADER_DURATION_MS = 20000
 
 const RESEARCH_FUN_FACTS = [
   "Mascot is filing your notes before the coffee cools.",
@@ -57,8 +63,7 @@ function getActionLabel(target: HTMLElement) {
 /** Destination-path → loader variant, most specific first. Matching is STRICT
  * on the pathname: the query string is never consulted (sidebar links carry
  * `?project=<id>`, which used to fuzzy-match every section to the "projects"
- * loader). `/data` shows the experiments loader — data lives inside an
- * experiment tab and the route redirects there. */
+ * loader). */
 const PATH_VARIANTS: ReadonlyArray<readonly [string, Notes9LoaderVariant]> = [
   ["/research-map", "research-map"],
   ["/protocols", "protocols"],
@@ -231,17 +236,23 @@ function triggerLoader(
   setLoaderVariant: (value: Notes9LoaderVariant) => void,
   setIsLoading: (value: boolean) => void,
   setLoadingStartedAt: (value: number | null) => void,
+  setIsLeaving: (value: boolean) => void,
 ) {
   const { title, captions } = buildLoaderCopy(actionLabel, variant)
   setLoaderTitle(title)
   setLoaderCaptions(captions)
   setLoaderVariant(variant)
   setIsLoading(true)
+  setIsLeaving(false)
   setLoadingStartedAt(Date.now())
 }
 
 export function NavigationLoader() {
   const [isLoading, setIsLoading] = useState(false)
+  // Dismissal fades the overlay out over ~200ms instead of unmounting it in
+  // one frame — the destination is already painted beneath, so the handoff
+  // reads as a reveal rather than a hard cut.
+  const [isLeaving, setIsLeaving] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [loaderTitle, setLoaderTitle] = useState("Loading Notes9")
   const [loaderVariant, setLoaderVariant] = useState<Notes9LoaderVariant>("default")
@@ -288,21 +299,27 @@ export function NavigationLoader() {
     const remaining = Math.max(redirectGraceMs, MIN_LOADER_DURATION_MS - elapsed)
     let raf1 = 0
     let raf2 = 0
+    let leaveTimerId = 0
     const timeoutId = window.setTimeout(() => {
       // Two rAFs = the new route has committed AND painted beneath the
       // overlay, so removing it can never reveal a stale frame of the old page.
       raf1 = requestAnimationFrame(() => {
         raf2 = requestAnimationFrame(() => {
-          setIsLoading(false)
-          setLoadingStartedAt(null)
-          destinationPathRef.current = null
-          originPathRef.current = null
+          setIsLeaving(true)
+          leaveTimerId = window.setTimeout(() => {
+            setIsLoading(false)
+            setIsLeaving(false)
+            setLoadingStartedAt(null)
+            destinationPathRef.current = null
+            originPathRef.current = null
+          }, 220)
         })
       })
     }, remaining)
 
     return () => {
       window.clearTimeout(timeoutId)
+      window.clearTimeout(leaveTimerId)
       cancelAnimationFrame(raf1)
       cancelAnimationFrame(raf2)
     }
@@ -348,7 +365,7 @@ export function NavigationLoader() {
             originPathRef.current = pathname
             const label = getActionLabel(target)
             const variant = inferLoaderVariant(label, href)
-            triggerLoader(label, variant, setLoaderTitle, setLoaderCaptions, setLoaderVariant, setIsLoading, setLoadingStartedAt)
+            triggerLoader(label, variant, setLoaderTitle, setLoaderCaptions, setLoaderVariant, setIsLoading, setLoadingStartedAt, setIsLeaving)
             startSafetyTimeout(variant)
           }
         }
@@ -364,7 +381,7 @@ export function NavigationLoader() {
           originPathRef.current = pathname
           const label = getActionLabel(target)
           const variant = inferLoaderVariant(label)
-          triggerLoader(label, variant, setLoaderTitle, setLoaderCaptions, setLoaderVariant, setIsLoading, setLoadingStartedAt)
+          triggerLoader(label, variant, setLoaderTitle, setLoaderCaptions, setLoaderVariant, setIsLoading, setLoadingStartedAt, setIsLeaving)
           startSafetyTimeout(variant)
         }
       }
@@ -376,7 +393,7 @@ export function NavigationLoader() {
       destinationPathRef.current = detail?.href ? extractPathname(detail.href) : null
       originPathRef.current = pathname
       const variant = detail?.kind ?? inferLoaderVariant(label, detail?.href)
-      triggerLoader(label, variant, setLoaderTitle, setLoaderCaptions, setLoaderVariant, setIsLoading, setLoadingStartedAt)
+      triggerLoader(label, variant, setLoaderTitle, setLoaderCaptions, setLoaderVariant, setIsLoading, setLoadingStartedAt, setIsLeaving)
       startSafetyTimeout(variant)
     }
 
@@ -395,12 +412,16 @@ export function NavigationLoader() {
   // Don't render anything until mounted (prevents hydration mismatch)
   if (!mounted || !isLoading) return null
 
+  const overlayMotion = isLeaving
+    ? "animate-out fade-out-0 fill-mode-forwards duration-200"
+    : "animate-in fade-in duration-300"
+
   return (
     <>
-      <div className="fixed inset-0 z-[9998] pointer-events-none animate-in fade-in duration-300">
+      <div className={`fixed inset-0 z-[9998] pointer-events-none ${overlayMotion}`}>
         <div className="absolute inset-0 bg-background" />
       </div>
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center pointer-events-none animate-in fade-in duration-300">
+      <div className={`fixed inset-0 z-[9999] flex items-center justify-center pointer-events-none ${overlayMotion}`}>
         <div className="-translate-y-8 sm:-translate-y-10">
           {loaderVariant === "auth" ? (
             <Notes9VideoLoader

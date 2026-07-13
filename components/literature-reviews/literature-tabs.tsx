@@ -48,6 +48,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useLiteratureMentionRegister } from "@/contexts/literature-mention-context"
+import { useProjectScope } from "@/contexts/project-scope-context"
 import {
   StagedPaperView,
   mapRowToListItem,
@@ -228,6 +229,18 @@ export function LiteratureTabs({
     initialProjectId && projects.some((p) => p.id === initialProjectId) ? initialProjectId : null
   const lockedProjectName = lockedProjectId
     ? projects.find((p) => p.id === lockedProjectId)?.name ?? null
+    : null
+
+  // Sidebar-pinned experiment: saves also link to it when it belongs to the
+  // scoped project. Names feed the save toasts (req: toast states the links).
+  const scope = useProjectScope()
+  const pinnedExperimentForSave = useMemo(() => {
+    const pin = scope.pinnedExperimentId
+    if (!pin || !lockedProjectId) return null
+    return experiments.find((e) => e.id === pin && e.project_id === lockedProjectId) ?? null
+  }, [scope.pinnedExperimentId, lockedProjectId, experiments])
+  const saveScopeLabel = lockedProjectName
+    ? `${lockedProjectName}${pinnedExperimentForSave ? ` / ${pinnedExperimentForSave.name}` : ""}`
     : null
 
   const stagedLiteratureScoped = useMemo(() => {
@@ -872,21 +885,27 @@ export function LiteratureTabs({
   }
 
   const handleSaveFromStaging = async (paper: SearchPaper, literatureId: string) => {
-    // Save directly from the reading view. A project is optional (the action
-    // accepts a null project), so we never detour through the picker dialog —
-    // clicking "Save to library" while reading must always perform a visible
-    // save. The paper inherits the locked project when there is one.
+    // Save directly from the reading view. Library papers REQUIRE a project:
+    // with a locked project the save fires immediately (linking the pinned
+    // experiment when one is set); without one, the link dialog opens so the
+    // user picks the mandatory project first.
+    if (!lockedProjectId) {
+      openSaveDialog(paper, literatureId)
+      return
+    }
     setSavingStagingLiteratureId(literatureId)
     try {
       const result = await savePaperToRepository(paper, {
-        projectId: lockedProjectId ?? null,
-        experimentId: null,
+        projectId: lockedProjectId,
+        experimentId: pinnedExperimentForSave?.id ?? null,
         literatureId,
       })
       if (result.success) {
         const pdfAttached = Boolean(result.data?.pdf_storage_path) && !result.warning
+        const linkSuffix = saveScopeLabel ? ` — linked to ${saveScopeLabel}` : ""
         toast.success(
-          pdfAttached ? "Paper and PDF saved to library" : "Paper saved to library"
+          (pdfAttached ? "Paper and PDF saved to library" : "Paper saved to library") +
+            linkSuffix
         )
         if (result.warning) {
           toast.message(result.warning)
@@ -910,19 +929,32 @@ export function LiteratureTabs({
 
   const handleSavePaper = async () => {
     if (!pendingSavePaper) return
+    const projectIdToSave = selectedProjectId || lockedProjectId
+    // Library papers require a project; the dialog's Save button is disabled
+    // until one is picked — this is just a defensive guard.
+    if (!projectIdToSave) return
 
     setIsSavingPaper(true)
     try {
       const result = await savePaperToRepository(pendingSavePaper, {
-        projectId: (selectedProjectId || lockedProjectId) || null,
+        projectId: projectIdToSave,
         experimentId: selectedExperimentId || null,
         literatureId: pendingLiteratureId || null,
       })
 
       if (result.success) {
         const pdfAttached = Boolean(result.data?.pdf_storage_path) && !result.warning
+        const projectName =
+          projects.find((p) => p.id === projectIdToSave)?.name ?? lockedProjectName
+        const experimentName = selectedExperimentId
+          ? experiments.find((e) => e.id === selectedExperimentId)?.name ?? null
+          : null
+        const linkSuffix = projectName
+          ? ` — linked to ${projectName}${experimentName ? ` / ${experimentName}` : ""}`
+          : ""
         toast.success(
-          pdfAttached ? "Paper and PDF saved to library" : "Paper saved to library"
+          (pdfAttached ? "Paper and PDF saved to library" : "Paper saved to library") +
+            linkSuffix
         )
         if (result.warning) {
           toast.message(result.warning)
@@ -1161,6 +1193,10 @@ export function LiteratureTabs({
                         hasSearched={hasSearched}
                         onSearch={handleSearch}
                         resultsOnly
+                        projectId={lockedProjectId}
+                        experimentId={pinnedExperimentForSave?.id ?? null}
+                        scopeLabel={saveScopeLabel}
+                        onRequestSave={openSaveDialog}
                         onStagePaper={handleStagePaper}
                         onOpenStaged={handleOpenStaged}
                         isPaperStaged={isPaperStaged}
@@ -1235,6 +1271,10 @@ export function LiteratureTabs({
               hasSearched={hasSearched}
               onSearch={handleSearch}
               resultsOnly
+              projectId={lockedProjectId}
+              experimentId={pinnedExperimentForSave?.id ?? null}
+              scopeLabel={saveScopeLabel}
+              onRequestSave={openSaveDialog}
               onStagePaper={handleStagePaper}
               onOpenStaged={handleOpenStaged}
               isPaperStaged={isPaperStaged}
@@ -1360,8 +1400,8 @@ export function LiteratureTabs({
           <DialogHeader>
             <DialogTitle>Link paper to your research</DialogTitle>
             <DialogDescription>
-              Connect this paper to a project, and optionally to one of that project&apos;s
-              experiments, before saving it to your library.
+              Library papers must belong to a project (required). Linking one of
+              that project&apos;s experiments is optional.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -1373,7 +1413,7 @@ export function LiteratureTabs({
             </div>
             <div className="grid min-w-0 gap-4 md:grid-cols-2">
               <div className="min-w-0 space-y-2">
-                <Label htmlFor="link-project">Project</Label>
+                <Label htmlFor="link-project">Project (required)</Label>
                 {lockedProjectId && lockedProjectName ? (
                   <div
                     id="link-project"
@@ -1388,14 +1428,13 @@ export function LiteratureTabs({
                   </div>
                 ) : (
                   <Select
-                    value={selectedProjectId || "none"}
-                    onValueChange={(value) => setSelectedProjectId(value === "none" ? "" : value)}
+                    value={selectedProjectId}
+                    onValueChange={(value) => setSelectedProjectId(value)}
                   >
                     <SelectTrigger id="link-project">
-                      <SelectValue placeholder="Select project (optional)" />
+                      <SelectValue placeholder="Select project" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">No project</SelectItem>
                       {projects.map((project) => (
                         <SelectItem key={project.id} value={project.id}>
                           {project.name}
@@ -1406,7 +1445,7 @@ export function LiteratureTabs({
                 )}
               </div>
               <div className="min-w-0 space-y-2">
-                <Label htmlFor="link-experiment">Experiment</Label>
+                <Label htmlFor="link-experiment">Experiment (optional)</Label>
                 <Select
                   value={selectedExperimentId || "none"}
                   onValueChange={(value) => setSelectedExperimentId(value === "none" ? "" : value)}
@@ -1445,8 +1484,11 @@ export function LiteratureTabs({
             >
               Cancel
             </Button>
-            <Button onClick={handleSavePaper} disabled={isSavingPaper}>
-              {isSavingPaper ? "Saving..." : "Save to Repository"}
+            <Button
+              onClick={handleSavePaper}
+              disabled={isSavingPaper || !(selectedProjectId || lockedProjectId)}
+            >
+              {isSavingPaper ? "Saving..." : "Save to library"}
             </Button>
           </DialogFooter>
         </DialogContent>

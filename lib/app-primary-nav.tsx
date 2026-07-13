@@ -6,13 +6,13 @@ import {
   Flask as FlaskConical,
   Folder,
   Graph as Network,
-  HeadCircuit,
   House as Home,
   NotePencil as NotebookPen,
   PenNib,
   TestTube,
 } from "@phosphor-icons/react/ssr"
 import { ClipboardInfoIcon } from "@/components/ui/clipboard-info-icon"
+import { GalaxyIcon } from "@/components/ui/galaxy-icon"
 
 /** Accepts Phosphor icons and our custom SVG-based wrapper icons. `weight`
  * lets the sidebar render the active item's icon filled. */
@@ -64,8 +64,9 @@ export const APP_PRIMARY_NAV: NavItem[] = [
   { name: "Samples", href: "/samples", icon: TestTube },
   { name: "Writing", href: "/papers", icon: PenNib },
   { name: "Reports", href: "/reports", icon: FileText },
-  // HeadCircuit (not the generic sparkles): Catalyst is the lab's AI mind,
-  // and the head-with-circuitry glyph reads "AI assistant" at a glance.
-  { name: "Catalyst", href: "/catalyst", icon: HeadCircuit },
+  // Spiral galaxy (custom SVG, brush-stroke arms) — Catalyst's glyph after
+  // ruling out sparkles, brain/head-circuit, lightning and atom: an original
+  // orbital mark that reads scientific intelligence with zero AI cliché.
+  { name: "Catalyst", href: "/catalyst", icon: GalaxyIcon as unknown as NavIcon },
   { name: "Research map", href: "/research-map", icon: Network },
 ]

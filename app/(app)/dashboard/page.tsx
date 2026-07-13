@@ -20,7 +20,6 @@ import { DashboardFirstRun } from "./dashboard-first-run"
 import { DashboardScheduleTasks } from "./dashboard-schedule-tasks"
 import { DashboardWhiteboard } from "./dashboard-whiteboard"
 import { DashboardRecentWork } from "./dashboard-recent-work"
-import { ActivitySummary } from "./activity-summary"
 
 /**
  * Dashboard = Unified lab workspace.
@@ -265,10 +264,11 @@ export default async function DashboardPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 md:gap-8 pb-8 min-w-0">
-      {/* Compact glass masthead: date + greeting, with the AI "lab pulse"
-          strip anchored full-width beneath them — replaces the old centered
+      {/* Compact glass masthead: date + greeting — replaces the old centered
           hero stack (avatar sphere + date + separate summary row) that burned
-          a lot of vertical space. */}
+          a lot of vertical space. (The AI activity strip was removed at the
+          user's request; app/(app)/dashboard/activity-summary.tsx keeps the
+          component should it return.) */}
       <header className="n9-grain relative flex shrink-0 flex-col gap-2.5 overflow-hidden rounded-2xl border border-[color:var(--glass-border)] bg-[color:var(--glass-bg)] px-4 py-3.5 backdrop-blur-md md:px-6 md:py-4">
         {/* Ambient warm wash for depth; paints under the content. */}
         <div
@@ -276,7 +276,6 @@ export default async function DashboardPage() {
           className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[radial-gradient(90%_100%_at_18%_0%,color-mix(in_oklab,var(--primary)_10%,transparent),transparent_70%)]"
         />
         <DashboardGreeting name={greetingName} />
-        <ActivitySummary />
       </header>
 
       {/* Catalyst AI composer */}

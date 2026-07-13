@@ -4,16 +4,12 @@ import { memo, useState, type ComponentProps, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { Copy, PencilSimple as Pencil, ThumbsUp, ThumbsDown, ArrowCounterClockwise as RotateCcw, Check } from "@phosphor-icons/react/ssr";
 import { Button } from '@/components/ui/button';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import type { Vote } from '@/lib/db/schema';
 
-// Action Button Component
+// Action Button Component. Hover tooltips removed (they rendered glitchy —
+// user request, 2026-07); the label survives as an aria-label for
+// accessibility without any hover popup.
 interface ActionButtonProps extends ComponentProps<typeof Button> {
   tooltip?: string;
   children: ReactNode;
@@ -25,11 +21,12 @@ function ActionButton({
   className,
   ...props
 }: ActionButtonProps) {
-  const button = (
+  return (
     <Button
       type="button"
       variant="ghost"
       size="icon"
+      aria-label={tooltip}
       className={cn(
         'size-7 text-muted-foreground hover:text-foreground transition-colors',
         className
@@ -39,21 +36,6 @@ function ActionButton({
       {children}
     </Button>
   );
-
-  if (tooltip) {
-    return (
-      <TooltipProvider delayDuration={300}>
-        <Tooltip>
-          <TooltipTrigger asChild>{button}</TooltipTrigger>
-          <TooltipContent side="bottom" className="text-xs">
-            {tooltip}
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
-  }
-
-  return button;
 }
 
 // Message Actions Props

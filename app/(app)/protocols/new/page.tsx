@@ -14,6 +14,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { useAuthUser } from "@/components/auth/auth-provider"
 import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
+import { useProjectScope } from "@/contexts/project-scope-context"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -189,6 +190,7 @@ function NewProtocolForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { toast } = useToast()
+  const scopeProjectId = useProjectScope().projectId
 
   const [step, setStep] = useState<"template" | "form">("template")
   const [selectedChoice, setSelectedChoice] = useState<ProtocolTemplateChoice | null>(null)
@@ -288,13 +290,19 @@ function NewProtocolForm() {
       const allowed = projectList.map((p) => p.id)
       const id = resolveInitialProjectIdParam(projectParam, allowed)
       setReturnProjectId(id)
-      if (id) setFormData((prev) => ({ ...prev, project_id: id }))
+      // Prefill from the URL param, else the sidebar context. Either way the
+      // picker stays editable — project is optional for protocols.
+      const prefill =
+        id ?? (scopeProjectId && allowed.includes(scopeProjectId) ? scopeProjectId : null)
+      if (prefill) {
+        setFormData((prev) => (prev.project_id ? prev : { ...prev, project_id: prefill }))
+      }
     }
     void run()
     return () => {
       cancelled = true
     }
-  }, [projectParam, user])
+  }, [projectParam, user, scopeProjectId])
 
   // Fetch experiments when project changes
   useEffect(() => {
@@ -325,11 +333,9 @@ function NewProtocolForm() {
     listFallbackPath: protocolsListHref,
   })
 
-  const isFormValid =
-    formData.name.trim() &&
-    formData.content.trim() &&
-    formData.project_id &&
-    formData.experiment_id
+  // Protocols are reusable org-wide assets: project/experiment links are
+  // OPTIONAL (prefilled from the sidebar context when present).
+  const isFormValid = formData.name.trim() && formData.content.trim()
 
   const applyTemplate = useCallback((choice: ProtocolTemplateChoice) => {
     setSelectedChoice(choice)
@@ -396,8 +402,8 @@ function NewProtocolForm() {
           category: formData.category || null,
           is_active: formData.is_active,
           created_by: user.id,
-          project_id: formData.project_id,
-          experiment_id: formData.experiment_id,
+          project_id: formData.project_id || null,
+          experiment_id: formData.experiment_id || null,
           document_template_id: documentTemplateId,
         }
       )
@@ -454,35 +460,29 @@ function NewProtocolForm() {
   // ─── Step 2: Form + optional design mode ───────────────────────────────────
   const contextHeaderContent = (
     <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
-      {!returnProjectId && (
-        <div className="min-w-0 space-y-2">
-          <Label htmlFor="project_id">
-            Project <span className="text-destructive">*</span>
-          </Label>
-          <Select
-            value={formData.project_id}
-            onValueChange={(value) =>
-              setFormData((prev) => ({ ...prev, project_id: value, experiment_id: "" }))
-            }
-          >
-            <SelectTrigger id="project_id">
-              <SelectValue placeholder="Select a project" />
-            </SelectTrigger>
-            <SelectContent>
-              {projects.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
+      <div className="min-w-0 space-y-2">
+        <Label htmlFor="project_id">Project (optional)</Label>
+        <Select
+          value={formData.project_id}
+          onValueChange={(value) =>
+            setFormData((prev) => ({ ...prev, project_id: value, experiment_id: "" }))
+          }
+        >
+          <SelectTrigger id="project_id">
+            <SelectValue placeholder="Select a project" />
+          </SelectTrigger>
+          <SelectContent>
+            {projects.map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
       <div className="min-w-0 space-y-2">
-        <Label htmlFor="experiment_id">
-          Experiment <span className="text-destructive">*</span>
-        </Label>
+        <Label htmlFor="experiment_id">Experiment (optional)</Label>
         <Select
           value={formData.experiment_id}
           onValueChange={(value) =>

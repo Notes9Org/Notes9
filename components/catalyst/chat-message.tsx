@@ -268,34 +268,33 @@ function ChatMessageInner({
         {/* Actions (visible on hover for completed assistant messages) */}
         {!isUser && content && !isStreaming && (
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="size-7" onClick={handleCopy}>
-                  {copied ? (
-                    <Check className="size-3.5 text-green-500" />
-                  ) : (
-                    <Copy className="size-3.5" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">{copied ? 'Copied!' : 'Copy message'}</TooltipContent>
-            </Tooltip>
+            {/* Hover tooltips removed (glitchy — user request); labels live on
+                as aria-labels. */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7"
+              onClick={handleCopy}
+              aria-label={copied ? 'Copied!' : 'Copy message'}
+            >
+              {copied ? (
+                <Check className="size-3.5 text-green-500" />
+              ) : (
+                <Copy className="size-3.5" />
+              )}
+            </Button>
 
             {isLast && onRegenerate && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-7"
-                    onClick={onRegenerate}
-                    disabled={isRegenerating}
-                  >
-                    <RefreshCw className={cn('size-3.5', isRegenerating && 'animate-spin')} />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">Regenerate response</TooltipContent>
-              </Tooltip>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7"
+                onClick={onRegenerate}
+                disabled={isRegenerating}
+                aria-label="Regenerate response"
+              >
+                <RefreshCw className={cn('size-3.5', isRegenerating && 'animate-spin')} />
+              </Button>
             )}
           </div>
         )}

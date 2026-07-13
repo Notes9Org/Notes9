@@ -18,43 +18,72 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft } from "@phosphor-icons/react/ssr"
 import { toast } from "sonner"
+import { useProjectScope } from "@/contexts/project-scope-context"
 
 function NewPaperPageInner() {
   const user = useAuthUser();
   const router = useRouter()
+  const scope = useProjectScope()
   const { handleBack } = useCreatePageNav({
     pageLabel: "New Paper",
     listFallbackPath: "/papers",
   })
   const [title, setTitle] = useState("")
   const [projectId, setProjectId] = useState<string>("")
+  const [experimentId, setExperimentId] = useState<string>("")
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([])
+  const [experiments, setExperiments] = useState<
+    { id: string; name: string; project_id: string | null }[]
+  >([])
   const [isCreating, setIsCreating] = useState(false)
 
   useEffect(() => {
+    // Prefill from the URL param first, else the sidebar context — both are
+    // just prefills: project and experiment stay OPTIONAL and editable here.
     if (typeof window !== "undefined") {
       const p = new URLSearchParams(window.location.search).get("project")
       if (p) setProjectId(p)
+      else if (scope.projectId) setProjectId(scope.projectId)
     }
 
-    const fetchProjects = async () => {
+    const fetchOptions = async () => {
       const supabase = createClient()
-      const { data } = await supabase
-        .from("projects")
-        .select("id, name")
-        .order("name")
-      setProjects(data || [])
+      const [projectsRes, experimentsRes] = await Promise.all([
+        supabase.from("projects").select("id, name").order("name"),
+        supabase.from("experiments").select("id, name, project_id").order("name"),
+      ])
+      setProjects(projectsRes.data || [])
+      setExperiments(experimentsRes.data || [])
     }
-    fetchProjects()
+    fetchOptions()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- prefill once on mount
   }, [])
+
+  // Prefill the experiment from the sidebar's pinned experiment when it
+  // belongs to the selected project.
+  useEffect(() => {
+    if (experimentId || !scope.pinnedExperimentId || experiments.length === 0) return
+    const pinned = experiments.find((e) => e.id === scope.pinnedExperimentId)
+    if (pinned && (!projectId || pinned.project_id === projectId)) {
+      setExperimentId(pinned.id)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot prefill once options load
+  }, [experiments, scope.pinnedExperimentId])
+
+  // Keep the experiment consistent with the selected project.
+  useEffect(() => {
+    if (!experimentId) return
+    const exp = experiments.find((e) => e.id === experimentId)
+    if (projectId && exp && exp.project_id !== projectId) setExperimentId("")
+  }, [projectId, experimentId, experiments])
+
+  const experimentOptions = projectId
+    ? experiments.filter((e) => e.project_id === projectId)
+    : experiments
 
   const handleCreate = async () => {
     if (!title.trim()) {
       toast.error("Please enter a paper title")
-      return
-    }
-    if (!projectId) {
-      toast.error("Please select a project")
       return
     }
 
@@ -69,7 +98,8 @@ function NewPaperPageInner() {
           title: title.trim(),
           content: "",
           status: "draft",
-          project_id: projectId,
+          project_id: projectId || null,
+          experiment_id: experimentId || null,
           created_by: user.id,
         })
         .select("id")
@@ -123,16 +153,54 @@ function NewPaperPageInner() {
 
           <div className="space-y-2.5">
             <Label htmlFor="project" className="text-base">
-              Project <span className="text-destructive">*</span>
+              Project (optional)
             </Label>
-            <Select value={projectId} onValueChange={setProjectId}>
+            <Select
+              value={projectId || "none"}
+              onValueChange={(v) => setProjectId(v === "none" ? "" : v)}
+            >
               <SelectTrigger className="h-11 w-full text-base md:text-base">
                 <SelectValue placeholder="Select a project" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="none" className="text-base">
+                  No project
+                </SelectItem>
                 {projects.map((p) => (
                   <SelectItem key={p.id} value={p.id} className="text-base">
                     {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2.5">
+            <Label htmlFor="experiment" className="text-base">
+              Experiment (optional)
+            </Label>
+            <Select
+              value={experimentId || "none"}
+              onValueChange={(v) => {
+                if (v === "none") {
+                  setExperimentId("")
+                  return
+                }
+                setExperimentId(v)
+                const exp = experiments.find((e) => e.id === v)
+                if (exp?.project_id) setProjectId(exp.project_id)
+              }}
+            >
+              <SelectTrigger className="h-11 w-full text-base md:text-base">
+                <SelectValue placeholder="Select an experiment" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none" className="text-base">
+                  No experiment
+                </SelectItem>
+                {experimentOptions.map((e) => (
+                  <SelectItem key={e.id} value={e.id} className="text-base">
+                    {e.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -153,7 +221,7 @@ function NewPaperPageInner() {
               size="lg"
               className="text-base"
               onClick={handleCreate}
-              disabled={isCreating || !projectId}
+              disabled={isCreating}
             >
               {isCreating ? "Creating..." : "Create Paper"}
             </Button>

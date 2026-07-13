@@ -24,9 +24,10 @@ const ALLOWED_TYPES = [
 ]
 
 // The unified glass composer (`.n9-composer`, globals.css) with the Catalyst
-// AI identity modifier (sienna ring + apricot glow). Glass at rest, solidifies
-// on focus so typed text stays readable.
-const composerShell = cn("n9-composer n9-composer-ai flex flex-col overflow-hidden p-3")
+// AI identity modifier (sienna ring + apricot glow) and the moving neon
+// outline (`.n9-neon-ring`). Glass at rest, solidifies on focus so typed
+// text stays readable.
+const composerShell = cn("n9-composer n9-composer-ai n9-neon-ring flex flex-col overflow-hidden p-3")
 
 type Props = {
   size?: "sm" | "lg"
@@ -186,7 +187,9 @@ export function CatalystSectionHero({
   const isUploading = uploadQueue.length > 0
   const shouldShrink = shrinkOnScroll && isScrolled && !isFocused && input.trim() === "" && !canSend && !isUploading
   const minBoxHeight = shouldShrink ? "min-h-[44px]" : (size === "lg" ? "min-h-[132px]" : "min-h-[112px]")
-  const contentWidth = cn("mx-auto w-full transition-all duration-500 ease-in-out", size === "lg" ? "max-w-4xl" : "max-w-3xl", shouldShrink && "max-w-2xl")
+  // One notch narrower across the board — the AI bar should read as a compact
+  // prompt, not a full-width pane.
+  const contentWidth = cn("mx-auto w-full transition-all duration-500 ease-in-out", size === "lg" ? "max-w-3xl" : "max-w-2xl", shouldShrink && "max-w-xl")
   const effectivePlaceholder = projectName
     ? `How can I help with ${projectName} today?`
     : placeholder
@@ -356,9 +359,10 @@ export function CatalystSectionHero({
         className={cn(
           "transition-all duration-500 ease-in-out",
           shrinkOnScroll && "sticky -top-3 sm:-top-4 md:-top-6 z-40 -mx-3 px-3 sm:-mx-4 sm:px-4 md:-mx-6 md:px-6 py-2 md:py-4",
-          shrinkOnScroll && (shouldShrink
-            ? "bg-transparent"
-            : "bg-background/80 backdrop-blur-md")
+          // Same at-rest fix as the sticky shell: only wash while scrolled.
+          shrinkOnScroll && (isScrolled && !shouldShrink
+            ? "bg-background/80 backdrop-blur-md"
+            : "bg-transparent")
         )}
       >
         <AnimatePresence initial={false}>
@@ -379,8 +383,13 @@ export function CatalystSectionHero({
   }
 
   const stickyShell = cn(
-    "sticky top-0 z-30 -mx-3 sm:-mx-4 md:-mx-6 px-3 sm:px-4 md:px-6",
-    "backdrop-blur-md bg-background/75 supports-[backdrop-filter]:bg-background/55",
+    "sticky top-0 z-30 -mx-3 sm:-mx-4 md:-mx-6 px-3 sm:px-4 md:px-6 transition-colors duration-300",
+    // The wash exists so content scrolling UNDER the stuck composer stays
+    // readable — at rest it just painted a page-wide light bar behind the
+    // (narrower) composer, so it now appears only once the page scrolls.
+    isScrolled
+      ? "backdrop-blur-md bg-background/75 supports-[backdrop-filter]:bg-background/55"
+      : "bg-transparent",
   )
 
   return (

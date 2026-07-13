@@ -67,12 +67,15 @@ import "@/styles/inline-diff.css"
 // .docx file — load it dynamically inside `insertDocxFromFile` instead of
 // bundling it into the initial editor chunk.
 import { toast } from "sonner"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
+// Hover tooltips are intentionally DISABLED on the editor toolbar — the
+// hover/focus popups rendered glitchy over this surface (user request,
+// 2026-07). No-op stand-ins keep the many call sites unchanged while never
+// showing anything on hover or focus; buttons keep their aria-labels.
+type TooltipStubProps = { children?: React.ReactNode; [prop: string]: unknown }
+const TooltipProvider = ({ children }: TooltipStubProps) => <>{children}</>
+const Tooltip = ({ children }: TooltipStubProps) => <>{children}</>
+const TooltipTrigger = ({ children }: TooltipStubProps) => <>{children}</>
+const TooltipContent = (_props: TooltipStubProps) => null
 import {
   DropdownMenu,
   DropdownMenuContent,

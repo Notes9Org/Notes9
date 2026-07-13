@@ -1,3 +1,4 @@
+
 # Notes9 "Sandglass" Revamp — Systematic Plan
 
 _Status: approved direction, 2026-07-12. Builds on `docs/UI_ARCHITECTURE.md` (the single-edit-point
@@ -136,14 +137,13 @@ fade, no hollow-after-content.
 
 ## 7. Phases & sequencing
 
-| Phase | Scope | Risk | Status |
+| Phase | Scope | Risk | Gate |
 |---|---|---|---|
-| **0** | tokens, `.n9-grain`, composer prominence, `useSkeletonGate`, ghost scrollbars, `SideRail` | — | **done** ✅ |
-| **1** | `prefers-reduced-transparency`/`prefers-contrast` fallbacks; grain+highlight onto `.glass-panel`, `.n9-glass`, header; gallery "Sandglass" section | low | **done** ✅ |
-| **2** | primitives (§3): menus/popovers/selects/context-menus glassed; dialog+sheet scrims frosted, panels 92% glass + grain, rounded-2xl; card `variant="glass"`; sonner glass toasts; tabs + view-toggle glass strips | medium | **done** ✅ (command palette host inherits popover glass) |
-| **3** | interactive pass (§4): `.n9-sheen` sweep on default/secondary buttons + interactive cards; press audit (buttons already `.n9-press`; tab triggers got press-scale) | low | **done** ✅ |
-| **4** | load choreography (§5): gate wired into protocol/papers/reports rails, PDF annotation sidebar, Catalyst history rail. Remaining: loading.tsx layout-parity audit + double-fade audit per route | medium | **core done**, audit open |
-| **5** | page polish: dashboard widgets, literature panels, settings — apply taxonomy §2 (`variant="glass"` per widget) | low | open |
+| **0 (done)** | tokens, `.n9-grain`, composer prominence, `useSkeletonGate`, ghost scrollbars, `SideRail` | — | typecheck ✅ |
+| **1** | `prefers-reduced-transparency`/`prefers-contrast` fallbacks; grain+highlight onto `.glass-panel`, `.n9-glass`, header; gallery "Sandglass" section | low | /ui-gallery both themes |
+| **2** | primitives (§3): menus/popovers → dialogs/sheets → card glass variant → tabs/toasts | medium | gallery + spot pages |
+| **3** | interactive pass (§4): sheen sweep, press audit | low | gallery |
+| **4** | load choreography (§5): migrate skeleton call sites to the gate, loading.tsx parity audit, kill double fades | medium | throttled nav test |
+| **5** | page polish: dashboard widgets, literature panels, settings — apply taxonomy §2 | low | per-page |
 
-Grain prominence was raised on request (2026-07-12): opacity 0.09 light / 0.14 dark, coarser
-noise (baseFrequency 0.7). Tune in one place: `--glass-grain-opacity` / `--glass-grain-img`.
+Each phase is one reviewable PR; nothing in a later phase blocks an earlier one from shipping.

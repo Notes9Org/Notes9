@@ -1,10 +1,8 @@
 'use client';
 
-import { useState } from 'react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import type { AgentCitationPanelItem } from './agent-citations-panel';
-import { GroundingProvenanceBadge } from './grounding-provenance-badge';
 
 export interface InlineCitationProps {
   number: number;
@@ -13,19 +11,14 @@ export interface InlineCitationProps {
   className?: string;
 }
 
-const TOOLTIP_EXCERPT_LENGTH = 120;
-
+/**
+ * Inline [n] citation chip. The hover excerpt tooltip was removed (it
+ * rendered glitchy — user request, 2026-07): the chip is now purely a
+ * click-through to the source, with the title announced via aria-label.
+ */
 export function InlineCitation({ number, citation, onNavigate, className }: InlineCitationProps) {
-  const [showTooltip, setShowTooltip] = useState(false);
-
   const href = citation?.highlightHref || citation?.documentHref;
   const isLoading = !citation;
-  const hasExcerpt = citation?.excerpt && citation.excerpt.trim().length > 0;
-  const tooltipExcerpt = hasExcerpt
-    ? citation.excerpt.length > TOOLTIP_EXCERPT_LENGTH
-      ? `${citation.excerpt.slice(0, TOOLTIP_EXCERPT_LENGTH - 1)}…`
-      : citation.excerpt
-    : null;
 
   const chipContent = (
     <span
@@ -38,8 +31,6 @@ export function InlineCitation({ number, citation, onNavigate, className }: Inli
             : 'bg-muted/80 text-muted-foreground ring-1 ring-border/40',
         className
       )}
-      onMouseEnter={() => setShowTooltip(true)}
-      onMouseLeave={() => setShowTooltip(false)}
       // No explicit role: on the href path the wrapping <Link> already provides
       // link semantics, and a non-focusable role="link" span misleads screen
       // readers. The aria-label still announces the citation.
@@ -50,36 +41,7 @@ export function InlineCitation({ number, citation, onNavigate, className }: Inli
   );
 
   if (!href) {
-    return (
-      <span className="relative inline-block">
-        {chipContent}
-        {showTooltip && tooltipExcerpt && (
-          <span
-            className={cn(
-              'absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 whitespace-normal',
-              'w-64 rounded-lg border border-border bg-popover p-2 text-xs leading-snug text-popover-foreground shadow-lg',
-              'animate-in fade-in-0 zoom-in-95 duration-150'
-            )}
-            role="tooltip"
-          >
-            <div className="flex items-start justify-between gap-1.5">
-              <p className="font-medium text-foreground">{citation?.title}</p>
-              {citation && (
-                <GroundingProvenanceBadge
-                  grounding={citation.grounding}
-                  matchKind={citation.matchKind}
-                  supportStatus={citation.supportStatus}
-                  className="shrink-0"
-                />
-              )}
-            </div>
-            {tooltipExcerpt && (
-              <p className="mt-1 text-muted-foreground">{tooltipExcerpt}</p>
-            )}
-          </span>
-        )}
-      </span>
-    );
+    return <span className="relative inline-block">{chipContent}</span>;
   }
 
   return (
@@ -92,37 +54,10 @@ export function InlineCitation({ number, citation, onNavigate, className }: Inli
             onNavigate();
           }
         }}
-        onFocus={() => setShowTooltip(true)}
-        onBlur={() => setShowTooltip(false)}
         className="no-underline"
       >
         {chipContent}
       </Link>
-      {showTooltip && tooltipExcerpt && (
-        <span
-          className={cn(
-            'pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 whitespace-normal',
-            'w-64 rounded-lg border border-border bg-popover p-2 text-xs leading-snug text-popover-foreground shadow-lg',
-            'animate-in fade-in-0 zoom-in-95 duration-150'
-          )}
-          role="tooltip"
-        >
-          <div className="flex items-start justify-between gap-1.5">
-            <p className="font-medium text-foreground">{citation?.title}</p>
-            {citation && (
-              <GroundingProvenanceBadge
-                grounding={citation.grounding}
-                matchKind={citation.matchKind}
-                supportStatus={citation.supportStatus}
-                className="shrink-0"
-              />
-            )}
-          </div>
-          {tooltipExcerpt && (
-            <p className="mt-1 text-muted-foreground">{tooltipExcerpt}</p>
-          )}
-        </span>
-      )}
     </span>
   );
 }

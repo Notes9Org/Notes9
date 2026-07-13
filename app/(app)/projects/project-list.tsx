@@ -99,7 +99,7 @@ export function ProjectsPageContent({ projects }: { projects: Project[] }) {
         </p>
         <div className="flex items-center gap-2 shrink-0">
           <ViewModeToggle value={viewMode} onChange={setViewMode} tableDisabled={isMobile} />
-          <Button id="tour-create-project" asChild size="icon" variant="ghost" className="size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" aria-label="New project">
+          <Button id="tour-create-project" asChild size="icon" className="n9-new-btn size-8 rounded-md transition-colors" aria-label="New project">
             <Link href="/projects/new">
               <Plus className="size-4" />
             </Link>

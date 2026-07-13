@@ -74,13 +74,19 @@ export function ExperimentsPageContent({
 }) {
   const isMobile = useMediaQuery("(max-width: 768px)")
   const [viewMode, setViewMode] = useState<"grid" | "table">("table")
-  const [projectFilter, setProjectFilter] = useState(FILTER_ALL)
+  // The sidebar context SEEDS the project filter but never locks it — the
+  // dropdown stays visible so other projects' experiments are one change away.
+  const [projectFilter, setProjectFilter] = useState(projectContext?.id ?? FILTER_ALL)
   const [statusFilter, setStatusFilter] = useState(FILTER_ALL)
 
+  useEffect(() => {
+    setProjectFilter(projectContext?.id ?? FILTER_ALL)
+  }, [projectContext?.id])
+
   const baseExperiments = useMemo(() => {
-    if (!projectContext) return experiments
-    return experiments.filter((e) => e.project_id === projectContext.id)
-  }, [experiments, projectContext])
+    if (projectFilter === FILTER_ALL) return experiments
+    return experiments.filter((e) => e.project_id === projectFilter)
+  }, [experiments, projectFilter])
 
   // On mobile, lock to grid view (and switch to grid when resizing to mobile)
   useEffect(() => {
@@ -89,15 +95,19 @@ export function ExperimentsPageContent({
 
   const projectOptions = useMemo(() => {
     const m = new Map<string, string>()
-    for (const e of baseExperiments) {
+    for (const e of experiments) {
       const id = e.project_id
       const name = e.project?.name
       if (id && name) m.set(id, name)
     }
+    // The scoped project may have no experiments yet — still offer it.
+    if (projectContext && !m.has(projectContext.id)) {
+      m.set(projectContext.id, projectContext.name)
+    }
     return Array.from(m.entries())
       .map(([value, label]) => ({ value, label }))
       .sort((a, b) => a.label.localeCompare(b.label))
-  }, [baseExperiments])
+  }, [experiments, projectContext])
 
   // Hard-coded enum so empty statuses still show up in the filter dropdown
   // with a `(0)` count. Add `data-derived` once a real workflow extends these.
@@ -122,13 +132,10 @@ export function ExperimentsPageContent({
 
   const filteredExperiments = useMemo(() => {
     return baseExperiments.filter((e) => {
-      if (!projectContext && projectFilter !== FILTER_ALL && e.project_id !== projectFilter) {
-        return false
-      }
       if (statusFilter !== FILTER_ALL && e.status !== statusFilter) return false
       return true
     })
-  }, [baseExperiments, projectContext, projectFilter, statusFilter])
+  }, [baseExperiments, statusFilter])
 
   const newExperimentHref = linkProjectId
     ? `/experiments/new?project=${linkProjectId}`
@@ -142,7 +149,7 @@ export function ExperimentsPageContent({
         </p>
         <div className="flex items-center gap-2 shrink-0">
           <ViewModeToggle value={viewMode} onChange={setViewMode} tableDisabled={isMobile} />
-          <Button id="tour-create-experiment" asChild size="icon" variant="ghost" className="size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" aria-label="New experiment">
+          <Button id="tour-create-experiment" asChild size="icon" className="n9-new-btn size-8 rounded-md transition-colors" aria-label="New experiment">
             <Link href={newExperimentHref}>
               <Plus className="size-4" />
             </Link>
@@ -151,7 +158,6 @@ export function ExperimentsPageContent({
       </div>
 
       <ResourceFilterRow>
-        {!projectContext ? (
         <ResourceListFilter
           label="Project"
           value={projectFilter}
@@ -159,7 +165,6 @@ export function ExperimentsPageContent({
           options={projectOptions}
           allLabel="All projects"
         />
-        ) : null}
         <ResourceListFilter
           label="Status"
           value={statusFilter}
@@ -180,8 +185,10 @@ export function ExperimentsPageContent({
         <Card>
           <CardContent className="py-12 text-center text-sm text-muted-foreground space-y-2">
             <p>
-              {projectContext
-                ? `No experiments in ${projectContext.name} yet.`
+              {projectFilter !== FILTER_ALL
+                ? `No experiments in ${
+                    projectOptions.find((o) => o.value === projectFilter)?.label ?? "this project"
+                  } yet.`
                 : "No experiments match the selected filters."}
             </p>
             {projectContext ? (

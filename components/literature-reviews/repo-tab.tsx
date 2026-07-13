@@ -851,7 +851,7 @@ export function RepoTab({
               <p className="text-muted-foreground mb-4">
                 No literature references yet
               </p>
-              <Button asChild>
+              <Button asChild className="n9-new-btn">
                 <Link href={newManualReferenceHref}>
                   <Plus className="h-4 w-4 mr-2" />
                   Add First Reference

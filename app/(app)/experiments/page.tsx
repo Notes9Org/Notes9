@@ -107,7 +107,7 @@ export default async function ExperimentsPage({
                 Manage and track all experimental procedures
               </p>
               <div className="flex items-center gap-2">
-                <Button id="tour-create-experiment" asChild size="sm" className="gap-2">
+                <Button id="tour-create-experiment" asChild size="sm" className="n9-new-btn gap-2">
                   <Link
                     href={
                       projectContext
@@ -134,7 +134,7 @@ export default async function ExperimentsPage({
                 </EmptyDescription>
               </EmptyHeader>
               <EmptyContent>
-                <Button id="tour-create-experiment-empty" asChild>
+                <Button id="tour-create-experiment-empty" asChild className="n9-new-btn">
                   <Link
                     href={
                       projectContext

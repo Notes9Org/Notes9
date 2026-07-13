@@ -44,6 +44,14 @@ function savedKeyForResult(r: AiSearchResult): string {
   return String(p?.id || p?.doi || p?.pmid || p?.title || r.citeLabel)
 }
 
+// Saved-paper identities at MODULE scope so they survive unmount (navigating
+// away and back restores the search session from the host's module store, and
+// the "Saved" state must come back with it). The server-fetched library list
+// is the long-term source of truth; this set only bridges the optimistic
+// window until the refreshed membership lands. Identity keys are paper-global
+// (id/doi/pmid), so entries never leak across unrelated queries.
+const persistentSavedKeys = new Set<string>()
+
 function refMeta(r: AiSearchResult): string {
   const authors = r.paper?.authors ?? []
   const lead = authors[0] ? `${stripHtmlToText(authors[0])}${authors.length > 1 ? ' et al.' : ''}` : ''
@@ -71,6 +79,9 @@ function CardSkeleton({ delay = 0 }: { delay?: number }) {
 export function AiSearchView({
   query,
   projectId,
+  experimentId,
+  scopeLabel,
+  onRequestSave,
   filters = DEFAULT_AI_FILTERS,
   onFiltersChange,
   onStagePaper,
@@ -85,6 +96,12 @@ export function AiSearchView({
 }: {
   query: string
   projectId?: string | null
+  /** Experiment (sidebar pin) that saves should also link to. */
+  experimentId?: string | null
+  /** "Project / Experiment" label for save toasts. */
+  scopeLabel?: string | null
+  /** Host handler that opens the link-to-research dialog when no project context exists. */
+  onRequestSave?: (paper: SearchPaper) => void
   papers?: SearchPaper[]
   /** Result filters (controlled from the search bar). */
   filters?: AiResultFilters
@@ -120,10 +137,6 @@ export function AiSearchView({
     stop,
   } = useAiLiteratureSearch({ query })
 
-  // Track saved papers by identity (id|doi|pmid|title) across re-renders so cards
-  // don't revert on remount — never by list position, which leaks across queries.
-  const savedKeysRef = useRef(new Set<string>())
-
   // Pagination: one deeply-ranked fetch; "Load more" reveals the rest of the
   // buffer client-side (PAGE_SIZE at a time). No network page-2.
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
@@ -131,7 +144,6 @@ export function AiSearchView({
   useEffect(() => {
     if (query.trim()) void run(query)
     setVisibleCount(PAGE_SIZE)
-    savedKeysRef.current = new Set<string>()
   }, [query, run])
 
   // Reset the visible window when filters change so the reveal math stays sane.
@@ -361,6 +373,9 @@ export function AiSearchView({
             <AiPaperCard
               result={{ ...r, citeLabel: String(i + 1) }}
               projectId={projectId}
+              experimentId={experimentId}
+              scopeLabel={scopeLabel}
+              onRequestSave={onRequestSave}
               query={query}
               // Seed "saved" from the host's persisted library membership (source of
               // truth, shared with the detail view) UNIONed with optimistic
@@ -368,10 +383,10 @@ export function AiSearchView({
               // library" on the card while the detail shows "Saved to library".
               initialSaved={
                 (r.paper ? (isPaperStaged?.(r.paper.id) ?? false) : false) ||
-                savedKeysRef.current.has(savedKeyForResult(r))
+                persistentSavedKeys.has(savedKeyForResult(r))
               }
               onSaved={() => {
-                savedKeysRef.current.add(savedKeyForResult(r))
+                persistentSavedKeys.add(savedKeyForResult(r))
                 // Refresh the host's library source of truth so the card stays
                 // "Saved" across re-renders / new searches (mirrors staging).
                 onPaperSaved?.()

@@ -19,12 +19,14 @@ import { DefaultChatTransport, type UIMessage } from 'ai';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
+// Hover tooltips disabled in the Catalyst chat area (they rendered glitchy —
+// user request, 2026-07). No-op stand-ins keep call sites unchanged while
+// never showing hover/focus popups; controls keep their aria-labels.
+type TooltipStubProps = { children?: React.ReactNode; [prop: string]: unknown }
+const TooltipProvider = ({ children }: TooltipStubProps) => <>{children}</>
+const Tooltip = ({ children }: TooltipStubProps) => <>{children}</>
+const TooltipTrigger = ({ children }: TooltipStubProps) => <>{children}</>
+const TooltipContent = (_props: TooltipStubProps) => null
 
 import { Square, ArrowUp, ClockCounterClockwise as History, ArrowsOut as Maximize, ArrowsIn as Minimize, SidebarSimple as PanelLeft, Plus, Paperclip, Globe, Chat as MessageSquare, NotePencil as NotebookPen, NotePencil as PenBox, DotsThree as MoreHorizontal, PushPin as Pin, PushPinSlash as PinOff, PencilSimple as Pencil, Check, CaretRight as ChevronRight, Folder, FolderPlus, FolderOpen as FolderInput, CheckSquare, MagnifyingGlass as Search, Trash as Trash2, CaretDown as ChevronDown, X, Binoculars as Telescope, List as Menu, Sun, Moon, Question as CircleHelp, Microphone as Mic, BookOpen, Flask as FlaskConical, FolderOpen, FileText, CircleNotch as Loader2, At as AtSign } from "@phosphor-icons/react/ssr";
 import { cn } from '@/lib/utils';
@@ -3619,7 +3621,7 @@ export function RightSidebar({
     <div className="group/input relative flex flex-col w-full">
       <div
         className={cn(
-          'overflow-hidden',
+          'overflow-hidden n9-neon-ring',
           heroStyle ? catalystHeroComposerShell : 'n9-composer',
           isDraggingContext && 'border-primary bg-primary/5 ring-2 ring-primary',
         )}

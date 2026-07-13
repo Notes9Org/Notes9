@@ -144,6 +144,14 @@ function NewSamplePageInner() {
     setExperimentIds((current) => (current.includes(experimentId) ? current : [...current, experimentId]))
   }, [searchParams])
 
+  // Prefill from the sidebar context (`?project=` on the Create-menu link).
+  // Optional and editable — samples remain an org-wide library.
+  useEffect(() => {
+    const projectId = searchParams.get("project")
+    if (!projectId) return
+    setProjectIds((current) => (current.includes(projectId) ? current : [...current, projectId]))
+  }, [searchParams])
+
   useEffect(() => {
     const selectedProjectIds = experiments
       .filter((experiment) => experimentIds.includes(experiment.id) && experiment.project_id)

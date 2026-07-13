@@ -18,7 +18,9 @@ import { SidebarProvider, SidebarInset, useSidebar } from "@/components/ui/sideb
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { useResizable } from "@/hooks/use-resizable"
 import { cn } from "@/lib/utils"
-import { List as Menu, X, HeadCircuit, Chat as MessageSquare, Sun, Moon, Question as CircleHelp, Flag } from "@phosphor-icons/react/ssr"
+import { List as Menu, X, Sun, Moon, Question as CircleHelp, Flag } from "@phosphor-icons/react/ssr"
+import { ClipboardInfoIcon } from "@/components/ui/clipboard-info-icon"
+import { GalaxyIcon } from "@/components/ui/galaxy-icon"
 import { PageTransition } from "./page-transition"
 import { useTheme } from "next-themes"
 import { useMediaQuery } from "@/hooks/use-media-query"
@@ -523,7 +525,9 @@ function AppLayoutBody({ children }: AppLayoutProps) {
                     aria-label={headerAi.ariaLabel ?? "Toggle protocol AI"}
                     title={headerAi.title ?? "Toggle protocol AI"}
                   >
-                    <HeadCircuit className="size-4" />
+                    {/* Protocol glyph — keeps this AI toggle visually distinct
+                        from the Catalyst galaxy button beside it. */}
+                    <ClipboardInfoIcon className="size-4" />
                   </Button>
                 ) : null}
               <Button
@@ -533,7 +537,7 @@ function AppLayoutBody({ children }: AppLayoutProps) {
                 variant="ghost"
                 size="icon"
                 className={cn(
-                  "size-8 shrink-0 text-primary ring-1 ring-inset ring-[color:var(--primary)]/25 transition-colors hover:text-primary sm:size-9",
+                  "n9-neon-ring size-8 shrink-0 text-primary ring-1 ring-inset ring-[color:var(--primary)]/25 transition-colors hover:text-primary sm:size-9",
                   catalystVisible
                     ? "bg-[color:var(--primary)]/20 hover:bg-[color:var(--primary)]/24"
                     : "bg-[color:var(--primary)]/[0.08] hover:bg-[color:var(--primary)]/15",
@@ -542,9 +546,9 @@ function AppLayoutBody({ children }: AppLayoutProps) {
                 aria-label={catalystVisible ? "Close Catalyst" : "Ask Catalyst"}
                 title={catalystVisible ? "Close Catalyst" : "Ask Catalyst"}
               >
-                {/* MessageSquare (not HeadCircuit) so this stays visually distinct
-                    when the protocol-AI HeadCircuit button also appears next to it. */}
-                <MessageSquare className="size-4" />
+                {/* Galaxy — same glyph as the left sidebar's Catalyst item,
+                    so the top-right toggle reads as the same feature. */}
+                <GalaxyIcon className="size-4" />
               </Button>
             </div>
           </header>
@@ -554,9 +558,13 @@ function AppLayoutBody({ children }: AppLayoutProps) {
             id="main"
             className={cn(
               "flex min-h-0 flex-1 flex-col min-w-0",
+              // scrollbar-gutter:stable — the ghost-scrollbar pattern fades
+              // the thumb in on hover, which could re-reserve the gutter and
+              // nudge the whole center pane sideways. A permanently reserved
+              // gutter means hovering never changes the pane's width.
               isCatalystRoute
                 ? "overflow-hidden p-0"
-                : "overflow-auto p-3 sm:p-4 md:p-6"
+                : "overflow-auto p-3 sm:p-4 md:p-6 [scrollbar-gutter:stable]"
             )}
           >
             {/* h-full lets nested routes use h-full / percentage heights reliably (e.g. protocol design mode) */}

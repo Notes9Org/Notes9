@@ -1,8 +1,8 @@
 "use client"
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react"
-import Link, { useLinkStatus } from "next/link"
-import { usePathname, useRouter } from "next/navigation"
+import Link from "next/link"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
 import { motion } from "framer-motion"
 import { CaretUp as ChevronUp, CaretUpDown, Check, Flask as FlaskConical, Folder, FolderOpen, NotePencil as NotebookPen, SidebarSimple as PanelLeft, Plus, MagnifyingGlass as Search, Gear as Settings, TestTube, FileText, NotePencil as FileEdit, CircleNotch as Loader2 } from "@phosphor-icons/react/ssr"
@@ -15,6 +15,7 @@ import {
   SidebarHeader,
   SidebarInput,
   SidebarMenu,
+  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSub,
@@ -61,6 +62,10 @@ const SCOPED_NAV_HREFS = new Set([
   "/reports",
 ])
 
+/** Entity detail pages — the one place a context switch must navigate away. */
+const ENTITY_DETAIL_RE =
+  /^\/(projects|experiments|lab-notes-list|lab-notes|protocols|samples|papers|literature-reviews|reports|catalyst|equipment)\/[^/?#]+/
+
 /**
  * Shared row treatment for primary nav: quiet by default (muted icon, 13px
  * label); the sliding pill supplies the active background, the row only
@@ -68,32 +73,10 @@ const SCOPED_NAV_HREFS = new Set([
  */
 type SwitcherExperiment = { id: string; name: string; project_id: string | null }
 
-/** Same effect as TabsTrigger: its easing + press-scale, and while the menu is
- * open the row lifts as a solid raised tab (bg + shadow), like an active tab. */
-const SWITCHER_TAB_EFFECT_CLASS =
-  "duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-[0.97] motion-reduce:active:scale-100 data-[state=open]:bg-background data-[state=open]:text-foreground data-[state=open]:shadow-sm"
-
 /** Frosted switcher panel: thinner fill + stronger blur than the default menu
  * glass, with an inner top highlight so it reads as a lifted glass pane. */
 const SWITCHER_MENU_CLASS =
   "w-60 rounded-xl p-1.5 bg-[color:color-mix(in_srgb,var(--glass-bg)_72%,transparent)] backdrop-blur-2xl backdrop-saturate-150 shadow-xl shadow-black/10 ring-1 ring-inset ring-white/25 dark:ring-white/[0.07] dark:shadow-black/40"
-
-/** Switcher affordance: a soft raised ⇅ chip — shadow only, no outline — so
- * the row visibly reads as "opens a picker", lighting up primary on
- * hover/open. The whole row is the click target. */
-function SwitcherKeycap() {
-  return (
-    <span
-      aria-hidden
-      className="ml-auto flex size-5 shrink-0 items-center justify-center rounded-[6px] bg-background shadow-sm transition-shadow duration-150 group-hover:shadow-md dark:bg-sidebar-accent"
-    >
-      <CaretUpDown
-        weight="bold"
-        className="size-3 !text-muted-foreground transition-colors group-hover:!text-primary group-data-[state=open]:!text-primary"
-      />
-    </span>
-  )
-}
 
 const NAV_ROW_CLASS =
   "group relative z-[1] h-8 rounded-lg text-[13px] text-sidebar-foreground/75 transition-all duration-150 [&_svg]:text-sidebar-foreground/55 [&_svg]:transition-transform [&_svg]:duration-200 hover:bg-background/60 hover:text-sidebar-foreground hover:[&_svg]:scale-110 hover:[&_svg]:text-sidebar-foreground/80 active:scale-[0.985] active:bg-background/80 dark:hover:bg-background/40 dark:active:bg-background/60 data-[active=true]:bg-transparent data-[active=true]:font-medium data-[active=true]:text-sidebar-foreground data-[active=true]:[&_svg]:text-primary"
@@ -129,23 +112,10 @@ type SearchResultItem = {
   href: string
 }
 
-// Spinner shown on a nav link while its navigation is pending (RSC fetch or
-// dev-mode route compile in flight). Must be rendered INSIDE a <Link> —
-// useLinkStatus reads the pending state of the enclosing link.
-function NavLinkSpinner() {
-  const { pending } = useLinkStatus()
-  if (!pending) return null
-  return (
-    <Loader2
-      className="ml-auto size-3.5 shrink-0 animate-spin text-muted-foreground"
-      aria-label="Loading page"
-    />
-  )
-}
-
 export function AppSidebar() {
   const authUser = useAuthUser();
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const router = useRouter()
   const { setOpenMobile, isMobile, state, openMobile, open, setOpen } = useSidebar()
   // Active-project context (URL `?project=` or `/projects/<id>` path). When set,
@@ -188,17 +158,19 @@ export function AppSidebar() {
     }
   }, [supabase, scope.projectId])
 
-  // Always include the experiment the user is standing in, even if it isn't
-  // among the fetched most-recent (or the fetch is still in flight).
+  // Always include the experiment the user is standing in (or has pinned),
+  // even if it isn't among the fetched most-recent (or the fetch is still in
+  // flight).
+  const currentSwitcherExperimentId = scope.liveExperimentId ?? scope.pinnedExperimentId
   const switcherExperiments = useMemo(() => {
     if (
-      scope.liveExperimentId &&
+      currentSwitcherExperimentId &&
       scope.experimentName &&
-      !experimentsForSwitcher.some((e) => e.id === scope.liveExperimentId)
+      !experimentsForSwitcher.some((e) => e.id === currentSwitcherExperimentId)
     ) {
       return [
         {
-          id: scope.liveExperimentId,
+          id: currentSwitcherExperimentId,
           name: scope.experimentName,
           project_id: scope.projectId,
         },
@@ -206,7 +178,7 @@ export function AppSidebar() {
       ]
     }
     return experimentsForSwitcher
-  }, [experimentsForSwitcher, scope.liveExperimentId, scope.experimentName, scope.projectId])
+  }, [experimentsForSwitcher, currentSwitcherExperimentId, scope.experimentName, scope.projectId])
 
   // Project-switcher list: recently opened first; always includes the scoped
   // project even when it fell out of the fetched top-5.
@@ -221,6 +193,90 @@ export function AppSidebar() {
     }
     return list
   }, [projects, scope.projectId, scope.projectName])
+
+  // ——— Context switching (nav-row switchers) ————————————————————————————
+  // Selecting a context is a FILTER, not a navigation: on list pages we stay
+  // put and rewrite ?project=/?experiment= in place so the page re-filters.
+  // Only entity DETAIL pages navigate away — the entity on screen may not
+  // belong to the new context (and standing on /experiments/<id> would
+  // instantly re-pin the old experiment).
+  const replaceScopeInUrl = useCallback(
+    (projectId: string | null, experimentId: string | null) => {
+      const params = new URLSearchParams(searchParams?.toString() ?? "")
+      params.delete("project")
+      params.delete("experiment")
+      if (projectId) params.set("project", projectId)
+      if (experimentId) params.set("experiment", experimentId)
+      const qs = params.toString()
+      router.replace(qs ? `${pathname}?${qs}` : pathname)
+    },
+    [searchParams, pathname, router],
+  )
+
+  /** List page a detail path falls back to when its entity leaves the scope. */
+  const listHrefForDetailPath = useCallback(() => {
+    const section = "/" + (pathname?.split("/")[1] ?? "")
+    return section === "/lab-notes-list" ? "/lab-notes" : section
+  }, [pathname])
+
+  const handleSelectProject = useCallback(
+    (projectId: string) => {
+      scope.setProjectScope(projectId)
+      if (pathname?.startsWith("/projects/")) {
+        router.push(`/projects/${projectId}`)
+      } else if (pathname && ENTITY_DETAIL_RE.test(pathname)) {
+        const listHref = listHrefForDetailPath()
+        router.push(
+          SCOPED_NAV_HREFS.has(listHref) ? `${listHref}?project=${projectId}` : listHref,
+        )
+      } else {
+        replaceScopeInUrl(projectId, null)
+      }
+    },
+    [scope, pathname, router, listHrefForDetailPath, replaceScopeInUrl],
+  )
+
+  const handleClearProject = useCallback(() => {
+    scope.clearScope()
+    if (pathname && ENTITY_DETAIL_RE.test(pathname)) {
+      router.push(listHrefForDetailPath())
+    } else {
+      replaceScopeInUrl(null, null)
+    }
+  }, [scope, pathname, router, listHrefForDetailPath, replaceScopeInUrl])
+
+  const handleSelectExperiment = useCallback(
+    (exp: SwitcherExperiment) => {
+      scope.setExperimentScope(exp.id, exp.project_id)
+      const projectId = exp.project_id ?? scope.projectId
+      if (pathname?.startsWith("/experiments/")) {
+        router.push(
+          projectId
+            ? `/experiments/${exp.id}?project=${projectId}`
+            : `/experiments/${exp.id}`,
+        )
+      } else if (pathname && ENTITY_DETAIL_RE.test(pathname)) {
+        const listHref = listHrefForDetailPath()
+        router.push(
+          SCOPED_NAV_HREFS.has(listHref) && projectId
+            ? `${listHref}?project=${projectId}&experiment=${exp.id}`
+            : listHref,
+        )
+      } else {
+        replaceScopeInUrl(projectId, exp.id)
+      }
+    },
+    [scope, pathname, router, listHrefForDetailPath, replaceScopeInUrl],
+  )
+
+  const handleClearExperiment = useCallback(() => {
+    scope.setExperimentScope(null)
+    if (pathname?.startsWith("/experiments/")) {
+      router.push(scope.projectId ? `/experiments?project=${scope.projectId}` : "/experiments")
+    } else {
+      replaceScopeInUrl(scope.projectId, null)
+    }
+  }, [scope, pathname, router, replaceScopeInUrl])
 
   const toggleSidebarOpen = (e?: React.MouseEvent<HTMLButtonElement>) => {
     setOpen(!open)
@@ -663,13 +719,13 @@ export function AppSidebar() {
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
-                      <Link href={withFromDashboard("/experiments/new")} className="cursor-pointer">
+                      <Link href={withFromDashboard(scope.projectId ? `/experiments/new?project=${scope.projectId}` : "/experiments/new")} className="cursor-pointer">
                         <FlaskConical className="mr-2 size-4" />
                         <span>Experiment</span>
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
-                      <Link href={withFromDashboard("/samples/new")} className="cursor-pointer">
+                      <Link href={withFromDashboard(scope.projectId ? `/samples/new?project=${scope.projectId}` : "/samples/new")} className="cursor-pointer">
                         <TestTube className="mr-2 size-4" />
                         <span>Sample</span>
                       </Link>
@@ -685,7 +741,7 @@ export function AppSidebar() {
                       <span>Lab note</span>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
-                      <Link href={withFromDashboard("/papers/new")} className="cursor-pointer">
+                      <Link href={withFromDashboard(scope.projectId ? `/papers/new?project=${scope.projectId}` : "/papers/new")} className="cursor-pointer">
                         <FileEdit className="mr-2 size-4" />
                         <span>Writing</span>
                       </Link>
@@ -703,176 +759,6 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Context card: WHERE AM I. The active project + experiment switchers,
-            pinned to the BOTTOM of the sidebar (order-last + mt-auto), just
-            above the account footer — the nav list stays clean, and the
-            current context sits in a stable, glanceable home. Same sandglass
-            material as the nav strip; triggers behave like TabsTriggers
-            (raised solid tab while open). */}
-        {!isIconMode && mounted && scope.projectId && (
-          <SidebarGroup className="order-last mt-auto pb-2">
-            <SidebarGroupContent className="n9-grain rounded-xl border border-[color:var(--glass-border)] bg-[color:var(--glass-bg)] p-1 backdrop-blur-md">
-              <div className="px-2 pb-0.5 pt-1 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-                Context
-              </div>
-              <SidebarMenu className="gap-0.5">
-                <SidebarMenuItem>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <SidebarMenuButton
-                        className={cn(NAV_ROW_CLASS, SWITCHER_TAB_EFFECT_CLASS)}
-                        aria-label={`Project: ${scope.projectName}. Open project switcher`}
-                      >
-                        <FolderOpen className="size-4 shrink-0" weight="fill" />
-                        <span className="flex-1 flex items-center min-w-0">
-                          <span className="truncate">{scope.projectName}</span>
-                        </span>
-                        <SwitcherKeycap />
-                      </SidebarMenuButton>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      side="right"
-                      align="start"
-                      sideOffset={10}
-                      className={SWITCHER_MENU_CLASS}
-                    >
-                      <DropdownMenuLabel className="px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                        Switch project
-                      </DropdownMenuLabel>
-                      {switcherProjects.map((p) => {
-                        const isCurrent = p.id === scope.projectId
-                        return (
-                          <DropdownMenuItem
-                            key={p.id}
-                            onSelect={() => router.push(`/projects/${p.id}`)}
-                            className="cursor-pointer gap-2.5 rounded-lg py-2"
-                          >
-                            <Folder
-                              className="size-4 shrink-0 text-muted-foreground"
-                              weight={isCurrent ? "fill" : "regular"}
-                            />
-                            <span className="min-w-0 flex-1 truncate text-[13px]">{p.name}</span>
-                            {isCurrent && (
-                              <Check className="size-4 shrink-0 text-primary" weight="bold" />
-                            )}
-                          </DropdownMenuItem>
-                        )
-                      })}
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onSelect={() => {
-                          scope.clearScope()
-                          router.push("/projects")
-                        }}
-                        className="cursor-pointer gap-2.5 rounded-lg py-2 text-[13px]"
-                      >
-                        <Folder className="size-4 shrink-0 text-muted-foreground" />
-                        All projects
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild className="cursor-pointer gap-2.5 rounded-lg py-2 text-[13px]">
-                        <Link href={withFromDashboard("/projects/new")}>
-                          <Plus className="size-4 shrink-0 text-muted-foreground" />
-                          New project
-                        </Link>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </SidebarMenuItem>
-
-                {scope.liveExperimentId && scope.experimentName && (
-                  <SidebarMenuItem>
-                    <DropdownMenu
-                      onOpenChange={(o) => {
-                        if (o) loadSwitcherExperiments()
-                      }}
-                    >
-                      <DropdownMenuTrigger asChild>
-                        <SidebarMenuButton
-                          className={cn(NAV_ROW_CLASS, SWITCHER_TAB_EFFECT_CLASS)}
-                          aria-label={`Experiment: ${scope.experimentName}. Open experiment switcher`}
-                        >
-                          <FlaskConical className="size-4 shrink-0" weight="fill" />
-                          <span className="flex-1 flex items-center min-w-0">
-                            <span className="truncate">{scope.experimentName}</span>
-                          </span>
-                          <SwitcherKeycap />
-                        </SidebarMenuButton>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent
-                        side="right"
-                        align="start"
-                        sideOffset={10}
-                        className={SWITCHER_MENU_CLASS}
-                      >
-                        <DropdownMenuLabel className="px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                          Switch experiment
-                        </DropdownMenuLabel>
-                        {switcherExperiments.map((exp) => {
-                          const isCurrent = exp.id === scope.liveExperimentId
-                          return (
-                            <DropdownMenuItem
-                              key={exp.id}
-                              onSelect={() =>
-                                router.push(
-                                  exp.project_id
-                                    ? `/experiments/${exp.id}?project=${exp.project_id}`
-                                    : `/experiments/${exp.id}`,
-                                )
-                              }
-                              className="cursor-pointer gap-2.5 rounded-lg py-2"
-                            >
-                              <FlaskConical
-                                className="size-4 shrink-0 text-muted-foreground"
-                                weight={isCurrent ? "fill" : "regular"}
-                              />
-                              <span className="min-w-0 flex-1 truncate text-[13px]">{exp.name}</span>
-                              {isCurrent && (
-                                <Check className="size-4 shrink-0 text-primary" weight="bold" />
-                              )}
-                            </DropdownMenuItem>
-                          )
-                        })}
-                        {experimentsLoading && switcherExperiments.length <= 1 && (
-                          <div className="flex items-center gap-2 px-2 py-2 text-[13px] text-muted-foreground">
-                            <Loader2 className="size-3.5 animate-spin" />
-                            Loading experiments…
-                          </div>
-                        )}
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onSelect={() =>
-                            router.push(
-                              scope.projectId
-                                ? `/experiments?project=${scope.projectId}`
-                                : "/experiments",
-                            )
-                          }
-                          className="cursor-pointer gap-2.5 rounded-lg py-2 text-[13px]"
-                        >
-                          <FlaskConical className="size-4 shrink-0 text-muted-foreground" />
-                          All experiments
-                        </DropdownMenuItem>
-                        <DropdownMenuItem asChild className="cursor-pointer gap-2.5 rounded-lg py-2 text-[13px]">
-                          <Link
-                            href={withFromDashboard(
-                              scope.projectId
-                                ? `/experiments/new?project=${scope.projectId}`
-                                : "/experiments/new",
-                            )}
-                          >
-                            <Plus className="size-4 shrink-0 text-muted-foreground" />
-                            New experiment
-                          </Link>
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </SidebarMenuItem>
-                )}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
-
         {/* Main navigation: one flat, minimal list. Icons only when collapsed. */}
         <SidebarGroup
           className={cn(
@@ -882,10 +768,12 @@ export function AppSidebar() {
           <SidebarGroupContent
             // Sandglass strip, same grammar as TabsList: translucent, blurred,
             // grained container; the sliding active pill is the solid raised
-            // "tab" inside it.
+            // "tab" inside it. When a project context is active the whole
+            // strip nudges right — a quiet "you are scoped" signal.
             className={cn(
-              "n9-grain rounded-xl border border-[color:var(--glass-border)] bg-[color:var(--glass-bg)] p-1 backdrop-blur-md",
+              "n9-grain rounded-xl border border-[color:var(--glass-border)] bg-[color:var(--glass-bg)] p-1 backdrop-blur-md transition-[margin] duration-300",
               isIconMode && "w-full flex flex-col items-center",
+              !isIconMode && mounted && scope.projectId && "ml-2",
             )}
           >
             <SidebarMenu
@@ -907,6 +795,23 @@ export function AppSidebar() {
                     // first client render stay identical.
                     const carriesScope =
                       mounted && !!scope.projectId && SCOPED_NAV_HREFS.has(item.href)
+
+                    // Nav-row context: the Projects / Experiments rows carry the
+                    // active context — label shows the context NAME, a trailing
+                    // action opens the switcher. Client-only (mounted gate).
+                    const isProjectsRow = item.href === "/projects"
+                    const isExperimentsRow = item.href === "/experiments"
+                    const showSwitcher =
+                      !isIconMode && mounted && (isProjectsRow || isExperimentsRow)
+                    const contextName =
+                      !isIconMode && mounted
+                        ? isProjectsRow && scope.projectId
+                          ? scope.projectName
+                          : isExperimentsRow &&
+                              (scope.pinnedExperimentId || scope.liveExperimentId)
+                            ? scope.experimentName
+                            : null
+                        : null
 
                     return (
                       <SidebarMenuItem key={item.name} data-tour={navTourKey(item.href)}>
@@ -933,15 +838,190 @@ export function AppSidebar() {
                             // sidebar so the user lands on the page with the full
                             // nav open (per request: clicking an icon opens it).
                             onClick={() => { if (isIconMode) setOpen(true) }}
-                            className="flex-1 flex items-center pr-6"
+                            className={cn(
+                              "flex-1 flex items-center",
+                              showSwitcher ? "pr-8" : "pr-6",
+                            )}
                           >
                             <Icon weight={isActive ? "fill" : "regular"} />
-                            <span className={cn(isIconMode && "hidden", "flex-1 flex items-center")}>
-                              <span className="truncate">{item.name}</span>
-                              <NavLinkSpinner />
+                            <span
+                              className={cn(
+                                isIconMode && "hidden",
+                                "flex-1 flex items-center min-w-0",
+                              )}
+                            >
+                              {/* With a context set the row label IS the context
+                                  name — no kicker, no dot; a slightly raised
+                                  weight marks it as the active context without
+                                  matching the full active-row treatment. */}
+                              <span
+                                className={cn(
+                                  "truncate",
+                                  contextName && "font-medium text-sidebar-foreground/90",
+                                )}
+                                title={contextName ?? undefined}
+                              >
+                                {contextName ?? item.name}
+                              </span>
                             </span>
                           </Link>
                         </SidebarMenuButton>
+
+                        {/* Context switcher: a sibling action, never nested in
+                            the Link (invalid HTML + hydration errors). */}
+                        {showSwitcher && (
+                          <DropdownMenu
+                            onOpenChange={
+                              isExperimentsRow
+                                ? (o) => {
+                                    if (o) loadSwitcherExperiments()
+                                  }
+                                : undefined
+                            }
+                          >
+                            <DropdownMenuTrigger asChild>
+                              <SidebarMenuAction
+                                aria-label={
+                                  isProjectsRow
+                                    ? "Switch project context"
+                                    : "Switch experiment context"
+                                }
+                                // z-[2]: the row's SidebarMenuButton sits at z-[1]
+                                // (NAV_ROW_CLASS), so without this the Link eats
+                                // the click and navigates instead of opening the
+                                // switcher.
+                                className="z-[2] !top-1/2 !-translate-y-1/2 size-5 rounded-[6px] bg-background text-muted-foreground shadow-sm transition-shadow duration-150 hover:shadow-md hover:text-primary data-[state=open]:text-primary dark:bg-sidebar-accent"
+                              >
+                                <CaretUpDown weight="bold" className="!size-3" />
+                              </SidebarMenuAction>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent
+                              side="right"
+                              align="start"
+                              sideOffset={10}
+                              className={SWITCHER_MENU_CLASS}
+                            >
+                              {isProjectsRow ? (
+                                <>
+                                  <DropdownMenuLabel className="px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                                    {scope.projectId ? "Switch project" : "Set project context"}
+                                  </DropdownMenuLabel>
+                                  {switcherProjects.map((p) => {
+                                    const isCurrent = p.id === scope.projectId
+                                    return (
+                                      <DropdownMenuItem
+                                        key={p.id}
+                                        onSelect={() => handleSelectProject(p.id)}
+                                        className="cursor-pointer gap-2.5 rounded-lg py-2"
+                                      >
+                                        <Folder
+                                          className="size-4 shrink-0 text-muted-foreground"
+                                          weight={isCurrent ? "fill" : "regular"}
+                                        />
+                                        <span className="min-w-0 flex-1 truncate text-[13px]">
+                                          {p.name}
+                                        </span>
+                                        {isCurrent && (
+                                          <Check
+                                            className="size-4 shrink-0 text-primary"
+                                            weight="bold"
+                                          />
+                                        )}
+                                      </DropdownMenuItem>
+                                    )
+                                  })}
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onSelect={handleClearProject}
+                                    className="cursor-pointer gap-2.5 rounded-lg py-2 text-[13px]"
+                                  >
+                                    <Folder className="size-4 shrink-0 text-muted-foreground" />
+                                    All projects (clear context)
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    asChild
+                                    className="cursor-pointer gap-2.5 rounded-lg py-2 text-[13px]"
+                                  >
+                                    <Link href={withFromDashboard("/projects/new")}>
+                                      <Plus className="size-4 shrink-0 text-muted-foreground" />
+                                      New project
+                                    </Link>
+                                  </DropdownMenuItem>
+                                </>
+                              ) : (
+                                <>
+                                  <DropdownMenuLabel className="px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                                    {scope.projectId
+                                      ? "Experiments in this project"
+                                      : "Recent experiments"}
+                                  </DropdownMenuLabel>
+                                  {switcherExperiments.map((exp) => {
+                                    const isCurrent =
+                                      exp.id ===
+                                      (scope.liveExperimentId ?? scope.pinnedExperimentId)
+                                    return (
+                                      <DropdownMenuItem
+                                        key={exp.id}
+                                        onSelect={() => handleSelectExperiment(exp)}
+                                        className="cursor-pointer gap-2.5 rounded-lg py-2"
+                                      >
+                                        <FlaskConical
+                                          className="size-4 shrink-0 text-muted-foreground"
+                                          weight={isCurrent ? "fill" : "regular"}
+                                        />
+                                        <span className="min-w-0 flex-1 truncate text-[13px]">
+                                          {exp.name}
+                                        </span>
+                                        {isCurrent && (
+                                          <Check
+                                            className="size-4 shrink-0 text-primary"
+                                            weight="bold"
+                                          />
+                                        )}
+                                      </DropdownMenuItem>
+                                    )
+                                  })}
+                                  {experimentsLoading && switcherExperiments.length <= 1 && (
+                                    <div className="flex items-center gap-2 px-2 py-2 text-[13px] text-muted-foreground">
+                                      <Loader2 className="size-3.5 animate-spin" />
+                                      Loading experiments…
+                                    </div>
+                                  )}
+                                  {!experimentsLoading && switcherExperiments.length === 0 && (
+                                    <div className="px-2 py-2 text-[13px] text-muted-foreground">
+                                      No experiments here yet
+                                    </div>
+                                  )}
+                                  <DropdownMenuSeparator />
+                                  {(scope.pinnedExperimentId || scope.liveExperimentId) && (
+                                    <DropdownMenuItem
+                                      onSelect={handleClearExperiment}
+                                      className="cursor-pointer gap-2.5 rounded-lg py-2 text-[13px]"
+                                    >
+                                      <FlaskConical className="size-4 shrink-0 text-muted-foreground" />
+                                      All experiments (clear context)
+                                    </DropdownMenuItem>
+                                  )}
+                                  <DropdownMenuItem
+                                    asChild
+                                    className="cursor-pointer gap-2.5 rounded-lg py-2 text-[13px]"
+                                  >
+                                    <Link
+                                      href={withFromDashboard(
+                                        scope.projectId
+                                          ? `/experiments/new?project=${scope.projectId}`
+                                          : "/experiments/new",
+                                      )}
+                                    >
+                                      <Plus className="size-4 shrink-0 text-muted-foreground" />
+                                      New experiment
+                                    </Link>
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
 
                         {/* Strictly-nested children (Lab notes / Data live only
                             inside experiments): indented tree rows sharing the
@@ -981,7 +1061,6 @@ export function AppSidebar() {
                                       <ChildIcon weight={childActive ? "fill" : "regular"} />
                                       <span className="flex-1 flex items-center min-w-0">
                                         <span className="truncate">{child.name}</span>
-                                        <NavLinkSpinner />
                                       </span>
                                     </Link>
                                   </SidebarMenuSubButton>
@@ -1075,6 +1154,7 @@ export function AppSidebar() {
         open={labNoteOpen}
         onOpenChange={setLabNoteOpen}
         defaultProjectId={scope.projectId}
+        defaultExperimentId={scope.pinnedExperimentId ?? scope.liveExperimentId}
       />
     </Sidebar>
   );
