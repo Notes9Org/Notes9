@@ -1,13 +1,10 @@
-import {
-  CatalystComposerSkeleton,
-  PapersPageSkeleton,
-} from "@/components/loading/page-skeletons"
+import { CatalystListPageSkeleton } from "@/components/loading/page-skeletons"
 
+/** Mirrors the Writing list: composer, toolbar, project filter, table. */
 export default function PapersLoading() {
   return (
     <div className="space-y-6 animate-pulse">
-      <CatalystComposerSkeleton />
-      <PapersPageSkeleton />
+      <CatalystListPageSkeleton filterCount={1} />
     </div>
   )
 }

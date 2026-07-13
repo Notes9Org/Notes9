@@ -286,7 +286,7 @@ export function TableListSkeleton({
   )
 }
 
-/** Literature reviews: page title + tabs + grid (composer is separate). */
+/** Literature reviews: page title + the two section tabs + search + grid. */
 export function LiteraturePageSkeleton() {
   return (
     <>
@@ -297,10 +297,10 @@ export function LiteraturePageSkeleton() {
           <div className="h-9 w-32 bg-muted rounded-md" />
         </div>
       </div>
+      {/* Two section tabs: "Search & read" / "My Library". */}
       <div className="flex gap-2">
-        <div className="h-9 w-20 bg-muted rounded-md" />
-        <div className="h-9 w-20 bg-muted rounded-md" />
-        <div className="h-9 w-20 bg-muted rounded-md" />
+        <div className="h-9 w-28 bg-muted rounded-md" />
+        <div className="h-9 w-24 bg-muted rounded-md" />
       </div>
       <div className="space-y-4">
         <div className="h-10 w-full bg-muted rounded-md" />
@@ -405,27 +405,3 @@ export function CatalystReasoningSkeleton({ className }: { className?: string })
   )
 }
 
-/** Papers workspace: tabs + split pane. */
-export function PapersPageSkeleton() {
-  return (
-    <>
-      <div className="flex gap-2 border-b border-border pb-2">
-        <div className="h-9 w-24 bg-muted rounded-md" />
-        <div className="h-9 w-28 bg-muted rounded-md" />
-      </div>
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,280px)_1fr] min-h-[400px]">
-        <div className="rounded-lg border bg-card p-3 space-y-2">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="h-10 bg-muted/60 rounded-md" />
-          ))}
-        </div>
-        <div className="rounded-lg border bg-card p-6 space-y-3">
-          <div className="h-6 w-48 bg-muted rounded-md" />
-          <div className="h-4 w-full bg-muted rounded-md" />
-          <div className="h-4 w-5/6 bg-muted rounded-md" />
-          <div className="flex-1 min-h-[200px] bg-muted/30 rounded-md" />
-        </div>
-      </div>
-    </>
-  )
-}
