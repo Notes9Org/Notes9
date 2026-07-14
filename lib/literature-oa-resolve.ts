@@ -19,6 +19,7 @@ import {
 } from "@/lib/literature-pdf-urls"
 import { resolvePmcOaPdfUrls } from "@/lib/literature-pdf-import"
 import { resolveUnpaywallPdfUrl } from "@/lib/unpaywall"
+import { unstable_cache } from "next/cache"
 
 const NOTES9_CONTACT_EMAIL = process.env.OPENALEX_CONTACT_EMAIL
 const OA_USER_AGENT = NOTES9_CONTACT_EMAIL
@@ -39,6 +40,129 @@ function addCandidate(out: string[], raw: string | null | undefined) {
   if (!raw) return
   const t = upgradeInsecurePdfUrlIfKnownHost(raw.trim())
   if (shouldTrySearchCardPdfUrl(t) && !out.includes(t)) out.push(t)
+}
+
+// ── Tier-2 repository-copy locators ────────────────────────────────────────────
+// When a paper is tagged open-access but the only copy Tier-1 (OpenAlex / Unpaywall /
+// Europe PMC / PMC) can find is the publisher's own bot-walled page, the download
+// fails. Semantic Scholar and CORE index the *green-OA* copy (author-deposited,
+// institutional-archive, aggregator-hosted) that is reachable in exactly that case.
+// Both are keyed by the EXACT DOI (Semantic Scholar also by PMID) so we never fetch a
+// different paper than the one requested. Day-long cached like Unpaywall; best-effort.
+const TIER2_FETCH_TIMEOUT_MS = 6000
+
+function firstPdfHttpUrl(url: string | null | undefined): string | null {
+  return typeof url === "string" && /^https?:\/\//i.test(url.trim()) ? url.trim() : null
+}
+
+type SemanticScholarResponse = { openAccessPdf?: { url?: string | null } | null }
+
+/** Pure: pull the OA PDF URL from a Semantic Scholar paper payload. */
+export function extractSemanticScholarPdf(data: SemanticScholarResponse | null | undefined): string | null {
+  return firstPdfHttpUrl(data?.openAccessPdf?.url)
+}
+
+async function fetchSemanticScholarPdfUrl(idParam: string): Promise<string | null> {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), TIER2_FETCH_TIMEOUT_MS)
+  try {
+    const apiKey = process.env.SEMANTIC_SCHOLAR_API_KEY?.trim()
+    const res = await fetch(
+      `https://api.semanticscholar.org/graph/v1/paper/${idParam}?fields=openAccessPdf`,
+      {
+        headers: {
+          Accept: "application/json",
+          "User-Agent": OA_USER_AGENT,
+          ...(apiKey ? { "x-api-key": apiKey } : {}),
+        },
+        signal: controller.signal,
+      },
+    )
+    if (!res.ok) return null
+    return extractSemanticScholarPdf((await res.json()) as SemanticScholarResponse)
+  } catch {
+    return null // best-effort; a transient failure must not blank the resolve
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
+const cachedFetchSemanticScholarPdfUrl = unstable_cache(
+  fetchSemanticScholarPdfUrl,
+  ["semantic-scholar-oa-pdf"],
+  { revalidate: 60 * 60 * 24 },
+)
+
+/** Resolve an OA PDF URL via Semantic Scholar's `openAccessPdf`, keyed by exact DOI
+ *  (else PMID). Keyless works; `SEMANTIC_SCHOLAR_API_KEY` is an optional override.
+ *  Best-effort → null. */
+export async function resolveFromSemanticScholar(
+  normalizedDoi: string | null,
+  pmid?: string | number | null,
+): Promise<string | null> {
+  const pmidStr = pmid != null ? String(pmid).trim() : ""
+  const idParam = normalizedDoi
+    ? `DOI:${encodeURIComponent(normalizedDoi)}`
+    : pmidStr
+      ? `PMID:${encodeURIComponent(pmidStr)}`
+      : null
+  if (!idParam) return null
+  return cachedFetchSemanticScholarPdfUrl(idParam)
+}
+
+type CoreWork = { doi?: string | null; downloadUrl?: string | null }
+type CoreSearchResponse = { results?: CoreWork[] | null }
+
+/** Pure: pick the download URL of the CORE result whose DOI EXACTLY matches the
+ *  requested one — CORE's search is fuzzy and can return neighbouring works, and we
+ *  must never download a different paper than the one asked for. */
+export function pickCoreDownloadUrl(
+  results: CoreWork[] | null | undefined,
+  normalizedDoi: string,
+): string | null {
+  for (const w of results ?? []) {
+    if (normalizeDoi(w.doi) !== normalizedDoi) continue
+    const url = firstPdfHttpUrl(w.downloadUrl)
+    if (url) return url
+  }
+  return null
+}
+
+async function fetchCorePdfUrl(normalizedDoi: string): Promise<string | null> {
+  const apiKey = process.env.CORE_API_KEY?.trim()
+  if (!apiKey) return null
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), TIER2_FETCH_TIMEOUT_MS)
+  try {
+    const res = await fetch(
+      `https://api.core.ac.uk/v3/search/works?q=${encodeURIComponent(`doi:"${normalizedDoi}"`)}&limit=10`,
+      {
+        headers: { Accept: "application/json", Authorization: `Bearer ${apiKey}` },
+        signal: controller.signal,
+      },
+    )
+    if (!res.ok) return null
+    const data = (await res.json()) as CoreSearchResponse
+    return pickCoreDownloadUrl(data.results, normalizedDoi)
+  } catch {
+    return null // best-effort
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
+const cachedFetchCorePdfUrl = unstable_cache(
+  fetchCorePdfUrl,
+  ["core-oa-pdf"],
+  { revalidate: 60 * 60 * 24 },
+)
+
+/** Resolve an OA PDF URL via CORE (green-OA aggregator), matched by exact DOI.
+ *  No-op returning null without `CORE_API_KEY`. Best-effort → null. */
+export async function resolveFromCore(normalizedDoi: string | null): Promise<string | null> {
+  if (!normalizedDoi) return null
+  if (!process.env.CORE_API_KEY?.trim()) return null // no key → no-op
+  return cachedFetchCorePdfUrl(normalizedDoi)
 }
 
 /** bioRxiv/medRxiv/arXiv PDF URLs reconstructed from a DOI. */
@@ -226,11 +350,16 @@ export type OaSources = { pdfUrls: string[]; oaPackageTgzUrl: string | null; abs
 // OpenAlex / Europe PMC / NCBI — so without this a retry (or a second paper
 // from the same upstream) re-races those slow calls under a tight budget, which
 // is exactly the "failed first, worked second" flakiness. Positive hits live
-// 30 min; a resolution that found NOTHING is negative-cached for 5 min so a
-// genuinely non-OA paper doesn't re-hammer upstreams on every click. In-process
+// 30 min; a resolution that found NOTHING is negative-cached only briefly (see
+// OA_CACHE_NEGATIVE_TTL_MS) so a transient miss doesn't pin an OA paper as empty. In-process
 // only (per server instance) and self-bounding — no external store.
+//
+// The negative TTL is deliberately short (1 min): a "found nothing" is often a
+// transient upstream timeout, not a truly non-OA paper, and a 5-min negative cache
+// made the user's "open again" retry return the same empty result for minutes. One
+// minute still absorbs rapid repeat clicks without pinning a transient miss.
 const OA_CACHE_TTL_MS = 30 * 60 * 1000
-const OA_CACHE_NEGATIVE_TTL_MS = 5 * 60 * 1000
+const OA_CACHE_NEGATIVE_TTL_MS = 60 * 1000
 const OA_CACHE_MAX_ENTRIES = 500
 const oaSourcesCache = new Map<string, { value: OaSources; expiresAt: number }>()
 
@@ -297,11 +426,17 @@ export async function resolveOaSourcesUncached(
   }
 
   // 2. Network resolvers — run together (free, parallel; resilient to failure):
-  //    OpenAlex, Europe PMC, and Unpaywall (the cross-publisher OA locator).
-  const [openAlex, europePmc, unpaywallPdfUrl] = await Promise.all([
+  //    OpenAlex, Europe PMC, Unpaywall (cross-publisher OA locator), and the Tier-2
+  //    repository aggregators (Semantic Scholar, CORE). Tier-2 runs in this SAME
+  //    parallel batch — not a second sequential round — so it adds no wall-clock
+  //    latency; its URLs are appended LAST (step 5) and only reached when the direct
+  //    copies fail to download (e.g. the publisher page is bot-walled).
+  const [openAlex, europePmc, unpaywallPdfUrl, semanticScholarPdfUrl, corePdfUrl] = await Promise.all([
     resolveFromOpenAlex(normalizedDoi),
     resolveFromEuropePmc(paper, normalizedDoi),
     resolveUnpaywallPdfUrl(normalizedDoi, opts?.contactEmail),
+    resolveFromSemanticScholar(normalizedDoi, paper.pmid),
+    resolveFromCore(normalizedDoi),
   ])
   // 2a. Europe PMC full text (render mirror) — non-gated.
   addCandidate(pdfUrls, europePmc.pdfUrl)
@@ -327,6 +462,12 @@ export async function resolveOaSourcesUncached(
       addCandidate(pdfUrls, u)
     }
   }
+
+  // 5. Tier-2 repository copies (Semantic Scholar, CORE) — resolved concurrently in
+  //    the batch above (no added latency), appended last so they act as the fallback
+  //    when every direct copy above is gated/bot-walled. Matched by exact DOI.
+  addCandidate(pdfUrls, semanticScholarPdfUrl)
+  addCandidate(pdfUrls, corePdfUrl)
 
   // Abstract: Europe PMC → OpenAlex, then preprint-API fallbacks for brand-new
   // papers not yet indexed. Fallbacks only fire when the earlier sources are null.

@@ -84,6 +84,27 @@ All variables are configured in `.env.local` (never committed). This file lists 
 | `NCBI_API_KEY` | Optional | Server | NCBI/PubMed API key (increases rate limits) |
 | `OPENALEX_CONTACT_EMAIL` | Optional | Server | Email polite pool for OpenAlex API |
 | `UNPAYWALL_EMAIL` | Optional | Server | Email for Unpaywall open-access lookups |
+| `CORE_API_KEY` | **Recommended** | Server | CORE (core.ac.uk) key — Tier-2 green-OA locator. See note below. |
+| `SEMANTIC_SCHOLAR_API_KEY` | Optional | Server | Semantic Scholar key — only raises rate limit; the locator works keyless. |
+
+### CORE_API_KEY — open-access PDF download (add this later)
+
+`CORE_API_KEY` powers the Tier-2 open-access fetch in `lib/literature-oa-resolve.ts`
+(`resolveFromCore`). CORE ([core.ac.uk](https://core.ac.uk)) is the largest aggregator of
+open-access papers — it harvests full text from ~10,000 institutional repositories and **hosts
+its own PDF copy** of each. That hosted copy is served from `core.ac.uk/download/...`, which
+**bypasses the publisher's bot-wall** (the Cloudflare/Akamai 403 that makes many open-access-
+*tagged* papers fail to download when opened to read). It is the reliable download path for
+gated/walled OA papers.
+
+- **Without the key:** `resolveFromCore` is a safe no-op (returns nothing); OA download still
+  works for papers that already have a non-gated mirror, but bot-walled OA papers keep failing.
+- **With the key:** the walled cases start downloading via CORE's hosted copy.
+- **Get one (free, ~2 min):** register at <https://core.ac.uk/services/api>, confirm email, paste
+  the token into `CORE_API_KEY=`. Generous free tier (thousands of req/day) — ample for
+  per-paper reading.
+- `SEMANTIC_SCHOLAR_API_KEY` is a separate, optional coverage source that already works keyless;
+  request one at <https://www.semanticscholar.org/product/api> only if you hit rate limits.
 
 ---
 
