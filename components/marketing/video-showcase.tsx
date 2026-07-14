@@ -3,14 +3,7 @@
 import { useState } from "react"
 import Image from "next/image"
 import { motion, AnimatePresence } from "framer-motion"
-import {
-  BookOpen,
-  Database,
-  FolderKanban,
-  LayoutDashboard,
-  Network,
-  TestTube2,
-} from "lucide-react"
+import { BookOpen, Database, Kanban as FolderKanban, SquaresFour as LayoutDashboard, Graph as Network, TestTube as TestTube2 } from "@phosphor-icons/react/ssr"
 import { resolveDemoScreenshot, useStableDemoTheme } from "@/components/marketing/demo-asset"
 import { PretextReveal } from "@/components/ui/fluid-text"
 

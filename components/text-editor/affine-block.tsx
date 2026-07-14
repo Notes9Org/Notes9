@@ -2,7 +2,7 @@
 
 import { useState, useRef, useMemo } from "react"
 import { Button } from "@/components/ui/button"
-import { Bold, Italic, List, ListOrdered, LinkIcon, Code, Heading1, Heading2 } from 'lucide-react'
+import { TextB as Bold, TextItalic as Italic, List, ListNumbers as ListOrdered, Link as LinkIcon, Code, TextHOne as Heading1, TextHTwo as Heading2 } from "@phosphor-icons/react/ssr"
 import { cn } from "@/lib/utils"
 import { sanitizeHtml } from "@/lib/sanitize-html"
 

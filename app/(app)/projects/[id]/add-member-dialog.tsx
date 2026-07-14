@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { Plus, Loader2 } from "lucide-react"
+import { Plus, CircleNotch as Loader2 } from "@phosphor-icons/react/ssr"
 
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"

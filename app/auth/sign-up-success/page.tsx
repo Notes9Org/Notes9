@@ -8,7 +8,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { PageHeading } from "@/components/ui/page-heading"
 import Link from "next/link"
-import { Mail, FlaskConical } from 'lucide-react'
+import { Envelope as Mail, Flask as FlaskConical } from "@phosphor-icons/react/ssr"
 
 export default function SignUpSuccessPage() {
   return (

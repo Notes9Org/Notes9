@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Trash2 } from "lucide-react"
+import { Trash as Trash2 } from "@phosphor-icons/react/ssr"
 
 import { Button } from "@/components/ui/button"
 import {

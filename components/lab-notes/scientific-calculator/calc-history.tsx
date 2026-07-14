@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react"
 import type { CalcHistoryEntry, CalculatorModeId } from "./calc-types"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Copy, CornerDownLeft, Trash2 } from "lucide-react"
+import { Copy, ArrowElbowDownLeft as CornerDownLeft, Trash as Trash2 } from "@phosphor-icons/react/ssr"
 import { cn } from "@/lib/utils"
 
 // ---------------------------------------------------------------------------

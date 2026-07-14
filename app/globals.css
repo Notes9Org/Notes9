@@ -12,14 +12,16 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Tri-font system.
-     - body:    IBM Plex Sans     (long-form, UI labels, controls)
-     - heading: Familjen Grotesk  (every h1-h6 inside the app)
-     - display: IBM Plex Serif    (hero numbers, editorial titles, empty-state headers)
-     Variables come from next/font in app/layout.tsx. */
-  --font-family-body: var(--font-ibm-sans), "IBM Plex Sans", system-ui, sans-serif;
-  --font-family-heading: var(--font-familjen), "Familjen Grotesk", system-ui, sans-serif;
-  --font-family-display: var(--font-ibm-serif), "IBM Plex Serif", ui-serif, Georgia, serif;
+  /* Tri-font system — journal-grounded (Nature/Elsevier/Cell). See docs/UI_UX_REVAMP_PLAN.md §3.1.
+     - body:    Merriweather Sans  (Nature's web UI face; long-form, UI labels, controls, h1-h6)
+     - heading: Merriweather Sans  (headings stay the humanist sans for dense-UI legibility)
+     - display: Source Serif 4     (scientific-publishing serif: page titles, hero numbers, empty states, editor reading)
+     - mono:    IBM Plex Mono      (sequences, sample IDs, counts, measurements)
+     Faces load via the Google Fonts <link> in app/layout.tsx; the legacy var names
+     (--font-ibm-sans etc.) are retained but now resolve to the faces above. */
+  --font-family-body: var(--font-ibm-sans), "Merriweather Sans", system-ui, sans-serif;
+  --font-family-heading: var(--font-familjen), "Merriweather Sans", system-ui, sans-serif;
+  --font-family-display: var(--font-ibm-serif), "Source Serif 4", ui-serif, Georgia, serif;
   --font-size-xs: 0.75rem;
   --font-size-sm: 0.875rem;
   --font-size-base: 1rem;
@@ -65,6 +67,14 @@
   --sidebar-border: #e6ddd1;
   --sidebar-ring: #c88a67;
   --highlight: #f4d65f;
+  /* Entity kind colors — drive the signature kind-ribbon and kind tinting platform-wide. */
+  --kind-project: var(--primary);
+  --kind-experiment: #2563eb;
+  --kind-protocol: #ca8a04;
+  --kind-note: #dc2626;
+  --kind-sample: #0d9488;
+  --kind-paper: #7c3aed;
+  --kind-literature: #4f46e5;
   --n9-accent: #965034;
   --n9-accent-hover: #7e3a1b;
   --n9-accent-light: #fcf2eb;
@@ -75,6 +85,15 @@
   --glass-bg: rgba(255, 253, 250, 0.72);
   --glass-border: rgba(150, 80, 52, 0.14);
   --glass-blur: 14px;
+  /* Sandglass layers: deep blur for hero surfaces, a top edge highlight, a
+     soft sheen wash, and the grain ("sand") intensity. `--glass-grain-img`
+     is the same noise tile with opacity baked in, for surfaces that layer it
+     via background-blend-mode instead of a ::before overlay. */
+  --glass-blur-strong: 22px;
+  --glass-highlight: rgba(255, 255, 255, 0.55);
+  --glass-sheen: rgba(255, 255, 255, 0.28);
+  --glass-grain-opacity: 0.09;
+  --glass-grain-img: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='140'%20height='140'%3E%3Cfilter%20id='n'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.7'%20numOctaves='2'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='saturate'%20values='0'/%3E%3C/filter%3E%3Crect%20width='100%25'%20height='100%25'%20filter='url(%23n)'%20opacity='0.09'/%3E%3C/svg%3E");
   /* ── Catalyst design language (G) ─────────────────────────────────── */
   /* G1 · one spring-like curve + three durations. */
   --n9-ease: cubic-bezier(0.22, 1, 0.36, 1);
@@ -133,6 +152,14 @@
   --sidebar-border: rgba(245, 240, 232, 0.1);
   --sidebar-ring: #b96f48;
   --highlight: #fff59d;
+  /* Entity kind colors — dark theme (lighter for contrast on dark surfaces). */
+  --kind-project: var(--primary);
+  --kind-experiment: #60a5fa;
+  --kind-protocol: #eab308;
+  --kind-note: #f87171;
+  --kind-sample: #2dd4bf;
+  --kind-paper: #a78bfa;
+  --kind-literature: #818cf8;
   --n9-accent: #d4845a;
   --n9-accent-hover: #c07650;
   --n9-accent-light: rgba(212, 132, 90, 0.1);
@@ -142,6 +169,12 @@
   --glass-bg: rgba(34, 29, 24, 0.66);
   --glass-border: rgba(245, 240, 232, 0.12);
   --glass-blur: 14px;
+  /* Sandglass layers — dark: weaker highlight/sheen, slightly stronger grain. */
+  --glass-blur-strong: 22px;
+  --glass-highlight: rgba(255, 255, 255, 0.07);
+  --glass-sheen: rgba(255, 255, 255, 0.05);
+  --glass-grain-opacity: 0.14;
+  --glass-grain-img: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='140'%20height='140'%3E%3Cfilter%20id='n'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.7'%20numOctaves='2'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='saturate'%20values='0'/%3E%3C/filter%3E%3Crect%20width='100%25'%20height='100%25'%20filter='url(%23n)'%20opacity='0.14'/%3E%3C/svg%3E");
   /* G2 · elevation scale — deeper shadows for dark. */
   --n9-elev-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 1px rgba(0, 0, 0, 0.3);
   --n9-elev-2: 0 1px 2px rgba(0, 0, 0, 0.4), 0 14px 34px -14px rgba(0, 0, 0, 0.6);
@@ -149,18 +182,19 @@
 }
 
 @theme inline {
-  /* Tailwind tokens.
-     - font-sans    → IBM Plex Sans     (body default)
-     - font-heading → Familjen Grotesk  (use .font-heading utility on H1-H6)
-     - font-serif   → IBM Plex Serif    (display face — exposed as `serif` so
-                                          existing `font-serif` callsites in
-                                          marketing pick it up automatically)
-     - font-display → IBM Plex Serif    (explicit alias for product surfaces) */
-  --font-sans: var(--font-ibm-sans), "IBM Plex Sans", system-ui, sans-serif;
-  --font-mono: var(--font-jetbrains-mono), 'Monaco', 'Courier New', monospace;
-  --font-serif: var(--font-ibm-serif), "IBM Plex Serif", ui-serif, Georgia, serif;
-  --font-display: var(--font-ibm-serif), "IBM Plex Serif", ui-serif, Georgia, serif;
-  --font-heading: var(--font-familjen), "Familjen Grotesk", system-ui, sans-serif;
+  /* Tailwind tokens (journal-grounded — see docs/UI_UX_REVAMP_PLAN.md §3.1).
+     - font-sans    → Merriweather Sans  (body default)
+     - font-heading → Merriweather Sans  (.font-heading utility)
+     - font-serif   → Source Serif 4     (display face — exposed as `serif` so
+                                          existing `font-serif` callsites pick it up.
+                                          NOTE: marketing font-serif text now renders
+                                          Source Serif 4; review in the marketing track.)
+     - font-display → Source Serif 4     (explicit alias for product surfaces) */
+  --font-sans: var(--font-ibm-sans), "Merriweather Sans", system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), "IBM Plex Mono", 'Monaco', 'Courier New', monospace;
+  --font-serif: var(--font-ibm-serif), "Source Serif 4", ui-serif, Georgia, serif;
+  --font-display: var(--font-ibm-serif), "Source Serif 4", ui-serif, Georgia, serif;
+  --font-heading: var(--font-familjen), "Merriweather Sans", system-ui, sans-serif;
 
   /* Sub-xs font scale for dense badges, hotkey labels, sequence viewer ticks.
      Use these tokens instead of arbitrary pixel values in className strings. */
@@ -400,23 +434,49 @@
   background: transparent !important;
 }
 
-/* Custom scrollbar styling */
+/* ── Ghost scrollbars (global) ─────────────────────────────────────────────
+   The platform scroll pattern: no permanent track/gutter chrome — a thin
+   (6px) pill thumb that is invisible at rest and fades in when the scroll
+   container is hovered or focused. To scroll with a pointer you're hovering
+   the container, so the affordance appears exactly when it's actionable;
+   compact regions (glass rails) add edge-fade overflow hints on top
+   (SideRailBody). Standard properties cover Chrome 121+/Firefox; the
+   -webkit rules cover Safari. `.n9-scrollbar-ghost` opts a container in
+   explicitly — it matches these defaults and survives local overrides. */
+* {
+  scrollbar-width: thin; /* Firefox / Chrome 121+ */
+  scrollbar-color: transparent transparent;
+}
+*:hover,
+*:focus-within {
+  scrollbar-color: color-mix(in srgb, var(--muted-foreground) 35%, transparent) transparent;
+}
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
-
 ::-webkit-scrollbar-track {
-  @apply bg-background;
+  background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
-  @apply bg-muted;
-  border-radius: 6px;
+  background: transparent;
+  border-radius: 9999px;
+}
+:hover::-webkit-scrollbar-thumb,
+:focus-within::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted-foreground) 35%, transparent);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--muted-foreground) 55%, transparent);
 }
 
-::-webkit-scrollbar-thumb:hover {
-  @apply bg-muted-foreground/50;
+.n9-scrollbar-ghost {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.n9-scrollbar-ghost:hover,
+.n9-scrollbar-ghost:focus-within {
+  scrollbar-color: color-mix(in srgb, var(--muted-foreground) 35%, transparent) transparent;
 }
 
 /* Ensure proper color scheme detection */
@@ -1220,6 +1280,93 @@ body > [data-radix-popper-content-wrapper] {
   animation: flow-pipeline 1.6s linear infinite;
 }
 
+/* Catalyst neon ring — a thin accent arc orbiting the OUTLINE of AI input
+   surfaces (section composer, right-sidebar composer, Ask Catalyst button).
+   The ::after overlay is masked down to a 1.5px border band, so only the
+   outline moves — the glass fill and inner highlight underneath stay put.
+   Without @property support (Safari <16.4) the angle can't interpolate, so
+   the arc simply sits still on the existing static Catalyst border. */
+@property --n9-orbit {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+@keyframes n9-orbit-spin {
+  to { --n9-orbit: 360deg; }
+}
+
+/* Signals (dashboard activity briefing) — tiny equalizer bars breathing in
+   the badge: reads as "live lab activity" without a literal loading spinner. */
+@keyframes n9-eq {
+  0%, 100% { transform: scaleY(0.35); }
+  50%      { transform: scaleY(1); }
+}
+.n9-eq-bar {
+  transform-origin: bottom;
+  animation: n9-eq 1.6s ease-in-out infinite;
+}
+.n9-neon-ring {
+  position: relative;
+}
+
+/* Green "create" identity — the same sage pill as the sidebar's New button,
+   so every New/plus action across list pages reads as one affordance.
+   Unlayered on purpose: it must win over button-variant utility classes. */
+.n9-new-btn {
+  background-color: #e4ecd9;
+  color: #4f5f42;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.04);
+}
+.n9-new-btn:hover {
+  background-color: #d6e3c7;
+  color: #3d4a35;
+}
+.dark .n9-new-btn {
+  background-color: #3d4a35;
+  color: #e4ecd9;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
+}
+.dark .n9-new-btn:hover {
+  background-color: #4f5f42;
+  color: #e4ecd9;
+}
+.n9-neon-ring::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  /* Slim band: two soft, symmetric brand-accent arcs drifting slowly
+     around the outline — a quiet "alive" signal, not a loading spinner.
+     Long transparent gaps + low-opacity shoulders keep it refined. */
+  padding: 1.5px;
+  background: conic-gradient(
+    from var(--n9-orbit),
+    transparent 0deg,
+    color-mix(in srgb, var(--n9-accent) 40%, transparent) 55deg,
+    color-mix(in srgb, var(--n9-accent) 85%, white) 90deg,
+    color-mix(in srgb, var(--n9-accent) 40%, transparent) 125deg,
+    transparent 180deg,
+    color-mix(in srgb, var(--n9-accent) 30%, transparent) 235deg,
+    color-mix(in srgb, var(--n9-accent) 65%, white) 270deg,
+    color-mix(in srgb, var(--n9-accent) 30%, transparent) 305deg,
+    transparent 360deg
+  );
+  opacity: 0.8;
+  /* The glow travels WITH the arcs (drop-shadow follows the masked shape). */
+  filter: drop-shadow(0 0 5px var(--n9-accent-glow));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: n9-orbit-spin 8s linear infinite;
+  transition: opacity 300ms ease;
+}
+/* Typing = full presence; idle stays understated. */
+.n9-neon-ring:focus-within::after {
+  opacity: 1;
+}
+
 /* Page transition — soft fade + tiny lift when the route changes. Driven by
    components/layout/page-transition.tsx. A slow, refined ease so route changes
    (e.g. maximising Catalyst to its full page) settle smoothly; two GPU-cheap
@@ -1262,12 +1409,18 @@ body > [data-radix-popper-content-wrapper] {
   .tour-mascot-animate,
   .rag-chunk-highlight,
   .pdf-rag-highlight,
+  .n9-neon-ring::after,
+  .n9-eq-bar,
   .ai-shimmer::after {
     animation: none !important;
   }
+  .n9-eq-bar {
+    transform: none !important;
+  }
   /* Reduced motion: drop the shimmer overlay entirely rather than freeze it
      mid-sweep (a static diagonal wash reads as a rendering glitch). */
-  .ai-shimmer::after {
+  .ai-shimmer::after,
+  .n9-neon-ring::after {
     display: none !important;
   }
   .notes9-md--streaming > p:last-child::after,
@@ -1528,6 +1681,11 @@ body > [data-radix-popper-content-wrapper] {
 /* ------------------------------------------------------------------ */
 .glass-panel {
   background-color: var(--glass-bg);
+  /* Sandglass grain, blended into the fill (background-blend-mode instead of
+     a ::before overlay so positioned/shadowed consumers are unaffected). */
+  background-image: var(--glass-grain-img);
+  background-size: 140px 140px;
+  background-blend-mode: overlay;
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
   backdrop-filter: blur(var(--glass-blur)) saturate(140%);
   border: 1px solid var(--glass-border);
@@ -1573,6 +1731,9 @@ body > [data-radix-popper-content-wrapper] {
 /* G4 · control-grade glass (popovers, menus, floating chips). */
 .n9-glass {
   background-color: var(--glass-bg);
+  background-image: var(--glass-grain-img);
+  background-size: 140px 140px;
+  background-blend-mode: overlay;
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
   backdrop-filter: blur(var(--glass-blur)) saturate(150%);
   border: 1px solid var(--glass-border);
@@ -1587,27 +1748,128 @@ body > [data-radix-popper-content-wrapper] {
   box-shadow: 0 6px 20px -8px var(--n9-accent-glow);
 }
 
-/* 11.1 · unified composer deck — one elevated glass shell (hero + docked). */
-.n9-composer {
-  border-radius: 1rem;
-  border: 1px solid var(--glass-border);
-  background-color: var(--glass-bg);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
-  backdrop-filter: blur(var(--glass-blur)) saturate(150%);
-  box-shadow: var(--n9-elev-2);
-  transition:
-    border-color var(--n9-dur-base) var(--n9-ease),
-    box-shadow var(--n9-dur-base) var(--n9-ease);
-}
-.n9-composer:focus-within {
-  border-color: color-mix(in srgb, var(--n9-accent) 42%, var(--border));
-  box-shadow: var(--n9-elev-2), 0 0 0 3px color-mix(in srgb, var(--n9-accent) 14%, transparent);
+/* 11.1 · unified composer deck — THE glass shell for every chat input
+   (dashboard/list-page hero, docked Catalyst drawer, popup chat, paper AI).
+   Readability rule: translucent glass at rest; while focused the surface
+   solidifies toward the card color so typed text always sits on a stable,
+   high-contrast background. Lives in @layer components so call-site
+   utilities (e.g. drag-over highlights) can override it. */
+@layer components {
+  /* Sand grain — a static fractal-noise wash that gives glass surfaces the
+     coarse "frosted sand" texture. Opt-in via .n9-grain, baked into
+     .n9-composer. Kept at token-driven low opacity so text stays perfectly
+     readable (it reads as paper tooth, not visual noise). */
+  .n9-grain {
+    position: relative;
+  }
+  .n9-grain::before,
+  .n9-composer::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='140'%20height='140'%3E%3Cfilter%20id='n'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.7'%20numOctaves='2'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='saturate'%20values='0'/%3E%3C/filter%3E%3Crect%20width='100%25'%20height='100%25'%20filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 140px 140px;
+    opacity: var(--glass-grain-opacity);
+    mix-blend-mode: overlay;
+  }
+
+  /* Sheen sweep — a one-shot diagonal light streak on hover. Pointer devices
+     only; removed entirely under reduced motion (see G7 block). */
+  .n9-sheen {
+    position: relative;
+    overflow: hidden;
+  }
+  .n9-sheen::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(115deg, transparent 32%, rgba(255, 255, 255, 0.25) 48%, transparent 62%);
+    transform: translateX(-130%);
+  }
+  @media (hover: hover) {
+    .n9-sheen:hover::after {
+      transform: translateX(130%);
+      transition: transform 600ms var(--n9-ease);
+    }
+  }
+
+  .n9-composer {
+    position: relative;
+    border-radius: 1rem;
+    border: 1px solid var(--glass-border);
+    background-color: var(--glass-bg);
+    /* Sheen wash: a soft light sweep across the top of the pane. */
+    background-image: linear-gradient(to bottom, var(--glass-sheen), transparent 42%);
+    -webkit-backdrop-filter: blur(var(--glass-blur-strong)) saturate(160%);
+    backdrop-filter: blur(var(--glass-blur-strong)) saturate(160%);
+    /* Inner top highlight = the polished glass edge; then ambient elevation. */
+    box-shadow:
+      inset 0 1px 0 var(--glass-highlight),
+      var(--n9-elev-2);
+    transition:
+      border-color var(--n9-dur-base) var(--n9-ease),
+      background-color var(--n9-dur-base) var(--n9-ease),
+      box-shadow var(--n9-dur-base) var(--n9-ease);
+  }
+  .n9-composer:focus-within {
+    /* Solidify while typing — input text always sits on a stable surface. */
+    background-color: color-mix(in srgb, var(--card) 90%, transparent);
+    border-color: color-mix(in srgb, var(--n9-accent) 42%, var(--border));
+    box-shadow:
+      inset 0 1px 0 var(--glass-highlight),
+      var(--n9-elev-2),
+      0 0 0 3px color-mix(in srgb, var(--n9-accent) 14%, transparent);
+  }
+  /* AI identity modifier — the Catalyst signature: sienna ring + apricot glow. */
+  .n9-composer-ai {
+    border-color: color-mix(in srgb, var(--primary) 25%, var(--glass-border));
+    box-shadow:
+      inset 0 1px 0 var(--glass-highlight),
+      0 1px 2px var(--n9-accent-glow),
+      0 8px 28px -8px var(--n9-accent-glow);
+  }
+  .n9-composer-ai:focus-within {
+    border-color: color-mix(in srgb, var(--primary) 50%, var(--glass-border));
+    box-shadow:
+      inset 0 1px 0 var(--glass-highlight),
+      0 8px 28px -8px var(--n9-accent-glow),
+      0 0 0 3px var(--n9-accent-glow);
+  }
 }
 
 @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
   .n9-glass,
   .n9-composer {
     background-color: var(--card);
+  }
+}
+
+/* Sandglass readability fallbacks (GLASS_REVAMP_PLAN §1.4): users who opt out
+   of transparency, or ask for more contrast, get near-opaque panes with no
+   grain or sheen — the layout and chrome stay identical, only the frost goes. */
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  :root {
+    --glass-bg: rgba(255, 253, 250, 0.97);
+    --glass-sheen: transparent;
+    --glass-grain-opacity: 0;
+    --glass-grain-img: none;
+  }
+  .dark {
+    --glass-bg: rgba(34, 29, 24, 0.97);
+    --glass-sheen: transparent;
+    --glass-grain-opacity: 0;
+    --glass-grain-img: none;
+  }
+}
+@media (prefers-contrast: more) {
+  :root {
+    --glass-border: rgba(150, 80, 52, 0.5);
+  }
+  .dark {
+    --glass-border: rgba(245, 240, 232, 0.45);
   }
 }
 
@@ -1618,6 +1880,9 @@ body > [data-radix-popper-content-wrapper] {
   }
   .n9-press:active {
     transform: none;
+  }
+  .n9-sheen::after {
+    display: none;
   }
 }
 

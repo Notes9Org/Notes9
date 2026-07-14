@@ -12,6 +12,15 @@ const cardVariants = cva(
         outline: 'border',
         filled: 'bg-muted/50 border-transparent',
         ghost: 'border-transparent',
+        // Clickable cards: token-driven hover lift + elevation, reduced-motion-safe.
+        interactive:
+          'n9-sheen border shadow-sm cursor-pointer transition-[transform,box-shadow,border-color] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-0.5 hover:shadow-md hover:border-border focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 motion-reduce:transition-none motion-reduce:hover:translate-y-0',
+        // Sandglass panel (G1): translucent grained glass — for widgets and
+        // cards that float on the canvas, not for long-form reading surfaces.
+        // Grain rides background-blend-mode so it composes with the ::before
+        // kind-ribbon.
+        glass:
+          'border border-[color:var(--glass-border)] bg-[color:var(--glass-bg)] [background-image:var(--glass-grain-img)] [background-size:140px_140px] [background-blend-mode:overlay] backdrop-blur-md shadow-sm',
       },
     },
     defaultVariants: {
@@ -23,12 +32,24 @@ const cardVariants = cva(
 function Card({
   className,
   variant,
+  ribbon,
+  style,
   ...props
-}: React.ComponentProps<'div'> & VariantProps<typeof cardVariants>) {
+}: React.ComponentProps<'div'> &
+  VariantProps<typeof cardVariants> & {
+    /** Signature kind-ribbon: a CSS color for a 3px left accent bar (entity identity). */
+    ribbon?: string
+  }) {
   return (
     <div
       data-slot="card"
-      className={cn(cardVariants({ variant }), className)}
+      className={cn(
+        cardVariants({ variant }),
+        ribbon &&
+          'relative overflow-hidden before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-[var(--card-ribbon)] before:content-[""]',
+        className,
+      )}
+      style={ribbon ? { ...style, ['--card-ribbon' as string]: ribbon } : style}
       {...props}
     />
   )

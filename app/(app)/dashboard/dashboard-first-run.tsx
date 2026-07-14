@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { FlaskConical, NotebookPen, TestTube, ClipboardList, ArrowRight } from "lucide-react"
+import { Flask as FlaskConical, NotePencil as NotebookPen, TestTube, ClipboardText as ClipboardList, ArrowRight } from "@phosphor-icons/react/ssr"
 import { Button } from "@/components/ui/button"
 import {
   Empty,

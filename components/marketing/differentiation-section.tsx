@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { motion, useMotionTemplate, useMotionValue } from "framer-motion"
-import { ArrowRight, CheckCircle2 } from "lucide-react"
+import { ArrowRight, CheckCircle as CheckCircle2 } from "@phosphor-icons/react/ssr"
 import { Button } from "@/components/ui/button"
 
 const points = [

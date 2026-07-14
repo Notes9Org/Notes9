@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, Loader2, RefreshCw } from 'lucide-react';
+import { Check, CircleNotch as Loader2, ArrowsClockwise as RefreshCw } from "@phosphor-icons/react/ssr";
 import { cn } from '@/lib/utils';
 import { MarkdownRenderer } from './markdown-renderer';
 import { AgentToolCards } from '@/components/catalyst/agent-tool-cards';

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState, useTransition, type KeyboardEvent } from "react"
-import { ChevronLeft, ChevronRight, Clock, Pencil, Plus, Trash2, X } from "lucide-react"
+import { CaretLeft as ChevronLeft, CaretRight as ChevronRight, Clock, PencilSimple as Pencil, Plus, Trash as Trash2, X } from "@phosphor-icons/react/ssr"
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {

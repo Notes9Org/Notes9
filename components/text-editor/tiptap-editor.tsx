@@ -39,64 +39,7 @@ import { sanitizeHtml } from "@/lib/sanitize-html"
 import { importFileToEditorHtml } from "@/lib/import-file-to-html"
 import type { SearchPaper } from "@/types/paper-search"
 import { createClient } from "@/lib/supabase/client"
-import {
-  Bold,
-  Italic,
-  LayoutGrid,
-  List,
-  ListOrdered,
-  ExternalLink,
-  ListChecks,
-  Undo,
-  Redo,
-  Link2,
-  Mic,
-  Camera,
-  BookOpen,
-  Quote,
-  Sheet,
-  Table as TableIcon,
-  FileText,
-  FileInput,
-  Sparkles,
-  WandSparkles,
-  Loader2,
-  Globe,
-  FlaskConical,
-  Sigma,
-  Calculator,
-  Underline as UnderlineIcon,
-  AlignLeft,
-  AlignCenter,
-  AlignRight,
-  AlignJustify,
-  Type,
-  MessageSquarePlus,
-  IndentDecrease,
-  IndentIncrease,
-  ChevronDown,
-  ArrowUp,
-  ArrowDown,
-  Trash2,
-  X,
-  Columns,
-  Rows,
-  MoveVertical,
-  SeparatorHorizontal,
-  ScrollText,
-  Ruler,
-  Maximize2,
-  Minimize2,
-  Maximize,
-  Minimize,
-  MessageSquare,
-  Plus,
-  Pipette,
-  Paintbrush,
-  ImagePlus,
-  ArrowRight,
-  Check,
-} from "lucide-react"
+import { TextB as Bold, TextItalic as Italic, SquaresFour as LayoutGrid, List, ListNumbers as ListOrdered, ArrowSquareOut as ExternalLink, ListChecks, ArrowArcLeft as Undo, ArrowArcRight as Redo, LinkSimple as Link2, Microphone as Mic, Camera, BookOpen, Quotes as Quote, Table as Sheet, Table as TableIcon, FileText, FileArrowDown as FileInput, Sparkle as Sparkles, MagicWand as WandSparkles, CircleNotch as Loader2, Globe, Flask as FlaskConical, Sigma, Calculator, TextUnderline as UnderlineIcon, TextAlignLeft as AlignLeft, TextAlignCenter as AlignCenter, TextAlignRight as AlignRight, TextAlignJustify as AlignJustify, TextT as Type, ChatDots as MessageSquarePlus, TextOutdent as IndentDecrease, TextIndent as IndentIncrease, CaretDown as ChevronDown, ArrowUp, ArrowDown, Trash as Trash2, X, Columns, Rows, ArrowsVertical as MoveVertical, Minus as SeparatorHorizontal, Scroll as ScrollText, Ruler, ArrowsOut as Maximize2, ArrowsIn as Minimize2, ArrowsOut as Maximize, ArrowsIn as Minimize, Chat as MessageSquare, Plus, Eyedropper as Pipette, PaintBrush as Paintbrush, ImageSquare as ImagePlus, ArrowRight, Check } from "@phosphor-icons/react/ssr"
 import { Extension, Mark, mergeAttributes } from "@tiptap/core"
 import { Plugin, PluginKey } from "@tiptap/pm/state"
 import { TextSelection } from "@tiptap/pm/state"
@@ -124,12 +67,15 @@ import "@/styles/inline-diff.css"
 // .docx file — load it dynamically inside `insertDocxFromFile` instead of
 // bundling it into the initial editor chunk.
 import { toast } from "sonner"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
+// Hover tooltips are intentionally DISABLED on the editor toolbar — the
+// hover/focus popups rendered glitchy over this surface (user request,
+// 2026-07). No-op stand-ins keep the many call sites unchanged while never
+// showing anything on hover or focus; buttons keep their aria-labels.
+type TooltipStubProps = { children?: React.ReactNode; [prop: string]: unknown }
+const TooltipProvider = ({ children }: TooltipStubProps) => <>{children}</>
+const Tooltip = ({ children }: TooltipStubProps) => <>{children}</>
+const TooltipTrigger = ({ children }: TooltipStubProps) => <>{children}</>
+const TooltipContent = (_props: TooltipStubProps) => null
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -644,8 +590,8 @@ function CommentSidebar({ editor, open, onClose }: { editor: any; open: boolean;
   return (
     <div className="absolute right-0 top-0 z-50 h-full w-72 max-w-full p-2 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-right-4 motion-safe:duration-300">
       {/* Floating glass card — matches the AI chat-history sidebar. */}
-      <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-[color:var(--glass-border)] bg-sidebar shadow-[0_10px_34px_-18px_rgba(20,14,8,0.4)] dark:shadow-[0_12px_38px_-16px_rgba(0,0,0,0.6)]">
-        <div className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-[color:var(--glass-border)] px-3">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-[0_10px_34px_-18px_rgba(20,14,8,0.4)] dark:shadow-[0_12px_38px_-16px_rgba(0,0,0,0.6)]">
+        <div className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-border px-3">
           <span className="flex items-center gap-1.5 text-[0.7rem] font-semibold uppercase tracking-wider text-sidebar-foreground/70">
             <MessageSquare className="h-3.5 w-3.5" /> Comments
           </span>
@@ -660,7 +606,7 @@ function CommentSidebar({ editor, open, onClose }: { editor: any; open: boolean;
             comments.map((comment) => (
               <div
                 key={`${comment.id}-${comment.pos}`}
-                className="group cursor-pointer rounded-lg border border-border/50 bg-card/60 p-2.5 transition-colors hover:border-primary/40 hover:bg-sidebar-accent/40"
+                className="group cursor-pointer rounded-lg border border-border bg-card p-2.5 transition-colors hover:border-primary/40 hover:bg-sidebar-accent"
                 onClick={() => {
                   if (comment.kind === "image") {
                     editor.chain().focus().setNodeSelection(comment.pos).run()
@@ -1884,9 +1830,12 @@ export function TiptapEditor({
       return
     }
 
-    // SidebarInset's right edge is where the right sidebar begins, and its left edge
-    // is where the left sidebar ends. The fullscreen shell spans exactly this inset
-    // area, covering the header bar but leaving both sidebars visible (or space for them).
+    // Full height (covers the header bar), horizontally bounded by
+    // SidebarInset: the collapsed left icon rail stays visible for navigation
+    // (the sidebar auto-collapses on fullscreen entry, and the ResizeObserver
+    // below re-syncs as it animates), and an open right sidebar (Catalyst)
+    // stays usable. With the rail collapsed and Catalyst closed this is
+    // effectively the whole page minus the 48px rail.
     const insetRect = sidebarInset.getBoundingClientRect()
     setEditorFullscreenStyle({
       position: "fixed",
@@ -1945,15 +1894,116 @@ export function TiptapEditor({
     // Ignore error if not inside a SidebarProvider
   }
 
+  // Collapse the left sidebar ONCE when entering fullscreen (maximize canvas),
+  // but let the user reopen it from the icon rail — the shell's ResizeObserver
+  // tracks SidebarInset and slides the editor over as the sidebar expands.
+  // (Previously this re-collapsed on every state change, making the sidebar
+  // impossible to open in fullscreen.)
+  const collapsedForFullscreenRef = useRef(false)
   useEffect(() => {
-    if (editorRegionFullscreen && sidebarContext?.state === "expanded") {
-      sidebarContext.setOpen(false)
+    if (!editorRegionFullscreen) {
+      collapsedForFullscreenRef.current = false
+      return
+    }
+    if (!collapsedForFullscreenRef.current) {
+      collapsedForFullscreenRef.current = true
+      if (sidebarContext?.state === "expanded") sidebarContext.setOpen(false)
     }
   }, [editorRegionFullscreen, sidebarContext])
 
   useEffect(() => {
     onEditorFullscreenChange?.(editorRegionFullscreen)
   }, [editorRegionFullscreen, onEditorFullscreenChange])
+
+  /** Ancestors with `transform`, `filter` or `backdrop-filter` (glass panels,
+   * motion wrappers) establish a CSS containing block, which re-bases
+   * `position: fixed` — the "fullscreen" shell then spans that card instead of
+   * the viewport, and its top-right controls (exit fullscreen) fall off-screen.
+   * While fullscreen, flatten those properties on the ancestor chain; the shell
+   * covers the whole page, so the visual change is invisible. Everything is
+   * restored verbatim on exit. */
+  useLayoutEffect(() => {
+    if (!editorRegionFullscreen) return
+    const el = fullscreenWorkspaceRef?.current ?? editorShellRef.current
+    if (!el) return
+
+    const neutralized: { node: HTMLElement; props: [string, string][] }[] = []
+    let node = el.parentElement
+    while (node && node !== document.body) {
+      const cs = getComputedStyle(node)
+      const props: [string, string][] = []
+      if (cs.transform !== "none") props.push(["transform", node.style.getPropertyValue("transform")])
+      if (cs.filter && cs.filter !== "none") props.push(["filter", node.style.getPropertyValue("filter")])
+      const backdrop =
+        cs.getPropertyValue("backdrop-filter") || cs.getPropertyValue("-webkit-backdrop-filter")
+      if (backdrop && backdrop !== "none") {
+        props.push(["backdrop-filter", node.style.getPropertyValue("backdrop-filter")])
+        props.push(["-webkit-backdrop-filter", node.style.getPropertyValue("-webkit-backdrop-filter")])
+      }
+      if (/transform|filter|perspective/.test(cs.willChange)) {
+        props.push(["will-change", node.style.getPropertyValue("will-change")])
+      }
+      if (cs.perspective !== "none") props.push(["perspective", node.style.getPropertyValue("perspective")])
+      // `contain: layout/paint/strict/content` and `content-visibility` also
+      // create containing blocks for fixed descendants.
+      if (/layout|paint|strict|content/.test(cs.contain)) {
+        props.push(["contain", node.style.getPropertyValue("contain")])
+      }
+      const cv = cs.getPropertyValue("content-visibility")
+      if (cv && cv !== "visible") {
+        props.push(["content-visibility", node.style.getPropertyValue("content-visibility")])
+      }
+      // A running OR fill-mode-retained animation of transform-like properties
+      // makes the element a containing block even at computed transform:none
+      // (spec: treated as will-change:transform) — invisible to the checks
+      // above. tw-animate's `animate-in ... forwards` on tab panels did this.
+      if (cs.animationName && cs.animationName !== "none") {
+        props.push(["animation", node.style.getPropertyValue("animation")])
+      }
+      // STACKING contexts on the ancestor chain cap the shell's z-index inside
+      // them — sticky page chrome (experiment header, tabs bar, z-10..z-50)
+      // then paints OVER the "fullscreen" editor. Flatten them so the shell's
+      // z-130 competes at the root and genuinely tops every layer. All of this
+      // sits under the fullscreen shell, so the temporary change is invisible.
+      if (cs.zIndex !== "auto") {
+        props.push(["z-index", node.style.getPropertyValue("z-index")])
+      }
+      if (parseFloat(cs.opacity) < 1) {
+        props.push(["opacity", node.style.getPropertyValue("opacity")])
+      }
+      if (cs.isolation === "isolate") {
+        props.push(["isolation", node.style.getPropertyValue("isolation")])
+      }
+      if (cs.mixBlendMode && cs.mixBlendMode !== "normal") {
+        props.push(["mix-blend-mode", node.style.getPropertyValue("mix-blend-mode")])
+      }
+      if (props.length) {
+        const NEUTRAL_VALUES: Record<string, string> = {
+          "will-change": "auto",
+          "content-visibility": "visible",
+          "z-index": "auto",
+          opacity: "1",
+          isolation: "auto",
+          "mix-blend-mode": "normal",
+          animation: "none",
+        }
+        for (const [prop] of props) {
+          node.style.setProperty(prop, NEUTRAL_VALUES[prop] ?? "none", "important")
+        }
+        neutralized.push({ node, props })
+      }
+      node = node.parentElement
+    }
+
+    return () => {
+      for (const { node: n, props } of neutralized) {
+        for (const [prop, original] of props) {
+          if (original) n.style.setProperty(prop, original)
+          else n.style.removeProperty(prop)
+        }
+      }
+    }
+  }, [editorRegionFullscreen, fullscreenWorkspaceRef])
 
   /** Apply fixed bounds to workspace shell or editor card (not both). */
   useLayoutEffect(() => {
@@ -1998,6 +2048,23 @@ export function TiptapEditor({
       if (s.width != null) el.style.width = String(s.width)
       if (s.height != null) el.style.height = String(s.height)
     }
+    // Catch-all for any containing block the neutralizer missed: measure where
+    // the shell actually landed and shift by the drift, so (0,0) is ALWAYS the
+    // viewport corner — covering the app header — never a card's corner.
+    // Only for plain-px coords (the desktop path); the mobile fallback uses
+    // env() safe-area expressions we must not fight.
+    const isPx = (v: unknown): v is string =>
+      typeof v === "string" && /^-?\d+(\.\d+)?px$/.test(v)
+    if (isPx(s.top) && isPx(s.left)) {
+      const rect = el.getBoundingClientRect()
+      const wantTop = parseFloat(s.top)
+      const wantLeft = parseFloat(s.left)
+      const driftTop = rect.top - wantTop
+      const driftLeft = rect.left - wantLeft
+      if (Math.abs(driftTop) > 1) el.style.top = `${wantTop - driftTop}px`
+      if (Math.abs(driftLeft) > 1) el.style.left = `${wantLeft - driftLeft}px`
+    }
+
     el.setAttribute("data-n9-editor-fullscreen", "")
     return reset
   }, [editorRegionFullscreen, editorFullscreenStyle, fullscreenWorkspaceRef])
@@ -2312,6 +2379,24 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
       if (commentsToggleRef) commentsToggleRef.current = null
     }
   }, [commentsToggleRef])
+  // The comments sidebar and the citation sidebar are both right-side overlays,
+  // so they must be mutually exclusive or they overlap. Rather than patch every
+  // open path (the comments toggle + the several citation-open call sites), this
+  // single guard enforces the invariant: when both end up open, keep the one the
+  // user just opened and close the one that was already open.
+  const prevRightPanelsRef = useRef({ comments: false, citation: false })
+  useEffect(() => {
+    if (commentsSidebarOpen && citationModalOpen) {
+      if (prevRightPanelsRef.current.comments) {
+        // comments was already open → the citation sidebar is the new one; close comments.
+        setCommentsSidebarOpen(false)
+      } else {
+        // comments just opened (or both opened at once) → close the citation sidebar.
+        setCitationModalOpen(false)
+      }
+    }
+    prevRightPanelsRef.current = { comments: commentsSidebarOpen, citation: citationModalOpen }
+  }, [commentsSidebarOpen, citationModalOpen])
   /* State merge: keeping activeCommentData from origin */
   const [activeCommentData, setActiveCommentData] = useState<{ author: string; content: string; createdAt: number; id: string; rect: DOMRect } | null>(null)
   const [, setToolbarSyncTick] = useState(0)
@@ -5794,7 +5879,11 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
             {/* Row 1 (merged surfaces only): document title + actions on their own full-width line */}
             {toolbarMergedLayout && (
               <div className="flex min-w-0 items-center gap-2">
-                <div className="flex min-w-0 flex-1 items-center gap-0.5 sm:gap-1">
+                {/* overflow-x-auto: a wide leading slot (note title + actions)
+                    must scroll, not push the trailing cluster — with the
+                    fullscreen toggle in it — past the shell's overflow-hidden
+                    right edge, where it was unreachable in fullscreen. */}
+                <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto hide-scrollbar sm:gap-1">
                   {leadingToolbarSlot}
                   {showFullscreenDocTitleInToolbar && renderFullscreenDocumentTitle("toolbar")}
                 </div>
@@ -6077,7 +6166,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
               the document reflows by the live panel width (set above). */}
           <div
             className={cn(
-              "absolute bottom-2 right-2 top-2 z-50 flex max-w-full flex-col overflow-hidden rounded-2xl border border-[color:var(--glass-border)] bg-sidebar shadow-[0_10px_34px_-18px_rgba(20,14,8,0.4)] dark:shadow-[0_12px_38px_-16px_rgba(0,0,0,0.6)]",
+              "absolute bottom-2 right-2 top-2 z-50 flex max-w-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-[0_10px_34px_-18px_rgba(20,14,8,0.4)] dark:shadow-[0_12px_38px_-16px_rgba(0,0,0,0.6)]",
               !citationSidebar.isResizing && "transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
               citationModalOpen ? "translate-x-0" : "pointer-events-none translate-x-full",
             )}
@@ -6094,7 +6183,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
 
             <TooltipProvider delayDuration={300}>
               {/* Header: source tabs · density toggle + close (all icon buttons) */}
-              <div className="flex items-center justify-between gap-1 border-b border-[color:var(--glass-border)] py-1.5 pl-2.5 pr-1.5">
+              <div className="flex items-center justify-between gap-1 border-b border-border py-1.5 pl-2.5 pr-1.5">
                 <div className="flex items-center gap-0.5">
                   <Tooltip>
                     <TooltipTrigger asChild>

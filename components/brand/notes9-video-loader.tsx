@@ -1,18 +1,7 @@
 "use client"
 
 import { useEffect, useState, type ReactNode } from "react"
-import {
-  BookOpen,
-  ClipboardList,
-  FlaskConical,
-  Microscope,
-  Network,
-  NotebookPen,
-  ScrollText,
-  Search,
-  Sparkles,
-  TestTube2,
-} from "lucide-react"
+import { BookOpen, ClipboardText as ClipboardList, Flask as FlaskConical, Microscope, Graph as Network, NotePencil as NotebookPen, Scroll as ScrollText, MagnifyingGlass as Search, Sparkle as Sparkles, TestTube as TestTube2 } from "@phosphor-icons/react/ssr"
 import { IceMascot } from "@/components/ui/ice-mascot"
 import { cn } from "@/lib/utils"
 
@@ -23,6 +12,7 @@ export type Notes9LoaderVariant =
   | "search"
   | "projects"
   | "experiments"
+  | "data"
   | "samples"
   | "equipment"
   | "notes"
@@ -468,7 +458,9 @@ export function Notes9VideoLoader({
       return <LiteratureScene compact={sceneCompact} horizontal={horizontal} inline={inline} />
     if (variant === "search") return <SearchScene compact={sceneCompact} horizontal={horizontal} inline={inline} />
     if (variant === "projects") return <ProjectsScene compact={sceneCompact} horizontal={horizontal} inline={inline} />
-    if (variant === "experiments") return <ExperimentsScene compact={sceneCompact} horizontal={horizontal} inline={inline} />
+    // Data shares the experiments scene (data lives inside an experiment) —
+    // the loader COPY is data-specific, see navigation-loader.
+    if (variant === "experiments" || variant === "data") return <ExperimentsScene compact={sceneCompact} horizontal={horizontal} inline={inline} />
     if (variant === "samples") return <SamplesScene compact={sceneCompact} horizontal={horizontal} inline={inline} />
     if (variant === "equipment") return <EquipmentScene compact={sceneCompact} horizontal={horizontal} inline={inline} />
     if (variant === "notes") return <NotesScene compact={sceneCompact} horizontal={horizontal} inline={inline} />

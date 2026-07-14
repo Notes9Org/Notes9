@@ -21,7 +21,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Loader2, RotateCcw, GitCompare, ShieldCheck } from "lucide-react"
+import { CircleNotch as Loader2, ArrowCounterClockwise as RotateCcw, GitDiff as GitCompare, ShieldCheck } from "@phosphor-icons/react/ssr"
 import { cn } from "@/lib/utils"
 import { htmlToDiffPlainText } from "@/lib/content-diff-plain-text"
 import {

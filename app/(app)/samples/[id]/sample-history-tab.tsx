@@ -46,7 +46,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { useToast } from "@/hooks/use-toast"
-import { ArrowRight, History, Loader2, Plus, Trash2 } from "lucide-react"
+import { ArrowRight, ClockCounterClockwise as History, CircleNotch as Loader2, Plus, Trash as Trash2 } from "@phosphor-icons/react/ssr"
 
 export type SampleTransfer = {
   id: string

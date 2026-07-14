@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
-import { Trash2, Loader2, AlertTriangle } from "lucide-react"
+import { Trash as Trash2, CircleNotch as Loader2, Warning as AlertTriangle } from "@phosphor-icons/react/ssr"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { deleteExperiment } from "@/lib/experiments"
 

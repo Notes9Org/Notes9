@@ -7,14 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import {
-  Loader2,
-  MessageSquare,
-  PanelRightClose,
-  Send,
-  Sparkles,
-  X,
-} from "lucide-react"
+import { CircleNotch as Loader2, Chat as MessageSquare, SidebarSimple as PanelRightClose, PaperPlaneTilt as Send, Sparkle as Sparkles, X } from "@phosphor-icons/react/ssr"
 import type { LiteraturePaperItem } from "./protocol-literature-panel"
 import { cn } from "@/lib/utils"
 
@@ -321,7 +314,7 @@ export function ProtocolDraftBiomniPanel({
       </ScrollArea>
 
       <div className="border-t p-2 space-y-2 shrink-0 bg-background">
-        <div className="flex gap-1.5">
+        <div className="n9-composer flex gap-1.5 overflow-hidden">
           <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -330,7 +323,7 @@ export function ProtocolDraftBiomniPanel({
                 ? "Select papers on the left first…"
                 : "Ask Cat-Bio to draft a section, list steps, or refine the protocol…"
             }
-            className="min-h-[72px] text-xs resize-none"
+            className="min-h-[72px] resize-none border-0 bg-transparent text-xs shadow-none focus-visible:ring-0"
             disabled={literatureIds.length === 0 || isStreaming}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {

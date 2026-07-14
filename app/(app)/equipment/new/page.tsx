@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { PageHeading } from "@/components/ui/page-heading"
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft } from "@phosphor-icons/react/ssr"
 import Link from 'next/link'
 import { DATE_ORDER_ERROR, isEndDateBeforeStartDate } from "@/lib/date-order"
 

@@ -2,7 +2,7 @@
 
 import { useRef } from "react"
 import { useScroll, useTransform, motion } from "framer-motion"
-import { LucideIcon } from "lucide-react"
+import type { Icon as LucideIcon } from "@phosphor-icons/react"
 
 interface FeatureProps {
     title: string

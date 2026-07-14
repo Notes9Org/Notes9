@@ -7,7 +7,7 @@ import { useQuery } from "@tanstack/react-query"
 import { createClient } from "@/lib/supabase/client"
 import { useAuthUser } from "@/components/auth/auth-provider"
 import { Button } from "@/components/ui/button"
-import { Plus } from "lucide-react"
+import { Plus } from "@phosphor-icons/react/ssr"
 import { PaperList, type PaperListItem } from "./paper-list"
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -140,7 +140,7 @@ export function PapersPageInner({ projects = [] }: PapersPageInnerProps = {}) {
         <p className="text-muted-foreground">
           Draft and export research papers with project-based filtering.
         </p>
-        <Button asChild className="shrink-0" data-tour="create-paper">
+        <Button asChild className="n9-new-btn shrink-0" data-tour="create-paper">
           <Link href={projectFilter !== FILTER_ALL ? `/papers/new?project=${projectFilter}` : "/papers/new"}>
             <Plus className="mr-2 h-4 w-4" />
             New Paper

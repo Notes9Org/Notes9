@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { PageHeading } from "@/components/ui/page-heading"
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
-import { ArrowLeft, Calendar, Dna, FlaskConical, Link2, MapPin, Package, ShieldAlert, Thermometer } from 'lucide-react'
+import { ArrowLeft, CalendarBlank as Calendar, Dna, Flask as FlaskConical, LinkSimple as Link2, MapPin, Package, ShieldWarning as ShieldAlert, Thermometer } from "@phosphor-icons/react/ssr"
 import Link from 'next/link'
 import { SampleActions } from './sample-actions'
 import { SampleMolecularFilesTab, type SampleMolecularFile } from './sample-molecular-files-tab'

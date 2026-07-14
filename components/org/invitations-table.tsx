@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { XCircle } from "lucide-react"
+import { XCircle } from "@phosphor-icons/react/ssr"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"

@@ -17,7 +17,7 @@ import { useState, useEffect, Suspense } from "react"
 import { Separator } from "@/components/ui/separator"
 import { InteractiveParticles } from "@/components/ui/interactive-particles"
 import { Notes9Brand } from "@/components/brand/notes9-brand"
-import { Eye, EyeOff, FlaskConical } from "lucide-react"
+import { Eye, EyeSlash as EyeOff, Flask as FlaskConical } from "@phosphor-icons/react/ssr"
 
 /** Only allow in-app relative paths (same rules as auth/callback). */
 function safeNextPath(raw: string | null): string {

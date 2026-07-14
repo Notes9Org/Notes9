@@ -7,14 +7,7 @@ import {
   ReactNodeViewRenderer,
   type NodeViewProps,
 } from "@tiptap/react"
-import {
-  MessageSquare,
-  AlignLeft,
-  AlignCenter,
-  AlignRight,
-  WrapText,
-  Trash2,
-} from "lucide-react"
+import { Chat as MessageSquare, TextAlignLeft as AlignLeft, TextAlignCenter as AlignCenter, TextAlignRight as AlignRight, TextAlignLeft as WrapText, Trash as Trash2 } from "@phosphor-icons/react/ssr"
 import { cn } from "@/lib/utils"
 
 export type ImageAlign = "left" | "center" | "right"

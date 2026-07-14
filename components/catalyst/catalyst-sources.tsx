@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { ArrowUpRight, MapPin } from 'lucide-react'
+import { ArrowUpRight, MapPin } from "@phosphor-icons/react/ssr"
 import { cn } from '@/lib/utils'
 import { buildHighlightUrl } from '@/lib/document-highlight'
 import type { PaperAnalyzerReference } from '@/lib/literature-agent-types'

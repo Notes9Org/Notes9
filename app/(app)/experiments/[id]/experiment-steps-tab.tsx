@@ -11,22 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Checkbox } from "@/components/ui/checkbox"
-import {
-  Plus,
-  MoreVertical,
-  Pencil,
-  Trash2,
-  ChevronUp,
-  ChevronDown,
-  Clock,
-  CheckCircle2,
-  Circle,
-  AlertCircle,
-  Loader2,
-  SkipForward,
-  ArrowDown,
-  FlaskConical,
-} from "lucide-react"
+import { Plus, DotsThreeVertical as MoreVertical, PencilSimple as Pencil, Trash as Trash2, CaretUp as ChevronUp, CaretDown as ChevronDown, Clock, CheckCircle as CheckCircle2, Circle, WarningCircle as AlertCircle, CircleNotch as Loader2, SkipForward, ArrowDown, Flask as FlaskConical } from "@phosphor-icons/react/ssr"
 import { cn } from "@/lib/utils"
 import {
   getSteps,

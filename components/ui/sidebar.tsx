@@ -4,7 +4,7 @@ import * as React from 'react'
 import { usePathname } from 'next/navigation'
 import { Slot } from '@radix-ui/react-slot'
 import { cva, VariantProps } from 'class-variance-authority'
-import { PanelLeft } from 'lucide-react'
+import { SidebarSimple as PanelLeft } from "@phosphor-icons/react/ssr"
 
 import { useIsMobile } from '@/hooks/use-mobile'
 import { cn } from '@/lib/utils'

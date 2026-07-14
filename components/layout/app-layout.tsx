@@ -18,7 +18,9 @@ import { SidebarProvider, SidebarInset, useSidebar } from "@/components/ui/sideb
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { useResizable } from "@/hooks/use-resizable"
 import { cn } from "@/lib/utils"
-import { Menu, X, Sparkles, MessageSquare, ChevronRight, Sun, Moon, CircleHelp, Flag } from 'lucide-react'
+import { List as Menu, X, Sun, Moon, Question as CircleHelp, Flag } from "@phosphor-icons/react/ssr"
+import { ClipboardInfoIcon } from "@/components/ui/clipboard-info-icon"
+import { FlareIcon } from "@/components/ui/flare-icon"
 import { PageTransition } from "./page-transition"
 import { useTheme } from "next-themes"
 import { useMediaQuery } from "@/hooks/use-media-query"
@@ -45,7 +47,7 @@ function HeaderTitle() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const { segments } = useBreadcrumb()
-  const { projectId, projectName, projectColor } = useProjectScope()
+  const { projectId, projectName } = useProjectScope()
   const isMobile = useMediaQuery("(max-width: 768px)")
   const scrollRef = useRef<HTMLElement>(null)
   const [scrollState, setScrollState] = useState({ canScrollLeft: false, canScrollRight: false })
@@ -59,19 +61,6 @@ function HeaderTitle() {
   })
   const filtered = resolveHeaderBreadcrumbs(autoSegments, pageSegments)
   const fallbackTitle = getHeaderTitleFromPath(pathname ?? "")
-
-  // When in project scope, render a small project-color dot before the breadcrumb.
-  // Only show it if the first crumb is the project (avoids double-rendering).
-  const showProjectDot =
-    Boolean(projectId && projectColor) &&
-    (filtered.length === 0 || filtered[0]?.label === projectName)
-  const ProjectDot = showProjectDot ? (
-    <span
-      aria-hidden
-      className="inline-block size-2 rounded-full shrink-0"
-      style={{ background: projectColor ?? undefined }}
-    />
-  ) : null
 
   const updateScrollState = useCallback(() => {
     const el = scrollRef.current
@@ -111,7 +100,6 @@ function HeaderTitle() {
   if (filtered.length === 0) {
     return (
       <h1 className="flex items-center gap-2 text-base sm:text-lg font-semibold truncate min-w-0">
-        {ProjectDot}
         <span className="truncate">{fallbackTitle}</span>
       </h1>
     )
@@ -139,22 +127,25 @@ function HeaderTitle() {
           aria-label={`Breadcrumb: ${fullPathAria}`}
           className="flex flex-nowrap items-center gap-1.5 text-sm text-muted-foreground min-w-0 flex-1 overflow-x-auto overflow-y-hidden scroll-smooth hide-scrollbar"
         >
-          {ProjectDot && <span className="shrink-0">{ProjectDot}</span>}
+          {/* Minimal grammar: quiet 13px crumbs, faint "/" separators, no
+              per-crumb icons; only the current page carries weight. */}
           {filtered.map((seg, i) => (
-            <span key={seg.href ?? `${seg.label}-${i}`} className="inline-flex items-center gap-1.5 shrink-0">
-              {i > 0 && <ChevronRight className="size-3.5 shrink-0" aria-hidden />}
+            <span key={seg.href ?? `${seg.label}-${i}`} className="inline-flex items-center gap-1.5 shrink-0 text-[13px]">
+              {i > 0 && (
+                <span aria-hidden className="select-none text-muted-foreground/40">
+                  /
+                </span>
+              )}
               {seg.href ? (
                 <Link
                   href={seg.href}
-                  className="transition-colors hover:text-foreground whitespace-nowrap flex items-center gap-1.5"
+                  className="whitespace-nowrap text-muted-foreground/80 transition-colors hover:text-foreground"
                   title={seg.label}
                 >
-                  {seg.icon && <seg.icon className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-foreground transition-colors" aria-hidden="true" />}
                   {shortenLabel(seg.label)}
                 </Link>
               ) : (
-                <span className="font-normal text-foreground whitespace-nowrap flex items-center gap-1.5" title={seg.label}>
-                  {seg.icon && <seg.icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
+                <span className="whitespace-nowrap font-medium text-foreground" title={seg.label}>
                   {shortenLabel(seg.label)}
                 </span>
               )}
@@ -165,21 +156,26 @@ function HeaderTitle() {
     )
   }
 
-  // Desktop: full breadcrumb path
+  // Desktop: full breadcrumb path. Minimal grammar: quiet 13px crumbs, faint
+  // "/" separators, no per-crumb icons; only the current page carries weight.
   return (
-    <nav aria-label="breadcrumb" className="flex flex-nowrap items-center gap-1.5 text-sm text-muted-foreground sm:gap-2.5 min-w-0 overflow-hidden">
-      {ProjectDot}
+    <nav aria-label="breadcrumb" className="flex min-w-0 flex-nowrap items-center gap-2 overflow-hidden text-[13px] text-muted-foreground">
       {filtered.map((seg, i) => (
-        <span key={seg.href ?? `${seg.label}-${i}`} className="inline-flex items-center gap-1.5 shrink-0 min-w-0">
-          {i > 0 && <ChevronRight className="size-3.5 shrink-0" aria-hidden />}
+        <span key={seg.href ?? `${seg.label}-${i}`} className="inline-flex min-w-0 shrink-0 items-center gap-2">
+          {i > 0 && (
+            <span aria-hidden className="select-none text-muted-foreground/40">
+              /
+            </span>
+          )}
           {seg.href ? (
-            <Link href={seg.href} className="transition-colors hover:text-foreground truncate min-w-0 flex items-center gap-1.5 group">
-              {seg.icon && <seg.icon className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-foreground transition-colors" aria-hidden="true" />}
+            <Link
+              href={seg.href}
+              className="min-w-0 truncate text-muted-foreground/80 transition-colors hover:text-foreground"
+            >
               <span className="truncate">{seg.label}</span>
             </Link>
           ) : (
-            <span className="font-normal text-foreground truncate min-w-0 flex items-center gap-1.5">
-              {seg.icon && <seg.icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
+            <span className="min-w-0 truncate font-medium text-foreground">
               <span className="truncate">{seg.label}</span>
             </span>
           )}
@@ -463,7 +459,7 @@ function AppLayoutBody({ children }: AppLayoutProps) {
               Skip to main content
             </a>
             {!isCatalystRoute && (
-            <header className="flex h-12 shrink-0 items-center justify-between border-b border-[color:var(--glass-border)] bg-[color:var(--n9-header-bg)]/70 px-3 backdrop-blur-xl saturate-[1.4] sm:h-14 sm:px-4">
+            <header className="n9-grain flex h-12 shrink-0 items-center justify-between border-b border-[color:var(--glass-border)] bg-[color:var(--n9-header-bg)]/70 px-3 backdrop-blur-xl saturate-[1.4] sm:h-14 sm:px-4">
               <div className="flex items-center gap-2 min-w-0 flex-1 truncate">
                 <MobileMenuButton />
                 <div className="min-w-0 flex-1 truncate">
@@ -529,7 +525,9 @@ function AppLayoutBody({ children }: AppLayoutProps) {
                     aria-label={headerAi.ariaLabel ?? "Toggle protocol AI"}
                     title={headerAi.title ?? "Toggle protocol AI"}
                   >
-                    <Sparkles className="size-4" />
+                    {/* Protocol glyph — keeps this AI toggle visually distinct
+                        from the Catalyst flare button beside it. */}
+                    <ClipboardInfoIcon className="size-4" />
                   </Button>
                 ) : null}
               <Button
@@ -539,7 +537,7 @@ function AppLayoutBody({ children }: AppLayoutProps) {
                 variant="ghost"
                 size="icon"
                 className={cn(
-                  "size-8 shrink-0 text-primary ring-1 ring-inset ring-[color:var(--primary)]/25 transition-colors hover:text-primary sm:size-9",
+                  "n9-neon-ring size-8 shrink-0 text-primary ring-1 ring-inset ring-[color:var(--primary)]/25 transition-colors hover:text-primary sm:size-9",
                   catalystVisible
                     ? "bg-[color:var(--primary)]/20 hover:bg-[color:var(--primary)]/24"
                     : "bg-[color:var(--primary)]/[0.08] hover:bg-[color:var(--primary)]/15",
@@ -548,9 +546,9 @@ function AppLayoutBody({ children }: AppLayoutProps) {
                 aria-label={catalystVisible ? "Close Catalyst" : "Ask Catalyst"}
                 title={catalystVisible ? "Close Catalyst" : "Ask Catalyst"}
               >
-                {/* MessageSquare (not Sparkles) so this stays visually distinct
-                    when the protocol-AI Sparkles button also appears next to it. */}
-                <MessageSquare className="size-4" />
+                {/* Flare — same glyph as the left sidebar's Catalyst item,
+                    so the top-right toggle reads as the same feature. */}
+                <FlareIcon className="size-4" />
               </Button>
             </div>
           </header>
@@ -560,9 +558,13 @@ function AppLayoutBody({ children }: AppLayoutProps) {
             id="main"
             className={cn(
               "flex min-h-0 flex-1 flex-col min-w-0",
+              // scrollbar-gutter:stable — the ghost-scrollbar pattern fades
+              // the thumb in on hover, which could re-reserve the gutter and
+              // nudge the whole center pane sideways. A permanently reserved
+              // gutter means hovering never changes the pane's width.
               isCatalystRoute
                 ? "overflow-hidden p-0"
-                : "overflow-auto p-3 sm:p-4 md:p-6"
+                : "overflow-auto p-3 sm:p-4 md:p-6 [scrollbar-gutter:stable]"
             )}
           >
             {/* h-full lets nested routes use h-full / percentage heights reliably (e.g. protocol design mode) */}

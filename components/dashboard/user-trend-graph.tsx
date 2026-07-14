@@ -19,7 +19,7 @@ import {
   type NodeProps,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
-import { Network, RefreshCw } from "lucide-react"
+import { Graph as Network, ArrowsClockwise as RefreshCw } from "@phosphor-icons/react/ssr"
 import {
   Dialog,
   DialogContent,

@@ -10,7 +10,7 @@ import {
   type MouseEvent,
 } from "react"
 import { createPortal } from "react-dom"
-import { Shapes, Type, Trash2, X, Sparkles, Maximize, Minimize } from "lucide-react"
+import { Shapes, TextT as Type, Trash as Trash2, X, Sparkle as Sparkles, ArrowsOut as Maximize, ArrowsIn as Minimize } from "@phosphor-icons/react/ssr"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -577,8 +577,12 @@ export function DashboardWhiteboard({
     <article
       data-tour="dash-whiteboard"
       className={cn(
-        "flex min-h-0 flex-col overflow-hidden bg-card transition-all",
-        isFullscreen ? "w-full h-full shadow-2xl rounded-2xl border-2 border-border" : "rounded-[calc(var(--radius)+4px)] border border-border h-full"
+        "flex min-h-0 flex-col overflow-hidden transition-all",
+        // Docked: sandglass panel like the other dashboard widgets.
+        // Fullscreen: solid card for drawing readability.
+        isFullscreen
+          ? "w-full h-full shadow-2xl rounded-2xl border-2 border-border bg-card"
+          : "n9-grain rounded-[calc(var(--radius)+4px)] border border-[color:var(--glass-border)] bg-[color:var(--glass-bg)] backdrop-blur-md h-full"
       )}
     >
       <header className="flex items-center justify-between gap-2 px-4 py-3 border-b border-border">

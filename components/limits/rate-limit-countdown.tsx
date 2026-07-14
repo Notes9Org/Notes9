@@ -21,7 +21,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Clock } from 'lucide-react'
+import { Clock } from "@phosphor-icons/react/ssr"
 import { cn } from '@/lib/utils'
 
 interface RateLimitCountdownProps {

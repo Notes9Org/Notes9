@@ -20,18 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import {
-  ExternalLink,
-  GripVertical,
-  Loader2,
-  PanelLeft,
-  SearchX,
-  Sparkles,
-  BookOpen,
-  FolderOpen,
-  FlaskConical,
-  X,
-} from "lucide-react"
+import { ArrowSquareOut as ExternalLink, DotsSixVertical as GripVertical, CircleNotch as Loader2, SidebarSimple as PanelLeft, MagnifyingGlass as SearchX, Sparkle as Sparkles, BookOpen, FolderOpen, Flask as FlaskConical, X } from "@phosphor-icons/react/ssr"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { ClipboardInfoIcon } from "@/components/ui/clipboard-info-icon"

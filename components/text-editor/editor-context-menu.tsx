@@ -12,27 +12,7 @@ import {
   ContextMenuLabel,
   ContextMenuShortcut,
 } from "@/components/ui/context-menu"
-import {
-  Bold,
-  Italic,
-  Underline as UnderlineIcon,
-  Scissors,
-  Copy,
-  ClipboardPaste,
-  Link2,
-  ImagePlus,
-  Table as TableIcon,
-  Sigma,
-  ArrowUp,
-  ArrowDown,
-  Trash2,
-  AlignLeft,
-  AlignCenter,
-  AlignRight,
-  WrapText,
-  Quote,
-  MessageSquarePlus,
-} from "lucide-react"
+import { TextB as Bold, TextItalic as Italic, TextUnderline as UnderlineIcon, Scissors, Copy, Clipboard as ClipboardPaste, LinkSimple as Link2, ImageSquare as ImagePlus, Table as TableIcon, Sigma, ArrowUp, ArrowDown, Trash as Trash2, TextAlignLeft as AlignLeft, TextAlignCenter as AlignCenter, TextAlignRight as AlignRight, TextAlignLeft as WrapText, Quotes as Quote, ChatDots as MessageSquarePlus } from "@phosphor-icons/react/ssr"
 import { moveTopLevelBlock } from "./editor-block-utils"
 
 export type EditorContextMenuActions = {

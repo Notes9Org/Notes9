@@ -21,7 +21,7 @@ import { RichTextEditor } from "@/components/rich-text-editor"
 import { countWordsFromHtml } from "@/components/ui/textarea-with-word-count"
 import { PageHeading } from "@/components/ui/page-heading"
 import { cn } from "@/lib/utils"
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft } from "@phosphor-icons/react/ssr"
 import { getUniqueNameErrorMessage } from "@/lib/unique-name-error"
 import { DATE_ORDER_ERROR, isEndDateBeforeStartDate } from "@/lib/date-order"
 import { recordRumEvent } from "@/lib/rum"

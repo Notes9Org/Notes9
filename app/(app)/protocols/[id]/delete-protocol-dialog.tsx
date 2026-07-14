@@ -15,7 +15,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Trash2, AlertTriangle } from "lucide-react"
+import { Trash as Trash2, Warning as AlertTriangle } from "@phosphor-icons/react/ssr"
 import { useToast } from "@/hooks/use-toast"
 
 export function DeleteProtocolDialog({

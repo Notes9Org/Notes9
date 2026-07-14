@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
-import { FileStack, FilePlus, Search, Check, Upload } from "lucide-react"
+import { Files as FileStack, FilePlus, MagnifyingGlass as Search, Check, UploadSimple as Upload } from "@phosphor-icons/react/ssr"
 import { cn } from "@/lib/utils"
 import type { ProtocolTemplateExtracted } from "@/lib/protocol-template-types"
 

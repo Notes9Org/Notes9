@@ -36,20 +36,7 @@ import {
 } from "@/lib/sample-molecular"
 import { SamplePlasmidViewer, type PlasmidAlignmentSource } from "./sample-plasmid-viewer"
 import { SampleProteinViewer, type ProteinSuperpositionSource } from "./sample-protein-viewer"
-import {
-  Atom,
-  Copy,
-  Dna,
-  Eye,
-  FileCode2,
-  Loader2,
-  PanelLeftClose,
-  PanelLeftOpen,
-  RefreshCw,
-  Trash2,
-  Upload,
-  X,
-} from "lucide-react"
+import { Atom, Copy, Dna, FileCode as FileCode2, CircleNotch as Loader2, SidebarSimple as PanelLeftClose, SidebarSimple as PanelLeftOpen, ArrowsClockwise as RefreshCw, Trash as Trash2, UploadSimple as Upload, X } from "@phosphor-icons/react/ssr"
 
 export type SampleMolecularFile = {
   id: string
@@ -683,7 +670,7 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
                 />
               ) : (
                 <div className="flex flex-col items-center gap-2 rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-                  <Eye className="h-6 w-6" />
+                  <FileCode2 className="h-6 w-6" />
                   <p>Preview is not available for this file type.</p>
                   <Button type="button" variant="outline" size="sm" asChild>
                     <a href={signedUrl} download={selectedFile.file_name}>

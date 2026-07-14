@@ -15,7 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ViewModeToggle } from "@/components/ui/view-mode-toggle"
-import { Microscope, MapPin, ArrowUpRight, Grid3x3, List } from 'lucide-react'
+import { Microscope, MapPin, ArrowUpRight, SquaresFour as Grid3x3, List } from "@phosphor-icons/react/ssr"
 import Link from 'next/link'
 
 interface Equipment {

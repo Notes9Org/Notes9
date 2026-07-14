@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { Building2, Mail, Settings2, UserPlus, Users } from "lucide-react"
+import { Buildings as Building2, Envelope as Mail, GearSix as Settings2, UserPlus, Users } from "@phosphor-icons/react/ssr"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"

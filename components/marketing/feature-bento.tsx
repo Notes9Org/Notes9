@@ -2,16 +2,7 @@
 
 import Image from "next/image"
 import { motion } from "framer-motion"
-import {
-  BookOpen,
-  FlaskConical,
-  Network,
-  Database,
-  FileText,
-  Sparkles,
-  TestTube2,
-  LineChart,
-} from "lucide-react"
+import { BookOpen, Flask as FlaskConical, Graph as Network, Database, FileText, Sparkle as Sparkles, TestTube as TestTube2, ChartLine as LineChart } from "@phosphor-icons/react/ssr"
 import { resolveDemoScreenshot, useStableDemoTheme } from "@/components/marketing/demo-asset"
 
 const features = [

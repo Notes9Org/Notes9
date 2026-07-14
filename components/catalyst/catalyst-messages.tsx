@@ -1,9 +1,9 @@
 'use client';
 
 import { useCallback, useRef, useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { CaretDown as ChevronDown } from "@phosphor-icons/react/ssr";
 import type { UIMessage } from 'ai';
-import { Square } from 'lucide-react';
+import { Square } from "@phosphor-icons/react/ssr";
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { MarkdownRenderer } from './markdown-renderer';

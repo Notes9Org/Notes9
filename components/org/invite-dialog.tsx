@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Send } from "lucide-react"
+import { PaperPlaneTilt as Send } from "@phosphor-icons/react/ssr"
 
 import { Button } from "@/components/ui/button"
 import {

@@ -9,7 +9,7 @@ import {
   EmptyDescription,
   EmptyContent,
 } from "@/components/ui/empty"
-import { FlaskConical, Plus } from 'lucide-react'
+import { Database, Flask as FlaskConical, Plus } from "@phosphor-icons/react/ssr"
 import Link from 'next/link'
 import { ExperimentsPageContent } from './experiment-list'
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
@@ -20,7 +20,7 @@ import { ensureUserProfile } from "@/lib/ensure-user-profile"
 export default async function ExperimentsPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ project?: string }>
+  searchParams?: Promise<{ project?: string; intent?: string }>
 }) {
   const user = await requireUser()
   const supabase = await createClient()
@@ -73,11 +73,29 @@ export default async function ExperimentsPage({
 
         <CatalystSectionHero size="sm" scope="experiments" shrinkOnScroll />
 
+        {/* Arriving via the sidebar's Data link with no experiment open lands
+            here by design — say so, or the hop reads as a glitch. */}
+        {sp.intent === "data" && (
+          <div className="n9-grain flex items-start gap-2.5 rounded-xl border border-[color:color-mix(in_oklab,var(--primary)_20%,var(--glass-border))] bg-[color:var(--glass-bg)] px-3.5 py-2.5 backdrop-blur-md">
+            <Database className="mt-0.5 size-4 shrink-0 text-[color:var(--n9-accent)]" weight="fill" aria-hidden />
+            <div className="min-w-0 text-[13px] leading-snug">
+              <span className="font-medium text-foreground">
+                Data files live inside each experiment.
+              </span>{" "}
+              <span className="text-muted-foreground">
+                Open an experiment below and you'll land on its Data &amp; Files
+                tab.
+              </span>
+            </div>
+          </div>
+        )}
+
         {experiments && experiments.length > 0 ? (
           <ExperimentsPageContent
             experiments={experiments}
             projectContext={projectContext}
             linkProjectId={projectContext?.id ?? null}
+            detailTab={sp.intent === "data" ? "data" : null}
           />
         ) : (
           <>
@@ -86,7 +104,7 @@ export default async function ExperimentsPage({
                 Manage and track all experimental procedures
               </p>
               <div className="flex items-center gap-2">
-                <Button id="tour-create-experiment" asChild size="sm" className="gap-2">
+                <Button id="tour-create-experiment" asChild size="sm" className="n9-new-btn gap-2">
                   <Link
                     href={
                       projectContext
@@ -113,7 +131,7 @@ export default async function ExperimentsPage({
                 </EmptyDescription>
               </EmptyHeader>
               <EmptyContent>
-                <Button id="tour-create-experiment-empty" asChild>
+                <Button id="tour-create-experiment-empty" asChild className="n9-new-btn">
                   <Link
                     href={
                       projectContext

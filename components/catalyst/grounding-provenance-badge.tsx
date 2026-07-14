@@ -1,10 +1,5 @@
 'use client';
 
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 /**
@@ -50,12 +45,6 @@ const GROUNDING_STYLE: Record<'native' | 'heuristic' | 'none', BadgeStyle> = {
   },
 };
 
-const MATCH_KIND_LABEL: Record<string, string> = {
-  exact: 'exact text',
-  semantic: 'semantic similarity',
-  keyword: 'keyword overlap',
-};
-
 export interface GroundingProvenanceBadgeProps {
   grounding: Grounding;
   /** Optional retrieval match kind (exact / semantic / keyword). */
@@ -68,9 +57,10 @@ export interface GroundingProvenanceBadgeProps {
 
 /**
  * A single compact, color-coded badge that distinguishes native (exact) from
- * heuristic (approximate) from none (source-only) grounding, with a tooltip
- * explaining the distinction. Renders nothing when grounding is absent so it
- * never clutters citations that carry no provenance signal.
+ * heuristic (approximate) from none (source-only) grounding. The explanation
+ * lives in the aria/title text — the hover tooltip was removed (it rendered
+ * glitchy; user request, 2026-07). Renders nothing when grounding is absent
+ * so it never clutters citations that carry no provenance signal.
  */
 export function GroundingProvenanceBadge({
   grounding,
@@ -86,38 +76,19 @@ export function GroundingProvenanceBadge({
   if (!key) return null;
 
   const style = GROUNDING_STYLE[key];
-  const matchLabel =
-    matchKind && MATCH_KIND_LABEL[matchKind] ? MATCH_KIND_LABEL[matchKind] : null;
+  void matchKind;
+  void supportStatus;
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span
-          className={cn(
-            'inline-flex select-none items-center gap-1 rounded-full px-1.5 py-0.5 text-2xs font-medium ring-1 ring-inset',
-            style.className,
-            className,
-          )}
-          aria-label={`Citation provenance: ${style.full}`}
-        >
-          {style.short}
-        </span>
-      </TooltipTrigger>
-      <TooltipContent className="max-w-[15rem] text-xs leading-snug">
-        <p className="font-medium">{style.full}</p>
-        <p className="mt-1 text-muted-foreground">{style.description}</p>
-        {matchLabel && (
-          <p className="mt-1 text-muted-foreground">
-            Located via <span className="font-medium">{matchLabel}</span>.
-          </p>
-        )}
-        {supportStatus && (
-          <p className="mt-1 text-muted-foreground">
-            Claim support:{' '}
-            <span className="font-medium capitalize">{supportStatus}</span>.
-          </p>
-        )}
-      </TooltipContent>
-    </Tooltip>
+    <span
+      className={cn(
+        'inline-flex select-none items-center gap-1 rounded-full px-1.5 py-0.5 text-2xs font-medium ring-1 ring-inset',
+        style.className,
+        className,
+      )}
+      aria-label={`Citation provenance: ${style.full}`}
+    >
+      {style.short}
+    </span>
   );
 }

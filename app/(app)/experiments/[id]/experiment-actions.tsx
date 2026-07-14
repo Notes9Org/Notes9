@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Pencil, Copy, Trash2 } from "lucide-react"
+import { PencilSimple as Pencil, Copy, Trash as Trash2 } from "@phosphor-icons/react/ssr"
 import { EditExperimentDialog } from "./edit-experiment-dialog"
 import { DeleteExperimentDialog } from "./delete-experiment-dialog"
 import { DuplicateExperimentDialog } from "./duplicate-experiment-dialog"

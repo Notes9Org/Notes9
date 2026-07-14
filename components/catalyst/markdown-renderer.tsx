@@ -11,7 +11,7 @@ import rehypeCitations from '@/lib/rehype-citations';
 import { parseCitationMeta, correctAcademicType } from '@/lib/citation-meta';
 import { resolveTitleFromId, isPlaceholderTitle } from '@/lib/citation-title';
 import { useSourceNavigation } from '@/hooks/use-source-navigation';
-import { ArrowUpRight, Calendar, User } from 'lucide-react';
+import { CalendarBlank as Calendar, User } from "@phosphor-icons/react/ssr";
 import { useRouter } from 'next/navigation';
 import type { CitationsManifest } from '@/hooks/use-agent-stream';
 import {
@@ -585,9 +585,10 @@ function MarkdownRendererImpl({
           showCursor && 'notes9-md--streaming',
           className
         )}
+        // Hover preview wiring removed (the hover card rendered glitchy —
+        // user request, 2026-07). Citations stay fully usable via CLICK:
+        // chip click opens the span viewer / source page below.
         onClick={hasManifest ? onClick : undefined}
-        onMouseOver={hasManifest ? onMouseOver : undefined}
-        onMouseLeave={hasManifest ? scheduleHoverClose : undefined}
         onScroll={hasManifest ? onScroll : undefined}
         onKeyDown={hasManifest ? onKeyDown : undefined}
       >
@@ -601,20 +602,6 @@ function MarkdownRendererImpl({
           {content}
         </Streamdown>
       </div>
-      {hover && containerRef.current && (
-        <CitationHoverCard
-          chip={hover.chip}
-          anchor={hover.anchor}
-          containerRect={containerRef.current.getBoundingClientRect()}
-          onMouseEnter={cancelHoverClose}
-          onMouseLeave={scheduleHoverClose}
-          // In the literature summary (host owns citation clicks → onCitationClick
-          // set) the in-app span viewer is not useful, so the "View source" button
-          // is suppressed; clicking the chip scrolls the left results panel instead.
-          onViewSource={onCitationClick ? undefined : () => openViewer(hover.chip)}
-          onOpenPage={() => openChip(hover.chip)}
-        />
-      )}
       <CitationSourceViewer
         source={viewerSource}
         open={viewerSource !== null}

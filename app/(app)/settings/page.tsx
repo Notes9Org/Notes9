@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { LogOut, Sun, Moon, Monitor, Loader2 } from 'lucide-react'
+import { SignOut as LogOut, Sun, Moon, Monitor, CircleNotch as Loader2 } from "@phosphor-icons/react/ssr"
 import { ChangePasswordDialog } from "@/components/change-password-dialog"
 import { UsagePanel } from "@/components/settings/usage-panel"
 import { PermissionsPanel } from "@/components/settings/permissions-panel"

@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from "react"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Plus, Package, Grid3x3, List, Dna, Atom, SearchX } from "lucide-react"
+import { Plus, Package, SquaresFour as Grid3x3, List, Dna, Atom, MagnifyingGlass as SearchX } from "@phosphor-icons/react/ssr"
 import Link from "next/link"
 import { SampleList } from "./sample-list"
 import {
@@ -13,6 +13,7 @@ import {
   ResourceListFilter,
 } from "@/components/ui/resource-list-filters"
 import { ViewModeToggle } from "@/components/ui/view-mode-toggle"
+import { useProjectScope } from "@/contexts/project-scope-context"
 
 export interface Sample {
   id: string
@@ -53,6 +54,7 @@ interface SamplesPageContentProps {
 
 export function SamplesPageContent({ samples, statusCount }: SamplesPageContentProps) {
   const isMobile = useMediaQuery("(max-width: 768px)")
+  const scope = useProjectScope()
   const [viewMode, setViewMode] = useState<"grid" | "table">("table")
   const [projectFilter, setProjectFilter] = useState(FILTER_ALL)
   const [experimentFilter, setExperimentFilter] = useState(FILTER_ALL)
@@ -110,6 +112,16 @@ export function SamplesPageContent({ samples, statusCount }: SamplesPageContentP
       project_id: v.project_id,
     }))
   }, [samples])
+
+  // Seed the project filter from the sidebar context (samples stay an
+  // org-wide library — the seed is editable, never a lock).
+  useEffect(() => {
+    if (scope.projectId && projectOptions.some((o) => o.value === scope.projectId)) {
+      setProjectFilter(scope.projectId)
+    } else if (!scope.projectId) {
+      setProjectFilter(FILTER_ALL)
+    }
+  }, [scope.projectId, projectOptions])
 
   useEffect(() => {
     if (projectFilter === FILTER_ALL) return
@@ -178,7 +190,7 @@ export function SamplesPageContent({ samples, statusCount }: SamplesPageContentP
         </p>
         <div className="flex items-center gap-2 shrink-0">
           <ViewModeToggle value={viewMode} onChange={setViewMode} tableDisabled={isMobile} />
-          <Button asChild size="sm" className="gap-2" aria-label="New sample" data-tour="create-sample">
+          <Button asChild size="sm" className="n9-new-btn gap-2" aria-label="New sample" data-tour="create-sample">
             <Link href="/samples/new">
               <Plus className="size-4" />
               New sample
@@ -287,7 +299,7 @@ export function SamplesEmptyState() {
         <p className="text-muted-foreground">
           Track and manage laboratory samples
         </p>
-        <Button asChild size="sm" className="gap-2" aria-label="New sample">
+        <Button asChild size="sm" className="n9-new-btn gap-2" aria-label="New sample">
           <Link href="/samples/new">
             <Plus className="size-4" />
             New sample
@@ -339,7 +351,7 @@ export function SamplesEmptyState() {
             </div>
           </div>
 
-          <Button asChild className="mx-auto w-full sm:w-auto">
+          <Button asChild className="n9-new-btn mx-auto w-full sm:w-auto">
             <Link href="/samples/new">
               <Plus className="mr-2 h-4 w-4" />
               Create first sample

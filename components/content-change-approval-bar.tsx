@@ -5,15 +5,7 @@ import { diffWords } from "diff"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import {
-  CheckCircle2,
-  XCircle,
-  ChevronDown,
-  ChevronUp,
-  ClipboardList,
-  AlertCircle,
-  History,
-} from "lucide-react"
+import { CheckCircle as CheckCircle2, XCircle, CaretDown as ChevronDown, CaretUp as ChevronUp, ClipboardText as ClipboardList, WarningCircle as AlertCircle, ClockCounterClockwise as History } from "@phosphor-icons/react/ssr"
 import { cn } from "@/lib/utils"
 import { useContentDiffs } from "@/hooks/use-content-diffs"
 import { ContentDiffHistoryDialog } from "@/components/content-diff-history-dialog"

@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { Streamdown } from 'streamdown';
-import { ExternalLink } from 'lucide-react';
+import { ArrowSquareOut as ExternalLink } from "@phosphor-icons/react/ssr";
 import {
   Dialog,
   DialogContent,

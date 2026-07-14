@@ -1,14 +1,7 @@
 'use client';
 
-import {
-  Activity,
-  Search,
-  BookOpen,
-  FlaskConical,
-  PenLine,
-  CheckCircle2,
-  type LucideIcon,
-} from 'lucide-react';
+import { Pulse as Activity, MagnifyingGlass as Search, BookOpen, Flask as FlaskConical, PencilSimpleLine as PenLine, CheckCircle as CheckCircle2 } from "@phosphor-icons/react/ssr"
+import type { Icon as LucideIcon } from "@phosphor-icons/react";
 import { cn } from '@/lib/utils';
 import type { ThinkingStage } from '@/hooks/use-agent-stream';
 

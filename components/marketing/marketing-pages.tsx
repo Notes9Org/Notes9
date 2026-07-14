@@ -1,23 +1,5 @@
 "use client"
-import {
-  BookOpen,
-  Bot,
-  Check,
-  Database,
-  FileSearch,
-  FileText,
-  FlaskConical,
-  FolderKanban,
-  GraduationCap,
-  LayoutDashboard,
-  Microscope,
-  Minus,
-  Settings,
-  ShieldCheck,
-  TestTube2,
-  Users,
-  Workflow,
-} from "lucide-react"
+import { BookOpen, Robot as Bot, Check, Database, FileMagnifyingGlass as FileSearch, FileText, Flask as FlaskConical, Kanban as FolderKanban, GraduationCap, SquaresFour as LayoutDashboard, Microscope, Minus, Gear as Settings, ShieldCheck, TestTube as TestTube2, Users, FlowArrow as Workflow } from "@phosphor-icons/react/ssr"
 
 import {
   CTAPanel,

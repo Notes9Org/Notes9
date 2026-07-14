@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useTransition, useCallback, useRef, type FormEvent, type KeyboardEvent } from "react"
 import { usePathname, useRouter } from "next/navigation"
-import { ArrowUp, Paperclip, Mic, X, FileText, ImageIcon, Globe } from "lucide-react"
+import { ArrowUp, Paperclip, Microphone as Mic, X, FileText, Image as ImageIcon, Globe } from "@phosphor-icons/react/ssr"
 import { Switch } from "@/components/ui/switch"
 import { AnimatePresence, motion } from "framer-motion"
 import { useProjectScope } from "@/contexts/project-scope-context"
@@ -23,20 +23,11 @@ const ALLOWED_TYPES = [
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ]
 
-// In-palette "AI" treatment: a burnt-sienna identity ring + soft apricot glow so
-// the composer reads unmistakably as the Catalyst AI surface while staying native
-// to the warm Notes9 brand (the old violet read as a bolted-on 3rd-party widget).
-const composerShell = cn(
-  "flex flex-col overflow-hidden rounded-2xl border-2 p-3",
-  // Light: warm cream tint. Dark: the 10%-accent token is near-transparent and
-  // bled the content behind it, so use an opaque card surface and let the accent
-  // come from the border + glow (keeps legibility + the AI signature).
-  "border-primary/25 bg-[var(--n9-accent-light)] dark:border-primary/30 dark:bg-card",
-  "shadow-[0_1px_2px_var(--n9-accent-glow),0_8px_28px_-8px_var(--n9-accent-glow)]",
-  "transition-[border-color,box-shadow] duration-200",
-  "focus-within:border-primary/50",
-  "focus-within:shadow-[0_8px_28px_-8px_var(--n9-accent-glow),0_0_0_3px_var(--n9-accent-glow)]",
-)
+// The unified glass composer (`.n9-composer`, globals.css) with the Catalyst
+// AI identity modifier (sienna ring + apricot glow) and the moving neon
+// outline (`.n9-neon-ring`). Glass at rest, solidifies on focus so typed
+// text stays readable.
+const composerShell = cn("n9-composer n9-composer-ai n9-neon-ring flex flex-col overflow-hidden p-3")
 
 type Props = {
   size?: "sm" | "lg"
@@ -196,7 +187,9 @@ export function CatalystSectionHero({
   const isUploading = uploadQueue.length > 0
   const shouldShrink = shrinkOnScroll && isScrolled && !isFocused && input.trim() === "" && !canSend && !isUploading
   const minBoxHeight = shouldShrink ? "min-h-[44px]" : (size === "lg" ? "min-h-[132px]" : "min-h-[112px]")
-  const contentWidth = cn("mx-auto w-full transition-all duration-500 ease-in-out", size === "lg" ? "max-w-4xl" : "max-w-3xl", shouldShrink && "max-w-2xl")
+  // One notch narrower across the board — the AI bar should read as a compact
+  // prompt, not a full-width pane.
+  const contentWidth = cn("mx-auto w-full transition-all duration-500 ease-in-out", size === "lg" ? "max-w-3xl" : "max-w-2xl", shouldShrink && "max-w-xl")
   const effectivePlaceholder = projectName
     ? `How can I help with ${projectName} today?`
     : placeholder
@@ -366,9 +359,10 @@ export function CatalystSectionHero({
         className={cn(
           "transition-all duration-500 ease-in-out",
           shrinkOnScroll && "sticky -top-3 sm:-top-4 md:-top-6 z-40 -mx-3 px-3 sm:-mx-4 sm:px-4 md:-mx-6 md:px-6 py-2 md:py-4",
-          shrinkOnScroll && (shouldShrink
-            ? "bg-transparent"
-            : "bg-background/80 backdrop-blur-md")
+          // Same at-rest fix as the sticky shell: only wash while scrolled.
+          shrinkOnScroll && (isScrolled && !shouldShrink
+            ? "bg-background/80 backdrop-blur-md"
+            : "bg-transparent")
         )}
       >
         <AnimatePresence initial={false}>
@@ -389,8 +383,13 @@ export function CatalystSectionHero({
   }
 
   const stickyShell = cn(
-    "sticky top-0 z-30 -mx-3 sm:-mx-4 md:-mx-6 px-3 sm:px-4 md:px-6",
-    "backdrop-blur-md bg-background/75 supports-[backdrop-filter]:bg-background/55",
+    "sticky top-0 z-30 -mx-3 sm:-mx-4 md:-mx-6 px-3 sm:px-4 md:px-6 transition-colors duration-300",
+    // The wash exists so content scrolling UNDER the stuck composer stays
+    // readable — at rest it just painted a page-wide light bar behind the
+    // (narrower) composer, so it now appears only once the page scrolls.
+    isScrolled
+      ? "backdrop-blur-md bg-background/75 supports-[backdrop-filter]:bg-background/55"
+      : "bg-transparent",
   )
 
   return (

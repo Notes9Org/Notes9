@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import Link from "next/link"
 import { useState } from "react"
-import { ArrowLeft, Mail } from "lucide-react"
+import { ArrowLeft, Envelope as Mail } from "@phosphor-icons/react/ssr"
 import { Notes9Brand } from "@/components/brand/notes9-brand"
 
 export default function ForgotPasswordPage() {

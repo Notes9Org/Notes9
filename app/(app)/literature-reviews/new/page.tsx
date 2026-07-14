@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { PageHeading } from "@/components/ui/page-heading"
-import { ArrowLeft, Star } from 'lucide-react'
+import { ArrowLeft, Star } from "@phosphor-icons/react/ssr"
 import Link from 'next/link'
 import { toast } from "sonner"
 import {

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { LiteratureDetailView } from '@/components/literature-reviews/literature-detail-view'
 import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
 import Link from "next/link"
-import { X } from "lucide-react"
+import { X } from "@phosphor-icons/react/ssr"
 
 export default async function LiteratureReviewDetailPage({
   params,

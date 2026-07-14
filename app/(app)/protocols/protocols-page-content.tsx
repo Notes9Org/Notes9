@@ -13,7 +13,7 @@ import {
   EmptyDescription,
   EmptyContent,
 } from "@/components/ui/empty"
-import { Plus, FileText, Grid3x3, List, PenBox, X } from "lucide-react"
+import { Plus, FileText, SquaresFour as Grid3x3, List, NotePencil as PenBox, X } from "@phosphor-icons/react/ssr"
 import Link from "next/link"
 import { ProtocolList } from "./protocol-list"
 import {
@@ -143,7 +143,7 @@ export function ProtocolsPageContent({
         </p>
         <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
           <ViewModeToggle value={viewMode} onChange={setViewMode} tableDisabled={isMobile} />
-          <Button asChild size="sm" className="gap-2" aria-label="New protocol" data-tour="create-protocol">
+          <Button asChild size="sm" className="n9-new-btn gap-2" aria-label="New protocol" data-tour="create-protocol">
             <Link href={newProtocolHref}>
               <Plus className="size-4" />
               New protocol
@@ -247,7 +247,7 @@ export function ProtocolsPageContent({
                 </EmptyDescription>
               </EmptyHeader>
               <EmptyContent>
-                <Button asChild>
+                <Button asChild className="n9-new-btn">
                   <Link href={newProtocolHref}>
                     <Plus className="h-4 w-4 mr-2" />
                     New protocol

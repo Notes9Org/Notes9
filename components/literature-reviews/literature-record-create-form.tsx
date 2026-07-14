@@ -129,12 +129,13 @@ export function LiteratureRecordCreateForm({
         <div className="mb-3">
           <Label className="text-sm font-medium">Link to research</Label>
           <p className="text-xs text-muted-foreground">
-            Optionally connect this paper to a project and one of its experiments.
+            Library papers always belong to a project; the experiment link is
+            optional.
           </p>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2 min-w-0">
-            <Label htmlFor="new-project-id">Project</Label>
+            <Label htmlFor="new-project-id">Project (required)</Label>
             <Select
               value={value.project_id}
               onValueChange={(next) => update("project_id", next)}
@@ -152,7 +153,7 @@ export function LiteratureRecordCreateForm({
             </Select>
           </div>
           <div className="space-y-2 min-w-0">
-            <Label htmlFor="new-experiment-id">Experiment</Label>
+            <Label htmlFor="new-experiment-id">Experiment (optional)</Label>
             <Select
               value={value.experiment_id}
               onValueChange={(next) => update("experiment_id", next)}

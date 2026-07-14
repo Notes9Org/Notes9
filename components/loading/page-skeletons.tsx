@@ -4,17 +4,17 @@ export function BreadcrumbSkeleton({ className }: { className?: string }) {
   return <div className={cn("h-4 w-40 bg-muted rounded-md", className)} />
 }
 
-/** Centered sparkle + greeting line (dashboard). */
-export function CenteredGreetingSkeleton({ className }: { className?: string }) {
+/** Glass masthead: date + greeting (dashboard header). */
+export function DashboardMastheadSkeleton({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "mx-auto flex w-full max-w-3xl items-center justify-center gap-3 md:gap-4 pt-2 md:pt-6",
+        "flex shrink-0 flex-col gap-2.5 rounded-2xl border border-[color:var(--glass-border)] bg-[color:var(--glass-bg)] px-4 py-3.5 md:px-6 md:py-4",
         className,
       )}
     >
-      <div className="size-7 md:size-9 shrink-0 rounded-full bg-muted" />
-      <div className="h-9 md:h-12 flex-1 max-w-md bg-muted rounded-md" />
+      <div className="h-3 w-32 rounded bg-muted" />
+      <div className="h-7 w-64 max-w-full rounded-md bg-muted md:h-8" />
     </div>
   )
 }
@@ -43,7 +43,8 @@ export function CatalystComposerSkeleton({
   className?: string
   size?: "sm" | "lg"
 }) {
-  const maxWidth = size === "lg" ? "max-w-4xl" : "max-w-3xl"
+  // One notch narrower to match the slimmed CatalystSectionHero widths.
+  const maxWidth = size === "lg" ? "max-w-3xl" : "max-w-2xl"
   const minHeight = size === "lg" ? "min-h-[132px]" : "min-h-[112px]"
 
   return (
@@ -141,15 +142,10 @@ export function ProjectWorkspaceGridSkeleton() {
   )
 }
 
-/** Three-column lab overview (dashboard). */
+/** 2×2 dashboard grid (schedule / whiteboard / recent work / recently edited). */
 export function DashboardLabGridSkeleton() {
-  const card = (colClass: string) => (
-    <div
-      className={cn(
-        "flex h-72 flex-col rounded-xl border border-border bg-card",
-        colClass,
-      )}
-    >
+  const card = (key: number) => (
+    <div key={key} className="flex h-full flex-col rounded-xl border border-border bg-card">
       <div className="border-b border-border px-6 py-4">
         <div className="h-5 w-24 bg-muted rounded-md" />
       </div>
@@ -162,10 +158,8 @@ export function DashboardLabGridSkeleton() {
   )
 
   return (
-    <div className="grid flex-1 grid-cols-1 gap-4 md:gap-5 xl:grid-cols-12">
-      {card("xl:col-span-4")}
-      {card("xl:col-span-5")}
-      {card("xl:col-span-3")}
+    <div className="grid grid-cols-1 gap-4 md:gap-5 xl:grid-cols-2 auto-rows-[400px]">
+      {[1, 2, 3, 4].map(card)}
     </div>
   )
 }
@@ -292,7 +286,7 @@ export function TableListSkeleton({
   )
 }
 
-/** Literature reviews: page title + tabs + grid (composer is separate). */
+/** Literature reviews: page title + the two section tabs + search + grid. */
 export function LiteraturePageSkeleton() {
   return (
     <>
@@ -303,10 +297,10 @@ export function LiteraturePageSkeleton() {
           <div className="h-9 w-32 bg-muted rounded-md" />
         </div>
       </div>
+      {/* Two section tabs: "Search & read" / "My Library". */}
       <div className="flex gap-2">
-        <div className="h-9 w-20 bg-muted rounded-md" />
-        <div className="h-9 w-20 bg-muted rounded-md" />
-        <div className="h-9 w-20 bg-muted rounded-md" />
+        <div className="h-9 w-28 bg-muted rounded-md" />
+        <div className="h-9 w-24 bg-muted rounded-md" />
       </div>
       <div className="space-y-4">
         <div className="h-10 w-full bg-muted rounded-md" />
@@ -411,27 +405,3 @@ export function CatalystReasoningSkeleton({ className }: { className?: string })
   )
 }
 
-/** Papers workspace: tabs + split pane. */
-export function PapersPageSkeleton() {
-  return (
-    <>
-      <div className="flex gap-2 border-b border-border pb-2">
-        <div className="h-9 w-24 bg-muted rounded-md" />
-        <div className="h-9 w-28 bg-muted rounded-md" />
-      </div>
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,280px)_1fr] min-h-[400px]">
-        <div className="rounded-lg border bg-card p-3 space-y-2">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="h-10 bg-muted/60 rounded-md" />
-          ))}
-        </div>
-        <div className="rounded-lg border bg-card p-6 space-y-3">
-          <div className="h-6 w-48 bg-muted rounded-md" />
-          <div className="h-4 w-full bg-muted rounded-md" />
-          <div className="h-4 w-5/6 bg-muted rounded-md" />
-          <div className="flex-1 min-h-[200px] bg-muted/30 rounded-md" />
-        </div>
-      </div>
-    </>
-  )
-}

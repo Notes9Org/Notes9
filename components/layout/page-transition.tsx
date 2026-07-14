@@ -14,16 +14,24 @@ export function PageTransition({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const firstPaint = useRef(true)
   const [phase, setPhase] = useState<"idle" | "enter">("idle")
+  // Detect the pathname change DURING render, not in an effect: the effect
+  // ran one paint late, so the new page painted fully visible for a frame,
+  // snapped to opacity 0 when the animation class landed, then faded back in
+  // — reading as a glitch right when the navigation loader hands off.
+  // Render-phase state means the new keyed div carries the animation class
+  // from its very first frame.
+  const [prevPathname, setPrevPathname] = useState(pathname)
+  if (pathname !== prevPathname) {
+    setPrevPathname(pathname)
+    if (!firstPaint.current) setPhase("enter")
+  }
 
   useEffect(() => {
-    if (firstPaint.current) {
-      firstPaint.current = false
-      return
-    }
-    setPhase("enter")
+    firstPaint.current = false
+    if (phase !== "enter") return
     const t = window.setTimeout(() => setPhase("idle"), 360)
     return () => window.clearTimeout(t)
-  }, [pathname])
+  }, [phase])
 
   return (
     <div

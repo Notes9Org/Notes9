@@ -6,7 +6,7 @@ import Link from "next/link"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { FileText, Plus, Trash2, ArrowUpRight, Sparkles } from "lucide-react"
+import { FileText, Plus, Trash as Trash2, ArrowUpRight, Sparkle as Sparkles } from "@phosphor-icons/react/ssr"
 import {
   Table,
   TableBody,
@@ -231,7 +231,7 @@ export function ReportsPageClient({ reports: initialReports, projects, experimen
   const pageHeader = (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       {titleBlock}
-      <Button onClick={() => setDialogOpen(true)} data-tour="generate-report" className="w-full sm:w-auto">
+      <Button onClick={() => setDialogOpen(true)} data-tour="generate-report" className="n9-new-btn w-full sm:w-auto">
         <Sparkles className="h-4 w-4 mr-2" />
         Generate AI report
       </Button>
@@ -276,7 +276,7 @@ export function ReportsPageClient({ reports: initialReports, projects, experimen
                 ? "Describe what you want to understand and Catalyst will pull your experiment data into a structured analysis."
                 : "Try clearing your filters or generate a new report for this project."}
             </p>
-            <Button onClick={() => setDialogOpen(true)}>
+            <Button onClick={() => setDialogOpen(true)} className="n9-new-btn">
               <Sparkles className="h-4 w-4 mr-2" />
               {reports.length === 0 ? "Generate first AI report" : "Generate AI report"}
             </Button>

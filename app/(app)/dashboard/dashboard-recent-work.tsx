@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { FlaskConical, FolderOpen, ArrowRight } from "lucide-react"
+import { Flask as FlaskConical, FolderOpen, ArrowRight } from "@phosphor-icons/react/ssr"
 import { getRecentProjectEntries } from "@/lib/recent-projects"
 
 type ActiveExperiment = {
@@ -136,7 +136,7 @@ export function DashboardRecentWork({
   const showEmpty = !loading && activeWorkItems.length === 0
 
   return (
-    <Card data-tour="dash-recent-work" className="flex min-w-0 flex-col">
+    <Card data-tour="dash-recent-work" variant="glass" className="flex min-w-0 flex-col">
       <CardHeader>
         <CardTitle className="text-base">Recent projects & experiments</CardTitle>
       </CardHeader>

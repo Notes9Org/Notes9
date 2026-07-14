@@ -1,6 +1,6 @@
 "use client"
 
-import { Check, FileText } from "lucide-react"
+import { Check, FileText } from "@phosphor-icons/react/ssr"
 
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import type { LiteratureRecordSummary } from "@/types/literature-pdf"

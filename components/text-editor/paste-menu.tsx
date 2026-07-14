@@ -1,13 +1,7 @@
 import { Editor } from "@tiptap/react"
 import { useEffect, useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
-import {
-    Clipboard,
-    FileText,
-    RemoveFormatting,
-    X,
-    Type
-} from "lucide-react"
+import { Clipboard, FileText, Eraser as RemoveFormatting, X, TextT as Type } from "@phosphor-icons/react/ssr"
 
 interface PasteMenuProps {
     editor: Editor

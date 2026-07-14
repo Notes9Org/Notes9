@@ -1,6 +1,6 @@
 'use client';
 
-import { Database, Search, Globe, FileText, Loader2 } from 'lucide-react';
+import { Database, MagnifyingGlass as Search, Globe, FileText, CircleNotch as Loader2 } from "@phosphor-icons/react/ssr";
 import { cn } from '@/lib/utils';
 
 export type ToolType = 'sql' | 'rag' | 'web_search' | 'full_record' | 'clarify' | null;

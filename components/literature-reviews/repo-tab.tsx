@@ -33,7 +33,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { BookOpen, ExternalLink, FileText, Plus, Search, Star, Trash2, X, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { BookOpen, ArrowSquareOut as ExternalLink, FileText, Plus, MagnifyingGlass as Search, Star, Trash as Trash2, X, CircleNotch as Loader2, CaretLeft as ChevronLeft, CaretRight as ChevronRight } from "@phosphor-icons/react/ssr";
 import Link from "next/link";
 import { toast } from "sonner";
 import { LiteratureDetailView } from "./literature-detail-view";
@@ -851,7 +851,7 @@ export function RepoTab({
               <p className="text-muted-foreground mb-4">
                 No literature references yet
               </p>
-              <Button asChild>
+              <Button asChild className="n9-new-btn">
                 <Link href={newManualReferenceHref}>
                   <Plus className="h-4 w-4 mr-2" />
                   Add First Reference

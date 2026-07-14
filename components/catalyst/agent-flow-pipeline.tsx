@@ -1,26 +1,8 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import {
-  Search,
-  ScanLine,
-  FlaskConical,
-  CheckCheck,
-  Brain,
-  BrainCircuit,
-  Database,
-  FileText,
-  Globe,
-  ClipboardList,
-  Microscope,
-  MessageSquare,
-  BarChart2,
-  Workflow,
-  CheckCircle2,
-  Loader2,
-  XCircle,
-  type LucideIcon,
-} from 'lucide-react';
+import { MagnifyingGlass as Search, Scan as ScanLine, Flask as FlaskConical, Checks as CheckCheck, Brain, Brain as BrainCircuit, Database, FileText, Globe, ClipboardText as ClipboardList, Microscope, Chat as MessageSquare, ChartBar as BarChart2, FlowArrow as Workflow, CheckCircle as CheckCircle2, CircleNotch as Loader2, XCircle } from "@phosphor-icons/react/ssr"
+import type { Icon as LucideIcon } from "@phosphor-icons/react";
 import type { ToolCard, ThinkingStage } from '@/hooks/use-agent-stream';
 
 // Each pipeline node represents a logical phase of the ReAct loop.

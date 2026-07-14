@@ -18,26 +18,7 @@ import {
   useSpring,
   useTransform,
 } from "framer-motion"
-import {
-  ArrowRight,
-  ArrowUpRight,
-  BarChart3,
-  BookOpen,
-  Boxes,
-  Check,
-  ClipboardList,
-  Database,
-  FileSignature,
-  FileText,
-  FlaskConical,
-  GraduationCap,
-  Microscope,
-  NotebookPen,
-  Quote,
-  Sparkles,
-  Users,
-  X,
-} from "lucide-react"
+import { ArrowRight, ArrowUpRight, ChartBar as BarChart3, BookOpen, Stack as Boxes, Check, ClipboardText as ClipboardList, Database, FileText as FileSignature, FileText, Flask as FlaskConical, GraduationCap, Microscope, NotePencil as NotebookPen, Quotes as Quote, Sparkle as Sparkles, Users, X } from "@phosphor-icons/react/ssr"
 import { cn } from "@/lib/utils"
 import { IceMascot } from "@/components/ui/ice-mascot"
 

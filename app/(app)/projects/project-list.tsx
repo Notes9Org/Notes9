@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Users, ArrowUpRight, Grid3x3, List, Plus, FlaskConical } from 'lucide-react'
+import { Users, ArrowUpRight, SquaresFour as Grid3x3, List, Plus, Flask as FlaskConical } from "@phosphor-icons/react/ssr"
 import { formatEntityTitle } from "@/lib/format-title"
 import {
   FILTER_ALL,
@@ -99,7 +99,7 @@ export function ProjectsPageContent({ projects }: { projects: Project[] }) {
         </p>
         <div className="flex items-center gap-2 shrink-0">
           <ViewModeToggle value={viewMode} onChange={setViewMode} tableDisabled={isMobile} />
-          <Button id="tour-create-project" asChild size="icon" variant="ghost" className="size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" aria-label="New project">
+          <Button id="tour-create-project" asChild size="icon" className="n9-new-btn size-8 rounded-md transition-colors" aria-label="New project">
             <Link href="/projects/new">
               <Plus className="size-4" />
             </Link>
@@ -186,6 +186,8 @@ export function ProjectList({ projects, viewMode: controlledView, setViewMode: s
           {projects.map((project) => (
             <Card
               key={project.id}
+              variant="interactive"
+              ribbon="var(--kind-project)"
               draggable
               onDragStart={(e) => {
                 e.dataTransfer.setData(
@@ -198,7 +200,7 @@ export function ProjectList({ projects, viewMode: controlledView, setViewMode: s
                 )
                 e.dataTransfer.effectAllowed = "copy"
               }}
-              className="hover:border-primary transition-colors flex flex-col min-w-0 overflow-hidden"
+              className="hover:border-primary flex flex-col min-w-0 overflow-hidden"
             >
               <CardHeader className="pb-3 min-w-0">
                 <div className="space-y-2 min-w-0">

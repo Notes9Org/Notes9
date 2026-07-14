@@ -34,7 +34,7 @@ const emptyMediaVariants = cva(
     variants: {
       variant: {
         default: 'bg-transparent',
-        icon: "bg-muted text-foreground flex size-10 shrink-0 items-center justify-center rounded-lg [&_svg:not([class*='size-'])]:size-6",
+        icon: "bg-primary/10 text-primary ring-1 ring-primary/15 flex size-12 shrink-0 items-center justify-center rounded-xl [&_svg:not([class*='size-'])]:size-6",
       },
     },
     defaultVariants: {
@@ -64,7 +64,7 @@ function EmptyTitle({ className, ...props }: React.ComponentProps<'div'>) {
       data-slot="empty-title"
       className={cn(
         // Editorial display face — every empty state in the product flows
-        // through here, so the new IBM Plex Serif lands consistently.
+        // through here, so the display serif (Source Serif 4) lands consistently.
         'font-display text-xl font-medium tracking-tight',
         className,
       )}

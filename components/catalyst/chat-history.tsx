@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, MessageSquare, Trash2, BookOpen } from 'lucide-react';
+import { Plus, Chat as MessageSquare, Trash as Trash2, BookOpen } from "@phosphor-icons/react/ssr";
 import { cn } from '@/lib/utils';
 import { ChatSession } from '@/hooks/use-chat-sessions';
 import { formatDistanceToNow } from 'date-fns';

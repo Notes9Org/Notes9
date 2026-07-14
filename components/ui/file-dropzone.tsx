@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { cn } from "@/lib/utils"
-import { Upload, XCircle } from "lucide-react"
+import { UploadSimple as Upload, XCircle } from "@phosphor-icons/react/ssr"
 import { useToast } from "@/hooks/use-toast"
 
 interface FileDropzoneProps {

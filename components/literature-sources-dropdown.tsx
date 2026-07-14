@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { BookOpen, ChevronDown, ExternalLink, MapPin } from 'lucide-react';
+import { BookOpen, CaretDown as ChevronDown, ArrowSquareOut as ExternalLink, MapPin } from "@phosphor-icons/react/ssr";
 import { Button } from '@/components/ui/button';
 import {
   Collapsible,

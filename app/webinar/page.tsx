@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { ArrowUpRight, CheckCircle2, Instagram, Linkedin, Loader2, Mail, Youtube } from "lucide-react"
+import { ArrowUpRight, CheckCircle as CheckCircle2, InstagramLogo as Instagram, LinkedinLogo as Linkedin, CircleNotch as Loader2, Envelope as Mail, YoutubeLogo as Youtube } from "@phosphor-icons/react/ssr"
 
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"

@@ -4,11 +4,7 @@ import {
   FROM_DASHBOARD_VALUE,
 } from "@/lib/from-dashboard"
 import { isLikelyUuid } from "@/lib/url-project-param"
-import {
-  Home, Folder, FlaskConical, Microscope, FileText, 
-  TestTube, BookOpen, FileEdit, NotebookPen, Settings, BarChart, 
-  Sparkles, Database, Building, Network
-} from "lucide-react"
+import { House as Home, Folder, Flask as FlaskConical, Microscope, FileText, TestTube, BookOpen, NotePencil as FileEdit, NotePencil as NotebookPen, Gear as Settings, ChartBar as BarChart, Sparkle as Sparkles, Database, Buildings as Building, Graph as Network } from "@phosphor-icons/react/ssr"
 import { ClipboardInfoIcon } from "@/components/ui/clipboard-info-icon"
 
 type RouteCrumbConfig = {

@@ -5,8 +5,14 @@ import { usePathname } from "next/navigation"
 import { Notes9LoaderVariant, Notes9VideoLoader } from "@/components/brand/notes9-video-loader"
 
 export const MIN_LOADER_DURATION_MS = 350
-export const MAX_LOADER_DURATION_MS = 8000
-export const AUTH_MAX_LOADER_DURATION_MS = 12000
+// Hard failsafe only. This used to be 8s, which slow routes (dev compiles,
+// heavy RSC fetches) regularly exceeded — the overlay force-dismissed while
+// the route was still in flight, dumping the user back onto the PREVIOUS
+// page until the new one landed (read as a glitch). Successful navigations
+// are dismissed by the settle effect; this timer only rescues genuinely
+// stuck/cancelled ones, so it can afford to be long.
+export const MAX_LOADER_DURATION_MS = 20000
+export const AUTH_MAX_LOADER_DURATION_MS = 20000
 
 const RESEARCH_FUN_FACTS = [
   "Mascot is filing your notes before the coffee cools.",
@@ -54,18 +60,51 @@ function getActionLabel(target: HTMLElement) {
   return rawLabel.replace(/\s+/g, " ").trim()
 }
 
+/** Destination-path → loader variant, most specific first. Matching is STRICT
+ * on the pathname: the query string is never consulted (sidebar links carry
+ * `?project=<id>`, which used to fuzzy-match every section to the "projects"
+ * loader). */
+const PATH_VARIANTS: ReadonlyArray<readonly [string, Notes9LoaderVariant]> = [
+  ["/research-map", "research-map"],
+  ["/protocols", "protocols"],
+  ["/literature-reviews", "literature"],
+  ["/papers", "writing"],
+  ["/experiments", "experiments"],
+  ["/data", "data"],
+  ["/lab-notes", "notes"],
+  ["/samples", "samples"],
+  ["/equipment", "equipment"],
+  ["/projects", "projects"],
+  ["/search", "search"],
+]
+
+function variantFromPath(path: string): Notes9LoaderVariant | null {
+  for (const [prefix, variant] of PATH_VARIANTS) {
+    if (path === prefix || path.startsWith(prefix + "/")) return variant
+  }
+  return null
+}
+
 function inferLoaderVariant(actionLabel: string, href?: string | null): Notes9LoaderVariant {
-  const source = `${href ?? ""} ${actionLabel}`.toLowerCase()
-  if (source.includes("/research-map") || source.includes("research map")) return "research-map"
+  // The destination path is what the user actually selected — it wins.
+  if (href) {
+    const fromPath = variantFromPath(extractPathname(href))
+    if (fromPath) return fromPath
+  }
+  // Label keywords only as a fallback for hrefless triggers (buttons, custom
+  // navigation events with no path).
+  const source = actionLabel.toLowerCase()
+  if (source.includes("research map")) return "research-map"
   if (source.includes("protocol")) return "protocols"
   if (source.includes("literature") || source.includes("book")) return "literature"
-  if (source.includes("writing") || source.includes("/papers")) return "writing"
+  if (source.includes("writing") || source.includes("paper")) return "writing"
   if (source.includes("search")) return "search"
-  if (source.includes("/projects") || source.includes("project")) return "projects"
-  if (source.includes("/experiments") || source.includes("experiment")) return "experiments"
-  if (source.includes("/samples") || source.includes("sample")) return "samples"
-  if (source.includes("/equipment") || source.includes("equipment") || source.includes("microscope")) return "equipment"
-  if (source.includes("/lab-notes") || source.includes("note")) return "notes"
+  if (source.includes("experiment")) return "experiments"
+  if (source.includes("data")) return "data"
+  if (source.includes("sample")) return "samples"
+  if (source.includes("equipment") || source.includes("microscope")) return "equipment"
+  if (source.includes("note")) return "notes"
+  if (source.includes("project")) return "projects"
   return "default"
 }
 
@@ -83,6 +122,8 @@ function buildLoaderCopy(actionLabel: string, variant: Notes9LoaderVariant) {
           ? "Opening Projects"
           : variant === "experiments"
             ? "Opening Experiments"
+            : variant === "data"
+            ? "Opening Data"
             : variant === "samples"
             ? "Opening Samples"
               : variant === "equipment"
@@ -132,6 +173,12 @@ function buildLoaderCopy(actionLabel: string, variant: Notes9LoaderVariant) {
               "Reviewing your last brilliant hypothesis.",
               "Whispering encouragement to the bench.",
             ]
+          : variant === "data"
+            ? [
+                "Lining up datasets row by row.",
+                "Warming up the plots and readouts.",
+                "Fetching files fresh from the instrument.",
+              ]
           : variant === "samples"
             ? [
                 "Sample tubes spinning into place.",
@@ -189,17 +236,23 @@ function triggerLoader(
   setLoaderVariant: (value: Notes9LoaderVariant) => void,
   setIsLoading: (value: boolean) => void,
   setLoadingStartedAt: (value: number | null) => void,
+  setIsLeaving: (value: boolean) => void,
 ) {
   const { title, captions } = buildLoaderCopy(actionLabel, variant)
   setLoaderTitle(title)
   setLoaderCaptions(captions)
   setLoaderVariant(variant)
   setIsLoading(true)
+  setIsLeaving(false)
   setLoadingStartedAt(Date.now())
 }
 
 export function NavigationLoader() {
   const [isLoading, setIsLoading] = useState(false)
+  // Dismissal fades the overlay out over ~200ms instead of unmounting it in
+  // one frame — the destination is already painted beneath, so the handoff
+  // reads as a reveal rather than a hard cut.
+  const [isLeaving, setIsLeaving] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [loaderTitle, setLoaderTitle] = useState("Loading Notes9")
   const [loaderVariant, setLoaderVariant] = useState<Notes9LoaderVariant>("default")
@@ -208,6 +261,9 @@ export function NavigationLoader() {
   ])
   const [loadingStartedAt, setLoadingStartedAt] = useState<number | null>(null)
   const destinationPathRef = useRef<string | null>(null)
+  // Pathname at trigger time — when no destination is known (custom events),
+  // we settle only after we've actually LEFT this path.
+  const originPathRef = useRef<string | null>(null)
   const pathname = usePathname()
 
   // Prevent hydration mismatch by only rendering after mount
@@ -218,15 +274,56 @@ export function NavigationLoader() {
   useEffect(() => {
     if (!isLoading || loadingStartedAt == null) return
 
+    // Settle = hand off from the mascot overlay to the destination's
+    // loading.tsx skeleton, which has already committed beneath us (that's
+    // what flipped the pathname). The overlay is deliberately the SHORT
+    // phase — the route skeleton owns the rest of the wait while data
+    // streams, so the skeleton always shows longer than the overlay.
+    const destination = destinationPathRef.current
+    const origin = originPathRef.current
+
+    // Still on the page the user clicked from → route not committed yet.
+    if (origin != null && pathname === origin) return
+
+    // Redirect chains (e.g. /data → /experiments?project=…) never reach the
+    // recorded destination. Once we've LEFT the origin, treat a path that
+    // stays stable through a short grace window as the real destination —
+    // this effect re-runs (and cancels the timer) on every pathname hop, so
+    // an intermediate route never dismisses the overlay early. Previously the
+    // overlay waited for the unreachable destination until the 8s safety
+    // timeout fired.
+    const reachedDestination = destination == null || pathname === destination
+    const redirectGraceMs = reachedDestination ? 0 : 450
+
     const elapsed = Date.now() - loadingStartedAt
-    const remaining = Math.max(0, MIN_LOADER_DURATION_MS - elapsed)
+    const remaining = Math.max(redirectGraceMs, MIN_LOADER_DURATION_MS - elapsed)
+    let raf1 = 0
+    let raf2 = 0
+    let leaveTimerId = 0
     const timeoutId = window.setTimeout(() => {
-      setIsLoading(false)
-      setLoadingStartedAt(null)
+      // Two rAFs = the new route has committed AND painted beneath the
+      // overlay, so removing it can never reveal a stale frame of the old page.
+      raf1 = requestAnimationFrame(() => {
+        raf2 = requestAnimationFrame(() => {
+          setIsLeaving(true)
+          leaveTimerId = window.setTimeout(() => {
+            setIsLoading(false)
+            setIsLeaving(false)
+            setLoadingStartedAt(null)
+            destinationPathRef.current = null
+            originPathRef.current = null
+          }, 220)
+        })
+      })
     }, remaining)
 
-    return () => window.clearTimeout(timeoutId)
-  }, [pathname])
+    return () => {
+      window.clearTimeout(timeoutId)
+      window.clearTimeout(leaveTimerId)
+      cancelAnimationFrame(raf1)
+      cancelAnimationFrame(raf2)
+    }
+  }, [pathname, isLoading, loadingStartedAt])
 
   useEffect(() => {
     if (!mounted) return
@@ -265,9 +362,10 @@ export function NavigationLoader() {
           
           if (!samePage && !isHashLink) {
             destinationPathRef.current = destinationPath
+            originPathRef.current = pathname
             const label = getActionLabel(target)
             const variant = inferLoaderVariant(label, href)
-            triggerLoader(label, variant, setLoaderTitle, setLoaderCaptions, setLoaderVariant, setIsLoading, setLoadingStartedAt)
+            triggerLoader(label, variant, setLoaderTitle, setLoaderCaptions, setLoaderVariant, setIsLoading, setLoadingStartedAt, setIsLeaving)
             startSafetyTimeout(variant)
           }
         }
@@ -279,9 +377,11 @@ export function NavigationLoader() {
       if (button) {
         // Look for data attribute that indicates navigation
         if (button.hasAttribute("data-navigate")) {
+          destinationPathRef.current = null
+          originPathRef.current = pathname
           const label = getActionLabel(target)
           const variant = inferLoaderVariant(label)
-          triggerLoader(label, variant, setLoaderTitle, setLoaderCaptions, setLoaderVariant, setIsLoading, setLoadingStartedAt)
+          triggerLoader(label, variant, setLoaderTitle, setLoaderCaptions, setLoaderVariant, setIsLoading, setLoadingStartedAt, setIsLeaving)
           startSafetyTimeout(variant)
         }
       }
@@ -290,8 +390,10 @@ export function NavigationLoader() {
     const handleCustomNavigation = (event: Event) => {
       const detail = (event as CustomEvent<{ label?: string; href?: string; kind?: Notes9LoaderVariant }>).detail
       const label = detail?.label ?? ""
+      destinationPathRef.current = detail?.href ? extractPathname(detail.href) : null
+      originPathRef.current = pathname
       const variant = detail?.kind ?? inferLoaderVariant(label, detail?.href)
-      triggerLoader(label, variant, setLoaderTitle, setLoaderCaptions, setLoaderVariant, setIsLoading, setLoadingStartedAt)
+      triggerLoader(label, variant, setLoaderTitle, setLoaderCaptions, setLoaderVariant, setIsLoading, setLoadingStartedAt, setIsLeaving)
       startSafetyTimeout(variant)
     }
 
@@ -310,12 +412,16 @@ export function NavigationLoader() {
   // Don't render anything until mounted (prevents hydration mismatch)
   if (!mounted || !isLoading) return null
 
+  const overlayMotion = isLeaving
+    ? "animate-out fade-out-0 fill-mode-forwards duration-200"
+    : "animate-in fade-in duration-300"
+
   return (
     <>
-      <div className="fixed inset-0 z-[9998] pointer-events-none animate-in fade-in duration-300">
+      <div className={`fixed inset-0 z-[9998] pointer-events-none ${overlayMotion}`}>
         <div className="absolute inset-0 bg-background" />
       </div>
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center pointer-events-none animate-in fade-in duration-300">
+      <div className={`fixed inset-0 z-[9999] flex items-center justify-center pointer-events-none ${overlayMotion}`}>
         <div className="-translate-y-8 sm:-translate-y-10">
           {loaderVariant === "auth" ? (
             <Notes9VideoLoader

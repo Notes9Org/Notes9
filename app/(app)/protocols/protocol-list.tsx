@@ -15,7 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ViewModeToggle } from "@/components/ui/view-mode-toggle"
-import { FileText, Calendar, ArrowUpRight, Grid3x3, List, Pencil, FolderOpen, FlaskConical } from "lucide-react"
+import { FileText, CalendarBlank as Calendar, ArrowUpRight, SquaresFour as Grid3x3, List, PencilSimple as Pencil, FolderOpen, Flask as FlaskConical } from "@phosphor-icons/react/ssr"
 import Link from "next/link"
 import type { Protocol } from "./protocols-page-content"
 import { CATALYST_MENTION_DRAG_MIME } from "@/lib/catalyst-mention-types"
@@ -80,6 +80,7 @@ export function ProtocolList({
           {protocols.map((item) => (
             <Card
               key={item.id}
+              ribbon="var(--kind-protocol)"
               draggable
               onDragStart={(e) => {
                 e.dataTransfer.setData(

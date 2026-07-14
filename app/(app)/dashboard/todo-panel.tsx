@@ -38,15 +38,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { motion } from "framer-motion";
-import {
-  ListTodo,
-  Trash2,
-  Pencil,
-  FlaskConical,
-  FolderOpen,
-  X,
-  Check
-} from "lucide-react";
+import { ListChecks as ListTodo, Trash as Trash2, PencilSimple as Pencil, Flask as FlaskConical, FolderOpen, X, Check } from "@phosphor-icons/react/ssr";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 

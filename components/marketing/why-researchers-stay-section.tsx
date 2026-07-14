@@ -2,26 +2,8 @@
 
 import Link from "next/link"
 import { motion } from "framer-motion"
-import {
-  ArrowRight,
-  BarChart3,
-  BookOpen,
-  ClipboardList,
-  Database,
-  FileCheck,
-  FileText,
-  FlaskConical,
-  FolderOpen,
-  MessageCircle,
-  PenLine,
-  Play,
-  Quote,
-  Shield,
-  Sparkles,
-  TestTube2,
-  UsersRound,
-  type LucideIcon,
-} from "lucide-react"
+import { ArrowRight, ChartBar as BarChart3, BookOpen, ClipboardText as ClipboardList, Database, FileText as FileCheck, FileText, Flask as FlaskConical, FolderOpen, ChatCircle as MessageCircle, PencilSimpleLine as PenLine, Play, Quotes as Quote, Shield, Sparkle as Sparkles, TestTube as TestTube2, UsersThree as UsersRound } from "@phosphor-icons/react/ssr"
+import type { Icon as LucideIcon } from "@phosphor-icons/react"
 import { useId } from "react"
 
 import { IceMascot } from "@/components/ui/ice-mascot"

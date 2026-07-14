@@ -9,8 +9,18 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
 import { useMediaQuery } from "@/hooks/use-media-query"
-import { FileText, ChevronLeft, List, Loader2, Plus, MoreVertical, Trash2, Pencil } from "lucide-react"
+import { useSkeletonGate } from "@/hooks/use-skeleton-gate"
+import { FileText, CaretLeft as ChevronLeft, List, CircleNotch as Loader2, Plus, DotsThreeVertical as MoreVertical, Trash as Trash2, PencilSimple as Pencil } from "@phosphor-icons/react/ssr"
 import { cn } from "@/lib/utils"
+import {
+  SideRail,
+  SideRailBody,
+  SideRailEmpty,
+  SideRailHeader,
+  SideRailList,
+  SideRailRow,
+  SideRailSkeleton,
+} from "@/components/patterns/side-rail"
 import { PaperWorkspace } from "../paper-workspace"
 import {
   DropdownMenu,
@@ -44,6 +54,7 @@ export function PaperDetailClient({ activePaperId }: { activePaperId: string }) 
   const { projectId } = useProjectScope()
   const [papers, setPapers] = useState<Paper[]>([])
   const [loading, setLoading] = useState(true)
+  const showSkeleton = useSkeletonGate(loading)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   // Wraps the papers list + editor so editor fullscreen expands the whole
   // workspace, keeping the list visible (same pattern as lab notes / reports).
@@ -119,66 +130,47 @@ export function PaperDetailClient({ activePaperId }: { activePaperId: string }) 
   }
 
   const SidebarContent = () => (
-    <div className="flex h-full min-h-0 w-52 min-w-[13rem] flex-col gap-0 p-2">
-      <div className="flex h-9 shrink-0 items-center justify-between px-1">
-        <span className="truncate text-xs font-medium text-muted-foreground">
-          {projectId ? "Project Papers" : "All Papers"}
-        </span>
+    <div className="flex h-full min-h-0 flex-col gap-1">
+      <SideRailHeader label={projectId ? "Project Papers" : "All Papers"}>
         <Button
           variant="ghost"
-          size="icon-sm"
-          className="m-0 shrink-0 text-muted-foreground hover:text-foreground h-6 w-6"
+          size="icon"
+          className="h-7 w-7 shrink-0"
           onClick={() => {
             router.push(`/papers/new${projectId ? `?project=${projectId}` : ""}`)
           }}
           aria-label="Create new paper"
           title="Create new paper"
         >
-          <Plus className="h-4 w-4" />
+          <Plus className="size-4" />
         </Button>
-      </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-auto mt-1">
-        {loading ? (
-          <div className="flex items-center justify-center p-4">
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-          </div>
-        ) : papers.length > 0 ? (
-          <ul className="flex w-full min-w-0 flex-col gap-0.5">
+      </SideRailHeader>
+      <SideRailBody>
+        {showSkeleton ? (
+          <SideRailSkeleton label="Loading papers" />
+        ) : loading ? null : papers.length > 0 ? (
+          <SideRailList>
             {papers.map((paper) => {
               const isActive = activePaperId === paper.id
               const updatedStr = new Date(paper.updated_at).toLocaleString()
               return (
-                <li key={paper.id} className="group/list-item relative">
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => handleSelectPaper(paper.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault()
-                        handleSelectPaper(paper.id)
-                      }
-                    }}
-                    title={`Updated: ${updatedStr}`}
-                    className={cn(
-                      "grid w-full min-h-8 grid-cols-[auto_1fr_auto] items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-muted/80",
-                      isActive && "bg-muted font-medium"
-                    )}
-                  >
-                    <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    <p className="min-w-0 truncate m-0 text-sm">
-                      {paper.title || "Untitled Paper"}
-                    </p>
+                <SideRailRow
+                  key={paper.id}
+                  active={isActive}
+                  onSelect={() => handleSelectPaper(paper.id)}
+                  icon={<FileText />}
+                  title={`Updated: ${updatedStr}`}
+                  actions={
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="size-7 shrink-0 opacity-70 hover:opacity-100"
+                          className="size-7 shrink-0"
                           onClick={(e) => e.stopPropagation()}
                           aria-label="Paper options"
                         >
-                          <MoreVertical className="h-3.5 w-3.5" />
+                          <MoreVertical className="size-3.5" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
@@ -189,22 +181,22 @@ export function PaperDetailClient({ activePaperId }: { activePaperId: string }) 
                             setDeleteTarget(paper.id)
                           }}
                         >
-                          <Trash2 className="mr-2 h-4 w-4" />
+                          <Trash2 className="mr-2 size-4" />
                           Delete
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
-                  </div>
-                </li>
+                  }
+                >
+                  {paper.title || "Untitled Paper"}
+                </SideRailRow>
               )
             })}
-          </ul>
+          </SideRailList>
         ) : (
-          <div className="flex flex-col items-center justify-center gap-2 px-2 py-6 text-center text-xs text-muted-foreground">
-            No papers found.
-          </div>
+          <SideRailEmpty>No papers found.</SideRailEmpty>
         )}
-      </div>
+      </SideRailBody>
     </div>
   )
 
@@ -251,31 +243,15 @@ export function PaperDetailClient({ activePaperId }: { activePaperId: string }) 
       <div className="flex-1 min-w-0 min-h-0 flex flex-col">
         <Card className="flex h-full min-h-0 flex-col gap-0 py-0 border-0 shadow-none rounded-none sm:border sm:shadow-sm sm:rounded-xl">
           <div ref={paperWorkspaceRef} className="flex h-full min-h-0 min-w-0 flex-1 flex-row items-stretch overflow-hidden bg-background">
-            {/* Desktop Sidebar */}
-            <aside
-              className={cn(
-                "hidden sm:flex min-h-0 shrink-0 flex-col self-stretch overflow-hidden relative",
-                sidebarOpen ? "border-r border-border bg-muted/20" : "border-r-0"
-              )}
-              /* Animate the rail width (like lab notes / the left + Catalyst sidebars):
-                 the fixed-width inner panel stays mounted and is clipped by
-                 overflow-hidden, so it slides smoothly instead of reflowing. */
-              style={{
-                width: sidebarOpen ? "13rem" : 0,
-                minWidth: 0,
-                transition: "width 0.5s cubic-bezier(0.22, 1, 0.36, 1)",
-              }}
-              aria-hidden={!sidebarOpen}
-            >
-              <div className="flex h-full min-h-0 w-52 min-w-[13rem] flex-col">
-                <SidebarContent />
-              </div>
-            </aside>
+            {/* Desktop Sidebar — glass rail (Catalyst history look) */}
+            <SideRail open={sidebarOpen} className="hidden sm:flex">
+              <SidebarContent />
+            </SideRail>
 
             {/* Mobile Sidebar (Sheet) */}
             {isMobile && (
               <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-                <SheetContent side="left" className="w-64 p-0">
+                <SheetContent side="left" className="w-64 p-2">
                   <SidebarContent />
                 </SheetContent>
               </Sheet>

@@ -28,17 +28,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
-import {
-  Download,
-  Trash2,
-  FileText,
-  FileImage,
-  FileSpreadsheet,
-  File,
-  Eye,
-  Plus,
-  Loader2,
-} from "lucide-react"
+import { DownloadSimple as Download, Trash as Trash2, FileText, FileImage, FileText as FileSpreadsheet, File, ArrowUpRight, Plus, CircleNotch as Loader2 } from "@phosphor-icons/react/ssr"
 import { UploadFileDialog } from "./upload-file-dialog"
 import {
   ExperimentDataTabularDialog,
@@ -479,9 +469,21 @@ export function DataFilesTab({ experimentId }: { experimentId: string }) {
               </TableHeader>
               <TableBody>
                 {files.map((file) => (
-                  <TableRow key={file.id}>
-                    <TableCell>
-                      <Checkbox 
+                  <TableRow
+                    key={file.id}
+                    className="cursor-pointer"
+                    onClick={() => {
+                      if (isTabularExperimentFile(file)) {
+                        openTabularViewer(file)
+                      } else if (isPreviewableExperimentFile(file)) {
+                        openPreview(file)
+                      } else {
+                        void handleView(file)
+                      }
+                    }}
+                  >
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
                         checked={selectedIds.includes(file.id)}
                         onCheckedChange={(checked) => toggleSelect(file.id, checked === true)}
                         aria-label={`Select file ${file.file_name}`}
@@ -511,7 +513,7 @@ export function DataFilesTab({ experimentId }: { experimentId: string }) {
                     <TableCell className="text-muted-foreground text-xs">
                       {formatDate(file.created_at)}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
                         <Button
                           variant="ghost"
@@ -533,7 +535,7 @@ export function DataFilesTab({ experimentId }: { experimentId: string }) {
                                 : "Open file"
                           }
                         >
-                          <Eye className="h-4 w-4" />
+                          <ArrowUpRight className="h-4 w-4" />
                         </Button>
                         <Button
                           variant="ghost"

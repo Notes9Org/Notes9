@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
-import { SlidersHorizontal, X } from 'lucide-react'
+import { SlidersHorizontal, X } from "@phosphor-icons/react/ssr"
 import { cn } from '@/lib/utils'
 import {
   type AiResultFilters,

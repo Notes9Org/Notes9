@@ -38,8 +38,22 @@ export type ProjectScope = {
   projectName: string | null
   projectColor: string | null
   experimentId: string | null
+  /** Experiment present in the CURRENT url only (never the persisted one). */
+  liveExperimentId: string | null
+  /**
+   * Experiment the user explicitly pinned from the sidebar switcher (or by
+   * opening its page). Unlike the display-only persisted id, the pin IS
+   * carried into scoped nav links — it's an explicit, visible, one-click-
+   * clearable choice, so the leftover-URL bug liveExperimentId guards
+   * against doesn't apply.
+   */
+  pinnedExperimentId: string | null
   experimentName: string | null
   loading: boolean
+  /** Set (or clear, with null) the active project; always drops the pin. */
+  setProjectScope: (id: string | null) => void
+  /** Pin an experiment (optionally switching project with it), or clear with null. */
+  setExperimentScope: (id: string | null, projectId?: string | null) => void
   clearScope: () => void
   /** `?project=…&experiment=…` for project-scoped sidebar links */
   scopedQueryString: string
@@ -75,6 +89,10 @@ export function ProjectScopeProvider({ children }: { children: ReactNode }) {
     if (typeof window === "undefined") return null
     try { return localStorage.getItem("n9_last_experiment_id") } catch { return null }
   })
+  const [pinnedExperimentId, setPinnedExperimentId] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null
+    try { return localStorage.getItem("n9_pinned_experiment_id") } catch { return null }
+  })
 
   const [projectName, setProjectName] = useState<string | null>(null)
   const [experimentId, setExperimentId] = useState<string | null>(null)
@@ -101,6 +119,7 @@ export function ProjectScopeProvider({ children }: { children: ReactNode }) {
     if (pathExperimentId) return pathname
     if (queryExperimentId) return `/experiments/${queryExperimentId}`
     if (queryProjectId) return `/projects/${queryProjectId}`
+    if (pinnedExperimentId) return `/experiments/${pinnedExperimentId}`
     if (persistedExperimentId) return `/experiments/${persistedExperimentId}`
     if (persistedProjectId) return `/projects/${persistedProjectId}`
     return pathname
@@ -110,6 +129,7 @@ export function ProjectScopeProvider({ children }: { children: ReactNode }) {
     pathExperimentId,
     queryExperimentId,
     queryProjectId,
+    pinnedExperimentId,
     persistedExperimentId,
     persistedProjectId,
   ])
@@ -185,6 +205,24 @@ export function ProjectScopeProvider({ children }: { children: ReactNode }) {
     }
   }, [persistedProjectId, persistedExperimentId])
 
+  useEffect(() => {
+    try {
+      if (pinnedExperimentId) {
+        localStorage.setItem("n9_pinned_experiment_id", pinnedExperimentId)
+      } else {
+        localStorage.removeItem("n9_pinned_experiment_id")
+      }
+    } catch (e) {
+      console.warn("[ProjectScope] localStorage write failed:", e)
+    }
+  }, [pinnedExperimentId])
+
+  // Standing on an experiment page re-pins that experiment so the sidebar's
+  // "where am I" (Experiments row label + scoped links) stays truthful.
+  useEffect(() => {
+    if (pathExperimentId) setPinnedExperimentId(pathExperimentId)
+  }, [pathExperimentId])
+
   const activeProjectId =
     pathProjectId ?? queryProjectId ?? persistedProjectId
 
@@ -199,33 +237,89 @@ export function ProjectScopeProvider({ children }: { children: ReactNode }) {
     try {
       localStorage.removeItem("n9_last_project_id")
       localStorage.removeItem("n9_last_experiment_id")
+      localStorage.removeItem("n9_pinned_experiment_id")
     } catch (e) {
       console.warn("[ProjectScope] localStorage clear failed:", e)
     }
     setPersistedProjectId(null)
     setPersistedExperimentId(null)
+    setPinnedExperimentId(null)
     setExperimentId(null)
     setExperimentName(null)
   }, [])
 
+  const setProjectScope = useCallback(
+    (id: string | null) => {
+      if (!id) {
+        clearScope()
+        return
+      }
+      // A pinned/persisted experiment from another project must never survive
+      // a project switch — otherwise pathToResolve would resolve the old
+      // experiment and drag the previous project's scope right back in.
+      try {
+        localStorage.removeItem("n9_last_experiment_id")
+      } catch {}
+      setPinnedExperimentId(null)
+      setPersistedExperimentId(null)
+      setExperimentId(null)
+      setExperimentName(null)
+      setPersistedProjectId(id)
+    },
+    [clearScope],
+  )
+
+  const setExperimentScope = useCallback(
+    (id: string | null, nextProjectId?: string | null) => {
+      if (!id) {
+        try {
+          localStorage.removeItem("n9_last_experiment_id")
+        } catch {}
+        setPinnedExperimentId(null)
+        setPersistedExperimentId(null)
+        setExperimentId(null)
+        setExperimentName(null)
+        return
+      }
+      setPinnedExperimentId(id)
+      setPersistedExperimentId(id)
+      if (nextProjectId) setPersistedProjectId(nextProjectId)
+    },
+    [],
+  )
+
+  // An experiment is only "live" while the user is ON its page (`/experiments/
+  // <id>` in the path). Query params don't count: every scoped sidebar link
+  // re-forwarded `?experiment=`, so after leaving an experiment the id rode
+  // along in the URL indefinitely and clicking Data silently reopened the
+  // previous experiment. The persisted last-experiment id is likewise display-
+  // only and must never be carried into nav links. The PINNED experiment is
+  // the deliberate exception: chosen explicitly, shown on the Experiments nav
+  // row, cleared on project switch and one click away from removal.
+  const liveExperimentId = pathExperimentId
+  const carriedExperimentId = liveExperimentId ?? pinnedExperimentId
+
   const scopedQueryString = useMemo(() => {
     const params = new URLSearchParams()
     if (projectId) params.set("project", projectId)
-    const activeExperiment =
-      experimentId ?? queryExperimentId ?? persistedExperimentId
-    if (activeExperiment) params.set("experiment", activeExperiment)
+    if (carriedExperimentId) params.set("experiment", carriedExperimentId)
     const qs = params.toString()
     return qs ? `?${qs}` : ""
-  }, [projectId, experimentId, queryExperimentId, persistedExperimentId])
+  }, [projectId, carriedExperimentId])
 
   const value = useMemo<ProjectScope>(
     () => ({
       projectId,
       projectName,
       projectColor: projectId ? colorFromId(projectId) : null,
-      experimentId: experimentId ?? queryExperimentId ?? persistedExperimentId,
+      experimentId:
+        experimentId ?? queryExperimentId ?? pinnedExperimentId ?? persistedExperimentId,
+      liveExperimentId,
+      pinnedExperimentId,
       experimentName,
       loading,
+      setProjectScope,
+      setExperimentScope,
       clearScope,
       scopedQueryString,
     }),
@@ -234,9 +328,13 @@ export function ProjectScopeProvider({ children }: { children: ReactNode }) {
       projectName,
       experimentId,
       queryExperimentId,
+      pinnedExperimentId,
       persistedExperimentId,
+      liveExperimentId,
       experimentName,
       loading,
+      setProjectScope,
+      setExperimentScope,
       clearScope,
       scopedQueryString,
     ],
@@ -257,8 +355,12 @@ export function useProjectScope(): ProjectScope {
       projectName: null,
       projectColor: null,
       experimentId: null,
+      liveExperimentId: null,
+      pinnedExperimentId: null,
       experimentName: null,
       loading: false,
+      setProjectScope: () => {},
+      setExperimentScope: () => {},
       clearScope: () => {},
       scopedQueryString: "",
     }

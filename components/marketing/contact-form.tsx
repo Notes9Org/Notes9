@@ -15,7 +15,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "sonner"
-import { Loader2, Send } from "lucide-react"
+import { CircleNotch as Loader2, PaperPlaneTilt as Send } from "@phosphor-icons/react/ssr"
 import { useEffect, useState } from "react"
 
 const formSchema = z.object({

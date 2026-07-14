@@ -80,7 +80,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
-          href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400;1,500;1,700&family=DM+Serif+Display&family=Familjen+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Serif:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Work+Sans:wght@300;400;500;600;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400;1,500;1,700&family=DM+Serif+Display&family=Familjen+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Serif:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Merriweather+Sans:wght@400;500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&family=Work+Sans:wght@300;400;500;600;700&display=swap"
           rel="stylesheet"
         />
       </head>
@@ -92,11 +92,16 @@ export default function RootLayout({
         suppressHydrationWarning
         className="font-sans antialiased"
         style={{
-          // Map global styles to CSS variables so Tailwind classes still function correctly
-          "--font-ibm-sans": "var(--font-ibm-sans, 'IBM Plex Sans', system-ui, sans-serif)",
-          "--font-ibm-serif": "var(--font-ibm-serif, 'IBM Plex Serif', Georgia, serif)",
-          "--font-familjen": "var(--font-familjen, 'Familjen Grotesk', system-ui, sans-serif)",
-          "--font-jetbrains-mono": "var(--font-jetbrains-mono, 'JetBrains Mono', monospace)",
+          // Map global styles to CSS variables so Tailwind classes still function correctly.
+          // Journal-grounded product typeface system (see docs/UI_UX_REVAMP_PLAN.md §3.1):
+          //   body/UI + headings → Merriweather Sans (Nature's web UI face)
+          //   display/serif       → Source Serif 4 (scientific-publishing serif)
+          //   mono                → IBM Plex Mono (sequences, IDs, measurements)
+          // Legacy var names are kept to avoid churn; their resolved faces changed.
+          "--font-ibm-sans": "var(--font-ibm-sans, 'Merriweather Sans', system-ui, sans-serif)",
+          "--font-ibm-serif": "var(--font-ibm-serif, 'Source Serif 4', Georgia, serif)",
+          "--font-familjen": "var(--font-familjen, 'Merriweather Sans', system-ui, sans-serif)",
+          "--font-jetbrains-mono": "var(--font-jetbrains-mono, 'IBM Plex Mono', monospace)",
         } as React.CSSProperties}
       >
         <ThemeProvider

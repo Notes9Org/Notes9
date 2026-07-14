@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { z } from "zod"
-import { Building2 } from "lucide-react"
+import { Buildings as Building2 } from "@phosphor-icons/react/ssr"
 
 import { Button } from "@/components/ui/button"
 import {

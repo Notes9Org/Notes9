@@ -2,14 +2,7 @@
 
 import { useEffect, useMemo, useState, type ComponentType } from "react"
 import { useRouter } from "next/navigation"
-import {
-  FileEdit,
-  FileText,
-  FlaskConical,
-  FolderOpen,
-  NotebookPen,
-  TestTube,
-} from "lucide-react"
+import { NotePencil as FileEdit, FileText, Flask as FlaskConical, FolderOpen, NotePencil as NotebookPen, TestTube } from "@phosphor-icons/react/ssr"
 import { createClient } from "@/lib/supabase/client"
 import { useProjectScope } from "@/contexts/project-scope-context"
 import { NewLabNoteDialog } from "@/app/(app)/lab-notes/new-lab-note-dialog"

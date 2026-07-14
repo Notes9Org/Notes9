@@ -2,24 +2,8 @@
 
 import { useMemo, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import {
-  ArrowLeft,
-  ArrowRight,
-  Beaker,
-  Building2,
-  Check,
-  Compass,
-  FlaskConical,
-  GraduationCap,
-  Landmark,
-  Microscope,
-  NotebookPen,
-  Rocket,
-  Sparkles,
-  Stethoscope,
-  Users,
-} from "lucide-react"
-import type { LucideIcon } from "lucide-react"
+import { ArrowLeft, ArrowRight, Flask as Beaker, Buildings as Building2, Check, Compass, Flask as FlaskConical, GraduationCap, Bank as Landmark, Microscope, NotePencil as NotebookPen, Rocket, Sparkle as Sparkles, Stethoscope, Users } from "@phosphor-icons/react/ssr"
+import type { Icon as LucideIcon } from "@phosphor-icons/react"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"

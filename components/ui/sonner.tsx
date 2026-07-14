@@ -11,11 +11,16 @@ const Toaster = ({ ...props }: ToasterProps) => {
       theme={theme as ToasterProps['theme']}
       className="toaster group"
       closeButton
+      toastOptions={{
+        // Sandglass toast: grained, blurred, glass-bordered (readability from
+        // the high-opacity mix + blur).
+        className: 'n9-grain backdrop-blur-xl',
+      }}
       style={
         {
-          '--normal-bg': 'var(--popover)',
+          '--normal-bg': 'color-mix(in srgb, var(--popover) 82%, transparent)',
           '--normal-text': 'var(--popover-foreground)',
-          '--normal-border': 'var(--border)',
+          '--normal-border': 'var(--glass-border)',
         } as React.CSSProperties
       }
       {...props}

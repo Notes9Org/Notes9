@@ -8,12 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import {
-  FileText,
-  BookOpen,
-  FolderOpen,
-  ScrollText,
-} from "lucide-react"
+import { FileText, BookOpen, FolderOpen, Scroll as ScrollText } from "@phosphor-icons/react/ssr"
 import { OrgSetupCTA } from "@/components/org/org-setup-cta"
 import {
   DashboardMyLab,
@@ -26,7 +21,6 @@ import { DashboardFirstRun } from "./dashboard-first-run"
 import { DashboardScheduleTasks } from "./dashboard-schedule-tasks"
 import { DashboardWhiteboard } from "./dashboard-whiteboard"
 import { DashboardRecentWork } from "./dashboard-recent-work"
-import { ActivitySummary } from "./activity-summary"
 
 /**
  * Dashboard = Unified lab workspace.
@@ -99,7 +93,11 @@ export default async function DashboardPage() {
       .eq("user_id", user.id)
       .is("project_id", null)
       .order("created_at", { ascending: true }),
-    ensureUserProfile(user),
+    supabase
+      .from("profiles")
+      .select("organization_id, first_name")
+      .eq("id", user.id)
+      .single(),
     supabase
       .from("org_members")
       .select("id")
@@ -249,14 +247,16 @@ export default async function DashboardPage() {
     }
   }
 
-  // First-name lives in user_metadata too; avoid an extra profiles round-trip
-  // just for the greeting.
+  // Greeting name priority: the first name the user set in Account Settings
+  // (profiles.first_name — already fetched in the fan-out above), then auth
+  // metadata (OAuth), then the email prefix.
   const metadata = user.user_metadata ?? {}
   const firstName =
     typeof metadata.first_name === "string" ? metadata.first_name : undefined
   const fullName =
     typeof metadata.full_name === "string" ? metadata.full_name : undefined
   const greetingName =
+    profile?.first_name?.trim() ||
     firstName ||
     fullName?.split(" ")[0] ||
     user.email?.split("@")[0] ||
@@ -264,15 +264,22 @@ export default async function DashboardPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 md:gap-8 pb-8 min-w-0">
-      {/* Wish greeting ("Morning, <name>") */}
-      <DashboardGreeting name={greetingName} />
+      {/* Compact glass masthead: date + greeting — replaces the old centered
+          hero stack (avatar sphere + date + separate summary row) that burned
+          a lot of vertical space. (The AI activity strip was removed at the
+          user's request; app/(app)/dashboard/activity-summary.tsx keeps the
+          component should it return.) */}
+      <header className="n9-grain relative flex shrink-0 flex-col gap-2.5 overflow-hidden rounded-2xl border border-[color:var(--glass-border)] bg-[color:var(--glass-bg)] px-4 py-3.5 backdrop-blur-md md:px-6 md:py-4">
+        {/* Ambient warm wash for depth; paints under the content. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[radial-gradient(90%_100%_at_18%_0%,color-mix(in_oklab,var(--primary)_10%,transparent),transparent_70%)]"
+        />
+        <DashboardGreeting name={greetingName} />
+      </header>
+
       {/* Catalyst AI composer */}
       <CatalystSectionHero size="lg" scope="lab" shrinkOnScroll />
-
-      {/* AI-generated one-liner summarising recent lab activity */}
-      <div className="mt-2 flex flex-col gap-3">
-        <ActivitySummary />
-      </div>
 
       {/* Dashboard 2x2 Grid */}
       <div className="grid grid-cols-1 gap-4 md:gap-5 xl:grid-cols-2 auto-rows-[400px]">
@@ -294,7 +301,7 @@ export default async function DashboardPage() {
         <DashboardRecentWork activeExperiments={activeExperiments} />
 
         {/* Bottom Right: Recently Edited */}
-        <Card data-tour="dash-recently-edited" className="flex flex-col min-w-0 h-full">
+        <Card data-tour="dash-recently-edited" variant="glass" className="flex flex-col min-w-0 h-full">
           <CardHeader>
             <CardTitle className="text-base">Recently edited</CardTitle>
           </CardHeader>

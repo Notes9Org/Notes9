@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ViewModeToggle } from "@/components/ui/view-mode-toggle"
-import { NotebookPen, Grid3x3, List, ArrowUpRight } from "lucide-react"
+import { NotePencil as NotebookPen, SquaresFour as Grid3x3, List, ArrowUpRight } from "@phosphor-icons/react/ssr"
 import { CATALYST_MENTION_DRAG_MIME } from "@/lib/catalyst-mention-types"
 
 type LabNote = {
@@ -86,8 +86,9 @@ export default function LabNotesList({
       {effectiveViewMode === "grid" && (
         <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(280px,1fr))]">
           {notes.map((note) => (
-            <Card 
-              key={note.id} 
+            <Card
+              key={note.id}
+              ribbon="var(--kind-note)"
               draggable
               className="bg-card hover:border-primary transition-colors flex flex-col min-w-0 overflow-hidden cursor-pointer"
               onDragStart={(e) => {

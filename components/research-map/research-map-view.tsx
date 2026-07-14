@@ -49,7 +49,7 @@ import {
 import { cn } from "@/lib/utils"
 import { recordRumEvent } from "@/lib/rum"
 import { sortByRecentProjectOrder } from "@/lib/recent-projects"
-import { Loader2 } from "lucide-react"
+import { CircleNotch as Loader2 } from "@phosphor-icons/react/ssr"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
@@ -395,6 +395,13 @@ function ResearchMapCanvas() {
   const [projectId, setProjectId] = useState<string | "all">(activeProjectId || "all")
   const [experiments, setExperiments] = useState<{ id: string; name: string; project_id: string }[]>([])
   const [experimentId, setExperimentId] = useState<string | "all">("all")
+
+  // Follow sidebar context switches made while this page is open (the map's
+  // own project select stays editable for ad-hoc browsing).
+  useEffect(() => {
+    setProjectId(activeProjectId || "all")
+    setExperimentId("all")
+  }, [activeProjectId])
   const [include, setInclude] = useState<Record<ResearchMapNodeKind, boolean>>({
     project: true,
     experiment: true,

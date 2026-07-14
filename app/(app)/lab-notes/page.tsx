@@ -4,12 +4,13 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { useRouter, useSearchParams } from "next/navigation"
 import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
+import { useProjectScope } from "@/contexts/project-scope-context"
 import { createClient } from "@/lib/supabase/client"
 import LabNotesList from "@/app/(app)/lab-notes-list/[id]/lab-notes-list"
 import { NewLabNoteDialog } from "@/app/(app)/lab-notes/new-lab-note-dialog"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Loader2, Plus, Grid3x3, List, NotebookPen } from "lucide-react"
+import { CircleNotch as Loader2, Plus, SquaresFour as Grid3x3, List, NotePencil as NotebookPen } from "@phosphor-icons/react/ssr"
 import {
   Empty,
   EmptyHeader,
@@ -44,6 +45,7 @@ export default function LabNotesPage() {
   const searchParams = useSearchParams()
   const supabase = createClient()
   const { setSegments } = useBreadcrumb()
+  const scope = useProjectScope()
 
   const [notes, setNotes] = useState<LabNote[]>([])
   const [selectedNote, setSelectedNote] = useState<LabNote | null>(null)
@@ -159,8 +161,29 @@ export default function LabNotesPage() {
       raw ?? undefined,
       projectOptions.map((o) => o.value)
     )
-    setProjectFilter(resolved ?? FILTER_ALL)
-  }, [searchParams, projectOptions])
+    // No URL param (direct visit / bookmark): fall back to the sidebar
+    // context so the page still opens scoped. The filter stays editable.
+    const scopeFallback =
+      !raw && scope.projectId && projectOptions.some((o) => o.value === scope.projectId)
+        ? scope.projectId
+        : null
+    setProjectFilter(resolved ?? scopeFallback ?? FILTER_ALL)
+  }, [searchParams, projectOptions, scope.projectId])
+
+  // Same URL-sync for `?experiment=` — set when arriving from an experiment
+  // page's "Lab notes" sidebar link, so the list opens pre-filtered to the
+  // experiment the user was just looking at (clearable via the filter row).
+  useEffect(() => {
+    const raw = searchParams.get("experiment")
+    const valid = raw && experimentOptions.some((e) => e.value === raw)
+    const scopeFallback =
+      !raw &&
+      scope.pinnedExperimentId &&
+      experimentOptions.some((e) => e.value === scope.pinnedExperimentId)
+        ? scope.pinnedExperimentId
+        : null
+    setExperimentFilter(valid ? raw : scopeFallback ?? FILTER_ALL)
+  }, [searchParams, experimentOptions, scope.pinnedExperimentId])
 
   useEffect(() => {
     if (projectFilter === FILTER_ALL) return
@@ -260,7 +283,7 @@ export default function LabNotesPage() {
             size="sm"
             onClick={handleNewNote}
             data-tour="create-lab-note"
-            className="gap-2"
+            className="n9-new-btn gap-2"
             aria-label="New lab note — choose project and experiment"
             title="New lab note — choose project and experiment"
           >
@@ -312,7 +335,7 @@ export default function LabNotesPage() {
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
-            <Button onClick={handleNewNote}>
+            <Button onClick={handleNewNote} className="n9-new-btn">
               <NotebookPen className="h-4 w-4 mr-2" />
               New lab note
             </Button>
@@ -350,6 +373,7 @@ export default function LabNotesPage() {
         onOpenChange={setNewNoteDialogOpen}
         onCreated={handleNewNoteCreated}
         defaultProjectId={projectFilter !== FILTER_ALL ? projectFilter : null}
+        defaultExperimentId={experimentFilter !== FILTER_ALL ? experimentFilter : null}
       />
     </div>
   )

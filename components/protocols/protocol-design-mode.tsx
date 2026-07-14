@@ -29,9 +29,10 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
-import { ChevronLeft, Upload, FileStack, GitCompare, List, Plus } from "lucide-react"
+import { CaretLeft as ChevronLeft, UploadSimple as Upload, Files as FileStack, GitDiff as GitCompare, List, Plus } from "@phosphor-icons/react/ssr"
 import { ProtocolChangeApprovalBar } from "./protocol-change-approval"
 import { ProtocolSiblingsList } from "./protocol-siblings-list"
+import { SideRail } from "@/components/patterns/side-rail"
 // ProtocolAiSidechat + ProtocolLiteraturePanel are no longer mounted in edit mode.
 import { extractProtocolTemplateShell } from "@/lib/extract-protocol-template-shell"
 import { sanitizeHtml } from "@/lib/sanitize-html"
@@ -554,38 +555,21 @@ export function ProtocolDesignMode({
             data-editor-workspace-shell=""
             className="flex h-full min-h-0 min-w-0 flex-1 flex-row items-stretch overflow-hidden"
           >
-            {/* Siblings list — desktop column. Collapses to width 0 when hidden. */}
-            <aside
-              className={cn(
-                "flex min-h-0 shrink-0 flex-col self-stretch overflow-hidden bg-muted/30 relative",
-                !isMobile && siblingsPanelOpen
-                  ? cn(
-                      "border-r border-border bg-card",
-                      tiptapRegionFullscreen ? "z-[120]" : "z-10",
-                    )
-                  : "border-r-0",
-              )}
-              /* Animate the rail width like lab notes — the fixed-width inner list
-                 stays mounted and is clipped by overflow-hidden, so it slides
-                 smoothly instead of snapping. */
-              style={{
-                width: !isMobile && siblingsPanelOpen ? "13rem" : 0,
-                minWidth: 0,
-                transition: "width 0.5s cubic-bezier(0.22, 1, 0.36, 1)",
-              }}
-              aria-hidden={!siblingsPanelOpen || isMobile}
+            {/* Siblings list — desktop glass rail (Catalyst history look).
+                Collapses to width 0 when hidden. */}
+            <SideRail
+              open={!isMobile && siblingsPanelOpen}
+              className={tiptapRegionFullscreen ? "z-[120]" : "z-10"}
             >
               {!isMobile && (
-                <div className="flex h-full min-h-0 w-52 min-w-[13rem] flex-col">
-                  <ProtocolSiblingsList
-                    currentProtocolId={protocol.id}
-                    organizationId={organizationId}
-                    projectId={protocol.project_id ?? null}
-                    experimentId={protocol.experiment_id ?? null}
-                  />
-                </div>
+                <ProtocolSiblingsList
+                  currentProtocolId={protocol.id}
+                  organizationId={organizationId}
+                  projectId={protocol.project_id ?? null}
+                  experimentId={protocol.experiment_id ?? null}
+                />
               )}
-            </aside>
+            </SideRail>
 
             {/* Mobile: protocols list in a left Sheet overlay (matches lab-notes) */}
             {isMobile && (
@@ -594,7 +578,7 @@ export function ProtocolDesignMode({
                   <SheetHeader className="border-b px-4 py-3">
                     <SheetTitle>Protocols</SheetTitle>
                   </SheetHeader>
-                  <div className="flex h-[calc(100%-3rem)] min-h-0 flex-col">
+                  <div className="flex h-[calc(100%-3rem)] min-h-0 flex-col p-2">
                     <ProtocolSiblingsList
                       currentProtocolId={protocol.id}
                       organizationId={organizationId}

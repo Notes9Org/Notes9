@@ -11,7 +11,7 @@ import {
 } from "react"
 import { cn } from "@/lib/utils"
 import Mention from "@tiptap/extension-mention"
-import { FileText, FlaskConical } from "lucide-react"
+import { FileText, Flask as FlaskConical } from "@phosphor-icons/react/ssr"
 
 export interface EntityItem {
     id: string

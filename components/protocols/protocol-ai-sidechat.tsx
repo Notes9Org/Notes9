@@ -17,25 +17,7 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
-import {
-  ArrowUp,
-  BookOpen,
-  Check,
-  ChevronDown,
-  ChevronRight,
-  Copy,
-  FileText,
-  History,
-  Loader2,
-  MessageSquare,
-  NotebookPen,
-  PenBox,
-  Plus,
-  Square,
-  Trash2,
-  X,
-  PanelRightClose,
-} from "lucide-react"
+import { ArrowUp, BookOpen, Check, CaretDown as ChevronDown, CaretRight as ChevronRight, Copy, FileText, ClockCounterClockwise as History, CircleNotch as Loader2, Chat as MessageSquare, NotePencil as NotebookPen, NotePencil as PenBox, Plus, Square, Trash as Trash2, X, SidebarSimple as PanelRightClose } from "@phosphor-icons/react/ssr"
 import { usePathname, useRouter } from "next/navigation"
 import {
   DropdownMenu,

@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/select"
 import { Progress } from "@/components/ui/progress"
 import { useToast } from "@/hooks/use-toast"
-import { Upload, File, X, CheckCircle2, AlertCircle, Files } from "lucide-react"
+import { UploadSimple as Upload, File, X, CheckCircle as CheckCircle2, WarningCircle as AlertCircle, Files } from "@phosphor-icons/react/ssr"
 import { Card } from "@/components/ui/card"
 import { FileDropzone } from "@/components/ui/file-dropzone"
 import {
@@ -85,8 +85,15 @@ const ALLOWED_EXTENSIONS = [
 ]
 
 interface UploadFileDialogProps {
-  experimentId: string
+  /**
+   * Target experiment. Nullable so callers outside an experiment page (the
+   * Data & Files list) can inject their own project/experiment pickers via
+   * `contextPicker` — upload stays disabled until an experiment is chosen.
+   */
+  experimentId: string | null
   onUploadComplete: () => void
+  /** Rendered above the data-type select (e.g. scoped project/experiment pickers). */
+  contextPicker?: React.ReactNode
 }
 
 interface FileWithStatus {
@@ -96,7 +103,7 @@ interface FileWithStatus {
   error?: string
 }
 
-export function UploadFileDialog({ experimentId, onUploadComplete }: UploadFileDialogProps) {
+export function UploadFileDialog({ experimentId, onUploadComplete, contextPicker }: UploadFileDialogProps) {
   const user = useAuthUser();
   const { toast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -191,6 +198,7 @@ export function UploadFileDialog({ experimentId, onUploadComplete }: UploadFileD
     try {
       const supabase = createClient()
       if (!user) throw new Error("Not authenticated")
+      if (!experimentId) throw new Error("Choose a project and experiment first")
 
       const organizationId = await fetchOrganizationIdForExperiment(supabase, experimentId)
       if (!organizationId) {
@@ -374,7 +382,7 @@ export function UploadFileDialog({ experimentId, onUploadComplete }: UploadFileD
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button>
+        <Button className="n9-new-btn">
           <Upload className="h-4 w-4 mr-2" />
           Upload Files
         </Button>
@@ -388,6 +396,8 @@ export function UploadFileDialog({ experimentId, onUploadComplete }: UploadFileD
         </DialogHeader>
 
         <div className="space-y-4 py-4">
+          {contextPicker}
+
           {/* File Type Selector */}
           <div className="space-y-2">
             <Label htmlFor="data_type">Data Type (applies to all files)</Label>
@@ -521,7 +531,7 @@ export function UploadFileDialog({ experimentId, onUploadComplete }: UploadFileD
           </Button>
           <Button
             onClick={handleUploadAll}
-            disabled={selectedFiles.length === 0 || isUploading}
+            disabled={selectedFiles.length === 0 || isUploading || !experimentId}
           >
             {isUploading ? `Uploading... (${selectedFiles.filter(f => f.status === 'success').length}/${selectedFiles.length})` : `Upload ${selectedFiles.length} File(s)`}
           </Button>

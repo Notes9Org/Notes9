@@ -1,3 +1,4 @@
+
 -- scripts/092_chat_folders.sql
 -- User-defined folders for organising Catalyst chat sessions.
 --

@@ -16,15 +16,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { PageHeading } from "@/components/ui/page-heading"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import {
-  Calendar,
-  FileText,
-  User,
-  FlaskConical,
-  FolderOpen,
-  ArrowLeft,
-  Upload,
-} from "lucide-react"
+import { CalendarBlank as Calendar, User, Flask as FlaskConical, FolderOpen, ArrowLeft, UploadSimple as Upload } from "@phosphor-icons/react/ssr"
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 import { NoteExportMenu, NotePrintButton } from "@/components/note-export-menu"
 import { NoteImportButton } from "@/components/note-import-button"
@@ -283,35 +275,35 @@ export function ReportDetailView({ report, leftControls, sidebar }: ReportDetail
               ref={reportWorkspaceRef}
               className="flex min-h-0 min-w-0 flex-1 flex-row gap-4 overflow-hidden bg-background"
             >
+            {/* Rail column — no Card chrome: the glass SideRail is its own
+                floating surface (matches papers/protocols/lab notes). It must
+                stretch to the full row height, not wrap its list content. */}
             {sidebar && (
-              <Card className="flex min-h-0 shrink-0 flex-col gap-0 py-0 border-0 shadow-none rounded-none sm:border sm:shadow-sm sm:rounded-xl">
+              <div className="flex min-h-0 shrink-0 flex-col self-stretch">
                 {sidebar}
-              </Card>
+              </div>
             )}
             <Card className="flex-1 flex flex-col min-h-0">
               <CardContent className="flex-1 min-h-0 overflow-y-auto pt-6 p-4">
-                {content || report.content ? (
-                  <TiptapEditor
-                    key={report.id}
-                    content={content}
-                    onChange={handleContentChange}
-                    placeholder="Start writing your report..."
-                    title={exportTitle}
-                    minHeight="100%"
-                    showAITools
-                    showAiWritingDropdown={false}
-                    enableMath
-                    hideExportControls
-                    leadingToolbarSlot={leftControls}
-                    fullscreenWorkspaceRef={reportWorkspaceRef}
-                    onEditorReady={(ed) => { editorRef.current = ed; setEditorReady(true) }}
-                  />
-                ) : (
-                  <div className="flex h-full flex-col items-center justify-center text-muted-foreground">
-                    <FileText className="h-10 w-10 mb-3" />
-                    <p>No content yet. Start writing above.</p>
-                  </div>
-                )}
+                {/* Always mount the editor — an empty report must still be writable
+                    (the editor shows its own placeholder). The old conditional hid
+                    the editor whenever content was empty, so new/empty reports had
+                    nothing to type into and therefore nothing to save. */}
+                <TiptapEditor
+                  key={report.id}
+                  content={content}
+                  onChange={handleContentChange}
+                  placeholder="Start writing your report..."
+                  title={exportTitle}
+                  minHeight="100%"
+                  showAITools
+                  showAiWritingDropdown={false}
+                  enableMath
+                  hideExportControls
+                  leadingToolbarSlot={leftControls}
+                  fullscreenWorkspaceRef={reportWorkspaceRef}
+                  onEditorReady={(ed) => { editorRef.current = ed; setEditorReady(true) }}
+                />
               </CardContent>
             </Card>
             </div>

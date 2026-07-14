@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
-import { Loader2, Plus } from "lucide-react"
+import { CircleNotch as Loader2, Plus } from "@phosphor-icons/react/ssr"
 import { getUniqueNameErrorMessage } from "@/lib/unique-name-error"
 import { createLabNote } from "@/lib/lab-notes"
 
@@ -41,6 +41,11 @@ type NewLabNoteDialogProps = {
    * already filtered to.
    */
   defaultProjectId?: string | null
+  /**
+   * Experiment to pre-select (e.g. the sidebar's pinned experiment). Applied
+   * only if it belongs to the selected project; always editable.
+   */
+  defaultExperimentId?: string | null
 }
 
 export function NewLabNoteDialog({
@@ -48,6 +53,7 @@ export function NewLabNoteDialog({
   onOpenChange,
   onCreated,
   defaultProjectId = null,
+  defaultExperimentId = null,
 }: NewLabNoteDialogProps) {
   const user = useAuthUser();
   const router = useRouter()
@@ -62,6 +68,9 @@ export function NewLabNoteDialog({
   const [loadingProjects, setLoadingProjects] = useState(false)
   const [loadingExperiments, setLoadingExperiments] = useState(false)
   const [creating, setCreating] = useState(false)
+  // Experiment to auto-select once its project's experiment list loads (the
+  // load effect clears the selection, so the prefill has to be applied after).
+  const [pendingExperimentId, setPendingExperimentId] = useState<string | null>(null)
 
   const selectedProject = projects.find((p) => p.id === selectedProjectId)
   const selectedExperiment = experiments.find((e) => e.id === selectedExperimentId)
@@ -131,7 +140,16 @@ export function NewLabNoteDialog({
         if (error) {
           console.error("Failed to load experiments for project", error)
         } else {
-          setExperiments(data || [])
+          const loaded = data || []
+          setExperiments(loaded)
+          // Apply the context prefill only if the pinned experiment actually
+          // belongs to the selected project; the picker stays editable.
+          setPendingExperimentId((pending) => {
+            if (pending && loaded.some((e) => e.id === pending)) {
+              setSelectedExperimentId(pending)
+            }
+            return null
+          })
         }
         setLoadingExperiments(false)
       })
@@ -139,13 +157,15 @@ export function NewLabNoteDialog({
 
   useEffect(() => {
     if (open) {
-      // Pre-select the project the user was scoped to when they clicked
-      // "+ New lab note", so they don't get bounced back to a global picker.
+      // Pre-select the project (and pinned experiment) the user was scoped to
+      // when they clicked "+ New lab note", so they don't get bounced back to
+      // a global picker.
       setSelectedProjectId(defaultProjectId ?? "")
       setSelectedExperimentId("")
+      setPendingExperimentId(defaultProjectId ? (defaultExperimentId ?? null) : null)
       setTitle("")
     }
-  }, [open, defaultProjectId])
+  }, [open, defaultProjectId, defaultExperimentId])
 
   const getUniqueDefaultTitle = async (experimentId: string): Promise<string> => {
     const { data } = await supabase
@@ -211,7 +231,7 @@ export function NewLabNoteDialog({
         </DialogHeader>
         <div className="min-w-0 space-y-4 py-2">
           <div className="min-w-0 space-y-2">
-            <Label>Project</Label>
+            <Label>Project (required)</Label>
             <Select
               value={selectedProjectId}
               onValueChange={setSelectedProjectId}
@@ -230,7 +250,7 @@ export function NewLabNoteDialog({
             </Select>
           </div>
           <div className="min-w-0 space-y-2">
-            <Label>Experiment</Label>
+            <Label>Experiment (required)</Label>
             <Select
               value={selectedExperimentId}
               onValueChange={setSelectedExperimentId}

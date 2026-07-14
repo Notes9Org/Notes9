@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import * as SheetPrimitive from '@radix-ui/react-dialog'
-import { XIcon } from 'lucide-react'
+import { X as XIcon } from "@phosphor-icons/react/ssr"
 
 import { cn } from '@/lib/utils'
 
@@ -36,7 +36,7 @@ function SheetOverlay({
     <SheetPrimitive.Overlay
       data-slot="sheet-overlay"
       className={cn(
-        'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-[130] bg-black/50',
+        'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-[130] bg-foreground/25 backdrop-blur-[6px]',
         className,
       )}
       {...props}
@@ -64,7 +64,7 @@ function SheetContent({
       <SheetPrimitive.Content
         data-slot="sheet-content"
         className={cn(
-          'bg-background data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-[131] flex flex-col gap-4 shadow-lg transition ease-in-out duration-300',
+          'n9-grain bg-background/92 backdrop-blur-xl border-[color:var(--glass-border)] data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-[131] flex flex-col gap-4 shadow-lg transition ease-in-out duration-300',
           side === 'right' &&
             'data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right inset-y-0 right-0 h-full w-full border-l sm:w-3/4 sm:max-w-sm',
           side === 'left' &&

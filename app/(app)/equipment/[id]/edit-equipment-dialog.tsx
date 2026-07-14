@@ -23,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Pencil } from "lucide-react"
+import { PencilSimple as Pencil } from "@phosphor-icons/react/ssr"
 import { useToast } from "@/hooks/use-toast"
 import { DATE_ORDER_ERROR, isEndDateBeforeStartDate } from "@/lib/date-order"
 

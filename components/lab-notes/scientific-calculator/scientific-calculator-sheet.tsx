@@ -14,18 +14,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip"
 import { useToast } from "@/hooks/use-toast"
-import {
-  Calculator,
-  Copy,
-  CornerDownLeft,
-  FlaskConical,
-  Hash,
-  History,
-  Sigma,
-  Thermometer,
-  TestTubes,
-  X,
-} from "lucide-react"
+import { Calculator, Copy, ArrowElbowDownLeft as CornerDownLeft, Flask as FlaskConical, Hash, ClockCounterClockwise as History, Sigma, Thermometer, TestTube as TestTubes, X } from "@phosphor-icons/react/ssr"
 import { cn } from "@/lib/utils"
 import type { CalcHistoryEntry, CalculatorModeId, CalculatorResultUpdate } from "./calc-types"
 import { MolarityPanel } from "./modes/molarity-panel"

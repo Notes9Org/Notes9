@@ -18,6 +18,12 @@ const badgeVariants = cva(
         outline:
           'text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground',
         success: 'border-transparent bg-success text-success-foreground [a&]:hover:bg-success/90',
+        // Tonal (soft) variants — the modern default for status chips: tinted fill + colored text.
+        soft: 'border-transparent bg-primary/12 text-primary [a&]:hover:bg-primary/20',
+        'soft-success': 'border-transparent bg-success/15 text-success [a&]:hover:bg-success/25',
+        'soft-warning': 'border-transparent bg-warning/15 text-warning [a&]:hover:bg-warning/25',
+        'soft-info': 'border-transparent bg-info/15 text-info [a&]:hover:bg-info/25',
+        'soft-destructive': 'border-transparent bg-destructive/12 text-destructive [a&]:hover:bg-destructive/20',
       },
     },
     defaultVariants: {

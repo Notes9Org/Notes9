@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { GripVerticalIcon } from 'lucide-react'
+import { DotsSixVertical as GripVerticalIcon } from "@phosphor-icons/react/ssr"
 import * as ResizablePrimitive from 'react-resizable-panels'
 import type { ImperativePanelHandle } from 'react-resizable-panels'
 

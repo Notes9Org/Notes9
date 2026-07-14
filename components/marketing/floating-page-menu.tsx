@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { CircleDollarSign, FolderKanban, Home, Info, LibraryBig } from "lucide-react"
+import { CurrencyCircleDollar as CircleDollarSign, Kanban as FolderKanban, House as Home, Info, Books as LibraryBig } from "@phosphor-icons/react/ssr"
 
 import { cn } from "@/lib/utils"
 

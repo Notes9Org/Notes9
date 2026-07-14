@@ -12,20 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import {
-  Camera,
-  Download,
-  Focus,
-  Layers3,
-  Loader2,
-  Maximize,
-  Minimize,
-  Palette,
-  RotateCcw,
-  Sparkles,
-  Target,
-  X,
-} from "lucide-react"
+import { Camera, DownloadSimple as Download, Crosshair as Focus, Stack as Layers3, CircleNotch as Loader2, ArrowsOut as Maximize, ArrowsIn as Minimize, Palette, ArrowCounterClockwise as RotateCcw, Sparkle as Sparkles, Target, X } from "@phosphor-icons/react/ssr"
 import { getFileExtension, molecularFileFormatLabel } from "@/lib/sample-molecular"
 
 export type ProteinSuperpositionSource = {

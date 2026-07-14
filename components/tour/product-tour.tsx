@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { AnimatePresence, motion } from "framer-motion"
-import { ArrowLeft, ArrowRight, MousePointerClick, X } from "lucide-react"
+import { ArrowLeft, ArrowRight, CursorClick as MousePointerClick, X } from "@phosphor-icons/react/ssr"
 import { cn } from "@/lib/utils"
 
 export type TourSide = "top" | "right" | "bottom" | "left" | "auto"
