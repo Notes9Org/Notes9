@@ -585,12 +585,14 @@ function MarkdownRendererImpl({
           showCursor && 'notes9-md--streaming',
           className
         )}
-        // Hover preview wiring removed (the hover card rendered glitchy —
-        // user request, 2026-07). Citations stay fully usable via CLICK:
-        // chip click opens the span viewer / source page below.
+        // Citations are consistent on every surface: click opens the source
+        // viewer, hover shows the source preview card. Hover is safe during
+        // streaming because it clears on every content change (below).
         onClick={hasManifest ? onClick : undefined}
         onScroll={hasManifest ? onScroll : undefined}
         onKeyDown={hasManifest ? onKeyDown : undefined}
+        onMouseOver={hasManifest ? onMouseOver : undefined}
+        onMouseLeave={hasManifest ? scheduleHoverClose : undefined}
       >
         <Streamdown
           parseIncompleteMarkdown={showCursor}
@@ -602,6 +604,17 @@ function MarkdownRendererImpl({
           {content}
         </Streamdown>
       </div>
+      {hover && containerRef.current && (
+        <CitationHoverCard
+          chip={hover.chip}
+          anchor={hover.anchor}
+          containerRect={containerRef.current.getBoundingClientRect()}
+          onMouseEnter={cancelHoverClose}
+          onMouseLeave={scheduleHoverClose}
+          onViewSource={() => openViewer(hover.chip)}
+          onOpenPage={() => openChip(hover.chip)}
+        />
+      )}
       <CitationSourceViewer
         source={viewerSource}
         open={viewerSource !== null}

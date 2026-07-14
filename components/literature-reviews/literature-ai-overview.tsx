@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { Sparkle as Sparkles, CaretDown as ChevronDown } from '@phosphor-icons/react/ssr'
 import { MarkdownRenderer } from '@/components/catalyst/markdown-renderer'
-import { CatalystSources } from '@/components/catalyst/catalyst-sources'
 import type { CatalystLiterature } from '@/lib/catalyst-literature'
 
 /**
@@ -46,6 +45,7 @@ export function LiteratureAiOverview({
           content={lit.summary}
           showCursor={lit.streaming}
           className="w-full min-w-0 text-[13.5px] leading-relaxed break-words"
+          citationsManifest={lit.manifest ?? null}
           onCitationClick={(label) => {
             window.dispatchEvent(
               new CustomEvent('literature:scroll-to-citation', {
@@ -83,10 +83,6 @@ export function LiteratureAiOverview({
           </button>
         </div>
       )}
-
-      {expanded && lit.references?.length ? (
-        <CatalystSources items={lit.references} />
-      ) : null}
     </section>
   )
 }
