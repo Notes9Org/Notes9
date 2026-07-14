@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { PaperSearchSortMode, SearchPaper } from '@/types/paper-search'
 import { Input } from '@/components/ui/input'
-import { X, Square, Sparkle as Sparkles, Database, LockOpen as Unlock, Microphone as Mic, Binoculars as Telescope, Scroll as ScrollText, ChatCircle as MessageCircle, HighlighterCircle as Highlighter, NotePencil as NotebookPen, ArrowRight } from "@phosphor-icons/react/ssr"
+import { X, Square, Sparkle as Sparkles, Database, LockOpen as Unlock, Microphone as Mic, Binoculars as Telescope, Scroll as ScrollText, ChatCircle as MessageCircle, HighlighterCircle as Highlighter, NotePencil as NotebookPen, ArrowRight, Clock, ArrowCounterClockwise as RotateCcw } from "@phosphor-icons/react/ssr"
 import type { Icon as LucideIcon } from "@phosphor-icons/react"
 import { toast } from 'sonner'
 import { formatDistanceToNow } from 'date-fns'

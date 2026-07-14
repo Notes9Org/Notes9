@@ -93,11 +93,7 @@ export default async function DashboardPage() {
       .eq("user_id", user.id)
       .is("project_id", null)
       .order("created_at", { ascending: true }),
-    supabase
-      .from("profiles")
-      .select("organization_id, first_name")
-      .eq("id", user.id)
-      .single(),
+    ensureUserProfile(user),
     supabase
       .from("org_members")
       .select("id")
@@ -153,7 +149,8 @@ export default async function DashboardPage() {
   const orgMembership = orgMembershipRes.data
 
   let labSummary: DashboardLabSummary | null = null
-  const orgId = profileResult.ok ? profileResult.profile.organization_id : undefined
+  const profile = profileResult.ok ? profileResult.profile : null
+  const orgId = profile?.organization_id
 
   if (orgMembership && orgId) {
     const [orgRes, membersRes, memberCountRes, invitationsRes, rolesRes] =

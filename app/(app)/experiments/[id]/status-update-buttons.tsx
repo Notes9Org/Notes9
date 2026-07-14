@@ -23,6 +23,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import { CheckCircle as CheckCircle2, Pause, Play, Prohibit as Ban, CircleNotch as Loader2, CaretDown as ChevronDown } from "@phosphor-icons/react/ssr"
+import { updateExperiment } from "@/lib/experiments"
 
 interface StatusUpdateButtonsProps {
   experimentId: string

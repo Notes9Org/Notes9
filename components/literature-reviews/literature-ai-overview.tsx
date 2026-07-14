@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Sparkles, ChevronDown } from 'lucide-react'
+import { Sparkle as Sparkles, CaretDown as ChevronDown } from '@phosphor-icons/react/ssr'
 import { MarkdownRenderer } from '@/components/catalyst/markdown-renderer'
 import { CatalystSources } from '@/components/catalyst/catalyst-sources'
 import type { CatalystLiterature } from '@/lib/catalyst-literature'
