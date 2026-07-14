@@ -9,36 +9,13 @@ import type { Attachment } from './preview-attachment';
 import { cn } from '@/lib/utils';
 import { MarkdownRenderer } from './markdown-renderer';
 import { AgentToolCards } from './agent-tool-cards';
-import {
-  AgentCitationsPanel,
-  groundingResourceToPanelItem,
-} from './agent-citations-panel';
 import type { ToolCard, CitationsManifest, CitationsManifestEntry } from '@/hooks/use-agent-stream';
-import type { GroundingResource } from '@/lib/agent-stream-types';
 
 interface SourceItem {
   url?: string;
   title?: string;
   snippet?: string;
   [key: string]: unknown;
-}
-
-/** Adapt the modal's loose web-source shape into a GroundingResource so the
- * same AgentCitationsPanel renders modal answers identically to the page. */
-function sourceToGroundingResource(src: SourceItem | GroundingResource): GroundingResource {
-  const anySrc = src as any;
-  const url = anySrc.source_url || (typeof anySrc.url === 'string' ? anySrc.url : null);
-  const rawTitle = anySrc.source_name || anySrc.title;
-  const title = typeof rawTitle === 'string' && rawTitle.trim() ? rawTitle.trim() : url || 'Source';
-  const excerpt = anySrc.excerpt || (typeof anySrc.snippet === 'string' ? anySrc.snippet : null);
-  return {
-    source_type: anySrc.source_type || 'web',
-    source_name: title,
-    display_label: title,
-    source_url: url,
-    excerpt,
-    match_kind: 'web',
-  };
 }
 
 interface ChatMessageProps {
@@ -252,18 +229,8 @@ function ChatMessageInner({
           );
         })()}
 
-        {/* Sources — routed through the shared AgentCitationsPanel so modal
-            answers get the same grouped, interactive citation display as the
-            page surface. */}
-        {!isUser && normalizedSources.length > 0 && !isStreaming && (
-          <AgentCitationsPanel
-            items={normalizedSources.map((src, i) =>
-              groundingResourceToPanelItem(sourceToGroundingResource(src), i)
-            )}
-            triggerLabel="All citations"
-            className="mt-0.5 self-start"
-          />
-        )}
+        {/* Sources list removed — the per-citation hover card is now the single
+            source surface (avoids duplicating title/excerpt/open-link). */}
 
         {/* Actions (visible on hover for completed assistant messages) */}
         {!isUser && content && !isStreaming && (

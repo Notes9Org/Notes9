@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentUser } from '@/lib/auth/current-user'
+import { tryCatalystBaseUrl } from '@/lib/catalyst-client'
 
 /**
  * Free-tier usage summary — proxies the catalyst backend `GET /usage/summary`.
@@ -11,11 +12,6 @@ import { getCurrentUser } from '@/lib/auth/current-user'
  */
 
 export const dynamic = 'force-dynamic'
-
-function catalystBaseUrl(): string | null {
-  const raw = (process.env.CATALYST_URL?.trim() || process.env.CHAT_API_URL?.trim()) ?? ''
-  return raw ? raw.replace(/\/+$/, '') : null
-}
 
 export async function GET() {
   const supabase = await createClient()
@@ -29,7 +25,7 @@ export async function GET() {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const base = catalystBaseUrl()
+  const base = tryCatalystBaseUrl() || null
   if (!base) {
     return Response.json({ error: 'usage backend unavailable' }, { status: 503 })
   }

@@ -1,6 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { unstable_cache } from 'next/cache'
 import { getCurrentUser } from '@/lib/auth/current-user'
 import { cleanScrapedAbstract, decodeHtmlEntities } from '@/lib/literature-abstract-display'
+
+// Matches the AbortController timeout pattern in lib/supabase/middleware.ts —
+// keeps one slow upstream (OpenAlex/Europe PMC/Semantic Scholar) from stalling
+// this route indefinitely.
+const FETCH_TIMEOUT_MS = 8000
+
+function timedFetch(url: string, init?: RequestInit): Promise<Response> {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+  return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timeoutId))
+}
 
 /**
  * Lightweight, fast per-paper resolver — used to fill in abstracts AND the
@@ -134,7 +146,7 @@ function resolveFrom(work: OpenAlexWork | null | undefined): ResolvedPaper {
 
 async function fetchWork(url: string): Promise<OpenAlexWork | null> {
   try {
-    const res = await fetch(url, { headers: { 'User-Agent': userAgent() } })
+    const res = await timedFetch(url, { headers: { 'User-Agent': userAgent() } })
     if (!res.ok) return null
     return (await res.json()) as OpenAlexWork
   } catch {
@@ -177,7 +189,7 @@ async function fetchEuropePmc(queryExpr: string, wantTitle: string): Promise<Res
       format: 'json',
       pageSize: '1',
     })
-    const res = await fetch(
+    const res = await timedFetch(
       `https://www.ebi.ac.uk/europepmc/webservices/rest/search?${params.toString()}`,
       { headers: { 'User-Agent': userAgent() } },
     )
@@ -228,7 +240,7 @@ async function fetchSemanticScholar(idPath: string, wantTitle: string): Promise<
     const url = isSearch
       ? `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(idPath.slice(7))}&limit=1&fields=${fields}`
       : `https://api.semanticscholar.org/graph/v1/paper/${idPath}?fields=${fields}`
-    const res = await fetch(url, { headers: { 'User-Agent': userAgent() } })
+    const res = await timedFetch(url, { headers: { 'User-Agent': userAgent() } })
     if (!res.ok) return null
     const json = (await res.json()) as { data?: S2Paper[] } & S2Paper
     const paper: S2Paper | null = isSearch ? json.data?.[0] ?? null : json
@@ -311,6 +323,72 @@ function mergeResolved(base: ResolvedPaper, extra: ResolvedPaper | null): Resolv
   }
 }
 
+/**
+ * Steps 1-3: resolve abstract/PDF/identity purely from stable identifiers
+ * (DOI, PMID, title). This triple uniquely determines the result — the same
+ * DOI always resolves to the same paper — so it's the immutable part of the
+ * pipeline and safe to cache across users/requests. Step 4 (arbitrary
+ * `sourceUrl` page-scrape) is intentionally excluded: caching by raw URL would
+ * give the cache an unbounded, low-reuse key space.
+ */
+async function resolveByIdentifiers(
+  cleanDoi: string,
+  validPmid: string,
+  titleQuery: string,
+): Promise<ResolvedPaper> {
+  let resolved: ResolvedPaper | null = null
+  const title = titleQuery
+
+  // 1. OpenAlex — DOI → PMID → title (the title hit must be a similar title).
+  if (cleanDoi) {
+    const work = await fetchWork(`https://api.openalex.org/works/doi:${encodeURIComponent(cleanDoi)}`)
+    if (work) resolved = resolveFrom(work)
+  }
+  if (!resolved && validPmid) {
+    const work = await fetchWork(`https://api.openalex.org/works/pmid:${validPmid}`)
+    if (work) resolved = resolveFrom(work)
+  }
+  if (!resolved && title && title.length >= 8) {
+    const params = new URLSearchParams({ search: title, per_page: '1' })
+    const res = await fetchWork(`https://api.openalex.org/works?${params.toString()}`)
+    const list = (res as unknown as { results?: OpenAlexWork[] })?.results
+    const top = Array.isArray(list) ? list[0] : null
+    if (top && top.display_name && titlesSimilar(title, top.display_name)) {
+      resolved = resolveFrom(top)
+    }
+  }
+
+  // 2. Europe PMC fallback — fills a missing abstract and/or open-access PDF
+  //    that OpenAlex didn't have (common for biomedical literature).
+  if (!resolved || !resolved.abstract || !resolved.pdfUrl) {
+    let epmc: ResolvedPaper | null = null
+    if (cleanDoi) epmc = await fetchEuropePmc(`DOI:"${cleanDoi}"`, '')
+    if (!epmc && validPmid) epmc = await fetchEuropePmc(`EXT_ID:${validPmid} AND SRC:MED`, '')
+    if (!epmc && titleQuery) epmc = await fetchEuropePmc(`TITLE:"${titleQuery.replace(/"/g, '')}"`, titleQuery)
+    resolved = mergeResolved(resolved ?? EMPTY, epmc)
+  }
+
+  // 3. Semantic Scholar fallback — broad coverage for whatever's still missing.
+  if (!resolved.abstract || !resolved.pdfUrl) {
+    let s2: ResolvedPaper | null = null
+    if (cleanDoi) s2 = await fetchSemanticScholar(`DOI:${cleanDoi}`, '')
+    if (!s2 && validPmid) s2 = await fetchSemanticScholar(`PMID:${validPmid}`, '')
+    if (!s2 && titleQuery) s2 = await fetchSemanticScholar(`search:${titleQuery}`, titleQuery)
+    resolved = mergeResolved(resolved, s2)
+  }
+
+  return resolved
+}
+
+// DOI/PMID/title → abstract+identity is effectively immutable (metadata
+// almost never changes after publication), so cache it for a week to skip
+// three upstream round-trips on repeat lookups of the same paper.
+const cachedResolveByIdentifiers = unstable_cache(
+  resolveByIdentifiers,
+  ['paper-abstract-resolve-by-identifiers'],
+  { revalidate: 60 * 60 * 24 * 7 },
+)
+
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -326,45 +404,7 @@ export async function GET(request: NextRequest) {
   const titleQuery = title.length >= 8 ? title : ''
 
   try {
-    let resolved: ResolvedPaper | null = null
-
-    // 1. OpenAlex — DOI → PMID → title (the title hit must be a similar title).
-    if (cleanDoi) {
-      const work = await fetchWork(`https://api.openalex.org/works/doi:${encodeURIComponent(cleanDoi)}`)
-      if (work) resolved = resolveFrom(work)
-    }
-    if (!resolved && validPmid) {
-      const work = await fetchWork(`https://api.openalex.org/works/pmid:${validPmid}`)
-      if (work) resolved = resolveFrom(work)
-    }
-    if (!resolved && title && title.length >= 8) {
-      const params = new URLSearchParams({ search: title, per_page: '1' })
-      const res = await fetchWork(`https://api.openalex.org/works?${params.toString()}`)
-      const list = (res as unknown as { results?: OpenAlexWork[] })?.results
-      const top = Array.isArray(list) ? list[0] : null
-      if (top && top.display_name && titlesSimilar(title, top.display_name)) {
-        resolved = resolveFrom(top)
-      }
-    }
-
-    // 2. Europe PMC fallback — fills a missing abstract and/or open-access PDF
-    //    that OpenAlex didn't have (common for biomedical literature).
-    if (!resolved || !resolved.abstract || !resolved.pdfUrl) {
-      let epmc: ResolvedPaper | null = null
-      if (cleanDoi) epmc = await fetchEuropePmc(`DOI:"${cleanDoi}"`, '')
-      if (!epmc && validPmid) epmc = await fetchEuropePmc(`EXT_ID:${validPmid} AND SRC:MED`, '')
-      if (!epmc && titleQuery) epmc = await fetchEuropePmc(`TITLE:"${titleQuery.replace(/"/g, '')}"`, titleQuery)
-      resolved = mergeResolved(resolved ?? EMPTY, epmc)
-    }
-
-    // 3. Semantic Scholar fallback — broad coverage for whatever's still missing.
-    if (!resolved.abstract || !resolved.pdfUrl) {
-      let s2: ResolvedPaper | null = null
-      if (cleanDoi) s2 = await fetchSemanticScholar(`DOI:${cleanDoi}`, '')
-      if (!s2 && validPmid) s2 = await fetchSemanticScholar(`PMID:${validPmid}`, '')
-      if (!s2 && titleQuery) s2 = await fetchSemanticScholar(`search:${titleQuery}`, titleQuery)
-      resolved = mergeResolved(resolved, s2)
-    }
+    let resolved = await cachedResolveByIdentifiers(cleanDoi, validPmid, titleQuery)
 
     // 4. Source page — read the abstract straight off the cited page's scholarly
     //    meta tags when the indexes never matched it (web-only citations).

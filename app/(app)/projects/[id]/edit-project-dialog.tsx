@@ -28,6 +28,7 @@ import { useRouter } from "next/navigation"
 import { PencilSimple as Pencil, CircleNotch as Loader2 } from "@phosphor-icons/react/ssr"
 import { getUniqueNameErrorMessage } from "@/lib/unique-name-error"
 import { DATE_ORDER_ERROR, isEndDateBeforeStartDate } from "@/lib/date-order"
+import { updateProject } from "@/lib/projects"
 
 interface Project {
   id: string
@@ -103,18 +104,14 @@ export function EditProjectDialog({ project, asMenuItem = false, open: controlle
     setIsSaving(true)
 
     try {
-      const { error } = await supabase
-        .from("projects")
-        .update({
-          name: name.trim(),
-          description: description.trim() || null,
-          status,
-          priority,
-          start_date: startDate || null,
-          end_date: endDate || null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", project.id)
+      const { error } = await updateProject(supabase, project.id, {
+        name: name.trim(),
+        description: description.trim() || null,
+        status,
+        priority,
+        startDate: startDate || null,
+        endDate: endDate || null,
+      })
 
       if (error) throw error
 

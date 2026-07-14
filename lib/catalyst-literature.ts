@@ -27,6 +27,9 @@ export interface CatalystLiterature {
   summary: string
   /** True while the summary is still composing. */
   streaming: boolean
+  /** Live pipeline progress phases (searching → analyzing → summarizing …), shown as a
+   *  step timeline in the summary panel while streaming. */
+  phases?: string[]
   /** Cited papers, shown under the summary. */
   references: LiteratureRef[]
   /** ID of the persisted chat session for this literature search (set once the
@@ -39,6 +42,9 @@ export interface CatalystLiterature {
   /** Compact literature context stored in the session's metadata.literature and
    *  injected as a system message for follow-up turns. */
   context?: LiteratureSessionContext | null
+  /** True once the user explicitly chose to continue this literature summary in the
+   *  Catalyst chat (the only case where a chat session is persisted). */
+  dive?: boolean
 }
 
 export const CATALYST_LITERATURE_EVENT = 'notes9:catalyst-literature'

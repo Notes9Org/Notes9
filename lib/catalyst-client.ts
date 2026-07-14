@@ -1,5 +1,6 @@
 /**
- * Thin HTTP client for the catalyst FastAPI service (AI/catalyst/).
+ * Thin HTTP client for the catalyst FastAPI service (AI/catalyst/), and the
+ * SINGLE place that resolves every AI-backend base URL for the app.
  *
  * Catalyst is the same FastAPI app that already serves /chat and /biomni —
  * `/literature/*` routes are mounted on it. We resolve the base URL from
@@ -9,6 +10,16 @@
  * Used by:
  *  - `app/api/search-papers/route.ts` → POST /literature/search
  *  - `lib/literature-pdf-import.ts`    → POST /literature/pdf/verify (Phase 3)
+ *  - ~19 proxy routes under `app/api/{chat,agent,ai,literature,reports,usage}/*`
+ *
+ * A few backends are genuinely separate services (not the main catalyst
+ * backend) and get their own clearly-named resolver below, still living in
+ * this one file: `aiServiceBaseUrl()` (legacy AI_SERVICE_URL + its own bearer
+ * token, used only when a route must choose between it and the Supabase-token
+ * catalyst path), `biomniAgentJsonUrl()`/`biomniAgentStreamUrl()` (Biomni
+ * literature research-design Lambda), and `compareAgentBaseUrl()`/
+ * `compareAgentStreamUrl()` (paper-comparison agent, defaults to catalyst's
+ * `/paper-analyzer`). See docs/ENVIRONMENT_VARIABLES.md for the full list.
  */
 
 // The primary literature path is now a Claude web-search agent: live web search
@@ -37,14 +48,77 @@ export class CatalystHttpError extends Error {
   }
 }
 
-function catalystBaseUrl(): string {
-  const raw = (process.env.CATALYST_URL?.trim() || process.env.CHAT_API_URL?.trim()) ?? ""
-  if (!raw) {
+function stripTrailingSlash(url: string): string {
+  return url.replace(/\/+$/, "")
+}
+
+/** First non-empty, trimmed, trailing-slash-stripped value; "" if none configured. */
+function firstConfigured(...vars: Array<string | undefined>): string {
+  for (const v of vars) {
+    const trimmed = v?.trim()
+    if (trimmed) return stripTrailingSlash(trimmed)
+  }
+  return ""
+}
+
+function resolveCatalystBaseUrl(): string {
+  return firstConfigured(process.env.CATALYST_URL, process.env.CHAT_API_URL)
+}
+
+export function catalystBaseUrl(): string {
+  const url = resolveCatalystBaseUrl()
+  if (!url) {
     throw new CatalystUnavailableError(
       "Neither CATALYST_URL nor CHAT_API_URL is configured. Set one to the catalyst FastAPI base URL."
     )
   }
-  return raw.replace(/\/+$/, "")
+  return url
+}
+
+/** Same precedence as `catalystBaseUrl()` but returns "" instead of throwing when unconfigured. */
+export function tryCatalystBaseUrl(): string {
+  return resolveCatalystBaseUrl()
+}
+
+/**
+ * Legacy alternate AI service (`AI_SERVICE_URL`), authenticated with a static
+ * `AI_SERVICE_BEARER_TOKEN` instead of the user's Supabase token. Kept as its
+ * own resolver (not folded into `catalystBaseUrl()`'s precedence) because
+ * `app/api/{chat,ai/paper-chat,reports/generate}` need both values
+ * independently to pick which auth branch to use.
+ */
+export function aiServiceBaseUrl(): string {
+  return firstConfigured(process.env.AI_SERVICE_URL)
+}
+
+/** Biomni literature research-design agent — a separate Lambda, not the main catalyst backend. */
+export function biomniAgentJsonUrl(): string {
+  const explicit = firstConfigured(process.env.LITERATURE_BIOMNI_AGENT_URL)
+  if (explicit) return explicit
+  const base = firstConfigured(process.env.BIOMNI_FUNCTION_URL)
+  return base ? `${base}/biomni/literature` : ""
+}
+
+export function biomniAgentStreamUrl(): string {
+  const explicit = firstConfigured(process.env.LITERATURE_BIOMNI_STREAM_URL)
+  if (explicit) return explicit
+  const base = firstConfigured(process.env.BIOMNI_FUNCTION_URL)
+  return base ? `${base}/biomni/literature/stream` : ""
+}
+
+/** Paper-comparison agent. Defaults to the main catalyst backend's `/paper-analyzer` path. */
+export function compareAgentBaseUrl(): string {
+  const explicit = firstConfigured(process.env.LITERATURE_COMPARE_AGENT_URL)
+  if (explicit) return explicit
+  const catalyst = tryCatalystBaseUrl()
+  return catalyst ? `${catalyst}/paper-analyzer` : ""
+}
+
+export function compareAgentStreamUrl(): string {
+  const explicit = firstConfigured(process.env.LITERATURE_COMPARE_STREAM_URL)
+  if (explicit) return explicit
+  const base = compareAgentBaseUrl()
+  return base ? `${base}/stream` : ""
 }
 
 /** POST JSON to a catalyst path with the user's Supabase access token. */

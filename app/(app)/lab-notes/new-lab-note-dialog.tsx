@@ -26,6 +26,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { CircleNotch as Loader2, Plus } from "@phosphor-icons/react/ssr"
 import { getUniqueNameErrorMessage } from "@/lib/unique-name-error"
+import { createLabNote } from "@/lib/lab-notes"
 
 type Project = { id: string; name: string }
 type Experiment = { id: string; name: string; project_id: string }
@@ -186,17 +187,11 @@ export function NewLabNoteDialog({
     try {
       if (!user) throw new Error("Not authenticated")
       const noteTitle = title.trim() || (await getUniqueDefaultTitle(selectedExperimentId))
-      const { data, error } = await supabase
-        .from("lab_notes")
-        .insert({
-          experiment_id: selectedExperimentId,
-          title: noteTitle,
-          content: "",
-          note_type: "general",
-          created_by: user.id,
-        })
-        .select("id")
-        .single()
+      const { data, error } = await createLabNote(supabase, {
+        experimentId: selectedExperimentId,
+        title: noteTitle,
+        createdBy: user.id,
+      })
       if (error) throw error
       onOpenChange(false)
       onCreated?.()

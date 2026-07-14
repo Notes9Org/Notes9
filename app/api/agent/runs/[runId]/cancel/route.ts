@@ -1,4 +1,5 @@
 import { verifyBearerToken } from '@/lib/verify-bearer-token';
+import { tryCatalystBaseUrl } from '@/lib/catalyst-client';
 
 // Proxies the "Stop" button to the agent backend's run-cancel endpoint. The
 // backend flips an idempotent cancel flag on the in-flight run (only effective
@@ -6,7 +7,7 @@ import { verifyBearerToken } from '@/lib/verify-bearer-token';
 // runtime: a tiny JSON round-trip, no streaming.
 export const runtime = 'nodejs';
 
-const NOTES9_API_BASE = process.env.CHAT_API_URL?.replace(/\/$/, '') || '';
+const NOTES9_API_BASE = tryCatalystBaseUrl();
 
 export async function POST(
   req: Request,

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { createLabNote, saveDraft, commitLabNote, discardDraft } from "@/lib/lab-notes"
 import { useAuthUser } from "@/components/auth/auth-provider"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -362,20 +363,14 @@ export function LabNotesTab({
         draftInsertInFlightRef.current = true;
         let data: LabNote;
         try {
-          const res = await supabase
-            .from("lab_notes")
-            .insert({
-              experiment_id: experimentId,
-              title: titleToSave,
-              content: "",
-              draft_content: content,
-              draft_updated_at: nowIso,
-              draft_author_id: user.id,
-              note_type: noteTypeToSave,
-              created_by: user.id,
-            })
-            .select()
-            .single();
+          const res = await createLabNote(supabase, {
+            experimentId,
+            title: titleToSave,
+            noteType: noteTypeToSave,
+            createdBy: user.id,
+            draftContent: content,
+            draftAuthorId: user.id,
+          });
           if (res.error) throw res.error;
           data = res.data as LabNote;
         } finally {
@@ -393,14 +388,7 @@ export function LabNotesTab({
         await fetchNotes(data.id);
       } else {
         // Update existing note's draft buffer only.
-        const { error } = await supabase
-          .from("lab_notes")
-          .update({
-            draft_content: content,
-            draft_updated_at: nowIso,
-            draft_author_id: user.id,
-          })
-          .eq("id", selectedNote.id);
+        const { error } = await saveDraft(supabase, selectedNote.id, content, user.id);
 
         if (error) throw error;
 
@@ -826,13 +814,11 @@ export function LabNotesTab({
         // throttle window, then promotes the draft into `content` and clears the
         // draft — all in one transaction. The trigger owns versioning; the client
         // must NOT also write document_versions (that would double-write).
-        const { error } = await supabase.rpc("commit_lab_note", {
-          p_id: selectedNote.id,
-          p_content: committedContent,
-          p_title: formData.title,
-          p_note_type: formData.note_type,
-          p_user_agent:
-            typeof navigator !== "undefined" ? navigator.userAgent : null,
+        const { error } = await commitLabNote(supabase, {
+          id: selectedNote.id,
+          content: committedContent,
+          title: formData.title,
+          noteType: formData.note_type,
         });
 
         if (error) throw error;
@@ -863,15 +849,13 @@ export function LabNotesTab({
       } else {
         // Create new note. The DB trigger records its first version (action
         // 'create') automatically on INSERT — no client-side versioning.
-        const { error } = await supabase
-          .from("lab_notes")
-          .insert({
-            experiment_id: experimentId,
-            title: formData.title,
-            content: committedContent,
-            note_type: formData.note_type,
-            created_by: user.id,
-          });
+        const { error } = await createLabNote(supabase, {
+          experimentId,
+          title: formData.title,
+          content: committedContent,
+          noteType: formData.note_type,
+          createdBy: user.id,
+        });
 
         if (error) throw error;
 
@@ -978,17 +962,11 @@ export function LabNotesTab({
       if (!user) throw new Error("Not authenticated");
 
       const defaultTitle = await getUniqueDefaultTitle();
-      const { data, error } = await supabase
-        .from("lab_notes")
-        .insert({
-          experiment_id: experimentId,
-          title: defaultTitle,
-          content: "",
-          note_type: "general",
-          created_by: user.id,
-        })
-        .select()
-        .single();
+      const { data, error } = await createLabNote(supabase, {
+        experimentId,
+        title: defaultTitle,
+        createdBy: user.id,
+      });
 
       if (error) throw error;
 
@@ -1897,10 +1875,7 @@ export function LabNotesTab({
                           );
                           try {
                             const supabase = createClient();
-                            const { error } = await supabase
-                              .from("lab_notes")
-                              .update({ draft_content: null, draft_updated_at: null, draft_author_id: null })
-                              .eq("id", id);
+                            const { error } = await discardDraft(supabase, id);
                             if (error) throw error;
                           } catch (err: any) {
                             toast({
@@ -1941,10 +1916,7 @@ export function LabNotesTab({
                 if (id) {
                   try {
                     const supabase = createClient()
-                    await supabase
-                      .from("lab_notes")
-                      .update({ draft_content: null, draft_updated_at: null, draft_author_id: null })
-                      .eq("id", id)
+                    await discardDraft(supabase, id)
                     setNotes((prev) =>
                       prev.map((n) => (n.id === id ? { ...n, draft_content: null, draft_updated_at: null, draft_author_id: null } : n)),
                     )

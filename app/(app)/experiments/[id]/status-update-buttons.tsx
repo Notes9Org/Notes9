@@ -43,13 +43,7 @@ export function StatusUpdateButtons({ experimentId, currentStatus }: StatusUpdat
     setIsUpdating(true)
 
     try {
-      const { error } = await supabase
-        .from("experiments")
-        .update({
-          status: newStatus,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", experimentId)
+      const { error } = await updateExperiment(supabase, experimentId, { status: newStatus })
 
       if (error) throw error
 

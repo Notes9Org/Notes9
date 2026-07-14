@@ -11,10 +11,6 @@ import { MessageActions } from './message-actions';
 import { MessageEditor } from './message-editor';
 import { AgentStreamReply } from './agent-stream-reply';
 import { usePinnedAutoScroll } from '@/hooks/use-pinned-auto-scroll';
-import {
-  AgentCitationsPanel,
-  groundingResourceToPanelItem,
-} from '@/components/catalyst/agent-citations-panel';
 import { PersistedArtifactList } from '@/components/catalyst/agent-artifact-card';
 import { PreviewAttachment, type Attachment } from '@/components/catalyst/preview-attachment';
 import { AgentGraphList } from '@/components/catalyst/agent-graph-view';
@@ -23,7 +19,7 @@ import { Notes9ThinkingIndicator } from '@/components/catalyst/notes9-thinking-i
 import type { PersistedArtifact } from '@/lib/agent-artifacts';
 import { parseNotes9AssistantStoredContent } from '@/lib/notes9-chat-format';
 import type { Vote } from '@/lib/db/schema';
-import type { ThinkingPayload, RagChunksPayload, DonePayload, GroundingResource } from '@/lib/agent-stream-types';
+import type { ThinkingPayload, RagChunksPayload, DonePayload } from '@/lib/agent-stream-types';
 import type { CitationsManifest, ToolCard, AgentArtifact, AgentGraph, CitationsManifestEntry } from '@/hooks/use-agent-stream';
 
 interface CatalystMessagesProps {
@@ -254,42 +250,14 @@ export function CatalystMessages({
                             };
                           }
 
-                          const sourceToGroundingResource = (src: Record<string, unknown> | GroundingResource): GroundingResource => {
-                            const anySrc = src as any;
-                            const url = anySrc.source_url || (typeof anySrc.url === 'string' ? anySrc.url : undefined);
-                            const rawTitle = anySrc.source_name || anySrc.title;
-                            const title = typeof rawTitle === 'string' && rawTitle.trim() ? rawTitle.trim() : url || 'Source';
-                            return {
-                              source_type: anySrc.source_type || 'web',
-                              source_name: String(title),
-                              source_url: url,
-                              excerpt: anySrc.excerpt || (typeof anySrc.snippet === 'string' ? anySrc.snippet : undefined),
-                            };
-                          };
                           return (
                             <>
                               <MarkdownRenderer
                                 content={assistantDisplayMarkdown}
                                 citationsManifest={effectiveManifest}
                               />
-                              {notes9Sources && (
-                                <AgentCitationsPanel
-                                  items={notes9Sources.map((c, i) =>
-                                    groundingResourceToPanelItem(c, i)
-                                  )}
-                                  triggerLabel="All citations"
-                                  className="mt-2"
-                                />
-                              )}
-                              {!notes9Sources && rawSources.length > 0 && (
-                                <AgentCitationsPanel
-                                  items={rawSources.map((src, i) =>
-                                    groundingResourceToPanelItem(sourceToGroundingResource(src), i)
-                                  )}
-                                  triggerLabel="All citations"
-                                  className="mt-2"
-                                />
-                              )}
+                              {/* Sources list removed — per-citation hover card is
+                                  now the single source surface. */}
                               {/* Persisted relationship graphs — native dagre render */}
                               {messageGraphs.length > 0 && (
                                 <div className="mt-3">

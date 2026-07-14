@@ -44,13 +44,7 @@ export function ProjectStatusUpdateButtons({ projectId, currentStatus, compact =
     setIsUpdating(true)
 
     try {
-      const { error } = await supabase
-        .from("projects")
-        .update({
-          status: newStatus,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", projectId)
+      const { error } = await updateProject(supabase, projectId, { status: newStatus })
 
       if (error) throw error
 

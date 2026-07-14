@@ -8,8 +8,7 @@ import { BookOpen, Bookmark as BookmarkCheck, Bookmark as BookmarkPlus, ArrowSqu
 import { LiteraturePdfPanel } from "./literature-pdf-panel"
 import { UploadLiteraturePdfDialog } from "./upload-literature-pdf-dialog"
 import { decodeHtmlEntities } from "@/lib/literature-abstract-display"
-import { openCatalystPanel, attachToCatalyst } from "@/lib/catalyst-launch"
-import { normalizeDoi } from "@/lib/ai-search-match"
+import { attachPaperToCatalyst } from "@/lib/catalyst-launch"
 import { MotionReveal } from "@/components/literature-reviews/motion"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -31,6 +30,7 @@ export type StagingListItem = {
   pdf_import_status: string | null
   pdf_file_name: string | null
   pdf_file_url: string | null
+  catalog_placement: string | null
   project: { id: string; name: string } | null
   experiment: { id: string; name: string } | null
   created_by_profile: { first_name: string; last_name: string } | null
@@ -52,6 +52,7 @@ export function mapRowToListItem(row: StagingLiteratureRow): StagingListItem {
     pdf_import_status: (row.pdf_import_status as string | null) ?? null,
     pdf_file_name: (row.pdf_file_name as string | null) ?? null,
     pdf_file_url: (row.pdf_file_url as string | null) ?? null,
+    catalog_placement: (row.catalog_placement as string | null) ?? null,
     project: (row.project as StagingListItem["project"]) ?? null,
     experiment: (row.experiment as StagingListItem["experiment"]) ?? null,
     created_by_profile: (row.created_by_profile as StagingListItem["created_by_profile"]) ?? null,
@@ -97,8 +98,9 @@ export function StagedPaperView({
   onSavePaper,
   savingLiteratureId = null,
 }: StagedPaperViewProps) {
-  // Persisted save state: anything past the "staging" statuses is in the library.
-  const isSavedToLibrary = !["stage", "staged", "staging"].includes(String(lit.status ?? "").toLowerCase())
+  // Persisted save state lives in `catalog_placement` (not `status`) — "repository"
+  // means it's in the library, "staging" means it's a transient staged read.
+  const isSavedToLibrary = (lit.catalog_placement ?? "repository") === "repository"
   const stagedExpiresAt = (lit as { staged_expires_at?: string | null }).staged_expires_at ?? null
   const stagedDaysLeft =
     !isSavedToLibrary && stagedExpiresAt
@@ -127,27 +129,15 @@ export function StagedPaperView({
   // prefill (the paper rides in as an attachment), fly the PDF into the composer,
   // and fall back to web search when there's no stored full text.
   const askCatalyst = () => {
-    const hasPdf = Boolean(lit.pdf_storage_path)
-    openCatalystPanel({ scope: "literature", webSearch: !hasPdf, autoSend: false })
-    if (hasPdf) {
-      const decodedTitle = lit.title ? decodeHtmlEntities(lit.title) : "paper"
-      const attachments = [
-        {
-          url: `/api/literature/${lit.id}/viewer-pdf`,
-          // Human title, never the UUID storage filename (pdf_file_name is `${id}.pdf`).
-          name: `${decodedTitle.slice(0, 100)}.pdf`,
-          contentType: "application/pdf",
-          // DOI/title key so the SAME paper dedups whether attached from search or read.
-          paperKey: normalizeDoi(lit.doi) || `title:${decodedTitle.trim().toLowerCase()}`,
-        },
-      ]
-      // No fly animation in read mode — attach directly.
-      attachToCatalyst(attachments)
-    } else {
-      toast.info(
-        "No open-access full text found. Catalyst will use the abstract and web search; upload the PDF for full-text analysis.",
-      )
-    }
+    const paper = rowToSearchPaper(lit)
+    const decodedTitle = lit.title ? decodeHtmlEntities(lit.title) : paper.title
+    void attachPaperToCatalyst(
+      { ...paper, title: decodedTitle },
+      {
+        scope: "literature",
+        savedPdf: lit.pdf_storage_path ? { id: lit.id, storagePath: lit.pdf_storage_path } : null,
+      },
+    )
   }
 
   return (

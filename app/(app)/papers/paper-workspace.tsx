@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
+import { updatePaperContent, updatePaperMeta } from "@/lib/papers"
 import { useAuthUser } from "@/components/auth/auth-provider"
 import { useProjectScope } from "@/contexts/project-scope-context"
 import { SetScopedBreadcrumb } from "@/components/layout/breadcrumb-context"
@@ -169,10 +170,7 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
   const handleAutoSave = useCallback(
     async (newContent: string): Promise<void> => {
       const supabase = createClient()
-      const { error } = await supabase
-        .from("papers")
-        .update({ content: newContent, updated_at: new Date().toISOString() })
-        .eq("id", id)
+      const { error } = await updatePaperContent(supabase, id, newContent)
       if (error) throw error
     },
     [id]
@@ -202,10 +200,7 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
     if (!paper || next === current) return
 
     const supabase = createClient()
-    const { error } = await supabase
-      .from("papers")
-      .update({ title: next, updated_at: new Date().toISOString() })
-      .eq("id", id)
+    const { error } = await updatePaperMeta(supabase, id, { title: next })
 
     if (error) {
       toast.error("Could not save title")

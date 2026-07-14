@@ -1,7 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { USER_STORAGE_BUCKET } from "@/lib/user-storage-bucket"
 
 const DEFAULT_EXPIRES = 60 * 60 // 1 hour
-export const USER_STORAGE_BUCKET = "user"
+export { USER_STORAGE_BUCKET }
 
 /**
  * Create a short-lived signed URL for a private storage object. Prefer this

@@ -33,6 +33,7 @@ async function fetchPapersList(userId: string): Promise<PaperListItem[]> {
     .select(fullSelect)
     .eq("created_by", userId)
     .order("updated_at", { ascending: false })
+    .limit(100)
 
   // Supabase types the with-embed and without-embed selects as different row
   // shapes, so collect the rows as `unknown` and cast once at the boundary.
@@ -46,6 +47,7 @@ async function fetchPapersList(userId: string): Promise<PaperListItem[]> {
       .select(PAPER_LIST_COLUMNS)
       .eq("created_by", userId)
       .order("updated_at", { ascending: false })
+      .limit(100)
     rows = retry.data
     error = retry.error
   }

@@ -15,6 +15,7 @@ import { ExperimentsPageContent } from './experiment-list'
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
 import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
 import { CatalystSectionHero } from "@/components/catalyst/catalyst-section-hero"
+import { ensureUserProfile } from "@/lib/ensure-user-profile"
 
 export default async function ExperimentsPage({
   searchParams,
@@ -25,12 +26,8 @@ export default async function ExperimentsPage({
   const supabase = await createClient()
   // `profile` and the unfiltered `experiments` list are independent — fetch
   // in parallel. `orgProjects` has to wait for `profile.organization_id`.
-  const [profileRes, experimentsRes] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("organization_id")
-      .eq("id", user.id)
-      .single(),
+  const [profileResult, experimentsRes] = await Promise.all([
+    ensureUserProfile(user),
     supabase
       .from("experiments")
       .select(`
@@ -38,12 +35,12 @@ export default async function ExperimentsPage({
         project:projects(id, name),
         assigned_to:profiles!experiments_assigned_to_fkey(first_name, last_name)
       `)
-      .order("created_at", { ascending: false }),
+      .order("created_at", { ascending: false })
+      .limit(100),
   ])
-  const profile = profileRes.data
   const experiments = experimentsRes.data
 
-  const orgId = profile?.organization_id
+  const orgId = profileResult.ok ? profileResult.profile.organization_id : undefined
   const { data: orgProjects = [] } = orgId
     ? await supabase.from("projects").select("id").eq("organization_id", orgId)
     : { data: [] as { id: string }[] }

@@ -1,4 +1,5 @@
 import { verifyBearerToken } from '@/lib/verify-bearer-token';
+import { tryCatalystBaseUrl } from '@/lib/catalyst-client';
 
 // Proxies a tool-permission decision (allow / always / deny) to the agent
 // backend's permission endpoint. The backend records the choice and wakes the
@@ -6,7 +7,7 @@ import { verifyBearerToken } from '@/lib/verify-bearer-token';
 // runtime: a tiny JSON round-trip, no streaming.
 export const runtime = 'nodejs';
 
-const NOTES9_API_BASE = process.env.CHAT_API_URL?.replace(/\/$/, '') || '';
+const NOTES9_API_BASE = tryCatalystBaseUrl();
 
 export async function POST(
   req: Request,

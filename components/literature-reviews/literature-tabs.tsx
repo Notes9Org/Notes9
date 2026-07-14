@@ -7,9 +7,13 @@ import { MagnifyingGlass as SearchIcon, Database, CaretLeft as ChevronLeft, Care
 import {
   LiteratureSearchForm,
   SearchTab,
+  type LiteratureHistoryEntry,
 } from "@/components/literature-reviews/search-tab"
+import { useChatSessions } from "@/hooks/use-chat-sessions"
+import * as literatureSearchEngine from "@/lib/literature-search-engine"
 import { RepoTab } from "@/components/literature-reviews/repo-tab"
 import { PaperSearchSortMode, SearchPaper } from "@/types/paper-search"
+import type { CitationsManifest } from "@/hooks/use-agent-stream"
 import { DEFAULT_AI_FILTERS, type AiResultFilters } from "@/lib/ai-search-filters"
 import { normalizeDoi } from "@/lib/literature-pdf-storage"
 import {
@@ -421,7 +425,12 @@ export function LiteratureTabs({
         /* ignore */
       }
     }
-    if (savedActive) setActiveInnerTab(savedActive)
+    // ponytail: only apply the global (un-namespaced) last-active-tab value on
+    // a true first-ever mount for this session — otherwise it clobbers the
+    // already-correct session-scoped `savedSession.activeInnerTab` (or the
+    // "search" default) with a stale tab from a different project/session,
+    // which is what left the panel stuck at opacity 0 on return.
+    if (!savedSession && savedActive) setActiveInnerTab(savedActive)
     if (opened.length > 0) setOpenedStagedIds(opened)
     setTabsInitialized(true)
   }, [])
@@ -749,6 +758,55 @@ export function LiteratureTabs({
     setSearchResults([]) // clear stale results until the new search streams in
     syncTabsForSearchSession()
   }
+
+  // --- Search history (last 10 + see all) ---------------------------------
+  // Sessions already load newest-first server-side; kind='literature' rows
+  // are written authoritatively by the engine's onDone (see
+  // lib/literature-search-engine.ts) so history doesn't depend on the
+  // right-sidebar Catalyst bridge being mounted.
+  const { sessions: chatSessions, loadSessions: loadChatSessions } = useChatSessions()
+  useEffect(() => {
+    void loadChatSessions()
+  }, [loadChatSessions])
+  const [historyExpanded, setHistoryExpanded] = useState(false)
+  const literatureHistory = useMemo(
+    () => chatSessions.filter((s) => s.kind === "literature"),
+    [chatSessions],
+  )
+  const historyEntries: LiteratureHistoryEntry[] = useMemo(
+    () =>
+      (historyExpanded ? literatureHistory : literatureHistory.slice(0, 10)).map((s) => ({
+        id: s.id,
+        query: s.title ?? "",
+        updatedAt: s.updated_at,
+      })),
+    [literatureHistory, historyExpanded],
+  )
+
+  const handleSelectHistory = (q: string, opts: { refresh: boolean }) => {
+    if (opts.refresh) {
+      literatureSearchEngine.forgetCache(q)
+    } else {
+      // ponytail: DEFAULT behavior is instant restore from the saved answer
+      // (no LLM call) — seed the engine cache so handleSearch's run() below
+      // hits it immediately. Flip to "always refresh" by always taking the
+      // opts.refresh branch above.
+      const session = literatureHistory.find((s) => (s.title ?? "") === q)
+      const saved = session?.metadata?.literature as
+        | { summary?: string; papers?: SearchPaper[]; manifest?: unknown }
+        | undefined
+      if (saved?.papers?.length) {
+        literatureSearchEngine.restore(q, {
+          summary: saved.summary ?? "",
+          papers: saved.papers,
+          manifest: (saved.manifest as CitationsManifest | null | undefined) ?? null,
+        })
+      }
+    }
+    handleSearch(q)
+  }
+
+  const handleSeeAllHistory = () => setHistoryExpanded(true)
 
   // Jump from the library's search box straight into a fresh paper search.
   const handleSearchPapersFromRepo = (q: string) => {
@@ -1137,6 +1195,9 @@ export function LiteratureTabs({
               searchStopRef.current?.()
               setIsSearching(false)
             }}
+            history={historyEntries}
+            onSelectHistory={handleSelectHistory}
+            onSeeAllHistory={handleSeeAllHistory}
           />
 
           {resolvedActiveTab !== "search" && (

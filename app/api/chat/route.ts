@@ -15,10 +15,11 @@ import { createClient } from '@/lib/supabase/server';
 import { getCurrentUser } from '@/lib/auth/current-user';
 import { enforceLimits, checkBodyBytes, checkHistory, checkQueryChars } from '@/lib/limits/guards';
 import { literatureContextToSystemMessage, type LiteratureSessionContext } from '@/lib/literature-citations';
+import { aiServiceBaseUrl, tryCatalystBaseUrl } from '@/lib/catalyst-client';
 
 export const maxDuration = 300;
 
-const NOTES9_API_BASE = process.env.CHAT_API_URL?.replace(/\/$/, '') || '';
+const NOTES9_API_BASE = tryCatalystBaseUrl();
 
 /** Unwrap stringified JSON parts (e.g. [{"type":"text","text":"..."}]) to plain text. Handles double/triple wrapping. */
 function normalizeContentToPlainText(raw: string): string {
@@ -126,7 +127,7 @@ export async function POST(req: Request) {
     return new Response('Missing session_id', { status: 400 });
   }
 
-  const baseUrl = process.env.AI_SERVICE_URL?.replace(/\/$/, '') || NOTES9_API_BASE;
+  const baseUrl = aiServiceBaseUrl() || NOTES9_API_BASE;
   const bearerToken = process.env.AI_SERVICE_BEARER_TOKEN;
   const useNotes9Fallback = !bearerToken && supabaseToken && NOTES9_API_BASE;
 

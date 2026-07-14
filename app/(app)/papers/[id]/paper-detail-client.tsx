@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { deletePaper } from "@/lib/papers"
 import { useProjectScope } from "@/contexts/project-scope-context"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -109,7 +110,7 @@ export function PaperDetailClient({ activePaperId }: { activePaperId: string }) 
     setIsDeleting(true)
     try {
       const supabase = createClient()
-      const { error } = await supabase.from("papers").delete().eq("id", deleteTarget)
+      const { error } = await deletePaper(supabase, deleteTarget)
       if (error) {
         toast.error(`Failed to delete paper: ${error.message}`)
         return

@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/server"
 import { requireUser } from "@/lib/auth/current-user"
+import { ensureUserProfile } from "@/lib/ensure-user-profile"
 import {
   Card,
   CardContent,
@@ -47,7 +48,7 @@ export default async function DashboardPage() {
     allTasksRes,
     allEventsRes,
     whiteboardNotesRes,
-    profileRes,
+    profileResult,
     orgMembershipRes,
   ] = await Promise.all([
     supabase.from("projects").select("id", { count: "exact", head: true }).limit(1),
@@ -149,11 +150,10 @@ export default async function DashboardPage() {
     .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
     .slice(0, 15)
 
-  const profile = profileRes.data
   const orgMembership = orgMembershipRes.data
 
   let labSummary: DashboardLabSummary | null = null
-  const orgId = profile?.organization_id
+  const orgId = profileResult.ok ? profileResult.profile.organization_id : undefined
 
   if (orgMembership && orgId) {
     const [orgRes, membersRes, memberCountRes, invitationsRes, rolesRes] =

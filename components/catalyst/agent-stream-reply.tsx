@@ -3,10 +3,6 @@
 import { Check, CircleNotch as Loader2, ArrowsClockwise as RefreshCw } from "@phosphor-icons/react/ssr";
 import { cn } from '@/lib/utils';
 import { MarkdownRenderer } from './markdown-renderer';
-import {
-  AgentCitationsPanel,
-  mergeGroundingAndRagItems,
-} from '@/components/catalyst/agent-citations-panel';
 import { AgentToolCards } from '@/components/catalyst/agent-tool-cards';
 import { AgentArtifactList } from '@/components/catalyst/agent-artifact-card';
 import { AgentGraphList } from '@/components/catalyst/agent-graph-view';
@@ -20,11 +16,6 @@ import type {
   AgentArtifact,
   AgentGraph,
 } from '@/hooks/use-agent-stream';
-
-/** Escape a string for safe interpolation into a RegExp literal. */
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
 
 interface ToolOutput {
   tool: string;
@@ -101,7 +92,6 @@ export function AgentStreamReply({
   reasoning = '',
   synthesisPlan = null,
   sql,
-  ragChunks,
   streamedAnswer,
   donePayload,
   citationsManifest = null,
@@ -130,30 +120,6 @@ export function AgentStreamReply({
   // previous position-based negation heuristic was removed — it could drop
   // valid citations whenever the agent mentioned a source near a negating
   // phrase, and the manifest is now authoritative for what's cited.
-  const body = displayAnswer ?? '';
-  const grounding = rawGrounding.filter((r, i) => {
-    const label =
-      typeof r.cite_label === 'string' && r.cite_label.trim()
-        ? r.cite_label.trim()
-        : String(i + 1);
-    // Match the base document marker too ("3.2" → still cited if "[3.2]" or any
-    // "[3.x]" appears). Use anchored brackets, NOT substring includes — a plain
-    // `.includes("[1]")` falsely matches "[10]"/"[11]". The base regex covers
-    // "[3]" and any "[3.<n>]"; the exact `[label]` check covers odd labels.
-    const base = label.split('.')[0];
-    return (
-      new RegExp(`\\[${escapeRegExp(base)}(?:\\.\\d+)?\\]`).test(body) ||
-      body.includes(`[${label}]`)
-    );
-  });
-
-  const mergedCitationItems = mergeGroundingAndRagItems(grounding, ragChunks?.chunks);
-  const hasCitationPanel = mergedCitationItems.length > 0;
-  const citationTriggerLabel =
-    donePayload?.resources?.length || donePayload?.citations?.length
-      ? 'All citations'
-      : ragChunks?.message?.trim() || 'Retrieved chunks';
-
   const isStreaming = isThinkingStreaming;
   const hasToolCards = toolCards.length > 0;
   const hasThinkingBar =
@@ -397,18 +363,8 @@ export function AgentStreamReply({
       {graphs.length > 0 && <AgentGraphList graphs={graphs} />}
       {artifacts.length > 0 && <AgentArtifactList artifacts={artifacts} />}
 
-      {/* ── Citations panel ── */}
-      {hasCitationPanel ? (
-        <AgentCitationsPanel items={mergedCitationItems} triggerLabel={citationTriggerLabel} />
-      ) : (
-        // Once the answer is complete with no cited sources, say so honestly
-        // rather than leaving a silent gap.
-        donePayload != null &&
-        displayAnswer != null &&
-        displayAnswer.trim().length > 0 && (
-          <AgentCitationsPanel items={[]} triggerLabel={citationTriggerLabel} showEmptyState />
-        )
-      )}
+      {/* Citations panel removed — the per-citation hover card is now the
+          single source surface. */}
     </div>
   );
 }

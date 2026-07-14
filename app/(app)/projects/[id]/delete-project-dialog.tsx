@@ -48,10 +48,7 @@ export function DeleteProjectDialog({ projectId, projectName, experimentCount = 
     setIsDeleting(true)
 
     try {
-      const { error } = await supabase
-        .from("projects")
-        .delete()
-        .eq("id", projectId)
+      const { error } = await deleteProject(supabase, projectId)
 
       if (error) throw error
 
