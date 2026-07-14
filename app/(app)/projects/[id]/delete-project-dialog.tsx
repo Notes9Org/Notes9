@@ -17,6 +17,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import { Trash as Trash2, CircleNotch as Loader2, Warning as AlertTriangle } from "@phosphor-icons/react/ssr"
+import { deleteProject } from "@/lib/projects"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"

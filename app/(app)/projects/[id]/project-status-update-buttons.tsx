@@ -24,6 +24,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import { CheckCircle as CheckCircle2, Pause, Play, Archive, CircleNotch as Loader2, NotePencil as FileEdit, CaretDown as ChevronDown } from "@phosphor-icons/react/ssr"
+import { updateProject } from "@/lib/projects"
 
 interface ProjectStatusUpdateButtonsProps {
   projectId: string
