@@ -7,6 +7,11 @@ import {
   oaPdfCacheKey,
 } from "@/lib/literature-pdf-import"
 import { extractPdfFromUnpaywallPayload, unpaywallContactEmail } from "@/lib/unpaywall"
+import {
+  extractSemanticScholarPdf,
+  pickCoreDownloadUrl,
+  resolveFromCore,
+} from "@/lib/literature-oa-resolve"
 
 const enc = (s: string) => new TextEncoder().encode(s)
 const PDF_MAGIC = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x35]) // "%PDF-1.5"
@@ -180,5 +185,63 @@ describe("oaPdfCacheKey", () => {
     expect(oaPdfCacheKey({ pmid: "555" })).toBe(oaPdfCacheKey({ pmid: "555" }))
     expect(oaPdfCacheKey({ title: "A", year: 2000 })).not.toBe(oaPdfCacheKey({ title: "A", year: 2001 }))
     expect(oaPdfCacheKey({})).toBeNull()
+  })
+})
+
+describe("extractSemanticScholarPdf", () => {
+  it("returns the openAccessPdf url when present", () => {
+    expect(extractSemanticScholarPdf({ openAccessPdf: { url: "https://repo.example/x.pdf" } })).toBe(
+      "https://repo.example/x.pdf",
+    )
+  })
+
+  it("returns null when absent, non-http, or malformed", () => {
+    expect(extractSemanticScholarPdf({ openAccessPdf: null })).toBeNull()
+    expect(extractSemanticScholarPdf({})).toBeNull()
+    expect(extractSemanticScholarPdf(null)).toBeNull()
+    expect(extractSemanticScholarPdf({ openAccessPdf: { url: "ftp://nope" } })).toBeNull()
+  })
+})
+
+describe("pickCoreDownloadUrl — matches the RIGHT paper by DOI", () => {
+  const doi = "10.1234/abc"
+
+  it("picks the downloadUrl of the result whose DOI matches exactly", () => {
+    const results = [
+      { doi: "10.9999/other", downloadUrl: "https://repo/wrong.pdf" },
+      { doi: "10.1234/ABC", downloadUrl: "https://repo/right.pdf" }, // case-insensitive match
+    ]
+    expect(pickCoreDownloadUrl(results, doi)).toBe("https://repo/right.pdf")
+  })
+
+  it("never returns a neighbouring paper's PDF (no DOI match → null)", () => {
+    const results = [{ doi: "10.9999/other", downloadUrl: "https://repo/wrong.pdf" }]
+    expect(pickCoreDownloadUrl(results, doi)).toBeNull()
+    expect(pickCoreDownloadUrl([], doi)).toBeNull()
+    expect(pickCoreDownloadUrl(null, doi)).toBeNull()
+  })
+
+  it("skips a matching result that has no usable download url", () => {
+    const results = [
+      { doi: "10.1234/abc", downloadUrl: null },
+      { doi: "10.1234/abc", downloadUrl: "https://repo/right.pdf" },
+    ]
+    expect(pickCoreDownloadUrl(results, doi)).toBe("https://repo/right.pdf")
+  })
+})
+
+describe("resolveFromCore — no-op without a key", () => {
+  it("returns null when CORE_API_KEY is unset (never calls the network)", async () => {
+    const prev = process.env.CORE_API_KEY
+    delete process.env.CORE_API_KEY
+    try {
+      await expect(resolveFromCore("10.1234/abc")).resolves.toBeNull()
+    } finally {
+      if (prev !== undefined) process.env.CORE_API_KEY = prev
+    }
+  })
+
+  it("returns null for a missing DOI", async () => {
+    await expect(resolveFromCore(null)).resolves.toBeNull()
   })
 })

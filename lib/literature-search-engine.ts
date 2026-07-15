@@ -430,16 +430,21 @@ async function persistHistory(
       },
     }
 
-    const { data: existing } = await supabase
+    // Match ANY existing literature session with the same normalized query, not just the
+    // most-recent one — otherwise re-running an older query inserts a duplicate row.
+    const { data: candidates } = await supabase
       .from('chat_sessions')
       .select('id, title')
       .eq('user_id', user.id)
       .eq('kind', 'literature')
       .order('updated_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
+      .limit(100)
 
-    if (existing && (existing.title ?? '').trim().toLowerCase() === normalized) {
+    const existing = candidates?.find(
+      (s: { title: string | null }) => (s.title ?? '').trim().toLowerCase() === normalized,
+    )
+
+    if (existing) {
       await supabase
         .from('chat_sessions')
         .update({ metadata, updated_at: new Date().toISOString() })

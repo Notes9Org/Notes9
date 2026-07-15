@@ -28,7 +28,7 @@ const Tooltip = ({ children }: TooltipStubProps) => <>{children}</>
 const TooltipTrigger = ({ children }: TooltipStubProps) => <>{children}</>
 const TooltipContent = (_props: TooltipStubProps) => null
 
-import { Square, ArrowUp, ClockCounterClockwise as History, ArrowsOut as Maximize, ArrowsIn as Minimize, SidebarSimple as PanelLeft, Plus, Paperclip, Globe, Chat as MessageSquare, NotePencil as NotebookPen, NotePencil as PenBox, DotsThree as MoreHorizontal, PushPin as Pin, PushPinSlash as PinOff, PencilSimple as Pencil, Check, CaretRight as ChevronRight, Folder, FolderPlus, FolderOpen as FolderInput, CheckSquare, MagnifyingGlass as Search, Trash as Trash2, CaretDown as ChevronDown, X, Binoculars as Telescope, List as Menu, Sun, Moon, Question as CircleHelp, Microphone as Mic, BookOpen, Flask as FlaskConical, FolderOpen, FileText, CircleNotch as Loader2, At as AtSign } from "@phosphor-icons/react/ssr";
+import { Square, ArrowUp, ClockCounterClockwise as History, ArrowsOut as Maximize, ArrowsIn as Minimize, SidebarSimple as PanelLeft, Plus, Paperclip, Globe, Chat as MessageSquare, NotePencil as NotebookPen, NotePencil as PenBox, DotsThree as MoreHorizontal, PushPin as Pin, PushPinSlash as PinOff, PencilSimple as Pencil, Check, CaretRight as ChevronRight, Folder, FolderPlus, FolderOpen as FolderInput, CheckSquare, MagnifyingGlass as Search, Trash as Trash2, CaretDown as ChevronDown, X, Binoculars as Telescope, List as Menu, Sun, Moon, Question as CircleHelp, Microphone as Mic, BookOpen, Flask as FlaskConical, FolderOpen, FileText, CircleNotch as Loader2, At as AtSign, Info, Warning } from "@phosphor-icons/react/ssr";
 import { cn } from '@/lib/utils';
 import { recordRumEvent } from '@/lib/rum';
 import { AnalyticsEvent } from '@/lib/analytics/events';
@@ -630,6 +630,31 @@ const SidebarChatMessageItem = memo(function SidebarChatMessageItem({
   onSaveEdit,
   onRegenerate,
 }: SidebarChatMessageItemProps) {
+  // System notices (credit thresholds, "not open access", etc.) are injected as
+  // assistant messages so they land in-thread, but they are NOT AI answers —
+  // render them as a calm, contained info/warning strip (no Catalyst avatar, no
+  // citation/actions) so they never read as a model response.
+  const noticeMeta = (message as {
+    metadata?: { notice?: boolean; tone?: 'info' | 'warning' };
+  }).metadata;
+  if (noticeMeta?.notice) {
+    const tone = noticeMeta.tone === 'warning' ? 'warning' : 'info';
+    const NoticeIcon = tone === 'warning' ? Warning : Info;
+    return (
+      <div
+        role="note"
+        className={cn(
+          'mx-auto flex w-full max-w-[560px] gap-3 rounded-lg border px-4 py-3 text-[13px] leading-relaxed',
+          tone === 'warning'
+            ? 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200'
+            : 'border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-200',
+        )}
+      >
+        <NoticeIcon className="mt-0.5 size-4 shrink-0" aria-hidden />
+        <span className="min-w-0 flex-1">{sidebarGetMessageContent(message)}</span>
+      </div>
+    );
+  }
   // All derivations are pure functions of rawContent / message — stable for
   // settled messages because rawContent (a string) doesn't change.
   const literatureParsed =
@@ -3664,6 +3689,19 @@ export function RightSidebar({
         )}
         id="tour-ai-chat"
       >
+        {/* "N papers attached" affordance for a literature dive: the search papers
+            already ground follow-ups (forwarded as literature_sources via
+            effectiveLitCtx in handleSubmit); this just makes that context visible
+            in the generic composer, like an attachment chip. */}
+        {literature?.dive && (literature.context?.papers?.length ?? 0) > 0 && (
+          <div className="flex flex-wrap gap-1.5 px-3 pt-2 pb-0.5">
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/40 px-2 py-1 text-xs text-muted-foreground">
+              <BookOpen className="size-3.5 shrink-0" />
+              {literature.context!.papers.length} paper
+              {literature.context!.papers.length === 1 ? '' : 's'} attached
+            </span>
+          </div>
+        )}
         {(attachments.length > 0 || uploadQueue.length > 0 || fetchingPaperNames.length > 0) && (
           <div className="flex flex-wrap gap-1.5 px-3 pt-2 pb-0.5">
             {attachments.map((a) => (
