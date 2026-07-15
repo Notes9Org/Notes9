@@ -251,6 +251,8 @@ export function LiteratureSearchForm({
                       >
                         <button
                           type="button"
+                          title="Open saved result"
+                          aria-label={`Open saved result for "${h.query}"`}
                           className="min-w-0 flex-1 truncate text-left text-sm"
                           onClick={() => {
                             setHistoryOpen(false)
@@ -264,9 +266,9 @@ export function LiteratureSearchForm({
                         </button>
                         <button
                           type="button"
-                          aria-label="Refresh this search"
-                          title="Refresh — re-run live"
-                          className="shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
+                          title="Re-run this search live"
+                          aria-label={`Re-run "${h.query}" live`}
+                          className="shrink-0 rounded p-1 text-muted-foreground opacity-50 transition-opacity hover:text-foreground group-hover:opacity-100"
                           onClick={() => {
                             setHistoryOpen(false)
                             onSelectHistory?.(h.query, { refresh: true })
@@ -399,6 +401,8 @@ interface SearchTabProps {
    * to `query` when not provided.
    */
   aiQuery?: string
+  /** Bumped per explicit search so an unchanged `aiQuery` still forces a re-run. */
+  searchNonce?: number
   /** Lift the AI-search papers to the host (staging detection, count). */
   onResults?: (papers: SearchPaper[]) => void
   /** Report AI-search loading so the host's search-bar spinner stays in sync. */
@@ -432,6 +436,7 @@ export function SearchTab({
   filters: filtersProp,
   onFiltersChange,
   aiQuery,
+  searchNonce,
   onResults,
   onLoadingChange,
   registerStop,
@@ -469,6 +474,7 @@ export function SearchTab({
       {hasSearched && (
         <AiSearchView
           query={effectiveAiQuery}
+          searchNonce={searchNonce}
           projectId={projectId}
           experimentId={experimentId}
           scopeLabel={scopeLabel}

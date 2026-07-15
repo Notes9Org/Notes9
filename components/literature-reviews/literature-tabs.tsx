@@ -165,6 +165,8 @@ export function LiteratureTabs({
   const [openAccessOnlySearch, setOpenAccessOnlySearch] = useState(savedSession?.openAccessOnlySearch ?? false)
   const [searchResults, setSearchResults] = useState<SearchPaper[]>(savedSession?.searchResults ?? [])
   const [isSearching, setIsSearching] = useState(false)
+  // Bumped on every explicit search so an identical query still re-fires the run() effect.
+  const [searchNonce, setSearchNonce] = useState(0)
   const [hasSearched, setHasSearched] = useState(savedSession?.hasSearched ?? false)
   const [stagingPaperId, setStagingPaperId] = useState<string | null>(null)
   // AI result filters owned here so the main search bar controls them.
@@ -746,16 +748,25 @@ export function LiteratureTabs({
   // AiSearchView from the submitted query — there's no separate
   // /api/search-papers call. AiSearchView lifts its papers (for staging
   // detection + count) via onResults and its loading via onLoadingChange.
-  const handleSearch = (override?: string) => {
+  const handleSearch = (override?: string, { fresh = false }: { fresh?: boolean } = {}) => {
     const q = (override ?? query).trim()
     if (!q) return
+    // fresh = explicit search (Enter / button / history re-run): force a live fetch by
+    // clearing the cache + lastRunQuery guard, and show the spinner.
+    // not fresh = history restore: instant, renders from the seeded cache — no spinner
+    // (setting it here is what used to hang forever when the query was unchanged).
+    if (fresh) literatureSearchEngine.forgetCache(q)
     if (override !== undefined && override !== query) setQuery(override)
     // Surface the results view immediately on submit (from anywhere).
     setTopSection("search")
-    setSubmittedQuery(q) // drives the AI search — only changes on submit
+    setSubmittedQuery(q)
+    setSearchNonce((n) => n + 1) // re-fire the run() effect even if q is unchanged
     setHasSearched(true)
-    setIsSearching(true) // cleared by AiSearchView via onLoadingChange
-    setSearchResults([]) // clear stale results until the new search streams in
+    if (fresh) {
+      setIsSearching(true) // cleared by AiSearchView via onLoadingChange
+      setSearchResults([]) // clear stale results until the new search streams in
+    }
+    // restore (not fresh): keep results — the seeded cache repopulates via onResults.
     syncTabsForSearchSession()
   }
 
@@ -803,7 +814,8 @@ export function LiteratureTabs({
         })
       }
     }
-    handleSearch(q)
+    // refresh = live re-run (fresh); default = instant restore from the seeded cache.
+    handleSearch(q, { fresh: opts.refresh })
   }
 
   const handleSeeAllHistory = () => setHistoryExpanded(true)
@@ -1190,7 +1202,7 @@ export function LiteratureTabs({
             query={query}
             setQuery={setQuery}
             isSearching={isSearching}
-            onSearch={handleSearch}
+            onSearch={() => handleSearch(undefined, { fresh: true })}
             onStop={() => {
               searchStopRef.current?.()
               setIsSearching(false)
@@ -1252,7 +1264,7 @@ export function LiteratureTabs({
                         searchResults={displayedResults}
                         isSearching={isSearching}
                         hasSearched={hasSearched}
-                        onSearch={handleSearch}
+                        onSearch={() => handleSearch(undefined, { fresh: true })}
                         resultsOnly
                         projectId={lockedProjectId}
                         experimentId={pinnedExperimentForSave?.id ?? null}
@@ -1271,6 +1283,7 @@ export function LiteratureTabs({
                         filters={aiFilters}
                         onFiltersChange={setAiFilters}
                         aiQuery={submittedQuery}
+                        searchNonce={searchNonce}
                         onResults={setSearchResults}
                         onLoadingChange={setIsSearching}
                         registerStop={(fn) => {
@@ -1330,7 +1343,7 @@ export function LiteratureTabs({
               searchResults={displayedResults}
               isSearching={isSearching}
               hasSearched={hasSearched}
-              onSearch={handleSearch}
+              onSearch={() => handleSearch(undefined, { fresh: true })}
               resultsOnly
               projectId={lockedProjectId}
               experimentId={pinnedExperimentForSave?.id ?? null}
@@ -1348,6 +1361,7 @@ export function LiteratureTabs({
               filters={aiFilters}
               onFiltersChange={setAiFilters}
               aiQuery={submittedQuery}
+              searchNonce={searchNonce}
               onResults={setSearchResults}
               onLoadingChange={setIsSearching}
               registerStop={(fn) => {

@@ -84,6 +84,7 @@ function CardSkeleton({ delay = 0 }: { delay?: number }) {
 
 export function AiSearchView({
   query,
+  searchNonce,
   projectId,
   experimentId,
   scopeLabel,
@@ -101,6 +102,8 @@ export function AiSearchView({
   registerStop,
 }: {
   query: string
+  /** Bumped per explicit search so an unchanged `query` still re-fires the run() effect. */
+  searchNonce?: number
   projectId?: string | null
   /** Experiment (sidebar pin) that saves should also link to. */
   experimentId?: string | null
@@ -151,7 +154,8 @@ export function AiSearchView({
   useEffect(() => {
     if (query.trim()) void run(query)
     setVisibleCount(PAGE_SIZE)
-  }, [query, run])
+    // searchNonce forces a re-run on explicit re-submit even when `query` is unchanged.
+  }, [query, searchNonce, run])
 
   // Reset the visible window when filters change so the reveal math stays sane.
   useEffect(() => {
