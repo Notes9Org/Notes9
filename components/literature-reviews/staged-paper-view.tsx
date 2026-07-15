@@ -4,7 +4,8 @@ import { useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { SearchPaper } from "@/types/paper-search"
-import { BookOpen, Bookmark as BookmarkCheck, Bookmark as BookmarkPlus, ArrowSquareOut as ExternalLink, FileText, CircleNotch as Loader2, ChatCircle as MessageCircle } from "@phosphor-icons/react/ssr"
+import { BookOpen, Bookmark as BookmarkCheck, Bookmark as BookmarkPlus, ArrowSquareOut as ExternalLink, FileText, CircleNotch as Loader2 } from "@phosphor-icons/react/ssr"
+import { FlareIcon } from "@/components/ui/flare-icon"
 import { LiteraturePdfPanel } from "./literature-pdf-panel"
 import { UploadLiteraturePdfDialog } from "./upload-literature-pdf-dialog"
 import { decodeHtmlEntities } from "@/lib/literature-abstract-display"
@@ -185,7 +186,7 @@ export function StagedPaperView({
               title="Ask Catalyst AI about this paper"
               className="gap-1.5 rounded-lg text-muted-foreground hover:text-foreground"
             >
-              <MessageCircle className="h-4 w-4" />
+              <FlareIcon className="h-4 w-4" />
               Ask Catalyst
             </Button>
           </div>

@@ -485,8 +485,8 @@
   display: none;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 22px;
+  width: 20px;
+  height: 24px;
   padding: 0;
   border-radius: 5px;
   color: hsl(var(--muted-foreground, 0 0% 45%));
@@ -496,6 +496,13 @@
   transition: opacity 0.12s ease, background-color 0.12s ease, color 0.12s ease;
   user-select: none;
   -webkit-user-select: none;
+}
+/* Invisible halo — a much larger grab target than the visible 20×24 grip,
+   so the pointer doesn't have to land on the dots exactly. */
+.n9-block-drag-handle::before {
+  content: "";
+  position: absolute;
+  inset: -8px;
 }
 .n9-block-drag-handle:hover {
   opacity: 1;
@@ -532,7 +539,7 @@
   background: var(--background, #fff);
 }
 .ProseMirror .n9-page-break.ProseMirror-selectednode {
-  border-top-color: hsl(var(--primary, 220 90% 56%));
+  border-top-color: hsl(var(--primary, 17 49% 40%));
 }
 
 /* Text columns */
@@ -560,7 +567,7 @@
   --muted-foreground: #6b7280;
   --muted: 0 0% 96%;
   --border: 0 0% 86%;
-  --primary: 220 90% 56%;
+  --primary: 17 49% 40%;
   color: #1a1a1a;
   background-color: #ffffff;
   border-radius: 4px;
@@ -625,7 +632,7 @@
 
 /* ── Phase 2 polish: refined, document-like reading surface (additive only) ── */
 .ProseMirror ::selection {
-  background-color: hsl(var(--primary, 220 90% 56%) / 0.18);
+  background-color: hsl(var(--primary, 17 49% 40%) / 0.18);
 }
 /* Don't let the first block push the content down — tighter top rhythm */
 .ProseMirror > :first-child { margin-top: 0; }
@@ -675,11 +682,13 @@
 /* The page-view backdrop (area behind the sheets). A shared var keeps the
    page-break gap exactly the same colour as the surrounding backdrop. */
 .n9-page-backdrop {
-  --n9-backdrop: #eceef1;
+  /* Derived from the platform's warm neutrals (was a cold blue-gray #eceef1)
+     so the desk behind the page matches the rest of the app. */
+  --n9-backdrop: color-mix(in oklab, var(--muted) 70%, var(--background));
   background-color: var(--n9-backdrop);
 }
 :is(.dark) .n9-page-backdrop {
-  --n9-backdrop: #1b1e23;
+  --n9-backdrop: color-mix(in oklab, var(--background) 55%, var(--muted));
 }
 /* Backdrop gap between two sheets — same colour as behind, with soft page edges. */
 .n9-page-sep-gap {

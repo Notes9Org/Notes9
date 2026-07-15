@@ -237,8 +237,7 @@ export function EditProtocolDialog({ protocol }: EditProtocolDialogProps) {
               placeholder="Update protocol content..."
               title={formData.name || "protocol"}
               minHeight="300px"
-              showAITools={true}
-              showAiWritingDropdown={false}
+              showCitationTools
               onEditorReady={(ed) => { editorRef.current = ed }}
             />
           </div>

@@ -17,6 +17,7 @@ import { useDocumentVersions, type DocumentVersion } from "@/hooks/use-document-
 import { DocumentVersionsDialog } from "@/components/document-versions/document-versions-dialog"
 import Link from "next/link"
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
+import { InlineDocTitle } from "@/components/text-editor/inline-doc-title"
 import { NoteExportMenu, NotePrintButton } from "@/components/note-export-menu"
 import { NoteImportButton } from "@/components/note-import-button"
 import { Button } from "@/components/ui/button"
@@ -29,7 +30,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
-import { CaretLeft as ChevronLeft, UploadSimple as Upload, Files as FileStack, GitDiff as GitCompare, List, Plus } from "@phosphor-icons/react/ssr"
+import { CaretLeft as ChevronLeft, DownloadSimple as Download, Files as FileStack, GitDiff as GitCompare, List, Plus } from "@phosphor-icons/react/ssr"
 import { ProtocolChangeApprovalBar } from "./protocol-change-approval"
 import { ProtocolSiblingsList } from "./protocol-siblings-list"
 import { SideRail } from "@/components/patterns/side-rail"
@@ -129,8 +130,6 @@ export function ProtocolDesignMode({
   // lastEmittedHtmlRef guard can otherwise suppress restored content).
   const [editorRemountNonce, setEditorRemountNonce] = useState(0)
   const [currentVersion, setCurrentVersion] = useState(protocol.version)
-  const [isEditingTitle, setIsEditingTitle] = useState(false)
-  const titleInputRef = useRef<HTMLInputElement>(null)
 
   // AI-context paper/protocol lists removed alongside the AI sidechat.
   const [activeMainTabKey] = useState<string>("editor")
@@ -187,17 +186,54 @@ export function ProtocolDesignMode({
     }
   }, [])
 
+  /** True when `incoming` is a strictly newer dot-numeric version than `current`. */
+  const isVersionNewer = (incoming: string | null | undefined, current: string | null | undefined) => {
+    if (!incoming || !current) return false
+    const a = incoming.split(".").map((p) => parseInt(p, 10))
+    const b = current.split(".").map((p) => parseInt(p, 10))
+    if (a.some(Number.isNaN) || b.some(Number.isNaN)) return false
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+      const ai = a[i] ?? 0
+      const bi = b[i] ?? 0
+      if (ai !== bi) return ai > bi
+    }
+    return false
+  }
+
+  // Re-sync local state from the server ONLY when it genuinely has something
+  // new: a different protocol (id change) or a strictly newer version. The old
+  // unconditional sync re-ran on every prop identity churn — after
+  // "Accept & Save", onSaved() → router.refresh() could hand back a STALE
+  // protocol.content and silently wipe the just-saved draft (freshly applied
+  // templates "kept disappearing"). Never clobber a dirty draft.
+  const lastSyncedProtocolIdRef = useRef(protocol.id)
   useEffect(() => {
-    setDraftContent(protocol.content)
+    const idChanged = lastSyncedProtocolIdRef.current !== protocol.id
+    const newerVersion = isVersionNewer(protocol.version, currentVersion)
+    if (!idChanged && !newerVersion) return
+
+    lastSyncedProtocolIdRef.current = protocol.id
+    const dt = protocol.document_template_id ?? null
+    const label = protocol.document_template?.name ?? null
+    const draftDirty = draftContent !== savedContent
+
     setSavedContent(protocol.content)
     historyBaselineRef.current = protocol.content
     setCurrentVersion(protocol.version)
-    const dt = protocol.document_template_id ?? null
-    setDraftDocumentTemplateId(dt)
     setSavedDocumentTemplateId(dt)
-    const label = protocol.document_template?.name ?? null
-    setDraftTemplateLabel(label)
     setSavedTemplateLabel(label)
+
+    // Adopt the server body only when switching protocols or when the local
+    // draft has no unsaved edits; a dirty draft keeps the user's work and the
+    // approval bar shows the diff against the new baseline instead.
+    if (idChanged || !draftDirty) {
+      setDraftContent(protocol.content)
+      setDraftDocumentTemplateId(dt)
+      setDraftTemplateLabel(label)
+      // Same-id external update: force the mounted editor to show the new body.
+      if (!idChanged) setEditorRemountNonce((n) => n + 1)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [protocol.id, protocol.content, protocol.version, protocol.document_template_id, protocol.document_template])
 
   // Record change history as the user edits (debounced), aligned with lab note auto-save cadence.
@@ -226,13 +262,18 @@ export function ProtocolDesignMode({
 
   const hasPendingChanges = draftContent !== savedContent || templateMetaDirty
 
-  // Focus title input when entering edit mode
+  // The protocol draft lives ONLY in memory until Accept & Save — closing or
+  // refreshing the tab with pending changes would silently discard them, so
+  // ask the browser to confirm first.
   useEffect(() => {
-    if (isEditingTitle && titleInputRef.current) {
-      titleInputRef.current.focus()
-      titleInputRef.current.select()
+    if (!hasPendingChanges) return
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ""
     }
-  }, [isEditingTitle])
+    window.addEventListener("beforeunload", warn)
+    return () => window.removeEventListener("beforeunload", warn)
+  }, [hasPendingChanges])
 
   const templateShellForAi = useMemo(
     () => extractProtocolTemplateShell(draftContent),
@@ -389,6 +430,10 @@ export function ProtocolDesignMode({
       setDraftDocumentTemplateId(choice.id)
       setDraftTemplateLabel(choice.name)
     }
+    // Hard-remount so the applied template is guaranteed to render — the
+    // editor keeps internal ProseMirror state and can suppress a plain
+    // `content` prop swap (same pattern as version restore above).
+    setEditorRemountNonce((n) => n + 1)
   }, [])
 
   // Protocol AI sidechat and its supporting helpers (handleAiApply,
@@ -401,7 +446,9 @@ export function ProtocolDesignMode({
     tiptapRegionFullscreen && activeMainTabKey === "editor"
 
   const protocolFullscreenToolbarLeading = protocolMergedFullscreenToolbar ? (
-    <div className="flex min-w-0 max-w-[min(11rem,56vw)] shrink-0 items-center gap-1.5 sm:max-w-[min(18rem,38%)] sm:gap-2">
+    // flex-1: the title row is full-width in the merged toolbar, so let the
+    // document name take all free space instead of clipping at ~18rem.
+    <div className="flex min-w-0 w-full flex-1 items-center gap-1.5 sm:gap-2">
       <Button
         type="button"
         variant="ghost"
@@ -421,55 +468,19 @@ export function ProtocolDesignMode({
           <List className="h-4 w-4 pointer-events-none" />
         )}
       </Button>
-      <div className="min-w-0 flex-1">
-        {isEditingTitle ? (
-          <input
-            ref={titleInputRef}
-            type="text"
-            value={protocol.name}
-            onChange={(e) => onProtocolNameChange?.(e.target.value)}
-            onBlur={() => {
-              setIsEditingTitle(false)
-              onProtocolNameCommit?.(protocol.name)
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault()
-                titleInputRef.current?.blur()
-              }
-              if (e.key === "Escape") {
-                setIsEditingTitle(false)
-                titleInputRef.current?.blur()
-              }
-            }}
-            className="w-full border-b border-transparent bg-transparent pb-0.5 text-base font-semibold leading-none text-foreground outline-none focus:border-primary"
-            aria-label="Edit protocol title"
-          />
-        ) : (
-          <div
-            className={cn(
-              "truncate",
-              onProtocolNameChange &&
-                "cursor-pointer rounded px-1 -mx-1 hover:bg-muted/60 hover:text-foreground",
-            )}
-            onClick={() => {
-              if (onProtocolNameChange) setIsEditingTitle(true)
-            }}
-            role={onProtocolNameChange ? "button" : undefined}
-            tabIndex={onProtocolNameChange ? 0 : undefined}
-            onKeyDown={(e) => {
-              if (onProtocolNameChange && (e.key === "Enter" || e.key === " ")) {
-                e.preventDefault()
-                setIsEditingTitle(true)
-              }
-            }}
-            aria-label={onProtocolNameChange ? "Click to edit title" : undefined}
-          >
-            <h2 className="truncate text-base font-semibold leading-none text-foreground">
-              {protocol.name || "Untitled protocol"}
-            </h2>
-          </div>
-        )}
+      {/* Hairline divider — separates the list toggle from the document
+          identity, Notion-style: [toggle] | Title */}
+      <div aria-hidden className="h-4 w-px shrink-0 bg-border/70" />
+      <div className="min-w-0 flex-1 pl-1.5 sm:pl-2">
+        <InlineDocTitle
+          value={protocol.name}
+          onChange={(v) => onProtocolNameChange?.(v)}
+          onCommit={() => onProtocolNameCommit?.(protocol.name)}
+          placeholder="Untitled protocol"
+          size="base"
+          disabled={!onProtocolNameChange}
+          aria-label="Edit protocol title"
+        />
       </div>
     </div>
   ) : undefined
@@ -517,7 +528,7 @@ export function ProtocolDesignMode({
             className="shrink-0 text-muted-foreground hover:text-foreground"
             aria-label="Export protocol"
           >
-            <Upload className="h-4 w-4" />
+            <Download className="h-4 w-4" />
           </Button>
         }
       />
@@ -608,56 +619,15 @@ export function ProtocolDesignMode({
                     <div className="flex min-w-0 items-center gap-2">
                       {siblingsToggleButton}
                       <div className="min-w-0 flex-1">
-                        {isEditingTitle ? (
-                          <input
-                            ref={titleInputRef}
-                            type="text"
-                            value={protocol.name}
-                            onChange={(e) => onProtocolNameChange?.(e.target.value)}
-                            onBlur={() => setIsEditingTitle(false)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") {
-                                e.preventDefault()
-                                titleInputRef.current?.blur()
-                              }
-                              if (e.key === "Escape") {
-                                setIsEditingTitle(false)
-                                titleInputRef.current?.blur()
-                              }
-                            }}
-                            className="w-full bg-transparent text-base font-semibold leading-none text-foreground outline-none border-b border-transparent pb-0.5 focus:border-primary"
-                            aria-label="Edit protocol title"
-                          />
-                        ) : (
-                          <div
-                            className={cn(
-                              "truncate",
-                              onProtocolNameChange &&
-                                "cursor-pointer rounded px-1 -mx-1 hover:bg-muted/60 hover:text-foreground",
-                            )}
-                            onClick={() => {
-                              if (onProtocolNameChange) setIsEditingTitle(true)
-                            }}
-                            role={onProtocolNameChange ? "button" : undefined}
-                            tabIndex={onProtocolNameChange ? 0 : undefined}
-                            onKeyDown={(e) => {
-                              if (
-                                onProtocolNameChange &&
-                                (e.key === "Enter" || e.key === " ")
-                              ) {
-                                e.preventDefault()
-                                setIsEditingTitle(true)
-                              }
-                            }}
-                            aria-label={
-                              onProtocolNameChange ? "Click to edit title" : undefined
-                            }
-                          >
-                            <h2 className="text-base font-semibold leading-none text-foreground truncate">
-                              {protocol.name || "Untitled protocol"}
-                            </h2>
-                          </div>
-                        )}
+                        <InlineDocTitle
+                          value={protocol.name}
+                          onChange={(v) => onProtocolNameChange?.(v)}
+                          onCommit={() => onProtocolNameCommit?.(protocol.name)}
+                          placeholder="Untitled protocol"
+                          size="base"
+                          disabled={!onProtocolNameChange}
+                          aria-label="Edit protocol title"
+                        />
                       </div>
                     </div>
                   </CardHeader>
@@ -670,61 +640,15 @@ export function ProtocolDesignMode({
                   {/* Editable title — same pattern as lab notes inline-edit */}
                   <div className="flex min-w-0 flex-1 items-center gap-1">
                     <div className="min-w-0 flex-1">
-                      {isEditingTitle ? (
-                        <input
-                          ref={titleInputRef}
-                          type="text"
-                          value={protocol.name}
-                          onChange={(e) => onProtocolNameChange?.(e.target.value)}
-                          onBlur={() => {
-                            setIsEditingTitle(false)
-                            onProtocolNameCommit?.(protocol.name)
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault()
-                              titleInputRef.current?.blur()
-                            }
-                            if (e.key === "Escape") {
-                              setIsEditingTitle(false)
-                              titleInputRef.current?.blur()
-                            }
-                          }}
-                          className="w-full bg-transparent text-lg font-semibold leading-none text-foreground outline-none border-b border-transparent pb-0.5 focus:border-primary"
-                          aria-label="Edit protocol title"
-                        />
-                      ) : (
-                        <div
-                          className={cn(
-                            "truncate",
-                            onProtocolNameChange &&
-                              "cursor-pointer rounded px-1 -mx-1 hover:bg-muted/60 hover:text-foreground"
-                          )}
-                          onClick={() => {
-                            if (onProtocolNameChange) setIsEditingTitle(true)
-                          }}
-                          role={onProtocolNameChange ? "button" : undefined}
-                          tabIndex={onProtocolNameChange ? 0 : undefined}
-                          onKeyDown={(e) => {
-                            if (
-                              onProtocolNameChange &&
-                              (e.key === "Enter" || e.key === " ")
-                            ) {
-                              e.preventDefault()
-                              setIsEditingTitle(true)
-                            }
-                          }}
-                          aria-label={
-                            onProtocolNameChange
-                              ? "Click to edit title"
-                              : undefined
-                          }
-                        >
-                          <h2 className="text-lg font-semibold leading-none text-foreground truncate">
-                            {protocol.name || "Untitled protocol"}
-                          </h2>
-                        </div>
-                      )}
+                      <InlineDocTitle
+                        value={protocol.name}
+                        onChange={(v) => onProtocolNameChange?.(v)}
+                        onCommit={() => onProtocolNameCommit?.(protocol.name)}
+                        placeholder="Untitled protocol"
+                        size="lg"
+                        disabled={!onProtocolNameChange}
+                        aria-label="Edit protocol title"
+                      />
                     </div>
                   </div>
                 </div>
@@ -734,6 +658,20 @@ export function ProtocolDesignMode({
                   <Badge variant="outline" className="shrink-0 text-2xs font-normal">
                     v{currentVersion}
                   </Badge>
+                  {/* "+" sits left of version history — same order as lab notes. */}
+                  <Button
+                    asChild
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    className="text-muted-foreground hover:text-foreground"
+                    aria-label="New protocol"
+                    title="New protocol"
+                  >
+                    <Link href="/protocols/new">
+                      <Plus className="h-4 w-4" />
+                    </Link>
+                  </Button>
                   <Button
                     type="button"
                     variant="ghost"
@@ -775,19 +713,6 @@ export function ProtocolDesignMode({
                   >
                     <FileStack className="h-4 w-4" />
                   </Button>
-                  <Button
-                    asChild
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    className="text-muted-foreground hover:text-foreground"
-                    aria-label="New protocol"
-                    title="New protocol"
-                  >
-                    <Link href="/protocols/new">
-                      <Plus className="h-4 w-4" />
-                    </Link>
-                  </Button>
                   <NotePrintButton
                     title={protocol.name}
                     htmlContent={draftContent}
@@ -813,7 +738,7 @@ export function ProtocolDesignMode({
                         className="text-muted-foreground hover:text-foreground"
                         aria-label="Export protocol"
                       >
-                        <Upload className="h-4 w-4" />
+                        <Download className="h-4 w-4" />
                       </Button>
                     }
                   />
@@ -833,14 +758,11 @@ export function ProtocolDesignMode({
                       title={protocol.name}
                       minHeight="100%"
                       fillParentHeight
-                      // @ts-expect-error TiptapEditor types `samples` as EntityItem[] (requires a
-                      // `type` discriminant added internally); protocol samples omit it by design.
                       samples={samples}
                       fullscreenWorkspaceRef={protocolDesignWorkspaceRef}
                       leadingToolbarSlot={protocolFullscreenToolbarLeading}
                       trailingToolbarSlot={protocolFullscreenToolbarTrailing}
-                      showAITools
-                      showAiWritingDropdown={false}
+                      showCitationTools
                       enableMath
                       className="min-h-0 flex-1"
                       onOpenScientificCalculator={() => setScientificCalculatorOpen(true)}

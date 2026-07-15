@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { latexDecimal } from "./latex-format"
 import { keypadReducer, initialKeypadState } from "./calculator-keypad"
+import { unaryScientific } from "./numeric-scientific"
 import { resolveMolecularWeightInput } from "./molecular-weight-data"
 import { molarityFromMolesVolume } from "./molarity"
 import { molesFromMass, massFromMoles } from "./moles-mass"
@@ -175,5 +176,63 @@ describe("keypadReducer", () => {
     expect(st.hasError).toBe(true)
     st = keypadReducer(st, { type: "clear" })
     expect(st).toEqual(initialKeypadState())
+  })
+
+  it("percent divides the entry by 100", () => {
+    let st = pressDigits("50")
+    st = keypadReducer(st, { type: "percent" })
+    expect(parseFloat(st.display)).toBeCloseTo(0.5, 10)
+  })
+
+  it("setValue behaves as a typed entry inside a chain (5 + π ×)", () => {
+    let st = pressDigits("5+")
+    st = keypadReducer(st, { type: "setValue", display: "3.14159265358979", pressLabel: "π (Pi)" })
+    st = keypadReducer(st, { type: "op", op: "mul" })
+    // 5 + π folded into the accumulator when × was pressed
+    expect(st.accumulator).toBeCloseTo(5 + Math.PI, 8)
+  })
+
+  it("setValue then equals completes the pending op (5 + π =)", () => {
+    let st = pressDigits("5+")
+    st = keypadReducer(st, { type: "setValue", display: "3.14159265358979", pressLabel: "π (Pi)" })
+    st = keypadReducer(st, { type: "equals" })
+    expect(parseFloat(st.display)).toBeCloseTo(5 + Math.PI, 8)
+  })
+
+  it("setValue ignores non-numeric payloads", () => {
+    const st = keypadReducer(initialKeypadState(), { type: "setValue", display: "oops", pressLabel: "bad" })
+    expect(st).toEqual(initialKeypadState())
+  })
+})
+
+describe("unaryScientific angle units", () => {
+  it("sin(30°) = 0.5 in degree mode", () => {
+    const r = unaryScientific("sin", 30, { angleUnit: "deg" })
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.value).toBeCloseTo(0.5, 8)
+      expect(r.formulaLine).toContain("30°")
+    }
+  })
+
+  it("arcsin(0.5) = 30° in degree mode", () => {
+    const r = unaryScientific("asin", 0.5, { angleUnit: "deg" })
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.value).toBeCloseTo(30, 6)
+      expect(r.formulaLine).toContain("°")
+    }
+  })
+
+  it("defaults to radians when no unit is given", () => {
+    const r = unaryScientific("sin", Math.PI / 2)
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.value).toBeCloseTo(1, 8)
+  })
+
+  it("degree mode leaves non-trig ops untouched (log stays log)", () => {
+    const r = unaryScientific("log10", 1000, { angleUnit: "deg" })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.value).toBeCloseTo(3, 10)
   })
 })

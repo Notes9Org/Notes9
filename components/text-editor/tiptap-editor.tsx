@@ -18,7 +18,6 @@ import { Table } from "@tiptap/extension-table"
 import { TableRow } from "@tiptap/extension-table-row"
 import { TableCell } from "@tiptap/extension-table-cell"
 import { TableHeader } from "@tiptap/extension-table-header"
-import { TableOfContents } from "./table-of-contents"
 import { Mathematics } from "@tiptap/extension-mathematics"
 import { Underline } from "@tiptap/extension-underline"
 import { Subscript } from "@tiptap/extension-subscript"
@@ -117,6 +116,8 @@ import { BlockDragHandle } from "./extensions/block-drag-handle"
 import { moveTopLevelBlock } from "./editor-block-utils"
 import { EditorContextMenu } from "./editor-context-menu"
 import { EditorRuler } from "./editor-ruler"
+import { FlareIcon } from "@/components/ui/flare-icon"
+import { TableOfContents } from "./table-of-contents"
 import { LineHeight } from "./extensions/line-height"
 import { PageBreak } from "./extensions/page-break"
 import { Columns as ColumnsExtension } from "./extensions/columns"
@@ -221,12 +222,14 @@ interface TiptapEditorProps {
   className?: string
   editable?: boolean
   minHeight?: string
-  showAITools?: boolean
+  /** Shows the Citations cluster (cite with AI, browse library, bibliography, style picker). */
+  showCitationTools?: boolean
+  /** Hides the formatting toolbar entirely (read-only previews); a floating fullscreen button remains. */
+  hideToolbar?: boolean
   title?: string
-  autoSave?: boolean
-  onAutoSave?: (content: string) => Promise<void>
-  protocols?: EntityItem[]
-  samples?: EntityItem[]
+  /** Mention candidates; the editor adds the `type` discriminant itself. */
+  protocols?: Omit<EntityItem, "type">[]
+  samples?: Omit<EntityItem, "type">[]
   labNotes?: LabNoteItem[]
   literatureItems?: LiteratureItem[]
   /** Enable KaTeX math equation support (inline & block) */
@@ -238,12 +241,6 @@ interface TiptapEditorProps {
    * Use inside resizable panels (e.g. protocol design mode) so the formatting toolbar stays visible.
    */
   panelEmbed?: boolean
-  /**
-   * Sparkles menu (make shorter/longer, etc.). Disable where AI lives elsewhere (e.g. protocol design header).
-   */
-  showAiWritingDropdown?: boolean
-  /** When the writing dropdown is shown, also show an “AI” label next to the sparkles (e.g. paper writing workspace). */
-  showAiWritingToolbarLabel?: boolean
   /** Callback fired when the editor instance is ready (or changes). Useful for parent components that need direct editor access. */
   onEditorReady?: (editor: ReturnType<typeof useEditor>) => void
   /** HTML content to show as an inline diff widget at the cursor position */
@@ -1745,7 +1742,7 @@ export function TiptapEditor({
   className,
   editable = true,
   minHeight = "400px",
-  showAITools = true,
+  showCitationTools = true,
   title = "document",
   hideToolbar = false,
   protocols = [],
@@ -1755,8 +1752,6 @@ export function TiptapEditor({
   enableMath = false,
   paperMode = false,
   panelEmbed = false,
-  showAiWritingDropdown = true,
-  showAiWritingToolbarLabel = false,
   onEditorReady,
   inlineDiffHtml,
   onAcceptInlineDiff,
@@ -1776,12 +1771,7 @@ export function TiptapEditor({
   collaborationEnabled,
   userName,
   userColor,
-}: TiptapEditorProps & {
-  hideToolbar?: boolean
-  /** Accepted for lab-notes compatibility; export UI is toolbar-driven. */
-  hideExportControls?: boolean
-  exportIncludeCommentsInPdf?: boolean
-}) {
+}: TiptapEditorProps) {
   const [activeTable, setActiveTable] = useState<HTMLTableElement | null>(null)
   const [editorContainer, setEditorContainer] = useState<HTMLElement | null>(null)
 
@@ -5389,7 +5379,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
       </span>
 
       {/* ── Home run: AI & citations menu (always available on the Home tab) ── */}
-      {showAITools && (
+      {showCitationTools && (
         <span className={rg("home")}>
           <Separator orientation="vertical" className="mx-px h-5 shrink-0" />
           <DropdownMenu modal={false}>
@@ -5878,7 +5868,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
           >
             {/* Row 1 (merged surfaces only): document title + actions on their own full-width line */}
             {toolbarMergedLayout && (
-              <div className="flex min-w-0 items-center gap-2">
+              <div className="flex min-h-9 min-w-0 items-center gap-2 pl-0.5 sm:pl-1">
                 {/* overflow-x-auto: a wide leading slot (note title + actions)
                     must scroll, not push the trailing cluster — with the
                     fullscreen toggle in it — past the shell's overflow-hidden
@@ -5914,7 +5904,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
                       aria-label="Ask Catalyst"
                       title="Ask Catalyst"
                     >
-                      <MessageSquare className="h-4 w-4" />
+                      <FlareIcon className="h-4 w-4" />
                     </Button>
                   )}
                 </div>
@@ -5956,7 +5946,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
                       aria-label="Ask Catalyst"
                       title="Ask Catalyst"
                     >
-                      <MessageSquare className="h-4 w-4" />
+                      <FlareIcon className="h-4 w-4" />
                     </Button>
                   )}
                 </div>
@@ -5993,7 +5983,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
                   aria-label="Ask Catalyst"
                   title="Ask Catalyst"
                 >
-                  <MessageSquare className="h-4 w-4" />
+                  <FlareIcon className="h-4 w-4" />
                 </Button>
               )}
             </div>
@@ -6168,7 +6158,10 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
             className={cn(
               "absolute bottom-2 right-2 top-2 z-50 flex max-w-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-[0_10px_34px_-18px_rgba(20,14,8,0.4)] dark:shadow-[0_12px_38px_-16px_rgba(0,0,0,0.6)]",
               !citationSidebar.isResizing && "transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
-              citationModalOpen ? "translate-x-0" : "pointer-events-none translate-x-full",
+              // Closed: shift by width PLUS the right-2 inset + shadow bleed —
+              // plain translate-x-full left an unresponsive 8px strip of the
+              // panel edge permanently peeking inside the editor.
+              citationModalOpen ? "translate-x-0" : "pointer-events-none translate-x-[calc(100%+1.5rem)]",
             )}
             style={{ width: citationSidebar.width }}
             aria-hidden={!citationModalOpen}

@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { motion } from "framer-motion"
 import { MagnifyingGlass as Search } from "@phosphor-icons/react/ssr"
 import { MotionItem, MotionList } from "@/components/literature-reviews/motion"
 import { cn } from "@/lib/utils"
@@ -112,7 +113,9 @@ export function SideRailHeader({
   )
 }
 
-/** Glass search input matching the Catalyst rail's "Search chats…" field. */
+/** Glass search input matching the Catalyst rail's "Search chats…" field.
+ *  Stays compact at rest; swells subtly (spring scale + soft accent ring)
+ *  while the user is actually typing a query. */
 export function SideRailSearch({
   value,
   onChange,
@@ -126,16 +129,26 @@ export function SideRailSearch({
   "aria-label"?: string
   className?: string
 }) {
+  const typing = value.length > 0
   return (
-    <div className={cn("relative shrink-0 px-0.5 pb-1", className)}>
-      <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-sidebar-foreground/45" />
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        aria-label={ariaLabel ?? placeholder}
-        className="h-8 w-full rounded-lg border border-[color:var(--glass-border)] bg-background/50 pl-8 pr-2 text-sm text-sidebar-foreground outline-none placeholder:text-sidebar-foreground/40 focus:border-[color:color-mix(in_srgb,var(--n9-accent)_45%,var(--border))]"
-      />
+    <div className={cn("shrink-0 px-0.5 pb-1", className)}>
+      <motion.div
+        className="relative"
+        animate={{ scale: typing ? 1.03 : 1 }}
+        transition={{ type: "spring", stiffness: 420, damping: 30 }}
+      >
+        <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-sidebar-foreground/45" />
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          aria-label={ariaLabel ?? placeholder}
+          className={cn(
+            "h-8 w-full rounded-lg border border-[color:var(--glass-border)] bg-background/50 pl-8 pr-2 text-sm text-sidebar-foreground outline-none transition-shadow duration-200 placeholder:text-sidebar-foreground/40 focus:border-[color:color-mix(in_srgb,var(--n9-accent)_45%,var(--border))]",
+            typing && "shadow-[0_0_0_3px_color-mix(in_srgb,var(--n9-accent)_12%,transparent)]",
+          )}
+        />
+      </motion.div>
     </div>
   )
 }

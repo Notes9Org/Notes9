@@ -78,8 +78,9 @@ type SwitcherExperiment = { id: string; name: string; project_id: string | null 
 const SWITCHER_MENU_CLASS =
   "w-60 rounded-xl p-1.5 bg-[color:color-mix(in_srgb,var(--glass-bg)_72%,transparent)] backdrop-blur-2xl backdrop-saturate-150 shadow-xl shadow-black/10 ring-1 ring-inset ring-white/25 dark:ring-white/[0.07] dark:shadow-black/40"
 
+// No hover-driven motion (no icon scaling): hover feedback is color/fill only.
 const NAV_ROW_CLASS =
-  "group relative z-[1] h-8 rounded-lg text-[13px] text-sidebar-foreground/75 transition-all duration-150 [&_svg]:text-sidebar-foreground/55 [&_svg]:transition-transform [&_svg]:duration-200 hover:bg-background/60 hover:text-sidebar-foreground hover:[&_svg]:scale-110 hover:[&_svg]:text-sidebar-foreground/80 active:scale-[0.985] active:bg-background/80 dark:hover:bg-background/40 dark:active:bg-background/60 data-[active=true]:bg-transparent data-[active=true]:font-medium data-[active=true]:text-sidebar-foreground data-[active=true]:[&_svg]:text-primary"
+  "group relative z-[1] h-8 rounded-lg text-[13px] text-sidebar-foreground/75 transition-colors duration-150 [&_svg]:text-sidebar-foreground/55 hover:bg-background/60 hover:text-sidebar-foreground hover:[&_svg]:text-sidebar-foreground/80 active:bg-background/80 dark:hover:bg-background/40 dark:active:bg-background/60 data-[active=true]:bg-transparent data-[active=true]:font-medium data-[active=true]:text-sidebar-foreground data-[active=true]:[&_svg]:text-primary"
 
 interface Project {
   id: string
@@ -123,6 +124,7 @@ export function AppSidebar() {
   // hierarchy instead of the two parallel ones the audit flagged.
   const scope = useProjectScope()
   const [searchQuery, setSearchQuery] = useState("")
+  const [searchFocused, setSearchFocused] = useState(false)
   const [projects, setProjects] = useState<Project[]>([])
   const [user, setUser] = useState<User | null>(null)
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
@@ -604,7 +606,18 @@ export function AppSidebar() {
           <SidebarGroupContent className="px-2">
             <Popover open={searchQuery.length >= 2}>
               <PopoverAnchor asChild>
-                <div className="relative" id="tour-search" data-tour={TOUR.sidebarSearch}>
+                <motion.div
+                  className="relative"
+                  id="tour-search"
+                  data-tour={TOUR.sidebarSearch}
+                  // Same gesture as the Catalyst composer: compact at rest,
+                  // springs taller/larger the moment the user engages it.
+                  animate={{
+                    height: searchFocused || searchQuery.length > 0 ? 40 : 32,
+                    scale: searchFocused || searchQuery.length > 0 ? 1.02 : 1,
+                  }}
+                  transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                >
                   {/* Icon offset is tuned to sit ~9px inside the input's
                       visible left edge — `left-2.5` instead of the prior
                       `left-4` which left a noticeable dead-space gap. */}
@@ -613,12 +626,14 @@ export function AppSidebar() {
                     ref={searchInputRef}
                     placeholder="Search"
                     className={cn(
-                      "h-8 rounded-lg border-transparent bg-[color:color-mix(in_oklab,var(--sidebar)_72%,var(--sidebar-accent)_28%)] pl-9 pr-12 shadow-none transition-colors placeholder:text-muted-foreground/80 hover:bg-sidebar-accent/70 focus-visible:bg-sidebar focus-visible:ring-1",
-                      searchQuery.length === 0 &&
-                        "caret-transparent selection:bg-transparent",
+                      "h-full rounded-lg border-transparent bg-[color:color-mix(in_oklab,var(--sidebar)_72%,var(--sidebar-accent)_28%)] pl-9 pr-12 shadow-none transition-[color,background-color,box-shadow] duration-200 placeholder:text-muted-foreground/80 hover:bg-sidebar-accent/70 focus-visible:bg-sidebar focus-visible:ring-1",
+                      (searchFocused || searchQuery.length > 0) &&
+                        "shadow-[0_0_0_3px_color-mix(in_srgb,var(--primary)_10%,transparent)]",
                     )}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
+                    onFocus={() => setSearchFocused(true)}
+                    onBlur={() => setSearchFocused(false)}
                     onKeyDown={(e) => {
                       if (e.key === "Escape") setSearchQuery("")
                     }}
@@ -628,7 +643,7 @@ export function AppSidebar() {
                       ⌘K
                     </kbd>
                   )}
-                </div>
+                </motion.div>
               </PopoverAnchor>
               <PopoverContent
                 className="w-[var(--sidebar-width)] min-w-0 p-0 max-h-[min(60vh,400px)] overflow-auto"
@@ -768,12 +783,11 @@ export function AppSidebar() {
           <SidebarGroupContent
             // Sandglass strip, same grammar as TabsList: translucent, blurred,
             // grained container; the sliding active pill is the solid raised
-            // "tab" inside it. When a project context is active the whole
-            // strip nudges right — a quiet "you are scoped" signal.
+            // "tab" inside it. Kept centered — no scoped nudge, the strip
+            // stays symmetric in the sidebar column.
             className={cn(
-              "n9-grain rounded-xl border border-[color:var(--glass-border)] bg-[color:var(--glass-bg)] p-1 backdrop-blur-md transition-[margin] duration-300",
+              "n9-grain rounded-xl border border-[color:var(--glass-border)] bg-[color:var(--glass-bg)] p-1 backdrop-blur-md",
               isIconMode && "w-full flex flex-col items-center",
-              !isIconMode && mounted && scope.projectId && "ml-2",
             )}
           >
             <SidebarMenu
@@ -1048,7 +1062,7 @@ export function AppSidebar() {
                                   <SidebarMenuSubButton
                                     asChild
                                     isActive={childActive}
-                                    className="relative z-[1] h-7 rounded-lg text-[13px] text-sidebar-foreground/70 transition-all duration-150 [&_svg]:text-sidebar-foreground/50 [&_svg]:transition-transform [&_svg]:duration-200 hover:bg-background/60 hover:text-sidebar-foreground hover:[&_svg]:scale-110 dark:hover:bg-background/40 data-[active=true]:bg-transparent data-[active=true]:font-medium data-[active=true]:text-sidebar-foreground data-[active=true]:[&_svg]:text-primary"
+                                    className="relative z-[1] h-7 rounded-lg text-[13px] text-sidebar-foreground/70 transition-colors duration-150 [&_svg]:text-sidebar-foreground/50 hover:bg-background/60 hover:text-sidebar-foreground dark:hover:bg-background/40 data-[active=true]:bg-transparent data-[active=true]:font-medium data-[active=true]:text-sidebar-foreground data-[active=true]:[&_svg]:text-primary"
                                   >
                                     <Link
                                       href={

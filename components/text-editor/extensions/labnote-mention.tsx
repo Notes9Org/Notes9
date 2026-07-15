@@ -149,7 +149,9 @@ export function createLabNoteSuggestion(
                         getReferenceClientRect: props.clientRect,
                         appendTo: () => document.body,
                         content: component.element,
-                        showOnCreate: true,
+                        // No popup when there is nothing to suggest (e.g. a surface
+                        // with no mention data) — typing "#" should stay silent.
+                        showOnCreate: props.items.length > 0,
                         interactive: true,
                         trigger: "manual",
                         placement: "bottom-start",
@@ -166,12 +168,24 @@ export function createLabNoteSuggestion(
                     popup?.[0]?.setProps({
                         getReferenceClientRect: props.clientRect,
                     })
+
+                    if (props.items.length === 0) {
+                        popup?.[0]?.hide()
+                    } else {
+                        popup?.[0]?.show()
+                    }
                 },
 
                 onKeyDown(props: any) {
                     if (props.event.key === "Escape") {
                         popup?.[0]?.hide()
                         return true
+                    }
+
+                    // Hidden popup (no candidates): let keys through so Enter
+                    // still inserts a newline instead of being swallowed.
+                    if (!popup?.[0]?.state.isVisible) {
+                        return false
                     }
 
                     return component?.ref?.onKeyDown(props) ?? false

@@ -434,22 +434,16 @@
   background: transparent !important;
 }
 
-/* ── Ghost scrollbars (global) ─────────────────────────────────────────────
-   The platform scroll pattern: no permanent track/gutter chrome — a thin
-   (6px) pill thumb that is invisible at rest and fades in when the scroll
-   container is hovered or focused. To scroll with a pointer you're hovering
-   the container, so the affordance appears exactly when it's actionable;
-   compact regions (glass rails) add edge-fade overflow hints on top
-   (SideRailBody). Standard properties cover Chrome 121+/Firefox; the
-   -webkit rules cover Safari. `.n9-scrollbar-ghost` opts a container in
-   explicitly — it matches these defaults and survives local overrides. */
+/* ── Quiet constant scrollbars (global) ────────────────────────────────────
+   Scrollbars do NOT react to hovering their container: a thin low-contrast
+   pill thumb is always visible on scrollable regions (left sidebar, AI chat,
+   editor, main — everywhere). The previous "ghost" pattern faded the thumb in
+   on container hover, which read as movement/flicker at region edges whenever
+   the pointer crossed between panes. Only grabbing the thumb itself darkens
+   it. Standard properties cover Chrome 121+/Firefox; -webkit covers Safari. */
 * {
   scrollbar-width: thin; /* Firefox / Chrome 121+ */
-  scrollbar-color: transparent transparent;
-}
-*:hover,
-*:focus-within {
-  scrollbar-color: color-mix(in srgb, var(--muted-foreground) 35%, transparent) transparent;
+  scrollbar-color: color-mix(in srgb, var(--muted-foreground) 28%, transparent) transparent;
 }
 ::-webkit-scrollbar {
   width: 6px;
@@ -459,24 +453,27 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: transparent;
+  background: color-mix(in srgb, var(--muted-foreground) 28%, transparent);
   border-radius: 9999px;
 }
-:hover::-webkit-scrollbar-thumb,
-:focus-within::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--muted-foreground) 35%, transparent);
-}
 ::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--muted-foreground) 55%, transparent);
+  background: color-mix(in srgb, var(--muted-foreground) 50%, transparent);
 }
 
+/* Scroll containers keep their gutter reserved permanently so becoming
+   scrollable (or OS scrollbar-mode differences) can never nudge the pane
+   sideways — same remedy #main uses in app-layout. */
+@supports (scrollbar-gutter: stable) {
+  .overflow-auto,
+  .overflow-y-auto {
+    scrollbar-gutter: stable;
+  }
+}
+
+/* Legacy opt-in class — now identical to the global constant pattern. */
 .n9-scrollbar-ghost {
   scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
-}
-.n9-scrollbar-ghost:hover,
-.n9-scrollbar-ghost:focus-within {
-  scrollbar-color: color-mix(in srgb, var(--muted-foreground) 35%, transparent) transparent;
+  scrollbar-color: color-mix(in srgb, var(--muted-foreground) 28%, transparent) transparent;
 }
 
 /* Ensure proper color scheme detection */

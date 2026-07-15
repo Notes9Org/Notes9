@@ -14,14 +14,15 @@ import { marked } from "marked"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { PageHeading } from "@/components/ui/page-heading"
+import { InlineDocTitle } from "@/components/text-editor/inline-doc-title"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { CalendarBlank as Calendar, User, Flask as FlaskConical, FolderOpen, ArrowLeft, UploadSimple as Upload } from "@phosphor-icons/react/ssr"
+import { CalendarBlank as Calendar, User, Flask as FlaskConical, FolderOpen, ArrowLeft, DownloadSimple as Download } from "@phosphor-icons/react/ssr"
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 import { NoteExportMenu, NotePrintButton } from "@/components/note-export-menu"
 import { NoteImportButton } from "@/components/note-import-button"
 import { SaveStatusIndicator } from "@/components/ui/save-status"
 import { useAutoSave } from "@/hooks/use-auto-save"
+import { useMentionEntities } from "@/hooks/use-mention-entities"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import type { ReportRow } from "../reports-page-client"
@@ -190,11 +191,31 @@ export function ReportDetailView({ report, leftControls, sidebar }: ReportDetail
     [report.id, supabase]
   )
 
-  const { status: autoSaveStatus, lastSaved, debouncedSave } = useAutoSave({
+  const { status: autoSaveStatus, lastSaved, debouncedSave, forceSave } = useAutoSave({
     onSave: handleAutoSave,
     delay: 2000,
     enabled: true,
   })
+
+  // Refresh/close with a pending debounce would drop the last ~2s of typing —
+  // flush when the tab is hidden or torn down (same net as papers/lab notes).
+  useEffect(() => {
+    const flush = () => {
+      void forceSave()
+    }
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") flush()
+    }
+    window.addEventListener("pagehide", flush)
+    document.addEventListener("visibilitychange", onVisibility)
+    return () => {
+      window.removeEventListener("pagehide", flush)
+      document.removeEventListener("visibilitychange", onVisibility)
+    }
+  }, [forceSave])
+
+  // Org-wide @-mention candidates — same data the lab-notes/protocol editors get.
+  const { protocols: mentionProtocols, samples: mentionSamples } = useMentionEntities()
 
   const handleContentChange = useCallback(
     (html: string) => {
@@ -204,7 +225,28 @@ export function ReportDetailView({ report, leftControls, sidebar }: ReportDetail
     [debouncedSave]
   )
 
-  const exportTitle = report.title || "Data Analysis Report"
+  // Inline-editable title — same widget and commit pattern as the other
+  // editor surfaces (lab notes / protocols / papers).
+  const [titleInput, setTitleInput] = useState(report.title || "")
+  useEffect(() => {
+    setTitleInput(report.title || "")
+  }, [report.id, report.title])
+
+  const commitTitle = useCallback(async () => {
+    const next = titleInput.trim() || "Untitled report"
+    const current = (report.title || "").trim()
+    if (next === current) return
+    const { error } = await supabase.from("reports").update({ title: next }).eq("id", report.id)
+    if (error) {
+      toast.error("Could not save title")
+      setTitleInput(report.title || "")
+      return
+    }
+    setTitleInput(next)
+    router.refresh()
+  }, [titleInput, report.id, report.title, supabase, router])
+
+  const exportTitle = titleInput.trim() || report.title || "Data Analysis Report"
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden md:gap-6 h-full">
@@ -216,7 +258,15 @@ export function ReportDetailView({ report, leftControls, sidebar }: ReportDetail
           </Button>
           <div className="min-w-0 space-y-1">
             <div className="flex flex-wrap items-center gap-2">
-              <PageHeading>{report.title}</PageHeading>
+              <div className="min-w-0 flex-1">
+                <InlineDocTitle
+                  value={titleInput}
+                  onChange={setTitleInput}
+                  onCommit={() => void commitTitle()}
+                  size="2xl"
+                  aria-label="Report title"
+                />
+              </div>
               <Badge variant={statusVariant}>{report.status}</Badge>
             </div>
             <p className="text-sm text-muted-foreground">
@@ -250,7 +300,7 @@ export function ReportDetailView({ report, leftControls, sidebar }: ReportDetail
                 aria-label="Export"
                 className="text-muted-foreground hover:text-foreground"
               >
-                <Upload className="h-4 w-4" />
+                <Download className="h-4 w-4" />
               </Button>
             }
           />
@@ -283,27 +333,33 @@ export function ReportDetailView({ report, leftControls, sidebar }: ReportDetail
                 {sidebar}
               </div>
             )}
-            <Card className="flex-1 flex flex-col min-h-0">
-              <CardContent className="flex-1 min-h-0 overflow-y-auto pt-6 p-4">
+            <Card className="flex-1 flex flex-col min-h-0 gap-0 py-4">
+              {/* Same flex-fill skeleton as lab notes / protocol design: the
+                  editor body owns the scroll, so the toolbar stays pinned. */}
+              <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-4 sm:px-6">
                 {/* Always mount the editor — an empty report must still be writable
                     (the editor shows its own placeholder). The old conditional hid
                     the editor whenever content was empty, so new/empty reports had
                     nothing to type into and therefore nothing to save. */}
-                <TiptapEditor
-                  key={report.id}
-                  content={content}
-                  onChange={handleContentChange}
-                  placeholder="Start writing your report..."
-                  title={exportTitle}
-                  minHeight="100%"
-                  showAITools
-                  showAiWritingDropdown={false}
-                  enableMath
-                  hideExportControls
-                  leadingToolbarSlot={leftControls}
-                  fullscreenWorkspaceRef={reportWorkspaceRef}
-                  onEditorReady={(ed) => { editorRef.current = ed; setEditorReady(true) }}
-                />
+                <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+                  <TiptapEditor
+                    key={report.id}
+                    content={content}
+                    onChange={handleContentChange}
+                    placeholder="Write your report here... Use @ to tag protocols or samples"
+                    title={exportTitle}
+                    minHeight="100%"
+                    fillParentHeight
+                    showCitationTools
+                    protocols={mentionProtocols}
+                    samples={mentionSamples}
+                    enableMath
+                    className="min-h-0 flex-1"
+                    leadingToolbarSlot={leftControls}
+                    fullscreenWorkspaceRef={reportWorkspaceRef}
+                    onEditorReady={(ed) => { editorRef.current = ed; setEditorReady(true) }}
+                  />
+                </div>
               </CardContent>
             </Card>
             </div>
