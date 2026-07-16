@@ -314,10 +314,9 @@ export async function savePaperToRepository(
     const { data: existingDup } = await duplicateQuery.maybeSingle()
     if (existingDup) {
       if (existingDup.catalog_placement === "staging") {
-        return {
-          success: false,
-          error: "Paper is still in staging — open it from the Staging tab and save to repository",
-        }
+        // Already staged — "Save to library" should promote that row out of
+        // staging, not dead-end. Re-run through the literatureId promote path.
+        return savePaperToRepository(paper, { ...options, literatureId: existingDup.id })
       }
       return { success: false, error: "Paper already exists in repository" }
     }

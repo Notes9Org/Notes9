@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { SearchPaper } from "@/types/paper-search"
-import { BookOpen, Bookmark as BookmarkCheck, Bookmark as BookmarkPlus, ArrowSquareOut as ExternalLink, FileText, CircleNotch as Loader2, ChatCircle as MessageCircle } from "@phosphor-icons/react/ssr"
+import { BookOpen, Bookmark as BookmarkCheck, Bookmark as BookmarkPlus, ArrowSquareOut as ExternalLink, FileText, CircleNotch as Loader2, ChatCircle as MessageCircle, Trash as Trash2 } from "@phosphor-icons/react/ssr"
 import { LiteraturePdfPanel } from "./literature-pdf-panel"
 import { UploadLiteraturePdfDialog } from "./upload-literature-pdf-dialog"
 import { decodeHtmlEntities } from "@/lib/literature-abstract-display"
@@ -90,6 +90,8 @@ export function rowToSearchPaper(row: StagingListItem | StagingLiteratureRow): S
 interface StagedPaperViewProps {
   lit: StagingListItem
   onSavePaper: (paper: SearchPaper, literatureId: string) => void | Promise<void>
+  /** Discard this staged paper (opens the host's remove-confirm dialog). */
+  onRemove?: () => void
   savingLiteratureId?: string | null
 }
 
@@ -97,6 +99,7 @@ export function StagedPaperView({
   lit,
   onSavePaper,
   savingLiteratureId = null,
+  onRemove,
 }: StagedPaperViewProps) {
   // Persisted save state lives in `catalog_placement` (not `status`) — "repository"
   // means it's in the library, "staging" means it's a transient staged read.
@@ -188,6 +191,20 @@ export function StagedPaperView({
               <MessageCircle className="h-4 w-4" />
               Ask Catalyst
             </Button>
+            {/* Discard a staged paper. Hidden once saved — the library copy is
+                deleted from the Repository tab, not here. */}
+            {onRemove && !isSavedToLibrary ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onRemove()}
+                title="Remove this paper from staging"
+                className="gap-1.5 rounded-lg text-muted-foreground hover:text-rose-500"
+              >
+                <Trash2 className="h-4 w-4" />
+                Remove
+              </Button>
+            ) : null}
           </div>
         </div>
         {!isSavedToLibrary ? (

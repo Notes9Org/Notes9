@@ -9,7 +9,6 @@ import { AiPaperCard } from './ai-paper-card'
 import { AiSearchFilters } from './ai-search-filters'
 import { AnimatePresence, MotionResultCard } from './motion'
 import { openCatalystPanel } from '@/lib/catalyst-launch'
-import { paperIdentityKey } from '@/lib/paper-search'
 import { setCatalystLiterature, type CatalystLiterature, type LiteratureRef } from '@/lib/catalyst-literature'
 import { LiteratureAiOverview } from '@/components/literature-reviews/literature-ai-overview'
 import { papersToGrounding, buildLiteratureSessionContext } from '@/lib/literature-citations'
@@ -39,24 +38,6 @@ function refHref(r: AiSearchResult): string | null {
 
 /** How many result cards to reveal per "Load more" click (and on first render). */
 const PAGE_SIZE = 10
-
-// Stable per-paper identity for saved-state tracking — never list position.
-// Routed through the canonical pmid > doi > title ordering (`lib/paper-search.ts`)
-// so the same paper keys identically here, in `ai-paper-card.tsx`, and in
-// `staged-paper-view.tsx`.
-function savedKeyForResult(r: AiSearchResult): string {
-  const p = r.paper
-  if (!p) return `citelabel:${r.citeLabel}`
-  return paperIdentityKey(p)
-}
-
-// Saved-paper identities at MODULE scope so they survive unmount (navigating
-// away and back restores the search session from the host's module store, and
-// the "Saved" state must come back with it). The server-fetched library list
-// is the long-term source of truth; this set only bridges the optimistic
-// window until the refreshed membership lands. Identity keys are paper-global
-// (id/doi/pmid), so entries never leak across unrelated queries.
-const persistentSavedKeys = new Set<string>()
 
 function refMeta(r: AiSearchResult): string {
   const authors = r.paper?.authors ?? []
@@ -401,20 +382,9 @@ export function AiSearchView({
               scopeLabel={scopeLabel}
               onRequestSave={onRequestSave}
               query={query}
-              // Seed "saved" from the host's persisted library membership (source of
-              // truth, shared with the detail view) UNIONed with optimistic
-              // in-session saves — so an already-saved paper never shows "Save to
-              // library" on the card while the detail shows "Saved to library".
-              initialSaved={
-                (r.paper ? (isPaperStaged?.(r.paper.id) ?? false) : false) ||
-                persistentSavedKeys.has(savedKeyForResult(r))
-              }
-              onSaved={() => {
-                persistentSavedKeys.add(savedKeyForResult(r))
-                // Refresh the host's library source of truth so the card stays
-                // "Saved" across re-renders / new searches (mirrors staging).
-                onPaperSaved?.()
-              }}
+              // Refresh the host's library source of truth; the card derives its
+              // "Saved" badge from the recomputed `membership` prop below.
+              onSaved={() => onPaperSaved?.()}
               onStage={onStagePaper}
               onOpenStaged={onOpenStaged}
               isStaged={r.paper ? (isPaperStaged?.(r.paper.id) ?? false) : false}

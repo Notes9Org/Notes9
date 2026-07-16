@@ -156,7 +156,6 @@ function AiPaperCardImpl({
   query = '',
   summaryLoading = false,
   relevanceSummary,
-  initialSaved = false,
   onSaved,
   onStage,
   onOpenStaged,
@@ -181,8 +180,6 @@ function AiPaperCardImpl({
   /** The AI's own sentences (from the overall summary) about why this paper
    *  answers the user's query — shown in the per-paper "AI summary" tab. */
   relevanceSummary?: string
-  /** If true, initialise the card in the "already saved" state (survives remounts). */
-  initialSaved?: boolean
   onSaved?: () => void
   /** Same stage action the database card uses — stages + opens a reader tab. */
   onStage?: (paper: SearchPaper) => void | Promise<void>
@@ -193,16 +190,19 @@ function AiPaperCardImpl({
 }) {
   const [saving, setSaving] = useState(false)
   const [asking, setAsking] = useState(false)
-  const [saved, setSaved] = useState(initialSaved)
   const [showAbstract, setShowAbstract] = useState(false)
   const [tab, setTab] = useState<'ai' | 'abstract'>('ai')
 
-  // Sync upward only: `initialSaved` can lag behind an optimistic save (e.g.
-  // router.refresh() re-rendering with a momentarily stale library list), so a
-  // `false` must never stomp a card the user just saved.
+  // "Saved to library" is authoritative from the server-derived `membership`,
+  // which the host recomputes from its library list on every router.refresh().
+  // A local optimistic flag bridges the save→refresh lag; it clears once
+  // membership confirms the save, so a later delete (membership → null) reverts
+  // the badge instead of leaving it stuck on "Saved".
+  const [optimisticSaved, setOptimisticSaved] = useState(false)
   useEffect(() => {
-    if (initialSaved) setSaved(true)
-  }, [initialSaved])
+    if (membership === 'saved') setOptimisticSaved(false)
+  }, [membership])
+  const saved = membership === 'saved' || optimisticSaved
   const abstractRaw = result.paper?.abstract?.trim() || result.abstract?.trim() || ''
   const abstractPlain = abstractRaw ? formatLiteratureAbstractPlain(abstractRaw) : ''
   // Prefer the backend per-paper AI summary (/literature/ai-search); fall back to
@@ -301,7 +301,7 @@ function AiPaperCardImpl({
         experimentId: experimentId ?? undefined,
       })
       if (res.success) {
-        setSaved(true)
+        setOptimisticSaved(true)
         toast.success(
           `Saved to library${scopeLabel ? ` — linked to ${scopeLabel}` : ''}` +
             ('warning' in res && res.warning ? ` (${res.warning})` : ''),
@@ -583,7 +583,6 @@ function areEqual(prev: AiPaperCardProps, next: AiPaperCardProps): boolean {
     prev.projectId === next.projectId &&
     prev.summaryLoading === next.summaryLoading &&
     prev.relevanceSummary === next.relevanceSummary &&
-    prev.initialSaved === next.initialSaved &&
     prev.isStaged === next.isStaged &&
     prev.membership === next.membership &&
     prev.isStaging === next.isStaging &&
