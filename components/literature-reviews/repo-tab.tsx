@@ -510,6 +510,22 @@ export function RepoTab({
     <div className="space-y-6">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <div className="relative group transition-all">
+          <div className="flex items-stretch bg-muted/15 rounded-lg overflow-hidden">
+          {/* Pinned "All References" — always visible; only the paper tabs scroll. */}
+          <TabsList className="bg-transparent h-auto border-none rounded-none flex items-center flex-shrink-0 px-1 pt-0 pb-1.5">
+            <TabsTrigger
+              value="list"
+              data-value="list"
+              className="relative px-4 py-2 rounded-md data-[state=active]:text-[var(--n9-accent)] transition-all border border-transparent font-semibold shrink-0"
+            >
+              {activeTab === "list" && <TabPill reduce={reduce} />}
+              <span className="relative z-10 inline-flex items-center">
+                <BookOpen className="h-4 w-4 mr-2" />
+                All References
+              </span>
+            </TabsTrigger>
+          </TabsList>
+          <div className="relative flex-1 overflow-hidden">
           {showLeftArrow && (
             <div className="absolute left-0 top-0 bottom-0 z-20 flex items-center bg-gradient-to-r from-background via-background/80 to-transparent pr-10 pointer-events-none">
               <Button
@@ -528,19 +544,7 @@ export function RepoTab({
             className="overflow-x-auto no-scrollbar scroll-smooth"
             onScroll={checkScroll}
           >
-            <TabsList className="bg-transparent h-auto px-1 pt-0 pb-1.5 flex items-center justify-start gap-1.5 border-none bg-muted/15 rounded-lg w-max flex-nowrap min-w-full relative">
-              <div className="w-2 flex-shrink-0" />
-              <TabsTrigger
-                value="list"
-                data-value="list"
-                className="relative px-4 py-2 rounded-md data-[state=active]:text-[var(--n9-accent)] transition-all border border-transparent font-semibold"
-              >
-                {activeTab === "list" && <TabPill reduce={reduce} />}
-                <span className="relative z-10 inline-flex items-center">
-                  <BookOpen className="h-4 w-4 mr-2" />
-                  All References
-                </span>
-              </TabsTrigger>
+            <TabsList className="bg-transparent h-auto border-none rounded-none px-1 pt-0 pb-1.5 flex items-center justify-start gap-1.5 w-max flex-nowrap min-w-full">
               {openTabs.map(id => {
                 const lit = literatureReviews?.find(l => l.id === id)
                 return (
@@ -594,6 +598,8 @@ export function RepoTab({
               </Button>
             </div>
           )}
+          </div>
+          </div>
         </div>
 
         <TabsContent value="list" className="space-y-6 m-0 border-none p-0 outline-none">

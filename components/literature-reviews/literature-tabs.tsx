@@ -705,17 +705,21 @@ export function LiteratureTabs({
       const staged = resolveStagedLiteratureId(paper)
       if (staged) return { id: staged, placement: 'staging' }
       const nd = paper.doi ? normalizeDoi(paper.doi) : null
-      const pool = lockedProjectId
-        ? repositoryReviews.filter((r) => r.project?.id === lockedProjectId)
-        : repositoryReviews
-      const match = pool.find((row) => {
+      const matches = (row: (typeof repositoryReviews)[number]) => {
         const rowPmid = (row as { pmid?: string | null }).pmid ?? null
         if (paper.pmid && rowPmid === paper.pmid) return true
         if (nd && row.doi === nd) return true
         if (!paper.pmid && !nd && row.title === paper.title && row.publication_year === paper.year)
           return true
         return false
-      })
+      }
+      // A paper already in your repo must read as saved regardless of which
+      // project is active. Prefer a copy in the locked project (so "Open in
+      // library" routes to the in-context row), but fall back to any project.
+      const inProject = lockedProjectId
+        ? repositoryReviews.filter((r) => r.project?.id === lockedProjectId)
+        : repositoryReviews
+      const match = inProject.find(matches) ?? repositoryReviews.find(matches)
       return match ? { id: String(match.id), placement: 'repository' } : null
     },
     [resolveStagedLiteratureId, repositoryReviews, lockedProjectId]
