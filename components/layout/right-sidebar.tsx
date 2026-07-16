@@ -28,7 +28,7 @@ const Tooltip = ({ children }: TooltipStubProps) => <>{children}</>
 const TooltipTrigger = ({ children }: TooltipStubProps) => <>{children}</>
 const TooltipContent = (_props: TooltipStubProps) => null
 
-import { Square, ArrowUp, ClockCounterClockwise as History, ArrowsOut as Maximize, ArrowsIn as Minimize, SidebarSimple as PanelLeft, Plus, Paperclip, Globe, Chat as MessageSquare, NotePencil as NotebookPen, NotePencil as PenBox, DotsThree as MoreHorizontal, PushPin as Pin, PushPinSlash as PinOff, PencilSimple as Pencil, Check, CaretRight as ChevronRight, Folder, FolderPlus, FolderOpen as FolderInput, CheckSquare, MagnifyingGlass as Search, Trash as Trash2, CaretDown as ChevronDown, X, Binoculars as Telescope, List as Menu, Sun, Moon, Question as CircleHelp, Microphone as Mic, BookOpen, Flask as FlaskConical, FolderOpen, FileText, CircleNotch as Loader2, At as AtSign, Info, Warning } from "@phosphor-icons/react/ssr";
+import { Square, ArrowUp, ClockCounterClockwise as History, ArrowsOut as Maximize, ArrowsIn as Minimize, SidebarSimple as PanelLeft, Plus, Paperclip, Globe, Chat as MessageSquare, NotePencil as NotebookPen, NotePencil as PenBox, DotsThree as MoreHorizontal, PushPin as Pin, PushPinSlash as PinOff, PencilSimple as Pencil, Check, CaretRight as ChevronRight, Folder, FolderPlus, FolderOpen as FolderInput, CheckSquare, MagnifyingGlass as Search, Trash as Trash2, CaretDown as ChevronDown, X, Binoculars as Telescope, List as Menu, Sun, Moon, Question as CircleHelp, Microphone as Mic, BookOpen, Flask as FlaskConical, FolderOpen, FileText, CircleNotch as Loader2, At as AtSign, Info, Warning, UploadSimple } from "@phosphor-icons/react/ssr";
 import { cn } from '@/lib/utils';
 import { SideRailSearch } from '@/components/patterns/side-rail';
 import { recordRumEvent } from '@/lib/rum';
@@ -96,7 +96,6 @@ import {
 } from '@/components/ui/popover';
 import { usePaperAI } from '@/contexts/paper-ai-context';
 import { PaperAIPanel } from '@/components/text-editor/paper-ai-panel';
-import { FileDropzone } from '@/components/ui/file-dropzone';
 import { ClipboardInfoIcon } from '@/components/ui/clipboard-info-icon';
 import type { CatalystAgentMode, LiteratureDragPayload } from '@/lib/catalyst-agent-types';
 import {
@@ -118,7 +117,8 @@ import {
   setCatalystOrigin,
   getCatalystOrigin,
 } from '@/lib/catalyst-launch';
-import { maybeNotifyCreditThreshold } from '@/lib/limits/credit-notices';
+import { maybeNotifyCreditThreshold, type CreditNotice } from '@/lib/limits/credit-notices';
+import { LimitNotice } from '@/components/limits/limit-notice';
 import {
   getCatalystCoPilot,
   clearCatalystCoPilot,
@@ -134,11 +134,6 @@ import { useLiteratureAgentStream } from '@/hooks/use-literature-agent-stream';
 import type { LiteratureAgentDonePayload } from '@/lib/literature-agent-types';
 import { ClarifyCard } from '@/components/clarify-card';
 import { PermissionCard } from '@/components/catalyst/permission-card';
-import { CatalystSources, litRefsToSourceItems } from '@/components/catalyst/catalyst-sources';
-import {
-  AgentCitationsPanel,
-  groundingResourceToPanelItem,
-} from '@/components/catalyst/agent-citations-panel';
 import { PersistedArtifactList } from '@/components/catalyst/agent-artifact-card';
 import { toPersistedArtifacts, type PersistedArtifact } from '@/lib/agent-artifacts';
 import {
@@ -681,8 +676,6 @@ const SidebarChatMessageItem = memo(function SidebarChatMessageItem({
       ? notes9Parsed.bodyMarkdown
       : rawContent;
 
-  const literatureSources = hasLitRefs ? literatureParsed!.refs : null;
-
   const notes9Sources = (() => {
     if (!notes9Parsed || notes9Parsed.resources.length === 0) return null;
     const body = notes9Parsed.bodyMarkdown;
@@ -750,23 +743,6 @@ const SidebarChatMessageItem = memo(function SidebarChatMessageItem({
     }
     return changed ? { ...baseManifest, manifest } : baseManifest;
   }, [baseManifest, resolveTitle]);
-
-  const effectiveNotes9Sources = useMemo(() => {
-    if (!notes9Sources) return null;
-    let changed = false;
-    const out = notes9Sources.map((r) => {
-      const cur = r.source_name ?? r.display_label ?? null;
-      const better = isPlaceholderTitle(cur, r.source_type)
-        ? resolveTitle(r.source_type, r.source_id, r.source_url)
-        : null;
-      if (better) {
-        changed = true;
-        return { ...r, source_name: better };
-      }
-      return r;
-    });
-    return changed ? out : notes9Sources;
-  }, [notes9Sources, resolveTitle]);
 
   const userLiteratureMarkdown =
     message.role === 'user' &&
@@ -853,21 +829,9 @@ const SidebarChatMessageItem = memo(function SidebarChatMessageItem({
                 />
               )}
             </div>
-            {literatureSources && (
-              <CatalystSources
-                items={litRefsToSourceItems(literatureSources)}
-                className="mt-3 w-full"
-              />
-            )}
-            {effectiveNotes9Sources && (
-              <AgentCitationsPanel
-                items={effectiveNotes9Sources.map((c, i) =>
-                  groundingResourceToPanelItem(c, i)
-                )}
-                triggerLabel="Sources"
-                className="mt-3 w-full"
-              />
-            )}
+            {/* No bottom "Sources" block: the per-citation hover cards rendered
+                inline from citationsManifest are the single source surface,
+                matching the literature AI summary and chat-message.tsx. */}
             {messageGraphs.length > 0 && (
               <div className="mt-3 w-full">
                 <AgentGraphList graphs={messageGraphs} />
@@ -1433,6 +1397,9 @@ export function RightSidebar({
   // When a Catalyst turn finishes (busy → idle), check monthly AI-credit usage
   // and inject a 50%/90% notice bubble if a new threshold was crossed. The
   // helper self-throttles (once per month per tier) and never throws.
+  // Usage-limit card shown ABOVE the composer (dismissible popover, not a chat
+  // bubble) when a monthly-credit threshold is newly crossed.
+  const [limitNotice, setLimitNotice] = useState<CreditNotice | null>(null);
   const wasBusyRef = useRef(false);
   useEffect(() => {
     const busy =
@@ -1440,7 +1407,9 @@ export function RightSidebar({
       status === 'streaming' ||
       agentStream.isStreaming;
     if (wasBusyRef.current && !busy) {
-      void maybeNotifyCreditThreshold();
+      void maybeNotifyCreditThreshold().then((n) => {
+        if (n) setLimitNotice(n);
+      });
     }
     wasBusyRef.current = busy;
   }, [status, agentStream.isStreaming]);
@@ -1889,8 +1858,16 @@ export function RightSidebar({
       if (unifiedRaw) {
         try {
           const p = JSON.parse(unifiedRaw) as CatalystMentionDragPayload;
-          if (p?.id && p?.title && p.kind) {
-            appendMentionToInput({ kind: p.kind, id: p.id, title: p.title });
+          // Literature rows imported without metadata store their UUID (or blank)
+          // as the title. Route them through the shared resolver — the same
+          // choke-point the @-mention picker uses — so the chip shows a human
+          // title, not a UUID, whatever the drag source is. Other kinds keep theirs.
+          const title =
+            p?.kind === 'literature_review'
+              ? resolveLiteratureTitle({ title: p.title })
+              : p?.title;
+          if (p?.id && title && p.kind) {
+            appendMentionToInput({ kind: p.kind, id: p.id, title });
             return true;
           }
         } catch {
@@ -1902,11 +1879,13 @@ export function RightSidebar({
       if (!raw) return false;
       try {
         const p = JSON.parse(raw) as LiteratureDragPayload;
-        if (p?.id && p?.title) {
+        // Gate on id only; resolve the title so UUID/blank-title rows still drop
+        // with a readable label (and aren't silently ignored when title is empty).
+        if (p?.id) {
           appendMentionToInput({
             kind: 'literature_review',
             id: p.id,
-            title: p.title,
+            title: resolveLiteratureTitle({ title: p.title }),
           });
           return true;
         }
@@ -2159,6 +2138,36 @@ export function RightSidebar({
     setAttachments((prev) => [...prev, ...successful]);
     setUploadQueue([]);
   }, [uploadFile]);
+
+  // Panel-wide drop: the whole chat surface accepts files and tagged-item drags,
+  // not just the composer box. dragCounter tracks enter/leave across nested
+  // children so the overlay doesn't flicker as the cursor crosses them.
+  const panelDragCounter = useRef(0);
+  const handlePanelDragEnter = useCallback((e: DragEvent) => {
+    if (!e.dataTransfer?.types?.length) return;
+    e.preventDefault();
+    panelDragCounter.current += 1;
+    setIsDraggingContext(true);
+  }, []);
+  const handlePanelDragOver = useCallback((e: DragEvent) => {
+    if (!e.dataTransfer?.types?.length) return;
+    e.preventDefault();
+  }, []);
+  const handlePanelDragLeave = useCallback((e: DragEvent) => {
+    panelDragCounter.current -= 1;
+    if (panelDragCounter.current <= 0) {
+      panelDragCounter.current = 0;
+      setIsDraggingContext(false);
+    }
+  }, []);
+  const handlePanelDrop = useCallback((e: DragEvent) => {
+    e.preventDefault();
+    panelDragCounter.current = 0;
+    setIsDraggingContext(false);
+    if (handleNonFileDrop(e)) return;
+    const files = Array.from(e.dataTransfer?.files ?? []);
+    if (files.length > 0) void handleFilesDrop(files);
+  }, [handleNonFileDrop, handleFilesDrop]);
 
   const handlePaste = useCallback(async (event: ClipboardEvent) => {
     const items = event.clipboardData?.items;
@@ -3325,7 +3334,7 @@ export function RightSidebar({
   }, [isPageVariant, router]);
 
   const applyCatalystLaunch = useCallback(
-    (launch: { query?: string; projectId?: string; attachments?: Array<{ url: string; name: string; contentType: string; size?: number }>; literatureSources?: AgentLiteratureSource[]; webSearch?: boolean; autoSend?: boolean; sessionId?: string; expectAttachment?: boolean; expectedAttachmentName?: string }) => {
+    (launch: { query?: string; projectId?: string; attachments?: Array<{ url: string; name: string; contentType: string; size?: number }>; literatureSources?: AgentLiteratureSource[]; webSearch?: boolean; autoSend?: boolean; sessionId?: string; expectAttachment?: boolean; expectedAttachmentName?: string; literatureMention?: { id: string; title: string } }) => {
       // Gate the first Send while a paper attachment is being fetched, so the user
       // can't fire the message before it lands. A later launch (the closed-access
       // fallback re-open) or the attach/notice events release the gate.
@@ -3366,6 +3375,27 @@ export function RightSidebar({
           ...pendingLiteratureSourcesRef.current,
           ...launch.literatureSources,
         ]);
+      }
+      // "Ask Catalyst" on a saved/staged paper attaches it as an @-mention TAG —
+      // the same representation as dragging it in from the library, so every
+      // entry point behaves identically. Focus the composer + drop the caret at
+      // the end first, so appendMentionToInput renders the visible chip (it also
+      // updates selectedMentions, the agent's source of truth, regardless).
+      if (launch.literatureMention) {
+        const m = launch.literatureMention;
+        requestAnimationFrame(() => {
+          const el = inputRef.current;
+          if (el) {
+            el.focus();
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            range.collapse(false);
+            const sel = window.getSelection();
+            sel?.removeAllRanges();
+            sel?.addRange(range);
+          }
+          appendMentionToInput({ kind: 'literature_review', id: m.id, title: m.title });
+        });
       }
       const q = launch.query?.trim();
       if (q) {
@@ -3428,7 +3458,7 @@ export function RightSidebar({
         setWebSearchEnabled(launch.webSearch);
       }
     },
-    [resizeInput, supabase, armPendingAttach, clearPendingAttach],
+    [resizeInput, supabase, armPendingAttach, clearPendingAttach, appendMentionToInput],
   );
 
   useEffect(() => {
@@ -3456,6 +3486,7 @@ export function RightSidebar({
       // silently disabled the send-gate and the optimistic paper chip.
       expectAttachment: pendingLaunch.expectAttachment,
       expectedAttachmentName: pendingLaunch.expectedAttachmentName,
+      literatureMention: pendingLaunch.literatureMention,
     });
     onPendingLaunchConsumed?.();
   }, [
@@ -3660,6 +3691,14 @@ export function RightSidebar({
 
     return (
     <>
+    {limitNotice && (
+      <LimitNotice
+        message={limitNotice.message}
+        severity={limitNotice.severity}
+        onDismiss={() => setLimitNotice(null)}
+        className="mb-2"
+      />
+    )}
     {coPilot && messages.length === 0 && (
       <div className="mb-2 flex items-start gap-2 rounded-xl border border-primary/25 bg-primary/[0.05] px-3 py-2 text-xs">
         <Telescope className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden />
@@ -3705,18 +3744,28 @@ export function RightSidebar({
         )}
         {(attachments.length > 0 || uploadQueue.length > 0 || fetchingPaperNames.length > 0) && (
           <div className="flex flex-wrap gap-1.5 px-3 pt-2 pb-0.5">
-            {attachments.map((a) => (
+            {attachments.map((a) => {
+              // Key on the stable `paperKey` — same identity the insert-dedupe
+              // uses. The signed `url` rotates on every "Ask Catalyst" press, so
+              // keying on it makes React reuse the wrong chip and removal filter
+              // the wrong entry.
+              const attachKey = a.paperKey || a.url || a.name
+              return (
               <PreviewAttachment
-                key={a.url || a.name}
+                key={attachKey}
                 attachment={a}
                 compact
-                onRemove={() =>
+                onRemove={() => {
                   setAttachments((prev) =>
-                    prev.filter((x) => (x.url || x.name) !== (a.url || a.name)),
+                    prev.filter((x) => (x.paperKey || x.url || x.name) !== attachKey),
                   )
-                }
+                  attachmentsRef.current = attachmentsRef.current.filter(
+                    (x) => (x.paperKey || x.url || x.name) !== attachKey,
+                  )
+                }}
               />
-            ))}
+              )
+            })}
             {uploadQueue.map((name) => (
               <PreviewAttachment
                 key={`uploading-${name}`}
@@ -3741,40 +3790,31 @@ export function RightSidebar({
               ))}
           </div>
         )}
-        <FileDropzone
-          onFilesDrop={handleFilesDrop}
-          onNonFileDrop={handleNonFileDrop}
-          // No `accept` here on purpose: handleFilesDrop validates every dropped
-          // file through the shared isAcceptedAttachment (MIME + extension
-          // fallback), so it stays the single source of truth. The dropzone's
-          // own exact-MIME filter would otherwise reject extensionless blobs
-          // with a charset-suffixed type that the fallback accepts.
-          description="Drop tagged items to attach context"
-          activeClassName="ring-2 ring-primary border-primary bg-primary/5 min-h-[132px]"
-        >
-          <div
-            ref={inputRef}
-            role="textbox"
-            aria-multiline="true"
-            aria-label="Message Catalyst"
-            aria-disabled={isLoading || contextLoading}
-            contentEditable={!isLoading && !contextLoading}
-            suppressContentEditableWarning
-            onInput={handleTextareaChange}
-            onKeyDown={handleKeyDown}
-            data-placeholder={
-              heroStyle
-                ? 'Ask Catalyst anything. Type @ to reference a note, experiment, or paper.'
-                : 'Ask Catalyst anything. Use @ to tag notes, experiments, projects, protocols, and literature.'
-            }
-            className={cn(
-              'w-full resize-none bg-transparent focus-visible:outline-2 focus-visible:outline-ring/40 focus-visible:outline-offset-2 scrollbar-hide empty:before:pointer-events-none empty:before:text-muted-foreground/60 empty:before:content-[attr(data-placeholder)]',
-              heroStyle
-                ? 'min-h-[120px] px-5 py-4 text-[15px] leading-relaxed'
-                : 'min-h-[68px] px-4 py-2.5 text-sm',
-            )}
-          />
-        </FileDropzone>
+        {/* Drop handling lives on the panel root (handlePanelDrop) so files and
+            tagged items can be dropped anywhere in the chat surface, not just on
+            this box. */}
+        <div
+          ref={inputRef}
+          role="textbox"
+          aria-multiline="true"
+          aria-label="Message Catalyst"
+          aria-disabled={isLoading || contextLoading}
+          contentEditable={!isLoading && !contextLoading}
+          suppressContentEditableWarning
+          onInput={handleTextareaChange}
+          onKeyDown={handleKeyDown}
+          data-placeholder={
+            heroStyle
+              ? 'Ask Catalyst anything. Type @ to reference a note, experiment, or paper.'
+              : 'Ask Catalyst anything. Use @ to tag notes, experiments, projects, protocols, and literature.'
+          }
+          className={cn(
+            'w-full resize-none bg-transparent focus-visible:outline-2 focus-visible:outline-ring/40 focus-visible:outline-offset-2 scrollbar-hide empty:before:pointer-events-none empty:before:text-muted-foreground/60 empty:before:content-[attr(data-placeholder)]',
+            heroStyle
+              ? 'min-h-[120px] px-5 py-4 text-[15px] leading-relaxed'
+              : 'min-h-[68px] px-4 py-2.5 text-sm',
+          )}
+        />
         {mentionOpenForInput && filteredGlobalMentions.length > 0 && (
           <div className="mx-2 mb-1 max-h-52 overflow-y-auto rounded-md border border-border bg-popover p-1">
             {filteredGlobalMentions.map((item, idx) => (
@@ -4255,8 +4295,13 @@ export function RightSidebar({
   };
 
   return (
-    <div className={cn(
-      "flex flex-col bg-background min-h-0 overflow-hidden",
+    <div
+      onDragEnter={handlePanelDragEnter}
+      onDragOver={handlePanelDragOver}
+      onDragLeave={handlePanelDragLeave}
+      onDrop={handlePanelDrop}
+      className={cn(
+      "relative flex flex-col bg-background min-h-0 overflow-hidden",
       isPageVariant
         ? "h-full w-full min-w-0"
         : cn(
@@ -4269,6 +4314,14 @@ export function RightSidebar({
               : "h-full w-full min-w-0"
           )
     )}>
+      {isDraggingContext && (
+        <div className="pointer-events-none absolute inset-2 z-[130] flex items-center justify-center rounded-2xl border-2 border-dashed border-primary bg-background/80 backdrop-blur-[2px] animate-in fade-in duration-150">
+          <div className="flex flex-col items-center gap-2 text-primary">
+            <UploadSimple className="h-10 w-10 animate-bounce" />
+            <p className="text-sm font-semibold">Drop files or tagged items to attach</p>
+          </div>
+        </div>
+      )}
       {/* Hidden File Input */}
       <input ref={fileInputRef} type="file" multiple accept={ATTACHMENT_ACCEPT} className="hidden" onChange={handleFileSelect} disabled={isLoading || isUploading} />
 

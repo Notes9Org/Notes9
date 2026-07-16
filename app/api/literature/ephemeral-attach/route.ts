@@ -81,6 +81,10 @@ export async function POST(request: Request) {
     const cacheKey = oaPdfCacheKey(paper as SearchPaper)
     let pdfBuffer: ArrayBuffer | null = cacheKey ? await readOaPdfCache(cacheKey) : null
 
+    console.log(
+      `[lit] ask-catalyst ephemeral-attach doi=${paper.doi ?? "-"} pmid=${paper.pmid ?? "-"} cache=${pdfBuffer ? "hit" : "miss"}`,
+    )
+
     if (!pdfBuffer) {
       const directUrls = paper.pdfUrl ? [paper.pdfUrl] : []
       const oaSources = Promise.race([

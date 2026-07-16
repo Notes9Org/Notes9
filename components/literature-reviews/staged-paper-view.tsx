@@ -4,8 +4,7 @@ import { useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { SearchPaper } from "@/types/paper-search"
-import { BookOpen, Bookmark as BookmarkCheck, Bookmark as BookmarkPlus, ArrowSquareOut as ExternalLink, FileText, CircleNotch as Loader2 } from "@phosphor-icons/react/ssr"
-import { FlareIcon } from "@/components/ui/flare-icon"
+import { BookOpen, Bookmark as BookmarkCheck, Bookmark as BookmarkPlus, ArrowSquareOut as ExternalLink, FileText, CircleNotch as Loader2, ChatCircle as MessageCircle, Trash as Trash2 } from "@phosphor-icons/react/ssr"
 import { LiteraturePdfPanel } from "./literature-pdf-panel"
 import { UploadLiteraturePdfDialog } from "./upload-literature-pdf-dialog"
 import { decodeHtmlEntities } from "@/lib/literature-abstract-display"
@@ -91,6 +90,8 @@ export function rowToSearchPaper(row: StagingListItem | StagingLiteratureRow): S
 interface StagedPaperViewProps {
   lit: StagingListItem
   onSavePaper: (paper: SearchPaper, literatureId: string) => void | Promise<void>
+  /** Discard this staged paper (opens the host's remove-confirm dialog). */
+  onRemove?: () => void
   savingLiteratureId?: string | null
 }
 
@@ -98,6 +99,7 @@ export function StagedPaperView({
   lit,
   onSavePaper,
   savingLiteratureId = null,
+  onRemove,
 }: StagedPaperViewProps) {
   // Persisted save state lives in `catalog_placement` (not `status`) — "repository"
   // means it's in the library, "staging" means it's a transient staged read.
@@ -126,18 +128,15 @@ export function StagedPaperView({
     return () => clearTimeout(t)
   }, [lit.id, lit.pdf_storage_path])
 
-  // Ask Catalyst — mirrors the search-result card: open the panel with no text
-  // prefill (the paper rides in as an attachment), fly the PDF into the composer,
-  // and fall back to web search when there's no stored full text.
+  // Ask Catalyst — this paper lives in the library/staging, so it attaches as an
+  // @-mention TAG (via reviewId), identical to dragging it in from the library.
+  // The agent resolves the id to the row's metadata + imported full text.
   const askCatalyst = () => {
     const paper = rowToSearchPaper(lit)
     const decodedTitle = lit.title ? decodeHtmlEntities(lit.title) : paper.title
     void attachPaperToCatalyst(
       { ...paper, title: decodedTitle },
-      {
-        scope: "literature",
-        savedPdf: lit.pdf_storage_path ? { id: lit.id, storagePath: lit.pdf_storage_path } : null,
-      },
+      { scope: "literature", reviewId: lit.id },
     )
   }
 
@@ -189,17 +188,28 @@ export function StagedPaperView({
               <FlareIcon className="h-4 w-4" />
               Ask Catalyst
             </Button>
+            {/* Discard a staged paper. Hidden once saved — the library copy is
+                deleted from the Repository tab, not here. */}
+            {onRemove && !isSavedToLibrary ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onRemove()}
+                title="Remove this paper from staging"
+                className="gap-1.5 rounded-lg text-muted-foreground hover:text-rose-500"
+              >
+                <Trash2 className="h-4 w-4" />
+                Remove
+              </Button>
+            ) : null}
           </div>
         </div>
-        {!isSavedToLibrary && stagedDaysLeft !== null ? (
+        {!isSavedToLibrary ? (
           <div className="mt-3 flex items-start gap-2 rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
             <BookmarkPlus className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>
-              You&apos;re reading this without adding it to your library. It stays available for{" "}
-              <span className="font-medium text-foreground">
-                {stagedDaysLeft} {stagedDaysLeft === 1 ? "day" : "days"}
-              </span>
-              , then it&apos;s removed automatically. <span className="font-medium text-foreground">Save to library</span> to keep it.
+              You&apos;re just reading this — it isn&apos;t in your library yet.{" "}
+              <span className="font-medium text-foreground">Save to library</span> to keep it.
             </span>
           </div>
         ) : null}
@@ -253,7 +263,7 @@ export function StagedPaperView({
           <div>
             <CardTitle className="text-lg">Paper Source & PDF</CardTitle>
             <CardDescription>
-              Automatic import skipped or failed for this reference.
+              Couldn&apos;t fetch an open-access PDF. Open via the links below, or upload one.
             </CardDescription>
           </div>
           <UploadLiteraturePdfDialog
@@ -290,11 +300,11 @@ export function StagedPaperView({
               <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-muted">
                 <FileText className="h-6 w-6 text-muted-foreground" />
               </div>
-              <h4 className="text-lg font-semibold text-foreground">No PDF from search link</h4>
+              <h4 className="text-lg font-semibold text-foreground">No open-access PDF found</h4>
               <p className="mx-auto mt-2 max-w-lg text-sm text-muted-foreground">
-                Staging only pulls the PDF URL from your search result. That link may be missing,
-                blocked for server download, or require a browser session. Download the PDF yourself
-                if needed, then upload it here to read and annotate.
+                The PDF link from your search result may be missing, blocked for server download,
+                or require a browser session. Open it via the links below, or download it yourself
+                and upload it here to read and annotate.
               </p>
               <div className="mt-6 flex flex-wrap items-center justify-center gap-4">
                 {lit.doi && (

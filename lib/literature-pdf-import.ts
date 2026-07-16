@@ -272,6 +272,36 @@ export function looksLikeHtmlInterstitial(contentType: string | null, head: Uint
  * Prefer `linkname=pubmed_pmc` so we never pick a cited article from `pubmed_pmc_refs`.
  * @see https://pmc.ncbi.nlm.nih.gov/tools/id-converter-api/ (alternative official converter)
  */
+/**
+ * Map a PMID/DOI to its bare numeric PMC id via EuropePMC. EuropePMC's index is
+ * more reliable than NCBI elink (which intermittently returns no PMC link for
+ * articles that ARE in PMC), so this is the fallback resolver. Returns null on
+ * any miss/error — best-effort.
+ */
+export async function fetchPmcIdFromEuropePmc(
+  pmid: string | null | undefined,
+  doi: string | null | undefined,
+): Promise<string | null> {
+  const query = doi?.trim() ? `DOI:${doi.trim()}` : pmid?.trim() ? `ext_id:${pmid.trim()} AND src:med` : null
+  if (!query) return null
+  const url =
+    `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(query)}` +
+    `&format=json&pageSize=1&resultType=lite`
+  try {
+    const res = await fetch(url, {
+      headers: pdfFetchHeaders(url),
+      signal: AbortSignal.timeout(NCBI_METADATA_TIMEOUT_MS),
+    })
+    if (!res.ok) return null
+    const data = (await res.json()) as { resultList?: { result?: Array<{ pmcid?: string }> } }
+    const pmcid = data?.resultList?.result?.[0]?.pmcid
+    const m = pmcid ? /PMC(\d+)/i.exec(pmcid) : null
+    return m ? m[1] : null
+  } catch {
+    return null
+  }
+}
+
 export async function fetchPmcIdFromPmid(pmid: string): Promise<string | null> {
   const url = new URL("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/elink.fcgi")
   url.searchParams.set("dbfrom", "pubmed")
@@ -351,15 +381,14 @@ function extractPmcNumericId(paper: SearchPaper): string | null {
 export function buildPmcPdfCandidateUrls(pmcNumeric: string): string[] {
   const id = `PMC${pmcNumeric.replace(/^PMC/i, "")}`
   return [
-    // Non-gated Europe PMC render mirror first.
+    // Non-gated Europe PMC render mirrors (different host — no NCBI rate limit).
     `https://europepmc.org/backend/ptpmcrender.fcgi?accid=${encodeURIComponent(id)}&blobtype=pdf`,
     `https://europepmc.org/articles/${id}?pdf=render`,
-    // NLM direct-file forms (sometimes bytes, sometimes POW interstitial).
-    `https://pmc.ncbi.nlm.nih.gov/articles/${id}/pdf/main.pdf`,
-    `https://www.ncbi.nlm.nih.gov/pmc/articles/${id}/pdf/main.pdf`,
-    // Bare folder forms — most likely to return the POW interstitial; last.
+    // ONE canonical NLM request: the bare /pdf/ folder 301-redirects to the real
+    // filename and is fetched via the proof-of-work solver. Firing several PMC URL
+    // variants per paper in parallel (the old main.pdf guesses + www duplicates)
+    // reads as a bot burst and trips NCBI's reCAPTCHA tier, so we send only this.
     `https://pmc.ncbi.nlm.nih.gov/articles/${id}/pdf/`,
-    `https://www.ncbi.nlm.nih.gov/pmc/articles/${id}/pdf/`,
   ]
 }
 
@@ -426,6 +455,11 @@ export async function resolvePmcOaPdfUrls(paper: SearchPaper): Promise<{
   if (!pmcNum && paper.pmid) {
     pmcNum = await fetchPmcIdFromPmid(paper.pmid)
   }
+  // NCBI elink intermittently returns no PMC link even for in-PMC articles;
+  // EuropePMC maps DOI/PMID → PMCID reliably, so fall back to it before giving up.
+  if (!pmcNum) {
+    pmcNum = await fetchPmcIdFromEuropePmc(paper.pmid, paper.doi)
+  }
 
   if (!pmcNum) {
     return {
@@ -437,34 +471,26 @@ export async function resolvePmcOaPdfUrls(paper: SearchPaper): Promise<{
     }
   }
 
-  const oa = await queryPmcOpenAccessSubset(pmcNum)
-  if (!oa.ok) {
-    return {
-      urls: [],
-      oaPackageTgzUrl: null,
-      oaDirectPdfUrl: null,
-      pmcNumeric: pmcNum,
-      resolution: "oa_subset_check_failed",
-    }
-  }
-  if (!oa.inSubset) {
-    return {
-      urls: [],
-      oaPackageTgzUrl: null,
-      oaDirectPdfUrl: null,
-      pmcNumeric: pmcNum,
-      resolution: "not_pmc_open_access",
-    }
-  }
+  // oa.fcgi is only a best-effort source of an extra direct link — it is NOT
+  // required to fetch the article PDF (the proof-of-work solver hits pmc.ncbi
+  // directly). It also intermittently 5xx/times-out and its ftp:// package links
+  // are now dead (404 HTTPS / 550 FTP). So never gate the PMC candidate URLs on
+  // it: build them from the PMCID and treat oa.fcgi output as optional.
+  const oa = await queryPmcOpenAccessSubset(pmcNum).catch(() => null)
+  const oaLinks = oa && oa.ok && oa.inSubset ? oa : null
+  const directPdf =
+    oaLinks?.oaPdfHttpsUrl && !isDeadNcbiFtpUrl(oaLinks.oaPdfHttpsUrl) ? oaLinks.oaPdfHttpsUrl : null
+  const oaTgz =
+    oaLinks?.oaTgzHttpsUrl && !isDeadNcbiFtpUrl(oaLinks.oaTgzHttpsUrl) ? oaLinks.oaTgzHttpsUrl : null
 
   const urls: string[] = []
-  if (oa.oaPdfHttpsUrl) urls.push(oa.oaPdfHttpsUrl)
+  if (directPdf) urls.push(directPdf)
   urls.push(...buildPmcPdfCandidateUrls(pmcNum))
 
   return {
     urls: [...new Set(urls)],
-    oaPackageTgzUrl: oa.oaTgzHttpsUrl,
-    oaDirectPdfUrl: oa.oaPdfHttpsUrl,
+    oaPackageTgzUrl: oaTgz,
+    oaDirectPdfUrl: directPdf,
     pmcNumeric: pmcNum,
     resolution: "open_access_urls_ready",
   }
@@ -521,6 +547,214 @@ function isPdfMagic(bytes: Uint8Array): boolean {
   return bytes.length >= 4 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46
 }
 
+/** Append the OpenAlex content api_key at fetch time (kept out of stored URLs). */
+function withOpenAlexKey(url: string): string {
+  const key = process.env.OPENALEX_CONTENT_API_KEY?.trim()
+  if (!key) return url
+  return `${url}${url.includes("?") ? "&" : "?"}api_key=${encodeURIComponent(key)}`
+}
+
+/** Cookie NCBI's "cloudpmc-viewer" proof-of-work wall expects once solved. */
+const PMC_POW_COOKIE = "cloudpmc-viewer-pow"
+
+function isPmcArticlePdfHost(url: string): boolean {
+  try {
+    return new URL(url).hostname.toLowerCase() === "pmc.ncbi.nlm.nih.gov"
+  } catch {
+    return false
+  }
+}
+
+/** oa.fcgi advertises OA package/pdf as ftp://ftp.ncbi.nlm.nih.gov paths that no
+ *  longer resolve — 404 over HTTPS, 550 over anonymous FTP. A guaranteed miss. */
+function isDeadNcbiFtpUrl(url: string): boolean {
+  try {
+    return new URL(url).hostname.toLowerCase() === "ftp.ncbi.nlm.nih.gov"
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Solve NCBI's PMC proof-of-work: the smallest nonce whose
+ * `sha256(challenge + nonce)` hex digest starts with `difficulty` zero chars.
+ * Difficulty 4 averages ~65k hashes (<50 ms); the bound guards a runaway if NCBI
+ * raises difficulty (caller treats a throw as "give up → next candidate").
+ */
+export function solvePmcPow(challenge: string, difficulty: number): number {
+  const target = "0".repeat(difficulty)
+  for (let nonce = 0; nonce < 50_000_000; nonce++) {
+    const hex = createHash("sha256").update(challenge + nonce).digest("hex")
+    if (hex.startsWith(target)) return nonce
+  }
+  throw new Error("PMC proof-of-work not solved within bound")
+}
+
+/** Stream a Response body into a single buffer, aborting past `maxBytes`. */
+async function bufferResponseBounded(res: Response, maxBytes: number): Promise<Uint8Array | null> {
+  if (!res.body) return null
+  const reader = res.body.getReader()
+  const chunks: Uint8Array[] = []
+  let total = 0
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (!value || value.length === 0) continue
+      chunks.push(value)
+      total += value.length
+      if (total > maxBytes) return null
+    }
+  } finally {
+    reader.cancel().catch(() => {})
+  }
+  if (total === 0) return null
+  const buf = new Uint8Array(total)
+  let offset = 0
+  for (const c of chunks) {
+    buf.set(c, offset)
+    offset += c.length
+  }
+  return buf
+}
+
+/**
+ * Fetch a `pmc.ncbi.nlm.nih.gov` article PDF that is gated behind NCBI's
+ * JavaScript proof-of-work wall ("cloudpmc-viewer"). If the first response is
+ * already a PDF (no wall), it is returned directly. Otherwise POW_CHALLENGE /
+ * POW_DIFFICULTY are parsed from the interstitial, the hashcash is solved, and
+ * the URL is re-requested with the `cloudpmc-viewer-pow` cookie. Returns null
+ * (never throws) so the caller falls through to the next candidate.
+ */
+async function fetchPmcPdfWithPow(
+  url: string,
+  signal: AbortSignal,
+  maxBytes: number,
+): Promise<PdfDownloadResult | null> {
+  try {
+    const headers = pdfFetchHeaders(url)
+    const first = await fetch(url, { headers, redirect: "follow", signal })
+    if (!first.ok || !first.body) return null
+
+    const ct = (first.headers.get("content-type") || "").toLowerCase()
+    if (ct.includes("application/pdf")) {
+      const buf = await bufferResponseBounded(first, maxBytes)
+      return buf && isPdfMagic(buf) ? { buffer: buf.buffer as ArrayBuffer, usedUrl: url } : null
+    }
+
+    // The interstitial is a small HTML page carrying the PoW parameters.
+    const html = Buffer.from((await bufferResponseBounded(first, 256 * 1024)) ?? new Uint8Array()).toString("utf8")
+    const challenge = /POW_CHALLENGE\s*=\s*"([^"]+)"/.exec(html)?.[1]
+    const difficulty = Number(/POW_DIFFICULTY\s*=\s*"?(\d+)/.exec(html)?.[1] ?? "")
+    if (!challenge || !Number.isFinite(difficulty) || difficulty < 1 || difficulty > 6) return null
+
+    const nonce = solvePmcPow(challenge, difficulty)
+    // Re-request the RESOLVED url (first.url) — the interstitial's challenge is
+    // bound to the final path (e.g. /pdf/main.pdf). Re-requesting the original
+    // bare /pdf/ folder would 301 again and the PoW cookie would not validate.
+    const resolvedUrl = first.url || url
+    const second = await fetch(resolvedUrl, {
+      headers: { ...headers, Cookie: `${PMC_POW_COOKIE}=${challenge},${nonce}` },
+      redirect: "follow",
+      signal,
+    })
+    if (!second.ok) return null
+    const buf = await bufferResponseBounded(second, maxBytes)
+    return buf && isPdfMagic(buf) ? { buffer: buf.buffer as ArrayBuffer, usedUrl: resolvedUrl } : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * One fetch + streaming validation of a candidate PDF URL. `retryable` is true
+ * when the failure looks transient (403/429 or an HTML challenge/interstitial)
+ * so the caller can retry a Cloudflare-fronted host once.
+ */
+async function fetchAndValidatePdf(
+  url: string,
+  signal: AbortSignal,
+  maxBytes: number,
+): Promise<{ pdf: PdfDownloadResult | null; retryable: boolean }> {
+  const startedAt = Date.now()
+  const host = safeHost(url)
+  const log = (outcome: string, extra?: Record<string, unknown>) =>
+    console.log(
+      `[oa] fetch host=${host} outcome=${outcome} ms=${Date.now() - startedAt}` +
+        (extra ? " " + Object.entries(extra).map(([k, v]) => `${k}=${v}`).join(" ") : ""),
+    )
+
+  const res = await fetch(url, { headers: pdfFetchHeaders(url), redirect: "follow", signal })
+  const ct = (res.headers.get("content-type") || "").toLowerCase()
+  if (!res.ok || !res.body) {
+    const retryable = res.status === 403 || res.status === 429
+    log("http-error", { status: res.status, retryable })
+    return { pdf: null, retryable }
+  }
+
+  const reader = res.body.getReader()
+  const chunks: Uint8Array[] = []
+  let total = 0
+  let sniffed = false
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (!value || value.length === 0) continue
+      chunks.push(value)
+      total += value.length
+      if (!sniffed && total >= 8) {
+        sniffed = true
+        const head = new Uint8Array(8)
+        let filled = 0
+        for (const c of chunks) {
+          const take = Math.min(c.length, 8 - filled)
+          head.set(c.subarray(0, take), filled)
+          filled += take
+          if (filled >= 8) break
+        }
+        // Reject an HTML bot/verification page before downloading its whole body.
+        if (looksLikeHtmlInterstitial(ct, head)) {
+          log("html-wall", { ct })
+          return { pdf: null, retryable: true }
+        }
+      }
+      if (total > maxBytes) {
+        log("too-big", { bytes: total, maxBytes })
+        return { pdf: null, retryable: false }
+      }
+    }
+  } finally {
+    reader.cancel().catch(() => {})
+  }
+
+  if (total === 0) {
+    log("empty")
+    return { pdf: null, retryable: false }
+  }
+  const buf = new Uint8Array(total)
+  let offset = 0
+  for (const c of chunks) {
+    buf.set(c, offset)
+    offset += c.length
+  }
+  if (ct.includes("application/pdf") || isPdfMagic(buf)) {
+    log("ok", { bytes: total, ct: ct || "none" })
+    return { pdf: { buffer: buf.buffer as ArrayBuffer, usedUrl: url }, retryable: false }
+  }
+  log("not-pdf", { bytes: total, ct: ct || "none" })
+  return { pdf: null, retryable: false }
+}
+
+/** Host of a URL for logging; never throws on a malformed URL. */
+function safeHost(url: string): string {
+  try {
+    return new URL(url).host
+  } catch {
+    return "invalid-url"
+  }
+}
+
 async function tryDownloadOnePdf(
   url: string,
   parentSignal: AbortSignal,
@@ -529,49 +763,21 @@ async function tryDownloadOnePdf(
 ): Promise<PdfDownloadResult | null> {
   const { signal, dispose } = pdfDownloadSignal(parentSignal, perFetchTimeoutMs)
   try {
-    const res = await fetch(url, { headers: pdfFetchHeaders(url), redirect: "follow", signal })
-    if (!res.ok || !res.body) return null
-    const ct = (res.headers.get("content-type") || "").toLowerCase()
-
-    const reader = res.body.getReader()
-    const chunks: Uint8Array[] = []
-    let total = 0
-    let sniffed = false
+    let host = ""
     try {
-      for (;;) {
-        const { done, value } = await reader.read()
-        if (done) break
-        if (!value || value.length === 0) continue
-        chunks.push(value)
-        total += value.length
-        if (!sniffed && total >= 8) {
-          sniffed = true
-          const head = new Uint8Array(8)
-          let filled = 0
-          for (const c of chunks) {
-            const take = Math.min(c.length, 8 - filled)
-            head.set(c.subarray(0, take), filled)
-            filled += take
-            if (filled >= 8) break
-          }
-          // Reject an HTML bot/verification page before downloading its whole body.
-          if (looksLikeHtmlInterstitial(ct, head)) return null
-        }
-        if (total > maxBytes) return null
-      }
-    } finally {
-      reader.cancel().catch(() => {})
+      host = new URL(url).hostname.toLowerCase()
+    } catch {
+      /* ignore */
     }
-
-    if (total === 0) return null
-    const buf = new Uint8Array(total)
-    let offset = 0
-    for (const c of chunks) {
-      buf.set(c, offset)
-      offset += c.length
-    }
-    if (ct.includes("application/pdf") || isPdfMagic(buf)) {
-      return { buffer: buf.buffer as ArrayBuffer, usedUrl: url }
+    // OpenAlex serves the hosted PDF from content.openalex.org with the api_key as
+    // a query param. Append it here (not in the resolved/stored URL) so the secret
+    // never lands in tried_urls; record the clean `url` as usedUrl.
+    const fetchUrl = host === "content.openalex.org" ? withOpenAlexKey(url) : url
+    const maxAttempts = 2
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const { pdf, retryable } = await fetchAndValidatePdf(fetchUrl, signal, maxBytes)
+      if (pdf) return { buffer: pdf.buffer, usedUrl: url }
+      if (!retryable || attempt === maxAttempts) return null
     }
     return null
   } catch {
@@ -718,6 +924,12 @@ export async function importLiteraturePdfFromRemote(params: {
     throw new Error("No PDF URLs to try")
   }
 
+  console.log(
+    `[oa] import-start literatureId=${params.literatureId} candidates=${params.pdfUrls.length}` +
+      ` hosts=[${params.pdfUrls.map(safeHost).join(",")}]` +
+      (params.oaPackageTgzUrl ? " tgz=1" : ""),
+  )
+
   // Content verification (Phase 3 of snuggly-meandering-pinwheel).
   // When the expected title and an access token are provided, route the
   // candidate URLs through catalyst first so we only download PDFs that
@@ -764,6 +976,11 @@ export async function importLiteraturePdfFromRemote(params: {
     buffer = fromTgz.buffer
     usedUrl = fromTgz.usedUrl
   }
+
+  console.log(
+    `[oa] import-ok literatureId=${params.literatureId} won=${safeHost(usedUrl)}` +
+      ` bytes=${buffer.byteLength}`,
+  )
 
   const triedUrls = [...params.pdfUrls, ...(params.oaPackageTgzUrl ? [params.oaPackageTgzUrl] : [])]
   await persistLiteraturePdfBuffer({
@@ -897,6 +1114,26 @@ export async function tryImportPdfForPaper(params: {
   /** Signed-in user's email — passed to Unpaywall as the polite-pool contact. */
   contactEmail?: string | null
 }): Promise<TryImportPdfResult> {
+  console.log(
+    `[lit] import-try literatureId=${params.literatureId} source=${params.matchSource} doi=${params.paper.doi ?? "-"} pmid=${params.paper.pmid ?? "-"}`,
+  )
+
+  // Deterministic "already have it" short-circuit. Every entry point (stage a
+  // search hit, save to library, drag-drop) funnels through here, so checking the
+  // row's own stored PDF once — not just the TTL OA cache below, which expires —
+  // is what stops the same paper being re-resolved and re-downloaded on reopen.
+  const { data: existingRow } = await params.supabase
+    .from("literature_reviews")
+    .select("pdf_storage_path, pdf_import_status")
+    .eq("id", params.literatureId)
+    .maybeSingle()
+  if (existingRow?.pdf_import_status === "success" && existingRow.pdf_storage_path) {
+    console.log(
+      `[lit] import-skip literatureId=${params.literatureId} reason=already_stored path=${existingRow.pdf_storage_path}`,
+    )
+    return { ok: true as const, resolvedAbstract: params.paper.abstract ?? null }
+  }
+
   // Shared OA-PDF cache: if this exact paper was already downloaded (e.g. tagged
   // into chat first), reuse those bytes instead of re-resolving + re-downloading.
   const cacheKey = oaPdfCacheKey(params.paper)
@@ -914,6 +1151,7 @@ export async function tryImportPdfForPaper(params: {
           matchSource: params.matchSource,
           catalogNote: "reused_shared_oa_pdf_cache",
         })
+        console.log(`[lit] import-cache-hit literatureId=${params.literatureId} key=${cacheKey}`)
         return { ok: true as const, resolvedAbstract: params.paper.abstract ?? null }
       } catch {
         // Persisting the cached copy failed — fall through to a fresh fetch.
@@ -933,6 +1171,7 @@ export async function tryImportPdfForPaper(params: {
         pdf_metadata: { note: "no_open_access_pdf_resolved" },
       })
       .eq("id", params.literatureId)
+    console.log(`[lit] import-none literatureId=${params.literatureId} reason=no_open_access_pdf`)
     return { ok: false as const, reason: "no_open_access_pdf" as const, resolvedAbstract }
   }
 
@@ -989,6 +1228,7 @@ export async function tryImportPdfForPaper(params: {
         },
       })
       .eq("id", params.literatureId)
+    console.log(`[lit] import-fail literatureId=${params.literatureId} reason=fetch_failed msg=${message}`)
     return { ok: false as const, reason: "fetch_failed" as const, message, resolvedAbstract }
   }
 }

@@ -124,7 +124,11 @@ export function LimitNotice({
 }: LimitNoticeProps) {
   const [dismissed, setDismissed] = useState(false)
 
-  const isDismissible = severity === 'approaching' || severity === 'soft_overage'
+  // Dismissible at every severity: a limit notice is a popover the user can
+  // close (like Cursor's usage-limit card), not a permanent banner. `severity`
+  // still drives copy/color; it no longer gates the close button.
+  const isDismissible = true
+  void severity
   const colors = COLOR_CLASSES[message.color]
   const Icon = ICONS[message.icon] ?? Info
 

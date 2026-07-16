@@ -54,7 +54,7 @@ export async function removeStagingLiterature(literatureId: string) {
       return { success: false as const, error: "Record not found" }
     }
     if (row.created_by !== user.id || row.catalog_placement !== "staging") {
-      return { success: false as const, error: "Not allowed to remove this staged item" }
+      return { success: false as const, error: "Not allowed to remove this paper" }
     }
 
     if (row.pdf_storage_path) {
@@ -71,7 +71,7 @@ export async function removeStagingLiterature(literatureId: string) {
     revalidatePath("/literature-reviews")
     return { success: true as const }
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Failed to remove staged paper"
+    const message = error instanceof Error ? error.message : "Failed to remove paper"
     return { success: false as const, error: message }
   }
 }
@@ -115,7 +115,12 @@ export async function stagePaper(
       existing = data
     }
 
+    console.log(
+      `[lit] stagePaper doi=${normalizedDoi ?? "-"} pmid=${paper.pmid ?? "-"} existing=${existing?.catalog_placement ?? "none"}`,
+    )
+
     if (existing?.catalog_placement === "repository") {
+      console.log(`[lit] stagePaper skip=already_in_repository id=${existing.id}`)
       return { success: false as const, error: "Paper already exists in repository" }
     }
 
@@ -131,6 +136,7 @@ export async function stagePaper(
         .select("*")
         .eq("id", existing.id)
         .single()
+      console.log(`[lit] stagePaper reuse=staging id=${existing.id} (no re-import)`)
       revalidatePath("/literature-reviews")
       return { success: true as const, data: row, alreadyStaged: true as const }
     }
@@ -172,6 +178,8 @@ export async function stagePaper(
     // PDF fetch/upload can take many seconds — run after the action returns so staging feels instant.
     const stagedAbstract = paper.abstract
 
+    console.log(`[lit] stagePaper insert=new id=${literatureId} pdf_status=pending → import scheduled`)
+
     after(async () => {
       try {
         const bgSupabase = await createClient()
@@ -183,6 +191,9 @@ export async function stagePaper(
           matchSource: "staging_pubmed_import",
           contactEmail: userEmail,
         })
+        console.log(
+          `[lit] stagePaper import-done id=${literatureId} ok=${importResult.ok}${importResult.ok ? "" : ` reason=${importResult.reason}`}`,
+        )
         await backfillAbstractIfBlank(
           bgSupabase,
           literatureId,
@@ -190,7 +201,7 @@ export async function stagePaper(
           importResult.resolvedAbstract
         )
       } catch (err) {
-        console.error("[stagePaper] background PDF import failed", err)
+        console.error("[lit] stagePaper background PDF import failed", err)
       } finally {
         revalidatePath("/literature-reviews")
       }
@@ -314,10 +325,9 @@ export async function savePaperToRepository(
     const { data: existingDup } = await duplicateQuery.maybeSingle()
     if (existingDup) {
       if (existingDup.catalog_placement === "staging") {
-        return {
-          success: false,
-          error: "Paper is still in staging — open it from the Staging tab and save to repository",
-        }
+        // Already staged — "Save to library" should promote that row out of
+        // staging, not dead-end. Re-run through the literatureId promote path.
+        return savePaperToRepository(paper, { ...options, literatureId: existingDup.id })
       }
       return { success: false, error: "Paper already exists in repository" }
     }

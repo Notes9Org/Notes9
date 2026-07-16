@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { MotionTabPanel, motion, useReducedMotion } from "@/components/literature-reviews/motion"
-import { MagnifyingGlass as SearchIcon, Database, CaretLeft as ChevronLeft, CaretRight as ChevronRight, CircleNotch as Loader2, X } from "@phosphor-icons/react/ssr"
+import { MagnifyingGlass as SearchIcon, Database, CircleNotch as Loader2, X } from "@phosphor-icons/react/ssr"
 import {
   LiteratureSearchForm,
   SearchTab,
@@ -72,16 +72,17 @@ const INDICATOR_SPRING = { type: "spring", stiffness: 500, damping: 40, mass: 0.
  * `layoutId` glides the single underline between triggers on switch. Reduced-motion
  * users get a static span (no layout animation). Decorative — pointer-events-none.
  */
-function TabUnderline({ reduce }: { reduce: boolean | null }) {
+/** Pill active-indicator, mirrors My Library (RepoTab) so both tab strips match. */
+function TabPill({ reduce }: { reduce: boolean | null }) {
   if (reduce) {
     return (
-      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-[var(--n9-accent)]" />
+      <span className="pointer-events-none absolute inset-0 rounded-md border border-border/50 bg-background shadow-sm" />
     )
   }
   return (
     <motion.span
-      layoutId="lit-inner-tab-underline"
-      className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-[var(--n9-accent)]"
+      layoutId="search-tab-pill"
+      className="pointer-events-none absolute inset-0 rounded-md border border-border/50 bg-background shadow-sm"
       transition={INDICATOR_SPRING}
     />
   )
@@ -602,32 +603,6 @@ export function LiteratureTabs({
   }, [topSection, pendingPdfImportIds, stagedByIdMerged, router])
 
   const scrollTabsRef = useRef<HTMLDivElement>(null)
-  const [showLeftArrow, setShowLeftArrow] = useState(false)
-  const [showRightArrow, setShowRightArrow] = useState(false)
-
-  const checkScroll = useCallback(() => {
-    if (scrollTabsRef.current) {
-      const { scrollLeft, scrollWidth, clientWidth } = scrollTabsRef.current
-      setShowLeftArrow(scrollLeft > 0)
-      setShowRightArrow(scrollLeft < scrollWidth - clientWidth - 2)
-    }
-  }, [])
-
-  useEffect(() => {
-    checkScroll()
-    window.addEventListener("resize", checkScroll)
-    return () => window.removeEventListener("resize", checkScroll)
-  }, [stripPaperIds, checkScroll])
-
-  const scrollTabs = useCallback((direction: "left" | "right") => {
-    if (scrollTabsRef.current) {
-      const scrollAmount = 250
-      scrollTabsRef.current.scrollBy({
-        left: direction === "left" ? -scrollAmount : scrollAmount,
-        behavior: "smooth",
-      })
-    }
-  }, [])
 
   useEffect(() => {
     if (resolvedActiveTab !== "search" && scrollTabsRef.current) {
@@ -643,8 +618,7 @@ export function LiteratureTabs({
         }
       }
     }
-    checkScroll()
-  }, [resolvedActiveTab, checkScroll])
+  }, [resolvedActiveTab])
 
   const markStagedPaperOpened = useCallback((literatureId: string) => {
     setOpenedStagedIds((prev) => (prev.includes(literatureId) ? prev : [...prev, literatureId]))
@@ -704,17 +678,21 @@ export function LiteratureTabs({
       const staged = resolveStagedLiteratureId(paper)
       if (staged) return { id: staged, placement: 'staging' }
       const nd = paper.doi ? normalizeDoi(paper.doi) : null
-      const pool = lockedProjectId
-        ? repositoryReviews.filter((r) => r.project?.id === lockedProjectId)
-        : repositoryReviews
-      const match = pool.find((row) => {
+      const matches = (row: (typeof repositoryReviews)[number]) => {
         const rowPmid = (row as { pmid?: string | null }).pmid ?? null
         if (paper.pmid && rowPmid === paper.pmid) return true
         if (nd && row.doi === nd) return true
         if (!paper.pmid && !nd && row.title === paper.title && row.publication_year === paper.year)
           return true
         return false
-      })
+      }
+      // A paper already in your repo must read as saved regardless of which
+      // project is active. Prefer a copy in the locked project (so "Open in
+      // library" routes to the in-context row), but fall back to any project.
+      const inProject = lockedProjectId
+        ? repositoryReviews.filter((r) => r.project?.id === lockedProjectId)
+        : repositoryReviews
+      const match = inProject.find(matches) ?? repositoryReviews.find(matches)
       return match ? { id: String(match.id), placement: 'repository' } : null
     },
     [resolveStagedLiteratureId, repositoryReviews, lockedProjectId]
@@ -881,9 +859,9 @@ export function LiteratureTabs({
           openPaperTab(rowId, paper.title)
         }
         if (result.alreadyStaged) {
-          toast.message("Already in staging")
+          toast.message("Already open")
         } else {
-          toast.success("Paper staged — PDF import runs in the background")
+          toast.success("Opening paper — downloading the PDF…")
         }
         if ("warning" in result && typeof result.warning === "string" && result.warning) {
           toast.message(result.warning)
@@ -923,10 +901,10 @@ export function LiteratureTabs({
         throw new Error("error" in result ? result.error : "Remove failed")
       }
       closeTabOnly(id)
-      toast.success("Removed from staging")
+      toast.success("Paper removed")
       router.refresh()
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Failed to remove from staging")
+      toast.error(e instanceof Error ? e.message : "Failed to remove paper")
     } finally {
       setIsClosingTab(false)
       setPendingCloseId(null)
@@ -936,14 +914,10 @@ export function LiteratureTabs({
   const handleCloseTabClick = (id: string, e: React.MouseEvent | React.KeyboardEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    // Only staged papers have a staging row that can be removed, so only they
-    // get the "close tab / also remove from staging" prompt. Repo (library)
-    // papers and pending tabs have nothing to remove — close them immediately.
-    if (stagedByIdMerged.has(id)) {
-      setPendingCloseId(id)
-    } else {
-      closeTabOnly(id)
-    }
+    // Closing a reader tab just closes the view — no prompt. The paper (and its
+    // already-downloaded PDF) stays available to reopen or save to the library;
+    // it clears itself after the 7-day TTL if never saved.
+    closeTabOnly(id)
   }
 
   const openSaveDialog = (paper: SearchPaper, literatureId?: string) => {
@@ -1050,39 +1024,31 @@ export function LiteratureTabs({
   const pendingCloseItem = pendingCloseId ? stagedByIdMerged.get(pendingCloseId) : null
 
   const unifiedTabStrip = (
-    <div className="flex items-center justify-between gap-4 border-b">
-      <div className="relative group transition-all flex-1 overflow-hidden">
-        {showLeftArrow && (
-          <div className="absolute left-0 top-0 bottom-0 z-20 flex items-center bg-gradient-to-r from-background via-background/80 to-transparent pr-10 pointer-events-none">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 rounded-full shadow-lg bg-background border pointer-events-auto hover:bg-muted ml-0.5 transform translate-y-[1.5px] transition-transform active:scale-95"
-              onClick={() => scrollTabs("left")}
+    <div className="relative group transition-all">
+      <div className="flex items-stretch bg-muted/15 rounded-lg overflow-hidden">
+        {/* Pinned "Search results" — always visible; only the paper tabs scroll. */}
+        <TabsList scrollable={false} className="bg-transparent h-auto border-none rounded-none flex items-center flex-shrink-0 px-1 pt-0 pb-1.5">
+          {hasSearched && (
+            <TabsTrigger
+              value="search"
+              data-value="search"
+              className="relative data-[state=active]:bg-transparent data-[state=active]:text-[var(--n9-accent)] rounded-md border border-transparent px-4 py-2 bg-transparent text-muted-foreground transition-none shadow-none font-semibold shrink-0"
             >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-          </div>
-        )}
+              {resolvedActiveTab === "search" && <TabPill reduce={reduce} />}
+              <span className="relative z-10 inline-flex items-center">
+                <SearchIcon className="h-4 w-4 mr-2" />
+                Search results
+              </span>
+            </TabsTrigger>
+          )}
+        </TabsList>
+        <div className="relative flex-1 overflow-hidden">
 
         <div
           ref={scrollTabsRef}
           className="overflow-x-auto no-scrollbar scroll-smooth"
-          onScroll={checkScroll}
         >
-          <TabsList data-tour="lit-tabs" className="bg-transparent h-auto p-0 flex items-center justify-start border-none flex-nowrap w-max min-w-full relative">
-            <div className="w-2 flex-shrink-0" />
-            {hasSearched && (
-              <TabsTrigger
-                value="search"
-                data-value="search"
-                className="relative data-[state=active]:bg-transparent data-[state=active]:text-foreground rounded-none border-b-2 border-transparent px-4 py-2 bg-transparent text-muted-foreground transition-none shadow-none font-semibold shrink-0"
-              >
-                <SearchIcon className="h-4 w-4 mr-2" />
-                Search results
-                {resolvedActiveTab === "search" && <TabUnderline reduce={reduce} />}
-              </TabsTrigger>
-            )}
+          <TabsList data-tour="lit-tabs" scrollable={false} className="bg-transparent h-auto border-none rounded-none flex items-center justify-start flex-nowrap w-max min-w-full px-1 pt-0 pb-1.5 gap-1.5">
             {stripPaperIds.map((id) => {
               const lit = stagedByIdMerged.get(id) ?? repoById.get(id)
               const tabTitle = lit?.title ?? pendingTabTitles[id]
@@ -1092,9 +1058,10 @@ export function LiteratureTabs({
                   key={id}
                   value={id}
                   data-value={id}
-                  className="group relative data-[state=active]:bg-transparent data-[state=active]:text-foreground rounded-none border-b-2 border-transparent px-4 py-2 bg-transparent text-muted-foreground transition-none shadow-none max-w-[220px] flex items-center gap-1 shrink-0"
+                  className="group relative data-[state=active]:bg-transparent data-[state=active]:text-[var(--n9-accent)] rounded-md border border-transparent px-4 py-2 bg-transparent text-muted-foreground transition-none shadow-none max-w-[220px] flex items-center gap-1 shrink-0"
                 >
-                  <span className="truncate text-sm font-semibold">{tabTitle}</span>
+                  {resolvedActiveTab === id && <TabPill reduce={reduce} />}
+                  <span className="relative z-10 truncate text-sm font-semibold">{tabTitle}</span>
                   {/* role=button span, NOT a nested <button> (invalid inside the
                       TabsTrigger button — causes hydration errors). */}
                   <span
@@ -1110,30 +1077,17 @@ export function LiteratureTabs({
                         handleCloseTabClick(id, e)
                       }
                     }}
-                    className="flex-shrink-0 cursor-pointer rounded-md p-1 text-muted-foreground/60 opacity-0 transition-all hover:bg-muted hover:text-rose-500 hover:scale-110 active:scale-90 focus:opacity-100 group-hover:opacity-100"
+                    className="relative z-10 flex-shrink-0 cursor-pointer rounded-md p-1 text-muted-foreground/60 opacity-0 transition-all hover:bg-muted hover:text-rose-500 hover:scale-110 active:scale-90 focus:opacity-100 group-hover:opacity-100"
                   >
                     <X className="h-3 w-3" />
                   </span>
-                  {resolvedActiveTab === id && <TabUnderline reduce={reduce} />}
                 </TabsTrigger>
               )
             })}
-            <div className="w-10 flex-shrink-0" />
           </TabsList>
         </div>
 
-        {showRightArrow && (
-          <div className="absolute right-0 top-0 bottom-0 z-20 flex items-center bg-gradient-to-l from-background via-background/80 to-transparent pl-10 pointer-events-none">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 rounded-full shadow-lg bg-background border pointer-events-auto hover:bg-muted mr-0.5 transform translate-y-[1.5px] transition-transform active:scale-95"
-              onClick={() => scrollTabs("right")}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        )}
+        </div>
       </div>
     </div>
   )
@@ -1322,11 +1276,12 @@ export function LiteratureTabs({
                               lit={lit}
                               onSavePaper={handleSaveFromStaging}
                               savingLiteratureId={savingStagingLiteratureId}
+                              onRemove={() => setRemoveTargetId(lit.id)}
                             />
                           ) : (
                             <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
                               <Loader2 className="h-8 w-8 animate-spin text-[var(--n9-accent)]" />
-                              <p className="text-sm text-muted-foreground">Loading staged paper…</p>
+                              <p className="text-sm text-muted-foreground">Loading paper…</p>
                             </div>
                           )}
                         </motion.div>
@@ -1385,47 +1340,6 @@ export function LiteratureTabs({
       </MotionTabPanel>
 
       <AlertDialog
-        open={Boolean(pendingCloseId)}
-        onOpenChange={(open) => {
-          if (!open) setPendingCloseId(null)
-        }}
-      >
-        <AlertDialogContent className="glass-panel">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Close staged paper tab?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {pendingCloseItem ? (
-                <>
-                  <strong>{pendingCloseItem.title}</strong> — close this tab only, or also remove
-                  the paper from staging (and delete its PDF).
-                </>
-              ) : null}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
-            <AlertDialogCancel disabled={isClosingTab}>Cancel</AlertDialogCancel>
-            <Button
-              variant="outline"
-              disabled={isClosingTab}
-              onClick={() => pendingCloseId && closeTabOnly(pendingCloseId)}
-            >
-              Close tab
-            </Button>
-            <AlertDialogAction
-              onClick={(e) => {
-                e.preventDefault()
-                if (pendingCloseId) void closeTabAndRemove(pendingCloseId)
-              }}
-              disabled={isClosingTab}
-              className="bg-rose-50 text-rose-600 border border-rose-100 font-semibold hover:bg-rose-100 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-900/10 dark:hover:bg-rose-900/30"
-            >
-              {isClosingTab ? "Removing…" : "Close & remove from staging"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog
         open={Boolean(removeTargetId)}
         onOpenChange={(open) => {
           if (!open) setRemoveTargetId(null)
@@ -1433,12 +1347,12 @@ export function LiteratureTabs({
       >
         <AlertDialogContent className="glass-panel">
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove from staging?</AlertDialogTitle>
+            <AlertDialogTitle>Remove this paper?</AlertDialogTitle>
             <AlertDialogDescription>
               {removeTargetId && stagedByIdMerged.get(removeTargetId) ? (
                 <>
-                  This removes <strong>{stagedByIdMerged.get(removeTargetId)!.title}</strong> from staging
-                  and deletes its stored PDF if any. This cannot be undone.
+                  This removes <strong>{stagedByIdMerged.get(removeTargetId)!.title}</strong> and
+                  deletes its downloaded PDF. It stays in your library if you already saved it.
                 </>
               ) : null}
             </AlertDialogDescription>

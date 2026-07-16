@@ -18,7 +18,7 @@ import {
   upgradeInsecurePdfUrlIfKnownHost,
 } from "@/lib/literature-pdf-urls"
 import { resolvePmcOaPdfUrls } from "@/lib/literature-pdf-import"
-import { resolveUnpaywallPdfUrl } from "@/lib/unpaywall"
+import { resolveUnpaywallPdfUrls } from "@/lib/unpaywall"
 import { unstable_cache } from "next/cache"
 
 const NOTES9_CONTACT_EMAIL = process.env.OPENALEX_CONTACT_EMAIL
@@ -270,31 +270,60 @@ function abstractFromInvertedIndex(
   return cleanAbstract(joined)
 }
 
+/**
+ * OpenAlex-hosted OA PDF endpoint for a work id (e.g. `W1775749144`). The
+ * `api_key` is intentionally NOT included here — it is appended by the downloader
+ * at fetch time so the secret never lands in a stored candidate URL / tried_urls.
+ */
+export function openAlexContentPdfUrl(workId: string): string {
+  return `https://content.openalex.org/works/${workId}.pdf`
+}
+
 async function resolveFromOpenAlex(
   normalizedDoi: string | null
-): Promise<{ pdfUrl: string | null; abstract: string | null }> {
-  if (!normalizedDoi) return { pdfUrl: null, abstract: null }
+): Promise<{ pdfUrls: string[]; abstract: string | null }> {
+  if (!normalizedDoi) return { pdfUrls: [], abstract: null }
   try {
     const url = `https://api.openalex.org/works/doi:${encodeURIComponent(normalizedDoi)}`
     const res = await fetch(url, {
       headers: { "User-Agent": OA_USER_AGENT, Accept: "application/json" },
       next: { revalidate: 0 },
     })
-    if (!res.ok) return { pdfUrl: null, abstract: null }
+    if (!res.ok) return { pdfUrls: [], abstract: null }
     const data = (await res.json()) as {
-      best_oa_location?: { pdf_url?: string | null; url_for_pdf?: string | null } | null
-      primary_location?: { pdf_url?: string | null } | null
+      id?: string | null
       abstract_inverted_index?: Record<string, number[]> | null
+      best_oa_location?: { pdf_url?: string | null } | null
+      locations?: Array<{ pdf_url?: string | null }> | null
     }
-    const pdfUrl =
-      data.best_oa_location?.pdf_url ||
-      data.best_oa_location?.url_for_pdf ||
-      data.primary_location?.pdf_url ||
-      null
+    // Two independent PDF sources, tried in order:
+    // 1. OpenAlex's own hosted copy at content.openalex.org — bypasses every
+    //    publisher / PMC bot-wall. Short work id (e.g. W123…) from `id`; the
+    //    api_key is appended at fetch time so it never lands in a stored URL.
+    // 2. External repository PDFs OpenAlex already lists in best_oa_location /
+    //    locations[].pdf_url (PMC, university repos, arXiv…). These rescue
+    //    hybrid papers OpenAlex never mirrored but a green-OA copy exists for.
+    //    The downloader validates %PDF magic, so publisher landing pages that
+    //    aren't real PDFs are rejected downstream.
+    const workId = /\/(W\d+)$/i.exec(data.id ?? "")?.[1] ?? null
+    const candidates = [
+      workId ? openAlexContentPdfUrl(workId) : null,
+      data.best_oa_location?.pdf_url,
+      ...(data.locations ?? []).map((l) => l?.pdf_url),
+    ]
+    const seen = new Set<string>()
+    const pdfUrls: string[] = []
+    for (const c of candidates) {
+      const u = c?.trim()
+      if (u && /^https?:\/\//i.test(u) && !seen.has(u)) {
+        seen.add(u)
+        pdfUrls.push(u)
+      }
+    }
     const abstract = abstractFromInvertedIndex(data.abstract_inverted_index)
-    return { pdfUrl, abstract }
+    return { pdfUrls, abstract }
   } catch {
-    return { pdfUrl: null, abstract: null }
+    return { pdfUrls: [], abstract: null }
   }
 }
 
@@ -405,79 +434,47 @@ export async function resolveOaSourcesUncached(
   paper: SearchPaper,
   opts?: { contactEmail?: string | null }
 ): Promise<OaSources> {
+  // Multi-source OA resolution over official REST APIs only (no HTML scraping).
+  // All sources run in parallel (they're independent + free); candidates are
+  // merged in priority order and the downloader races them, keeping the first
+  // that yields real %PDF bytes and rejecting walls/landing-pages. Priority:
+  //   1. OpenAlex hosted (content.openalex.org) — bypasses every publisher/PMC
+  //      bot-wall; api_key appended at fetch time, never in a stored URL.
+  //   2. OpenAlex-tracked repository PDFs (PMC, HAL, university repos, arXiv).
+  //   3. Europe PMC full-text — clean, unblocked PDFs for life-science papers.
+  //   4. CORE — universal green-OA aggregator (needs CORE_API_KEY, else no-op).
+  //   5. Preprint servers (bioRxiv/medRxiv/arXiv) derived from the DOI.
+  //   6. Semantic Scholar openAccessPdf.
   const normalizedDoi = normalizeDoi(paper.doi)
-  const pdfUrls: string[] = []
-
-  // Candidates are ordered **non-gated first**: sources that stream PDF bytes
-  // without a bot/Proof-of-Work/Cloudflare challenge come before the publisher
-  // card href and the POW-prone NLM `/pdf/` forms. All candidates are still
-  // tried — only the order changes — so reliability improves without losing reach.
-
-  // 1. Preprint direct (arXiv/bioRxiv/medRxiv) — open repositories, never gated.
-  if (normalizedDoi) {
-    for (const u of preprintPdfUrlsFromDoi(normalizedDoi, paper.source)) {
-      addCandidate(pdfUrls, u)
-    }
-  }
-  // 1b. arXiv papers without a DOI: derive the id from the card/article URL.
-  const arxivId = arxivIdFromUrl(paper.pdfUrl) ?? arxivIdFromUrl(paper.articlePageUrl)
-  if (arxivId) {
-    addCandidate(pdfUrls, `https://arxiv.org/pdf/${arxivId}`)
-  }
-
-  // 2. Network resolvers — run together (free, parallel; resilient to failure):
-  //    OpenAlex, Europe PMC, Unpaywall (cross-publisher OA locator), and the Tier-2
-  //    repository aggregators (Semantic Scholar, CORE). Tier-2 runs in this SAME
-  //    parallel batch — not a second sequential round — so it adds no wall-clock
-  //    latency; its URLs are appended LAST (step 5) and only reached when the direct
-  //    copies fail to download (e.g. the publisher page is bot-walled).
-  const [openAlex, europePmc, unpaywallPdfUrl, semanticScholarPdfUrl, corePdfUrl] = await Promise.all([
+  const [openAlex, europePmc, coreUrl, s2Url] = await Promise.all([
     resolveFromOpenAlex(normalizedDoi),
     resolveFromEuropePmc(paper, normalizedDoi),
-    resolveUnpaywallPdfUrl(normalizedDoi, opts?.contactEmail),
-    resolveFromSemanticScholar(normalizedDoi, paper.pmid),
     resolveFromCore(normalizedDoi),
+    resolveFromSemanticScholar(normalizedDoi, paper.pmid),
   ])
-  // 2a. Europe PMC full text (render mirror) — non-gated.
-  addCandidate(pdfUrls, europePmc.pdfUrl)
-  // 2b. Unpaywall best OA PDF (often a repository-hosted, non-gated copy).
-  addCandidate(pdfUrls, unpaywallPdfUrl)
-  // 2c. OpenAlex best OA location.
-  addCandidate(pdfUrls, openAlex.pdfUrl)
+  const preprintUrls = paper.doi ? preprintPdfUrlsFromDoi(paper.doi, paper.source) : []
 
-  // 3. PMC OA subset (render-first internally; also surfaces the OA package .tgz).
-  let oaPackageTgzUrl: string | null = null
-  try {
-    const pmc = await resolvePmcOaPdfUrls(paper)
-    for (const u of pmc.urls) addCandidate(pdfUrls, u)
-    oaPackageTgzUrl = pmc.oaPackageTgzUrl
-  } catch {
-    /* ignore — PMC resolution is best-effort */
-  }
-
-  // 4. Card href (expanded: PMC folder → main.pdf, http → https) — last, since it
-  //    is frequently the gated publisher URL or the POW-prone NLM `/pdf/` form.
-  if (paper.pdfUrl?.trim()) {
-    for (const u of expandSearchCardPdfUrls(paper.pdfUrl.trim())) {
-      addCandidate(pdfUrls, u)
+  const seen = new Set<string>()
+  const pdfUrls: string[] = []
+  for (const u of [
+    ...openAlex.pdfUrls,
+    europePmc.pdfUrl,
+    coreUrl,
+    ...preprintUrls,
+    s2Url,
+  ]) {
+    const url = u?.trim()
+    if (url && /^https?:\/\//i.test(url) && !seen.has(url)) {
+      seen.add(url)
+      pdfUrls.push(url)
     }
   }
-
-  // 5. Tier-2 repository copies (Semantic Scholar, CORE) — resolved concurrently in
-  //    the batch above (no added latency), appended last so they act as the fallback
-  //    when every direct copy above is gated/bot-walled. Matched by exact DOI.
-  addCandidate(pdfUrls, semanticScholarPdfUrl)
-  addCandidate(pdfUrls, corePdfUrl)
-
-  // Abstract: Europe PMC → OpenAlex, then preprint-API fallbacks for brand-new
-  // papers not yet indexed. Fallbacks only fire when the earlier sources are null.
-  let abstract = europePmc.abstract ?? openAlex.abstract ?? null
-  if (abstract == null) {
-    abstract = await resolveFromBiorxivApi(normalizedDoi, paper.source)
-  }
-  if (abstract == null) {
-    abstract = await resolveFromArxivAtom(arxivId)
-  }
-
-  return { pdfUrls, oaPackageTgzUrl, abstract }
+  console.log(
+    `[oa] resolve doi=${normalizedDoi ?? "none"} pmid=${paper.pmid ?? "none"}` +
+      ` openalex=${openAlex.pdfUrls.length} europepmc=${europePmc.pdfUrl ? 1 : 0}` +
+      ` core=${coreUrl ? 1 : 0} preprint=${preprintUrls.length} s2=${s2Url ? 1 : 0}` +
+      ` merged=${pdfUrls.length}`,
+  )
+  const abstract = openAlex.abstract ?? europePmc.abstract ?? null
+  return { pdfUrls, oaPackageTgzUrl: null, abstract }
 }

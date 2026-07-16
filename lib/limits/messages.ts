@@ -199,6 +199,14 @@ export const atLimit: Record<string, LimitMessage> = {
     icon: 'file',
     color: 'slate',
   },
+  ai_budget_monthly: {
+    title: "You've used this month's AI credits",
+    body: "You've used all of this month's free AI credits. Everything you've done is fully saved.",
+    action: 'Upgrade for more AI usage, or continue next month.',
+    resetHint: 'Free credits refresh on the 1st.',
+    icon: 'zap',
+    color: 'amber',
+  },
 }
 
 // ---------------------------------------------------------------------------
