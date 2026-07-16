@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { AnimatePresence, motion } from "framer-motion"
 import type { Editor } from "@tiptap/react"
 import {
   Sheet,
@@ -300,13 +301,22 @@ export function ScientificCalculatorSheet({
                               setActiveTab("calc")
                             }}
                             className={cn(
-                              "flex h-8 w-full min-w-0 items-center justify-center rounded-md px-1 font-mono text-2xs leading-none tabular-nums transition-all",
+                              "relative flex h-8 w-full min-w-0 items-center justify-center rounded-md px-1 font-mono text-2xs leading-none tabular-nums transition-colors duration-150",
                               isActive
-                                ? "bg-primary/10 text-primary font-semibold shadow-sm ring-1 ring-primary/20"
+                                ? "text-primary font-semibold"
                                 : "text-muted-foreground/80 hover:bg-muted/60 hover:text-foreground",
                             )}
                           >
-                            <span className="truncate">{m.glyph}</span>
+                            {/* Sliding active pill — same grammar as the sidebar nav */}
+                            {isActive && (
+                              <motion.span
+                                aria-hidden
+                                layoutId="calc-mode-pill"
+                                transition={{ type: "spring", stiffness: 480, damping: 42 }}
+                                className="absolute inset-0 rounded-md bg-primary/10 shadow-sm ring-1 ring-primary/20"
+                              />
+                            )}
+                            <span className="relative z-[1] truncate">{m.glyph}</span>
                           </button>
                         </TooltipTrigger>
                         <TooltipContent side="right" className="max-w-[15rem]">
@@ -370,7 +380,7 @@ export function ScientificCalculatorSheet({
     <TooltipProvider delayDuration={150}>
       <div
         className={cn(
-          "rounded-lg border p-2.5 transition-all duration-300",
+          "rounded-xl border p-2.5 transition-all duration-300",
           resultError
             ? "border-destructive/40 bg-destructive/5"
             : resultText
@@ -606,12 +616,26 @@ export function ScientificCalculatorSheet({
   // ---------------------------------------------------------------------------
   // Header
   // ---------------------------------------------------------------------------
+  // Shared header chrome: quiet glass with a soft primary glow instead of the
+  // old slate gradient — matches the sidebar/panel ambient treatment.
+  const headerAmbient = (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute inset-0 bg-[radial-gradient(140%_130%_at_0%_0%,color-mix(in_oklab,var(--primary)_8%,transparent),transparent_62%)]"
+    />
+  )
+
+  const sigmaChip = (
+    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary/20 to-primary/5 ring-1 ring-inset ring-primary/15">
+      <Sigma className="size-3.5 text-primary" aria-hidden />
+    </div>
+  )
+
   const headerSheet = (
-    <SheetHeader className="shrink-0 border-b border-border/60 bg-gradient-to-r from-slate-50 to-slate-100 px-3 py-2 text-left dark:from-slate-900 dark:to-slate-800">
-      <div className="flex items-center gap-2">
-        <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10">
-          <Sigma className="size-3.5 text-primary" aria-hidden />
-        </div>
+    <SheetHeader className="relative shrink-0 overflow-hidden border-b border-border/50 px-3 py-2 text-left">
+      {headerAmbient}
+      <div className="relative flex items-center gap-2">
+        {sigmaChip}
         <SheetTitle className="text-sm">Calculator</SheetTitle>
         <SheetDescription className="sr-only">
           Lab formulas, logs/trig, and unit conversions
@@ -622,11 +646,10 @@ export function ScientificCalculatorSheet({
 
   const headerOverlay = (
     <TooltipProvider delayDuration={150}>
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/50 bg-gradient-to-r from-slate-50 to-slate-100 px-2 py-1.5 text-left dark:from-slate-900 dark:to-slate-800">
-        <div className="flex min-w-0 items-center gap-2">
-          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10">
-            <Sigma className="size-3.5 text-primary" aria-hidden />
-          </div>
+      <div className="relative flex shrink-0 items-center justify-between gap-2 overflow-hidden border-b border-border/50 px-2.5 py-2 text-left">
+        {headerAmbient}
+        <div className="relative flex min-w-0 items-center gap-2">
+          {sigmaChip}
           <h2 id="scientific-calculator-title" className="text-sm font-semibold tracking-tight">
             Calculator
           </h2>
@@ -637,7 +660,7 @@ export function ScientificCalculatorSheet({
               type="button"
               variant="ghost"
               size="icon"
-              className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+              className="relative h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
               onClick={() => onOpenChange(false)}
               aria-label="Close calculator"
             >
@@ -664,35 +687,49 @@ export function ScientificCalculatorSheet({
     )
   }
 
-  if (!open) return null
-
   const overlayTop = "top-14"
 
   return (
-    <div
-      className={cn(
-        "pointer-events-auto absolute bottom-0 left-0 right-0 z-[260] flex items-stretch justify-end overflow-hidden p-2 sm:p-3",
-        overlayTop,
+    <AnimatePresence>
+      {open && (
+        <div
+          key="scientific-calculator"
+          className={cn(
+            "pointer-events-auto absolute bottom-0 left-0 right-0 z-[260] flex items-stretch justify-end overflow-hidden p-2 sm:p-3",
+            overlayTop,
+          )}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="scientific-calculator-title"
+        >
+          <motion.button
+            type="button"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.22, ease: "easeOut" }}
+            className="absolute inset-0 cursor-default border-0 bg-background/40 backdrop-blur-[3px]"
+            aria-label="Dismiss calculator"
+            onClick={() => onOpenChange(false)}
+          />
+          <motion.div
+            initial={{ opacity: 0, x: 32, scale: 0.96 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            exit={{ opacity: 0, x: 24, scale: 0.97, transition: { duration: 0.18, ease: "easeIn" } }}
+            transition={{ type: "spring", stiffness: 380, damping: 34, mass: 0.9 }}
+            className={cn(
+              // Frosted glass panel — same grammar as the sidebar switcher menus.
+              "relative z-[1] flex h-full min-h-0 w-full max-w-xl flex-col overflow-hidden rounded-2xl",
+              "bg-[color:color-mix(in_oklab,var(--card)_88%,transparent)] backdrop-blur-2xl backdrop-saturate-150",
+              "shadow-[0_24px_64px_-16px_rgba(0,0,0,0.28),0_8px_24px_-8px_rgba(0,0,0,0.12)]",
+              "ring-1 ring-inset ring-white/30 dark:ring-white/[0.06] border border-border/60",
+            )}
+          >
+            {headerOverlay}
+            {body}
+          </motion.div>
+        </div>
       )}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="scientific-calculator-title"
-    >
-      <button
-        type="button"
-        className="absolute inset-0 cursor-default border-0 bg-background/40 backdrop-blur-[2px]"
-        aria-label="Dismiss calculator"
-        onClick={() => onOpenChange(false)}
-      />
-      <div
-        className={cn(
-          "relative z-[1] flex h-full min-h-0 w-full max-w-xl flex-col overflow-hidden rounded-xl border border-border/80 bg-card/98",
-          "shadow-[0_12px_40px_-12px_rgba(0,0,0,0.28),0_4px_14px_-4px_rgba(0,0,0,0.12)] ring-1 ring-black/[0.06]",
-        )}
-      >
-        {headerOverlay}
-        {body}
-      </div>
-    </div>
+    </AnimatePresence>
   )
 }

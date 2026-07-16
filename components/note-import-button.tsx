@@ -2,7 +2,7 @@
 
 import { useRef, useState, type ComponentProps } from "react"
 import { toast } from "sonner"
-import { DownloadSimple as Download, CircleNotch as Loader2 } from "@phosphor-icons/react/ssr"
+import { UploadSimple as Upload, CircleNotch as Loader2 } from "@phosphor-icons/react/ssr"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { IMPORT_ACCEPT } from "@/lib/import-file-to-html"
@@ -77,7 +77,8 @@ export function NoteImportButton({
         title="Import a PDF, Word, Markdown, text, or HTML file"
         aria-label="Import document"
       >
-        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+        {/* Import = the user UPLOADS a file into the app → up arrow. */}
+        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
       </Button>
     </>
   )

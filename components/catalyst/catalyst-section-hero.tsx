@@ -185,25 +185,29 @@ export function CatalystSectionHero({
 
   const canSend = input.trim().length > 0 || attachments.length > 0
   const isUploading = uploadQueue.length > 0
-  const shouldShrink = shrinkOnScroll && isScrolled && !isFocused && input.trim() === "" && !canSend && !isUploading
-  const minBoxHeight = shouldShrink ? "min-h-[44px]" : (size === "lg" ? "min-h-[132px]" : "min-h-[112px]")
-  // One notch narrower across the board — the AI bar should read as a compact
-  // prompt, not a full-width pane.
-  const contentWidth = cn("mx-auto w-full transition-all duration-500 ease-in-out", size === "lg" ? "max-w-3xl" : "max-w-2xl", shouldShrink && "max-w-xl")
+  // One line at rest on every page; the composer expands (height AND width,
+  // sprung) only while the user is actually in it — focused, typing, or with
+  // attachments in flight.
+  const expanded = isFocused || input.trim().length > 0 || attachments.length > 0 || isUploading
   const effectivePlaceholder = projectName
     ? `How can I help with ${projectName} today?`
     : placeholder
 
+  // One shared, gently-damped spring for every part of the expand gesture so
+  // width, height and the controls row land together — no FLIP `layout`
+  // animation here (it visibly stretched the textarea/placeholder mid-flight).
+  const composerSpring = { type: "spring" as const, stiffness: 280, damping: 32, mass: 0.9 }
+
   const composerForm = (
-    <form
+    <motion.form
+      animate={{ minHeight: expanded ? (size === "lg" ? 132 : 112) : 0 }}
+      transition={composerSpring}
       onSubmit={handleSubmit}
       aria-label="Ask Catalyst"
       className={cn(
-        composerShell, 
-        "transition-all duration-500 ease-in-out",
-        shouldShrink
-          ? "min-h-0 p-2 bg-[var(--n9-accent-light)] dark:bg-card border-primary/30"
-          : cn(minBoxHeight, "p-3")
+        composerShell,
+        "relative transition-[padding] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+        expanded ? "p-3" : "p-2",
       )}
     >
       {/* Attachment chips */}
@@ -246,17 +250,44 @@ export function CatalystSectionHero({
         onChange={(e) => setInput(e.target.value)}
         onKeyDown={handleKeyDown}
         onFocus={() => setIsFocused(true)}
-        onBlur={() => setIsFocused(false)}
+        onBlur={(e) => {
+          // Keep the composer expanded while focus moves WITHIN it (mic,
+          // paperclip, send) — otherwise the row collapses under the pointer
+          // before the button's click can land.
+          const form = e.currentTarget.form
+          if (form && e.relatedTarget instanceof Node && form.contains(e.relatedTarget)) return
+          setIsFocused(false)
+        }}
         placeholder={effectivePlaceholder}
         rows={1}
         aria-label="Ask Catalyst"
         className={cn(
           "w-full resize-none border-0 bg-transparent px-1 pt-0.5 text-foreground outline-none ring-0",
-          "placeholder:text-muted-foreground/80 transition-all duration-500 ease-in-out",
+          "placeholder:text-muted-foreground/80 transition-[min-height,height,padding] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
           size === "lg" ? "text-base" : "text-[15px]",
-          shouldShrink ? "min-h-[36px] flex-none" : "min-h-[44px] flex-1"
+          expanded ? "min-h-[44px] flex-1" : "h-9 min-h-0 flex-none py-1.5 pr-10",
         )}
       />
+
+      {/* Compact one-liner keeps a quiet send affordance at the right edge
+          (absolute — fades without touching layout). */}
+      <AnimatePresence initial={false}>
+        {!expanded && (
+          <motion.button
+            key="compact-send"
+            type="submit"
+            initial={{ opacity: 0, scale: 0.85 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.85 }}
+            transition={{ duration: 0.16, ease: "easeOut" }}
+            disabled={!canSend || isUploading}
+            aria-label="Send to Catalyst"
+            className="absolute right-2 top-1/2 inline-flex size-7 -translate-y-1/2 items-center justify-center rounded-full bg-muted text-muted-foreground"
+          >
+            <ArrowUp className="size-3.5" strokeWidth={2.25} aria-hidden />
+          </motion.button>
+        )}
+      </AnimatePresence>
 
       {/* Hidden file input */}
       <input
@@ -269,10 +300,20 @@ export function CatalystSectionHero({
         disabled={isUploading}
       />
 
-      <div className={cn(
-        "flex items-center justify-between transition-all duration-500 ease-in-out",
-        shouldShrink ? "mt-0" : "mt-2"
-      )}>
+      {/* Controls row — mounts/unmounts with a real exit animation; the top
+          spacing lives INSIDE the collapsing container so the height reaches
+          exactly zero (an outer margin left an 8px jump at the end). */}
+      <AnimatePresence initial={false}>
+      {expanded && (
+      <motion.div
+        key="composer-controls"
+        initial={{ opacity: 0, height: 0 }}
+        animate={{ opacity: 1, height: "auto" }}
+        exit={{ opacity: 0, height: 0 }}
+        transition={composerSpring}
+        className="overflow-hidden"
+      >
+      <div className="flex items-center justify-between pt-2">
         <div className="flex items-center gap-1.5">
           <Globe className={cn("size-3.5 shrink-0 transition-colors", webSearchEnabled ? "text-primary" : "text-muted-foreground")} aria-hidden />
           <Switch
@@ -332,7 +373,22 @@ export function CatalystSectionHero({
           </button>
         </div>
       </div>
-    </form>
+      </motion.div>
+      )}
+      </AnimatePresence>
+    </motion.form>
+  )
+
+  // Width follows the same gesture: a narrow one-liner at rest, easing wider
+  // while the user is composing.
+  const composerWithWidth = (
+    <motion.div
+      className="mx-auto w-full"
+      animate={{ maxWidth: expanded ? (size === "lg" ? "48rem" : "42rem") : "34rem" }}
+      transition={composerSpring}
+    >
+      {composerForm}
+    </motion.div>
   )
 
   const collapseMotion = {
@@ -360,7 +416,7 @@ export function CatalystSectionHero({
           "transition-all duration-500 ease-in-out",
           shrinkOnScroll && "sticky -top-3 sm:-top-4 md:-top-6 z-40 -mx-3 px-3 sm:-mx-4 sm:px-4 md:-mx-6 md:px-6 py-2 md:py-4",
           // Same at-rest fix as the sticky shell: only wash while scrolled.
-          shrinkOnScroll && (isScrolled && !shouldShrink
+          shrinkOnScroll && (isScrolled && expanded
             ? "bg-background/80 backdrop-blur-md"
             : "bg-transparent")
         )}
@@ -374,7 +430,7 @@ export function CatalystSectionHero({
               exit={{ opacity: 0 }}
               transition={{ duration: 0.15 }}
             >
-              <div className={contentWidth}>{composerForm}</div>
+              {composerWithWidth}
             </motion.div>
           )}
         </AnimatePresence>
@@ -397,7 +453,7 @@ export function CatalystSectionHero({
       <AnimatePresence initial={false} mode="wait">
         {catalystPanelOpen ? null : (
           <motion.div key="catalyst-hero" {...collapseMotion}>
-            <div className={contentWidth}>{composerForm}</div>
+            {composerWithWidth}
           </motion.div>
         )}
       </AnimatePresence>

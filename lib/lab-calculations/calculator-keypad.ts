@@ -27,6 +27,10 @@ export type KeypadAction =
   | { type: "sign" }
   /** Unary scientific fn applied in UI; carries formatted display + formula + LaTeX. */
   | { type: "setComputed"; display: string; lastTape: string; latex: string; pressLabel: string }
+  /** Replace the current entry with a literal value (constants, memory recall). */
+  | { type: "setValue"; display: string; pressLabel: string }
+  /** Divide the current entry by 100. */
+  | { type: "percent" }
   /** Invalid domain (e.g. log of negative). */
   | { type: "mathError" }
 
@@ -319,6 +323,33 @@ function keypadReducerImpl(state: KeypadState, action: KeypadAction): KeypadStat
         lastTape: tape,
         lastLatex: null,
         pressLog: logEq,
+      }
+    }
+
+    case "setValue": {
+      const v = parseFloat(action.display)
+      if (!Number.isFinite(v)) return state
+      // Behaves like a fully-typed entry so a chained operator consumes it
+      // (5 + π × … must fold 5 + π first, which requires replaceEntry=false).
+      return {
+        ...state,
+        display: action.display,
+        replaceEntry: false,
+        hasError: false,
+        pressLog: pushPress(state.pressLog, `${action.pressLabel} → ${action.display}`),
+      }
+    }
+
+    case "percent": {
+      const input = parseFloat(state.display)
+      if (!Number.isFinite(input)) return state
+      const next = formatKeypadNumber(input / 100)
+      return {
+        ...state,
+        display: next,
+        replaceEntry: false,
+        hasError: false,
+        pressLog: pushPress(state.pressLog, `% (percent) → ${next}`),
       }
     }
 

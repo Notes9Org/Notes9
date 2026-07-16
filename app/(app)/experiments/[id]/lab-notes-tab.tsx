@@ -5,7 +5,7 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { createLabNote, saveDraft, commitLabNote, discardDraft } from "@/lib/lab-notes"
 import { useAuthUser } from "@/components/auth/auth-provider"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import {
   SideRail,
@@ -33,14 +33,16 @@ import {
 } from "@/components/ui/dialog"
 import { AffineBlock } from "@/components/text-editor/affine-block"
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
+import { InlineDocTitle } from "@/components/text-editor/inline-doc-title"
 import type { Editor } from "@tiptap/react"
-import { NoteFileMenu } from "@/components/note-export-menu"
+import { NoteExportMenu, NotePrintButton } from "@/components/note-export-menu"
+import { NoteImportButton } from "@/components/note-import-button"
 import { useToast } from "@/hooks/use-toast"
 import { useAutoSave } from "@/hooks/use-auto-save"
 import { useContentDiffs } from "@/hooks/use-content-diffs"
 import { useDocumentVersions, type DocumentVersion } from "@/hooks/use-document-versions"
 import { LabNoteVersionsDialog } from "@/components/lab-notes/lab-note-versions-dialog"
-import { Plus, NotePencil as NotebookPen, FileCode, Globe, CircleNotch as Loader2, CaretLeft as ChevronLeft, DotsThreeVertical as MoreVertical, Trash as Trash2, List, PencilSimple as Pencil, X, GitDiff as GitCompare, ClockCounterClockwise as History, Chat as MessageSquare, FileArrowDown as FileDown } from "@phosphor-icons/react/ssr"
+import { Plus, NotePencil as NotebookPen, FileCode, Globe, CircleNotch as Loader2, CaretLeft as ChevronLeft, DotsThreeVertical as MoreVertical, Trash as Trash2, List, PencilSimple as Pencil, X, GitDiff as GitCompare, DownloadSimple as Download } from "@phosphor-icons/react/ssr"
 import {
   Table,
   TableBody,
@@ -188,9 +190,6 @@ export function LabNotesTab({
   const [renameNoteId, setRenameNoteId] = useState<string | null>(null);
   const [renameTitle, setRenameTitle] = useState("");
 
-  // Inline title editing in card header (no dialog)
-  const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const titleInputRef = useRef<HTMLInputElement>(null);
   const noteEditorRef = useRef<Editor | null>(null);
   const commentsToggleRef = useRef<(() => void) | null>(null);
 
@@ -199,46 +198,46 @@ export function LabNotesTab({
   // toolbars so both stay in sync.
   const renderNoteActionMenus = () => (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            data-tour="version-history"
-            className="shrink-0 text-muted-foreground hover:text-foreground"
-            aria-label="Review (version history, comments)"
-            title="Review"
-          >
-            <History className="h-4 w-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="min-w-[11rem]">
-          <DropdownMenuItem onClick={handleOpenVersions}>
-            <GitCompare className="mr-2 h-4 w-4" />
-            Version history
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => commentsToggleRef.current?.()}>
-            <MessageSquare className="mr-2 h-4 w-4" />
-            Comments
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <NoteFileMenu
+      {/* Direct version-history button — same control as protocol design mode.
+          (Comments already has its own toggle in the editor toolbar.) */}
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        data-tour="version-history"
+        className="shrink-0 text-muted-foreground hover:text-foreground"
+        aria-label="Version history"
+        title="Version history"
+        onClick={handleOpenVersions}
+      >
+        <GitCompare className="h-4 w-4" />
+      </Button>
+      {/* Print / import / export — same triple, order and styling as the
+          protocol, report and paper headers. */}
+      <NotePrintButton
+        title={resolvedExportTitle}
+        getHtmlContent={() => formData.content || ""}
+        includeCommentsInPdf
+        size="icon-sm"
+        className="shrink-0 text-muted-foreground hover:text-foreground"
+      />
+      <NoteImportButton
+        className="shrink-0 text-muted-foreground hover:text-foreground"
+        onImportHtml={(html) => noteEditorRef.current?.chain().focus().insertContent(html).run()}
+      />
+      <NoteExportMenu
         title={resolvedExportTitle}
         htmlContent={formData.content || ""}
-        getHtmlContent={() => formData.content || ""}
         getTiptapJson={() => noteEditorRef.current?.getJSON() ?? null}
-        onImportHtml={(html) => noteEditorRef.current?.chain().focus().insertContent(html).run()}
         includeCommentsInPdf
         trigger={
           <Button
             variant="ghost"
             size="icon-sm"
             className="shrink-0 text-muted-foreground hover:text-foreground"
-            aria-label="Import, export & print"
-            title="Import / export"
+            aria-label="Export note"
+            title="Export"
           >
-            <FileDown className="h-4 w-4" />
+            <Download className="h-4 w-4" />
           </Button>
         }
       />
@@ -338,6 +337,10 @@ export function LabNotesTab({
   // Guards a brand-new-note INSERT so a burst of debounced saves can't create
   // two rows before the first INSERT resolves and flips selectedNote.
   const draftInsertInFlightRef = useRef(false);
+  // Set synchronously the moment the INSERT resolves — React state (and the
+  // id ref fed by an effect) lands a tick later, and Accept & Save must see
+  // the new row id immediately to avoid committing as a duplicate create.
+  const lastDraftInsertIdRef = useRef<string | null>(null);
 
   // Auto-save = DRAFT only. It persists `draft_content` so nothing the user
   // types is ever lost, but it does NOT touch the committed `content` column
@@ -373,6 +376,7 @@ export function LabNotesTab({
           });
           if (res.error) throw res.error;
           data = res.data as LabNote;
+          lastDraftInsertIdRef.current = data.id;
         } finally {
           draftInsertInFlightRef.current = false;
         }
@@ -415,11 +419,29 @@ export function LabNotesTab({
     debouncedSave,
     cancelPendingSave,
     markSynced,
+    forceSave,
   } = useAutoSave({
     onSave: handleAutoSave,
     delay: 2000, // Save 2 seconds after user stops typing
     enabled: true, // Always enabled, even during creation
   });
+
+  // Refresh/close with a pending debounce would drop the last ~2s of typing
+  // from the DRAFT buffer — flush it when the tab hides or unloads.
+  useEffect(() => {
+    const flush = () => {
+      void forceSave();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [forceSave]);
 
   // Baseline for the diff bar when switching notes — mirrors the COMMITTED
   // `content`, so the approval bar compares the live draft against the official
@@ -472,10 +494,14 @@ export function LabNotesTab({
   const selectedNoteIdRef = useRef<string | null>(selectedNote?.id ?? null);
   useEffect(() => {
     selectedNoteIdRef.current = selectedNote?.id ?? null;
+    // Once React state carries the id, the synchronous INSERT stash has served
+    // its purpose — clear it so it can never leak into a LATER creation.
+    if (selectedNote?.id) lastDraftInsertIdRef.current = null;
   }, [selectedNote?.id]);
   const isCreatingRef = useRef(isCreating);
   useEffect(() => {
     isCreatingRef.current = isCreating;
+    if (isCreating) lastDraftInsertIdRef.current = null;
   }, [isCreating]);
 
   const fetchNotes = useCallback(async (preferredNoteId?: string | null, signal?: { cancelled: boolean }) => {
@@ -578,14 +604,6 @@ export function LabNotesTab({
     formData.title,
     selectedNote?.title,
   ]);
-
-  // Focus and select title input when entering inline edit mode
-  useEffect(() => {
-    if (isEditingTitle && titleInputRef.current) {
-      titleInputRef.current.focus();
-      titleInputRef.current.select();
-    }
-  }, [isEditingTitle]);
 
   // Fetch all available protocols for mentions
   useEffect(() => {
@@ -808,14 +826,26 @@ export function LabNotesTab({
       const committedContent = formData.content;
       const nowIso = new Date().toISOString();
 
-      if (selectedNote && !isCreating) {
+      // A brand-new note's draft INSERT may still be resolving (typing fires it
+      // async). Accept & Save during that window must WAIT and then commit to
+      // the freshly-created row — the stale `selectedNote` closure would
+      // otherwise take the create branch and insert a DUPLICATE note.
+      for (let i = 0; i < 30 && draftInsertInFlightRef.current; i++) {
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      const freshNoteId =
+        (selectedNote && !isCreating ? selectedNote.id : null) ??
+        selectedNoteIdRef.current ??
+        lastDraftInsertIdRef.current;
+
+      if (freshNoteId) {
         // Commit via commit_lab_note: it sets app.force_version so the DB trigger
         // `trg_write_document_version` writes a version even inside its 3-minute
         // throttle window, then promotes the draft into `content` and clears the
         // draft — all in one transaction. The trigger owns versioning; the client
         // must NOT also write document_versions (that would double-write).
         const { error } = await commitLabNote(supabase, {
-          id: selectedNote.id,
+          id: freshNoteId,
           content: committedContent,
           title: formData.title,
           noteType: formData.note_type,
@@ -831,13 +861,13 @@ export function LabNotesTab({
         // sidebar stay consistent: content advanced, draft cleared.
         setNotes((prev) =>
           prev.map((n) =>
-            n.id === selectedNote.id
+            n.id === freshNoteId
               ? { ...n, content: committedContent, title: formData.title, note_type: formData.note_type, draft_content: null, draft_updated_at: null, draft_author_id: null, updated_at: nowIso }
               : n,
           ),
         );
         setSelectedNote((prev) =>
-          prev && prev.id === selectedNote.id
+          prev && prev.id === freshNoteId
             ? { ...prev, content: committedContent, title: formData.title, note_type: formData.note_type, draft_content: null, draft_updated_at: null, draft_author_id: null, updated_at: nowIso }
             : prev,
         );
@@ -1246,15 +1276,13 @@ export function LabNotesTab({
     const newTitle = formData.title.trim();
     if (!newTitle) {
       setFormData((f) => ({ ...f, title: selectedNote.title || "" }));
-      setIsEditingTitle(false);
       return;
     }
     if (newTitle === (selectedNote.title || "")) {
-      setIsEditingTitle(false);
       return;
     }
-    // Optimistic: close edit mode and reflect the new title immediately in
-    // the list, header, and selectedNote so blur → render feels instant.
+    // Optimistic: reflect the new title immediately in the list, header, and
+    // selectedNote so blur → render feels instant.
     const previousTitle = selectedNote.title || "";
     const id = selectedNote.id;
     const nowIso = new Date().toISOString();
@@ -1262,7 +1290,6 @@ export function LabNotesTab({
       prev.map((n) => (n.id === id ? { ...n, title: newTitle, updated_at: nowIso } : n)),
     );
     setSelectedNote((prev) => (prev?.id === id ? { ...prev, title: newTitle } : prev));
-    setIsEditingTitle(false);
 
     try {
       const supabase = createClient();
@@ -1273,14 +1300,13 @@ export function LabNotesTab({
       if (error) throw error;
       toast({ title: "Note renamed", description: "Title updated." });
     } catch (err: any) {
-      // Roll back the optimistic title swap and reopen the inline editor so
-      // the user can correct the value without losing what they typed.
+      // Roll back the optimistic title swap; keep what the user typed in the
+      // form so they can click the title and retry without losing it.
       setNotes((prev) =>
         prev.map((n) => (n.id === id ? { ...n, title: previousTitle } : n)),
       );
       setSelectedNote((prev) => (prev?.id === id ? { ...prev, title: previousTitle } : prev));
       setFormData((f) => ({ ...f, title: newTitle }));
-      setIsEditingTitle(true);
       toast({
         title: "Couldn't rename note",
         description: getUniqueNameErrorMessage(err, "lab_note"),
@@ -1298,7 +1324,9 @@ export function LabNotesTab({
     noteEditorFullscreen && (selectedNote != null || isCreating);
 
   const labNoteFullscreenToolbarLeading = labNoteMergedFullscreenToolbar ? (
-    <div className="flex min-w-0 w-full max-w-[min(11rem,min(56vw,100%))] items-center gap-1.5 sm:max-w-[min(18rem,38%)] sm:gap-2">
+    // flex-1: the title row is full-width in the merged toolbar, so let the
+    // document name take all free space instead of clipping at ~18rem.
+    <div className="flex min-w-0 w-full flex-1 items-center gap-1.5 sm:gap-2">
       <Button
         type="button"
         variant="ghost"
@@ -1318,55 +1346,20 @@ export function LabNotesTab({
           <List className="h-4 w-4 pointer-events-none" />
         )}
       </Button>
+      {/* Hairline divider — separates the list toggle from the document
+          identity, Notion-style: [toggle] | Title */}
+      <div aria-hidden className="h-4 w-px shrink-0 bg-border/70" />
       <div className="flex min-w-0 flex-1 items-center gap-1">
-        <div className="min-w-0 flex-1">
-          {isEditingTitle && selectedNote ? (
-            <input
-              ref={titleInputRef}
-              type="text"
-              value={formData.title}
-              onChange={(e) => setFormData((f) => ({ ...f, title: e.target.value }))}
-              onBlur={handleInlineTitleSave}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  titleInputRef.current?.blur();
-                }
-                if (e.key === "Escape") {
-                  setFormData((f) => ({ ...f, title: selectedNote.title || "" }));
-                  setIsEditingTitle(false);
-                  titleInputRef.current?.blur();
-                }
-              }}
-              className="w-full border-b border-transparent bg-transparent pb-0.5 text-base font-semibold leading-none text-foreground outline-none focus:border-primary"
-              aria-label="Edit note title"
-            />
-          ) : (
-            <div
-              className={cn(
-                "truncate",
-                !isCreating && selectedNote && "cursor-pointer rounded px-1 -mx-1 hover:bg-muted/60 hover:text-foreground"
-              )}
-              onClick={() => {
-                if (!isCreating && selectedNote) setIsEditingTitle(true);
-              }}
-              role={!isCreating && selectedNote ? "button" : undefined}
-              tabIndex={!isCreating && selectedNote ? 0 : undefined}
-              onKeyDown={(e) => {
-                if (!isCreating && selectedNote && (e.key === "Enter" || e.key === " ")) {
-                  e.preventDefault();
-                  setIsEditingTitle(true);
-                }
-              }}
-              aria-label={!isCreating && selectedNote ? "Click to edit title" : undefined}
-            >
-              <CardTitle className="truncate text-base font-semibold leading-none text-foreground">
-                {isCreating
-                  ? "New Lab Note"
-                  : (!selectedNote ? "Lab Notes" : formData.title || "New Lab Note")}
-              </CardTitle>
-            </div>
-          )}
+        <div className="min-w-0 flex-1 pl-1.5 sm:pl-2">
+          <InlineDocTitle
+            value={!isCreating && selectedNote ? formData.title : ""}
+            onChange={(v) => setFormData((f) => ({ ...f, title: v }))}
+            onCommit={handleInlineTitleSave}
+            placeholder={isCreating ? "New Lab Note" : !selectedNote ? "Lab Notes" : "New Lab Note"}
+            size="base"
+            disabled={isCreating || !selectedNote}
+            aria-label="Edit note title"
+          />
         </div>
       </div>
     </div>
@@ -1697,61 +1690,15 @@ export function LabNotesTab({
                     </Button>
                     <div className="flex flex-1 min-w-0 items-center gap-1">
                       <div className="flex-1 min-w-0">
-                        {isEditingTitle && selectedNote ? (
-                          <input
-                            ref={titleInputRef}
-                            type="text"
-                            value={formData.title}
-                            onChange={(e) => setFormData((f) => ({ ...f, title: e.target.value }))}
-                            onBlur={handleInlineTitleSave}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") {
-                                e.preventDefault();
-                                titleInputRef.current?.blur();
-                              }
-                              if (e.key === "Escape") {
-                                setFormData((f) => ({ ...f, title: selectedNote.title || "" }));
-                                setIsEditingTitle(false);
-                                titleInputRef.current?.blur();
-                              }
-                            }}
-                            className={cn(
-                              "w-full bg-transparent font-semibold text-foreground leading-none outline-none border-b border-transparent focus:border-primary",
-                              noteEditorFullscreen ? "text-base" : "text-lg",
-                            )}
-                            aria-label="Edit note title"
-                          />
-                        ) : (
-                          <div
-                            className={cn(
-                              "truncate",
-                              !isCreating && selectedNote && "cursor-pointer rounded px-1 -mx-1 hover:bg-muted/60 hover:text-foreground"
-                            )}
-                            onClick={() => {
-                              if (!isCreating && selectedNote) setIsEditingTitle(true);
-                            }}
-                            role={!isCreating && selectedNote ? "button" : undefined}
-                            tabIndex={!isCreating && selectedNote ? 0 : undefined}
-                            onKeyDown={(e) => {
-                              if (!isCreating && selectedNote && (e.key === "Enter" || e.key === " ")) {
-                                e.preventDefault();
-                                setIsEditingTitle(true);
-                              }
-                            }}
-                            aria-label={!isCreating && selectedNote ? "Click to edit title" : undefined}
-                          >
-                            <CardTitle
-                              className={cn(
-                                "font-semibold text-foreground truncate leading-none",
-                                noteEditorFullscreen ? "text-base" : "text-lg",
-                              )}
-                            >
-                              {isCreating
-                                ? "New Lab Note"
-                                : (!selectedNote ? "Lab Notes" : formData.title || "New Lab Note")}
-                            </CardTitle>
-                          </div>
-                        )}
+                        <InlineDocTitle
+                          value={!isCreating && selectedNote ? formData.title : ""}
+                          onChange={(v) => setFormData((f) => ({ ...f, title: v }))}
+                          onCommit={handleInlineTitleSave}
+                          placeholder={isCreating ? "New Lab Note" : !selectedNote ? "Lab Notes" : "New Lab Note"}
+                          size={noteEditorFullscreen ? "base" : "lg"}
+                          disabled={isCreating || !selectedNote}
+                          aria-label="Edit note title"
+                        />
                       </div>
                     </div>
                   </div>
@@ -1803,7 +1750,7 @@ export function LabNotesTab({
                         key={`${selectedNote?.id ?? "new-note"}:${editorRemountNonce}`}
                         content={formData.content}
                         onChange={handleEditorContentChange}
-                        placeholder="Write your lab notes here... Use @ to tag protocols"
+                        placeholder="Write your lab notes here... Use @ to tag protocols or samples"
                         title={resolvedExportTitle}
                         minHeight="100%"
                         fillParentHeight
@@ -1812,12 +1759,9 @@ export function LabNotesTab({
                         commentsToggleRef={commentsToggleRef}
                         leadingToolbarSlot={labNoteFullscreenToolbarLeading}
                         trailingToolbarSlot={labNoteFullscreenToolbarTrailing}
-                        showAITools={true}
-                        showAiWritingDropdown={false}
+                        showCitationTools
                         protocols={editorProtocols}
                         samples={editorSamples}
-                        hideExportControls
-                        exportIncludeCommentsInPdf
                         enableMath
                         className="min-h-0 flex-1"
                         onOpenScientificCalculator={openScientificCalculator}

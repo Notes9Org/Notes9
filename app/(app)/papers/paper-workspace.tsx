@@ -14,13 +14,14 @@ import { useCollaboration } from "@/lib/collaboration/use-collaboration"
 import { isCollaborationEnabled } from "@/lib/collaboration/config"
 import { getCollaboratorColor } from "@/lib/collaboration/colors"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import { InlineDocTitle } from "@/components/text-editor/inline-doc-title"
 import { ArrowLeft, CircleNotch as Loader2, DownloadSimple as Download, UploadSimple as Upload, FileCode, NotePencil as NotebookPen, FileText, FileArrowDown as FileDown } from "@phosphor-icons/react/ssr"
 import { toast } from "sonner"
 import { ConnectionStatus } from "@/components/collaboration/connection-status"
 import { CollaboratorAvatars } from "@/components/collaboration/collaborator-avatars"
 import { useAutoSave } from "@/hooks/use-auto-save"
+import { useMentionEntities } from "@/hooks/use-mention-entities"
 import { PaperActions } from "./[id]/paper-actions"
 import { downloadLatex } from "@/lib/latex-export"
 import { JOURNAL_TEMPLATES } from "@/lib/latex-templates"
@@ -97,6 +98,7 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
 
   const [paper, setPaper] = useState<Record<string, unknown> | null>(null)
   const [titleInput, setTitleInput] = useState("")
+  const [editorFullscreen, setEditorFullscreen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [content, setContent] = useState("")
   const [userName, setUserName] = useState("")
@@ -138,9 +140,14 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
   })
 
   const collaborationConnected = collaborationStatus === "connected"
-  // Pass collaborationEnabled=true as soon as we have ydoc+provider (even while connecting)
-  // so the editor initializes with the Collaboration extension from the start
+  // Mount the collab editor only after the provider has actually connected at
+  // least once (latched). Mounting on mere ydoc/provider EXISTENCE meant an
+  // unreachable collab server produced an empty, never-seeded Yjs doc — the
+  // paper looked wiped after every refresh even though the DB had the content.
+  // Until the latch flips, the solo editor shows the DB content; once it
+  // flips it stays collab for the session (reconnects keep local Yjs edits).
   const collaborationReady = !!(ydoc && provider)
+  const [collabEditorActive, setCollabEditorActive] = useState(false)
 
   useEffect(() => {
     const fetchPaper = async () => {
@@ -176,10 +183,13 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
     [id]
   )
 
-  const { status: saveStatus, debouncedSave } = useAutoSave({
+  // DB autosave stays on even while collaboration is connected: the collab
+  // server also stores HTML, but the client-side write is the refresh-safety
+  // net when that server is down, restarting, or failing to store.
+  const { status: saveStatus, debouncedSave, forceSave } = useAutoSave({
     onSave: handleAutoSave,
     delay: 2000,
-    enabled: !loading && !!paper && !collaborationConnected,
+    enabled: !loading && !!paper,
   })
 
   const handleContentChange = useCallback(
@@ -190,9 +200,43 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
     [debouncedSave]
   )
 
+  // Switch to the collab editor only once connected — flushing any pending
+  // solo edits to the DB first so the server-side doc fetch can include them.
+  useEffect(() => {
+    if (!collaborationConnected || !collaborationReady || collabEditorActive) return
+    let cancelled = false
+    void (async () => {
+      await forceSave()
+      if (!cancelled) setCollabEditorActive(true)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [collaborationConnected, collaborationReady, collabEditorActive, forceSave])
+
+  // Refresh/close with a pending debounce would drop the last ~2s of typing —
+  // flush when the tab is hidden or the page is being torn down.
+  useEffect(() => {
+    const flush = () => {
+      void forceSave()
+    }
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") flush()
+    }
+    window.addEventListener("pagehide", flush)
+    document.addEventListener("visibilitychange", onVisibility)
+    return () => {
+      window.removeEventListener("pagehide", flush)
+      document.removeEventListener("visibilitychange", onVisibility)
+    }
+  }, [forceSave])
+
   const handleEditorReady = useCallback((editor: any) => {
     editorRef.current = editor
   }, [])
+
+  // Org-wide @-mention candidates — same data the lab-notes/protocol editors get.
+  const { protocols: mentionProtocols, samples: mentionSamples } = useMentionEntities()
 
   const commitTitle = useCallback(async () => {
     const next = titleInput.trim() || "Untitled"
@@ -418,6 +462,172 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
   const status = String(paper.status || "draft")
   const breadcrumbTitle = (titleInput.trim() || (paper.title as string) || "Untitled Paper").slice(0, 60)
 
+  // Print / import / export cluster — rendered in the page header and, in
+  // editor fullscreen (where the header is covered), in the toolbar's trailing
+  // slot, matching the lab-notes/protocol pattern.
+  const paperDocActions = (
+    <>
+      {/* Print / save as PDF */}
+      <NotePrintButton
+        title={titleInput.trim() || ((paper.title as string) || "Untitled Paper")}
+        getHtmlContent={() => contentRef.current || content}
+        size="icon-sm"
+        className="text-muted-foreground hover:text-foreground"
+      />
+      {/* Import dropdown */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            title="Import"
+            aria-label="Import"
+            data-tour="paper-import"
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <Upload className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-64">
+          <DropdownMenuLabel>Import Documents</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => docInputRef.current?.click()}>
+            <Upload className="mr-2 h-4 w-4" />
+            <div className="flex flex-col gap-0.5">
+              <span className="text-sm">Import document…</span>
+              <span className="text-xs text-muted-foreground">PDF, Word, Markdown, text, HTML — insert at cursor</span>
+            </div>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => texInputRef.current?.click()}>
+            <Upload className="mr-2 h-4 w-4" />
+            <div className="flex flex-col gap-0.5">
+              <span className="text-sm">Import LaTeX (.tex)</span>
+              <span className="text-xs text-muted-foreground">Replace paper content</span>
+            </div>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => bibInputRef.current?.click()}>
+            <Upload className="mr-2 h-4 w-4" />
+            <div className="flex flex-col gap-0.5">
+              <span className="text-sm">Import BibTeX (.bib)</span>
+              <span className="text-xs text-muted-foreground">Add references</span>
+            </div>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {/* Export dropdown */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            title="Export"
+            aria-label="Export"
+            data-tour="paper-export"
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <Download className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="max-h-96 w-64 overflow-y-auto">
+          <DropdownMenuLabel>Export Formats</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => void exportNoteAsMarkdown(content, displayTitle)}>
+            <Download className="mr-2 h-4 w-4" />
+            Markdown (.md)
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => exportNoteAsHtml(content, displayTitle)}>
+            <Download className="mr-2 h-4 w-4" />
+            HTML (.html)
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => exportNoteAsPlainText(content, displayTitle)}>
+            <Download className="mr-2 h-4 w-4" />
+            Plain text (.txt)
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => void exportNoteAsDocx(content, displayTitle)}>
+            <Download className="mr-2 h-4 w-4" />
+            Word (.docx)
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() =>
+              void exportNoteAsPdfFromHtml(content, displayTitle)
+            }
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Save as PDF…
+          </DropdownMenuItem>
+
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel>Export as LaTeX</DropdownMenuLabel>
+          {JOURNAL_TEMPLATES.map((tmpl) => (
+            <DropdownMenuItem
+              key={tmpl.id}
+              onClick={() => {
+                downloadLatex(content, {
+                  title: displayTitle,
+                  templateId: tmpl.id,
+                })
+                toast.success(`Exported as ${tmpl.name} LaTeX`)
+              }}
+            >
+              <Download className="mr-2 h-4 w-4 text-transparent" />
+              <div className="flex flex-col gap-0.5">
+                <span className="text-sm">{tmpl.name}</span>
+                <span className="text-xs text-muted-foreground">{tmpl.description}</span>
+              </div>
+            </DropdownMenuItem>
+          ))}
+
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel>Bibliography</DropdownMenuLabel>
+          <DropdownMenuItem
+            onClick={() => {
+              const citations = extractCitationsFromContent()
+              if (citations.length === 0) {
+                toast.error("No citations found in the paper", {
+                  description: "Add citations using 'Cite with AI' first.",
+                })
+                return
+              }
+              downloadBibtex(citations, displayTitle || "references")
+              toast.success(`Exported ${citations.length} references as .bib`)
+            }}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            <div className="flex flex-col gap-0.5">
+              <span className="text-sm">Export BibTeX (.bib)</span>
+              <span className="text-xs text-muted-foreground">Download citations</span>
+            </div>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </>
+  )
+
+  /** Fullscreen: list toggle + title share the toolbar row (lab-notes pattern). */
+  const paperFullscreenLeading = editorFullscreen ? (
+    // flex-1: the title row is full-width in the merged toolbar, so let the
+    // document name take all free space instead of clipping at ~18rem.
+    <div className="flex min-w-0 w-full flex-1 items-center gap-1.5 sm:gap-2">
+      {leftControls}
+      {/* Hairline divider — separates the list toggle from the document
+          identity, Notion-style: [toggle] | Title */}
+      <div aria-hidden className="h-4 w-px shrink-0 bg-border/70" />
+      <div className="min-w-0 flex-1 pl-1.5 sm:pl-2">
+        <InlineDocTitle
+          value={titleInput}
+          onChange={setTitleInput}
+          onCommit={() => void commitTitle()}
+          size="base"
+          aria-label="Paper title"
+        />
+      </div>
+    </div>
+  ) : (
+    leftControls
+  )
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <SetScopedBreadcrumb
@@ -427,166 +637,46 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
           { label: breadcrumbTitle },
         ]}
       />
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 flex-1 items-center gap-3">
-          {backLink ? (
-            <Button variant="ghost" size="icon" asChild>
-              <Link href={backLink.href}>
-                <ArrowLeft className="h-4 w-4" />
-              </Link>
-            </Button>
-          ) : null}
-          <Input
-            value={titleInput}
-            onChange={(e) => setTitleInput(e.target.value)}
-            onBlur={() => void commitTitle()}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault()
-                ;(e.target as HTMLInputElement).blur()
-              }
-            }}
-            data-tour="paper-title"
-            aria-label="Paper title"
-            className="min-w-0 flex-1 border-0 bg-transparent px-0 py-0.5 text-2xl font-bold shadow-none focus-visible:ring-1 focus-visible:ring-ring/40 md:text-2xl"
-          />
-          <Badge variant={statusVariant(status)}>{status.replace("_", " ")}</Badge>
-        </div>
-        {isCollaborationEnabled() && (
-          <CollaboratorAvatars collaborators={collaborators} />
-        )}
-        <div className="flex shrink-0 items-center gap-2">
-          {/* Print / save as PDF */}
-          <NotePrintButton
-            title={titleInput.trim() || ((paper.title as string) || "Untitled Paper")}
-            getHtmlContent={() => contentRef.current || content}
-            variant="outline"
-            size="icon"
-            className="text-foreground"
-          />
-          {/* Import dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon" title="Import" aria-label="Import" data-tour="paper-import">
-                <Download className="h-4 w-4" />
+      {/* Header hides in editor fullscreen — list toggle + title + doc actions
+          merge into the Tiptap toolbar row, same pattern as lab notes/protocols. */}
+      {!editorFullscreen && (
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            {backLink ? (
+              <Button variant="ghost" size="icon" asChild>
+                <Link href={backLink.href}>
+                  <ArrowLeft className="h-4 w-4" />
+                </Link>
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuLabel>Import Documents</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => docInputRef.current?.click()}>
-                <Download className="mr-2 h-4 w-4" />
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-sm">Import document…</span>
-                  <span className="text-xs text-muted-foreground">PDF, Word, Markdown, text, HTML — insert at cursor</span>
-                </div>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => texInputRef.current?.click()}>
-                <Download className="mr-2 h-4 w-4" />
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-sm">Import LaTeX (.tex)</span>
-                  <span className="text-xs text-muted-foreground">Replace paper content</span>
-                </div>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => bibInputRef.current?.click()}>
-                <Download className="mr-2 h-4 w-4" />
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-sm">Import BibTeX (.bib)</span>
-                  <span className="text-xs text-muted-foreground">Add references</span>
-                </div>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          {/* Export dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon" title="Export" aria-label="Export" data-tour="paper-export">
-                <Upload className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="max-h-96 w-64 overflow-y-auto">
-              <DropdownMenuLabel>Export Formats</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => void exportNoteAsMarkdown(content, displayTitle)}>
-                <Upload className="mr-2 h-4 w-4" />
-                Markdown (.md)
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => exportNoteAsHtml(content, displayTitle)}>
-                <Upload className="mr-2 h-4 w-4" />
-                HTML (.html)
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => exportNoteAsPlainText(content, displayTitle)}>
-                <Upload className="mr-2 h-4 w-4" />
-                Plain text (.txt)
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => void exportNoteAsDocx(content, displayTitle)}>
-                <Upload className="mr-2 h-4 w-4" />
-                Word (.docx)
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() =>
-                  void exportNoteAsPdfFromHtml(content, displayTitle)
-                }
-              >
-                <Upload className="mr-2 h-4 w-4" />
-                Save as PDF…
-              </DropdownMenuItem>
-
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel>Export as LaTeX</DropdownMenuLabel>
-              {JOURNAL_TEMPLATES.map((tmpl) => (
-                <DropdownMenuItem
-                  key={tmpl.id}
-                  onClick={() => {
-                    downloadLatex(content, {
-                      title: displayTitle,
-                      templateId: tmpl.id,
-                    })
-                    toast.success(`Exported as ${tmpl.name} LaTeX`)
-                  }}
-                >
-                  <Upload className="mr-2 h-4 w-4 text-transparent" />
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-sm">{tmpl.name}</span>
-                    <span className="text-xs text-muted-foreground">{tmpl.description}</span>
-                  </div>
-                </DropdownMenuItem>
-              ))}
-
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel>Bibliography</DropdownMenuLabel>
-              <DropdownMenuItem
-                onClick={() => {
-                  const citations = extractCitationsFromContent()
-                  if (citations.length === 0) {
-                    toast.error("No citations found in the paper", {
-                      description: "Add citations using 'Cite with AI' first.",
-                    })
-                    return
-                  }
-                  downloadBibtex(citations, displayTitle || "references")
-                  toast.success(`Exported ${citations.length} references as .bib`)
-                }}
-              >
-                <Upload className="mr-2 h-4 w-4" />
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-sm">Export BibTeX (.bib)</span>
-                  <span className="text-xs text-muted-foreground">Download citations</span>
-                </div>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <PaperActions
-            paper={{ id, title: displayTitle, status }}
-            onAfterMutation={onPaperMutated}
-          />
+            ) : null}
+            <div className="min-w-0 flex-1">
+              <InlineDocTitle
+                value={titleInput}
+                onChange={setTitleInput}
+                onCommit={() => void commitTitle()}
+                size="2xl"
+                data-tour="paper-title"
+                aria-label="Paper title"
+              />
+            </div>
+            <Badge variant={statusVariant(status)}>{status.replace("_", " ")}</Badge>
+          </div>
+          {isCollaborationEnabled() && (
+            <CollaboratorAvatars collaborators={collaborators} />
+          )}
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            {paperDocActions}
+            <PaperActions
+              paper={{ id, title: displayTitle, status }}
+              onAfterMutation={onPaperMutated}
+            />
+          </div>
         </div>
-      </div>
+      )}
 
-      <div style={{ height: "calc(100dvh - 180px)" }}>
+      {/* Flex-fill like the other editor surfaces (no hardcoded viewport math);
+          the parent chain is height-bounded down from the app shell. */}
+      <div className="min-h-0 flex-1">
         <FileDropzone
           onFilesDrop={(files) => {
             const MAX_IMPORT_BYTES = 5 * 1024 * 1024
@@ -657,19 +747,21 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
           activeClassName="ring-4 ring-primary ring-inset bg-primary/5 rounded-xl"
           className="h-full"
         >
-          {collaborationReady ? (
+          {collabEditorActive && collaborationReady ? (
             <PaperEditor
               key={`collab-${id}`}
               fullscreenWorkspaceRef={fullscreenWorkspaceRef}
-              leadingToolbarSlot={leftControls}
+              leadingToolbarSlot={paperFullscreenLeading}
+              trailingToolbarSlot={editorFullscreen ? paperDocActions : null}
+              onEditorFullscreenChange={setEditorFullscreen}
+              protocols={mentionProtocols}
+              samples={mentionSamples}
               content=""
               onChange={handleContentChange}
-              minHeight="calc(100dvh - 180px)"
+              minHeight="100%"
               title={titleInput}
               onDocumentTitleChange={setTitleInput}
               onDocumentTitleCommit={() => void commitTitle()}
-              autoSave
-              onAutoSave={handleAutoSave}
               onEditorReady={handleEditorReady}
               ydoc={ydoc}
               provider={provider}
@@ -681,15 +773,17 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
             <PaperEditor
               key={`solo-${id}`}
               fullscreenWorkspaceRef={fullscreenWorkspaceRef}
-              leadingToolbarSlot={leftControls}
+              leadingToolbarSlot={paperFullscreenLeading}
+              trailingToolbarSlot={editorFullscreen ? paperDocActions : null}
+              onEditorFullscreenChange={setEditorFullscreen}
+              protocols={mentionProtocols}
+              samples={mentionSamples}
               content={content}
               onChange={handleContentChange}
-              minHeight="calc(100dvh - 180px)"
+              minHeight="100%"
               title={titleInput}
               onDocumentTitleChange={setTitleInput}
               onDocumentTitleCommit={() => void commitTitle()}
-              autoSave
-              onAutoSave={handleAutoSave}
               onEditorReady={handleEditorReady}
             />
           )}

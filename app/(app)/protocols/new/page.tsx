@@ -768,8 +768,7 @@ function NewProtocolForm() {
                       placeholder="Draft your protocol… Link literature on the left for Cat-Bio; apply AI output from the right."
                       title={formData.name || "new-protocol"}
                       minHeight="460px"
-                      showAITools
-                      showAiWritingDropdown={false}
+                      showCitationTools
                       onEditorReady={(editor) => {
                         if (editor) {
                           editorInsertRef.current = (html: string) => {
@@ -1049,8 +1048,7 @@ function NewProtocolForm() {
                 placeholder="Write the detailed protocol steps here…"
                 title={formData.name || "protocol"}
                 minHeight="400px"
-                showAITools={true}
-                showAiWritingDropdown={false}
+                showCitationTools
               />
             </div>
 

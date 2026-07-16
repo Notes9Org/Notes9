@@ -185,7 +185,7 @@ export function StagedPaperView({
               title="Ask Catalyst AI about this paper"
               className="gap-1.5 rounded-lg text-muted-foreground hover:text-foreground"
             >
-              <MessageCircle className="h-4 w-4" />
+              <FlareIcon className="h-4 w-4" />
               Ask Catalyst
             </Button>
             {/* Discard a staged paper. Hidden once saved — the library copy is
