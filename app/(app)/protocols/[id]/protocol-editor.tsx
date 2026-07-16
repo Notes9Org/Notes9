@@ -631,8 +631,7 @@ export function ProtocolEditor({
                   fillParentHeight
                   editable={false}
                   hideToolbar
-                  showAITools={false}
-                  showAiWritingDropdown={false}
+                  showCitationTools={false}
                   samples={samples}
                   className="min-h-0 flex-1 border-0 shadow-none"
                   onEditorReady={(ed) => { protocolEditorRef.current = ed; setProtocolEditorReady(!!ed) }}

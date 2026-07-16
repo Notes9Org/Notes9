@@ -50,8 +50,6 @@ interface PaperEditorProps {
   editable?: boolean
   minHeight?: string
   title?: string
-  autoSave?: boolean
-  onAutoSave?: (content: string) => Promise<void>
   onEditorReady?: (editor: any) => void
   /** HTML content to show as an inline diff widget at the cursor */
   inlineDiffHtml?: string | null
@@ -77,6 +75,13 @@ interface PaperEditorProps {
   /** Prepended to the editor toolbar (e.g. the list-sidebar toggle) — stays
    *  visible in fullscreen since it lives in the editor's own toolbar. */
   leadingToolbarSlot?: ReactNode
+  /** Appended after the fullscreen control (doc actions), same as lab notes/protocols. */
+  trailingToolbarSlot?: ReactNode
+  /** Fires when editor region fullscreen is toggled (Esc or button). */
+  onEditorFullscreenChange?: (open: boolean) => void
+  /** @-mention candidates, forwarded to the editor (which adds the type discriminant). */
+  protocols?: { id: string; name: string; version?: string | null }[]
+  samples?: { id: string; name: string; sample_code?: string | null }[]
 }
 
 export function PaperEditor({
@@ -86,8 +91,6 @@ export function PaperEditor({
   editable = true,
   minHeight = "600px",
   title,
-  autoSave,
-  onAutoSave,
   onEditorReady,
   inlineDiffHtml,
   onAcceptInlineDiff,
@@ -101,6 +104,10 @@ export function PaperEditor({
   userColor,
   fullscreenWorkspaceRef,
   leadingToolbarSlot,
+  trailingToolbarSlot,
+  onEditorFullscreenChange,
+  protocols,
+  samples,
 }: PaperEditorProps) {
   const initialContent = collaborationEnabled
     ? undefined
@@ -111,22 +118,23 @@ export function PaperEditor({
       content={initialContent}
       fullscreenWorkspaceRef={fullscreenWorkspaceRef}
       leadingToolbarSlot={leadingToolbarSlot}
+      trailingToolbarSlot={trailingToolbarSlot}
+      onEditorFullscreenChange={onEditorFullscreenChange}
+      protocols={protocols}
+      samples={samples}
       onChange={onChange}
       className={className}
       editable={editable}
       minHeight={minHeight}
-      showAITools={true}
-      showAiWritingToolbarLabel
+      showCitationTools
       enableMath={true}
       paperMode={true}
       fillParentHeight
       title={title}
       onDocumentTitleChange={onDocumentTitleChange}
       onDocumentTitleCommit={onDocumentTitleCommit}
-      autoSave={autoSave}
-      onAutoSave={onAutoSave}
       onEditorReady={onEditorReady}
-      placeholder="Start writing your paper..."
+      placeholder="Write your paper here... Use @ to tag protocols or samples"
       inlineDiffHtml={inlineDiffHtml}
       onAcceptInlineDiff={onAcceptInlineDiff}
       onDismissInlineDiff={onDismissInlineDiff}

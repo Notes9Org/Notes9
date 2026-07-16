@@ -145,12 +145,15 @@ export function TableOfContents({ editor, className }: TableOfContentsProps) {
                     /* x always clipped — stops brief horizontal scrollbar when inner width collapses; don’t transition overflow (browser scrollbar flicker) */
                     "overflow-x-hidden overflow-y-hidden overscroll-y-contain",
                     "rounded-none border-0 bg-transparent p-0 shadow-none",
-                    "transition-[background-color,border-color,box-shadow,border-radius,padding] duration-500 ease-out",
-                    "hover:overflow-y-auto hover:rounded-2xl hover:border hover:border-border/80 hover:bg-background hover:p-2.5 hover:shadow-[0_10px_28px_rgba(44,36,24,0.09)]",
-                    "dark:hover:border-border dark:hover:bg-card dark:hover:shadow-[0_10px_28px_rgba(0,0,0,0.35)]"
+                    /* Quick, even in/out — the old 500ms ease-out made collapse feel sticky. */
+                    "transition-[background-color,border-color,box-shadow,border-radius,padding,backdrop-filter] duration-200 ease-out",
+                    /* Expanded: the left sidebar's nav-strip material — glass fill, glass border, p-1, rounded-xl. */
+                    "hover:overflow-y-auto hover:rounded-xl hover:border hover:border-[color:var(--glass-border)] hover:p-1.5",
+                    "hover:bg-[color:var(--glass-bg)] hover:backdrop-blur-md",
+                    "hover:shadow-lg hover:shadow-black/5 dark:hover:shadow-black/30"
                 )}
             >
-                <div className="flex min-w-0 max-w-full w-max flex-col items-end gap-1.5 overflow-x-hidden group-hover:w-full group-hover:items-stretch">
+                <div className="flex min-w-0 max-w-full w-max flex-col items-end gap-0.5 overflow-x-hidden group-hover:w-full group-hover:items-stretch">
                     {items.map((item) => {
                         const isActive = activeId === item.id
                         return (
@@ -159,23 +162,27 @@ export function TableOfContents({ editor, className }: TableOfContentsProps) {
                                 type="button"
                                 onClick={() => onItemClick(item.pos, item.id)}
                                 className={cn(
+                                    /* Row grammar mirrors the sidebar nav rows: h-8, rounded-lg, 13px, quiet hover bg. */
                                     "relative flex w-max max-w-full shrink-0 flex-row items-center justify-end gap-2 rounded-none border-0 bg-transparent p-0 outline-none",
-                                    "transition-[width,justify-content,padding,border-radius,background-color,color] duration-500 ease-out",
-                                    "group-hover:w-full group-hover:justify-between group-hover:rounded-md group-hover:px-2 group-hover:py-1",
-                                    "group-hover:hover:bg-muted/70 dark:group-hover:hover:bg-muted/50",
+                                    "transition-[width,justify-content,padding,border-radius,background-color,color] duration-200 ease-out",
+                                    "group-hover:h-8 group-hover:w-full group-hover:justify-between group-hover:rounded-lg group-hover:px-2",
+                                    "group-hover:hover:bg-background/60 dark:group-hover:hover:bg-background/40",
                                     "focus-visible:ring-1 focus-visible:ring-ring/40 focus-visible:ring-offset-1",
                                     isActive &&
-                                        "group-hover:bg-secondary group-hover:text-secondary-foreground dark:group-hover:bg-secondary dark:group-hover:text-secondary-foreground"
+                                        "group-hover:bg-background group-hover:shadow-sm group-hover:ring-1 group-hover:ring-inset group-hover:ring-black/[0.04] dark:group-hover:ring-white/[0.06]"
                                 )}
                             >
                                 <span
                                     className={cn(
-                                        "min-w-0 truncate text-left text-micro font-medium whitespace-nowrap opacity-0 transition-[max-width,opacity] duration-500 ease-out",
+                                        "min-w-0 truncate text-left text-[13px] whitespace-nowrap opacity-0 transition-[max-width,opacity] duration-200 ease-out",
                                         "max-w-0 overflow-hidden group-hover:max-w-[min(210px,100%)] group-hover:flex-1 group-hover:opacity-100",
-                                        isActive && "font-semibold text-primary group-hover:text-secondary-foreground",
-                                        !isActive && "text-muted-foreground group-hover:text-foreground",
-                                        item.level === 1 && !isActive && "text-foreground",
-                                        item.level === 3 && "text-2xs"
+                                        /* Level indent, sidebar-tree style */
+                                        item.level === 2 && "group-hover:pl-3",
+                                        item.level === 3 && "group-hover:pl-5 text-2xs",
+                                        isActive
+                                            ? "font-medium text-foreground"
+                                            : "text-sidebar-foreground/75 group-hover:hover:text-sidebar-foreground",
+                                        item.level === 1 && !isActive && "text-sidebar-foreground/90"
                                     )}
                                 >
                                     {item.text || "Untitled"}
@@ -183,10 +190,10 @@ export function TableOfContents({ editor, className }: TableOfContentsProps) {
 
                                 <div
                                     className={cn(
-                                        "h-[2px] shrink-0 rounded-full bg-border transition-[width,background-color,box-shadow] duration-500 ease-out",
+                                        "h-[2px] shrink-0 rounded-full bg-border transition-[width,background-color,box-shadow] duration-200 ease-out",
                                         isActive
                                             ? "bg-primary w-10 shadow-[0_0_8px_rgba(150,80,52,0.28)]"
-                                            : "group-hover:bg-primary",
+                                            : "group-hover:bg-primary/70",
                                         !isActive && (item.level === 1 ? "w-8" : item.level === 2 ? "w-5" : "w-3")
                                     )}
                                     aria-hidden

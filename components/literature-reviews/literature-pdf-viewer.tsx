@@ -11,7 +11,8 @@ import {
   useState,
   type MutableRefObject,
 } from "react"
-import { Robot as Bot, Copy, ArrowSquareOut as ExternalLink, HighlighterCircle as Highlighter, CircleNotch as Loader2, Note as StickyNote, MagnifyingGlassPlus as ZoomIn, MagnifyingGlassMinus as ZoomOut } from "@phosphor-icons/react/ssr"
+import { Copy, ArrowSquareOut as ExternalLink, HighlighterCircle as Highlighter, CircleNotch as Loader2, Note as StickyNote, MagnifyingGlassPlus as ZoomIn, MagnifyingGlassMinus as ZoomOut } from "@phosphor-icons/react/ssr"
+import { FlareIcon } from "@/components/ui/flare-icon"
 import { motion, useReducedMotion } from "@/components/literature-reviews/motion"
 // Static so the text/annotation-layer styles are reliably injected. This CSS is
 // tiny; the heavy pdfjs JS is still dynamically imported in load()/render().
@@ -441,7 +442,7 @@ const LiteraturePdfPageBlock = memo(function LiteraturePdfPageBlock({
                   }}
                   title="Ask Catalyst"
                 >
-                  <Bot className="h-3 w-3" />
+                  <FlareIcon className="h-3 w-3" />
                   Ask Catalyst
                 </Button>
               </>
@@ -1128,7 +1129,7 @@ export const LiteraturePdfViewer = forwardRef<LiteraturePdfViewerHandle, Literat
               onChange={(content) => setComposerState((current) => ({ ...current, content }))}
               placeholder="Write your note..."
               minHeight="220px"
-              showAITools={false}
+              showCitationTools={false}
               hideToolbar={false}
               title="note"
             />

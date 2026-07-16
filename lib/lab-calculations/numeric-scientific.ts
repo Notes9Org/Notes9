@@ -38,8 +38,62 @@ function unaryResult(
   })
 }
 
-export function unaryScientific(op: UnarySciOp, x: number): CalculationResult {
+export type AngleUnit = "rad" | "deg"
+
+const DEG_TO_RAD = Math.PI / 180
+
+/** Degree-mode trig: inputs in degrees for sin/cos/tan, outputs in degrees for arc fns. */
+function unaryTrigDegrees(op: UnarySciOp, x: number): CalculationResult | null {
+  const lx = latexDecimal(x)
+  switch (op) {
+    case "sin":
+    case "cos":
+    case "tan": {
+      const fn = op === "sin" ? Math.sin : op === "cos" ? Math.cos : Math.tan
+      const y = fn(x * DEG_TO_RAD)
+      return unaryResult(
+        "Result",
+        `${op}(${x}°) = ${roundToSigFigs(y, 10)}`,
+        `\\${op}\\left(${lx}^{\\circ}\\right)=${latexDecimal(roundToSigFigs(y, 10))}`,
+        y
+      )
+    }
+    case "asin":
+    case "acos": {
+      if (x < -1 || x > 1) return calcError(`${op === "asin" ? "arcsin" : "arccos"} needs x in [−1, 1].`)
+      const y = (op === "asin" ? Math.asin(x) : Math.acos(x)) / DEG_TO_RAD
+      return unaryResult(
+        "Result",
+        `arc${op.slice(1)}(${x}) = ${roundToSigFigs(y, 10)}°`,
+        `\\arc${op.slice(1)}\\left(${lx}\\right)=${latexDecimal(roundToSigFigs(y, 10))}^{\\circ}`,
+        y
+      )
+    }
+    case "atan": {
+      const y = Math.atan(x) / DEG_TO_RAD
+      return unaryResult(
+        "Result",
+        `arctan(${x}) = ${roundToSigFigs(y, 10)}°`,
+        `\\arctan\\left(${lx}\\right)=${latexDecimal(roundToSigFigs(y, 10))}^{\\circ}`,
+        y
+      )
+    }
+    default:
+      return null
+  }
+}
+
+export function unaryScientific(
+  op: UnarySciOp,
+  x: number,
+  opts?: { angleUnit?: AngleUnit }
+): CalculationResult {
   if (!Number.isFinite(x)) return calcError("Enter a valid number.")
+
+  if (opts?.angleUnit === "deg") {
+    const degResult = unaryTrigDegrees(op, x)
+    if (degResult) return degResult
+  }
 
   const lx = latexDecimal(x)
 

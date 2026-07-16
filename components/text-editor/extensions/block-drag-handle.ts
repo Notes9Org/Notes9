@@ -60,16 +60,38 @@ export const BlockDragHandle = Extension.create({
           // Start position (in the doc) of the block the handle currently targets.
           let hoveredPos: number | null = null
 
+          // Hiding is DEFERRED (grace period) instead of instant: the pointer
+          // has to travel across the gutter gap to reach the handle, and any
+          // instant hide on "no block under cursor" made the grip vanish
+          // before it could be grabbed.
+          let hideTimer: number | null = null
+          const cancelScheduledHide = () => {
+            if (hideTimer != null) {
+              window.clearTimeout(hideTimer)
+              hideTimer = null
+            }
+          }
           const hide = () => {
+            cancelScheduledHide()
             handle.style.display = "none"
             hoveredPos = null
+          }
+          const scheduleHide = (delay = 300) => {
+            cancelScheduledHide()
+            hideTimer = window.setTimeout(() => {
+              hideTimer = null
+              if (handle.classList.contains("is-dragging")) return
+              if (handle.matches(":hover")) return
+              handle.style.display = "none"
+              hoveredPos = null
+            }, delay)
           }
 
           // Leaving the editor hides the handle — unless the pointer is moving
           // onto the handle itself (otherwise you could never grab it).
           const onEditorLeave = (event: MouseEvent) => {
-            if (event.relatedTarget === handle) return
-            hide()
+            if (event.relatedTarget === handle || (event.relatedTarget instanceof Node && handle.contains(event.relatedTarget))) return
+            scheduleHide()
           }
 
           const positionFor = (blockEl: HTMLElement) => {
@@ -86,16 +108,19 @@ export const BlockDragHandle = Extension.create({
             if (!view.editable) return
             const blockEl = topLevelBlockEl(view, event.target as Node)
             if (!blockEl) {
-              if (event.target !== handle) hide()
+              // Pointer is over editor padding / the gutter corridor — give it
+              // time to reach the handle rather than yanking it away.
+              if (event.target !== handle) scheduleHide()
               return
             }
             try {
               const pos = view.posAtDOM(blockEl, 0)
               const $pos = view.state.doc.resolve(pos)
               hoveredPos = $pos.depth >= 1 ? $pos.before(1) : pos
+              cancelScheduledHide()
               positionFor(blockEl)
             } catch {
-              hide()
+              scheduleHide()
             }
           }
 
@@ -128,6 +153,15 @@ export const BlockDragHandle = Extension.create({
             hide()
           }
 
+          // Hovering the handle itself must always cancel a pending hide —
+          // it lives outside view.dom, so editor listeners never see it.
+          const onHandleEnter = () => cancelScheduledHide()
+          const onHandleLeave = () => {
+            if (!handle.classList.contains("is-dragging")) scheduleHide()
+          }
+
+          handle.addEventListener("mouseenter", onHandleEnter)
+          handle.addEventListener("mouseleave", onHandleLeave)
           handle.addEventListener("dragstart", onDragStart)
           handle.addEventListener("dragend", onDragEnd)
           view.dom.addEventListener("mousemove", onMouseMove)
@@ -137,6 +171,9 @@ export const BlockDragHandle = Extension.create({
 
           return {
             destroy() {
+              cancelScheduledHide()
+              handle.removeEventListener("mouseenter", onHandleEnter)
+              handle.removeEventListener("mouseleave", onHandleLeave)
               handle.removeEventListener("dragstart", onDragStart)
               handle.removeEventListener("dragend", onDragEnd)
               view.dom.removeEventListener("mousemove", onMouseMove)

@@ -30,6 +30,7 @@ const TooltipContent = (_props: TooltipStubProps) => null
 
 import { Square, ArrowUp, ClockCounterClockwise as History, ArrowsOut as Maximize, ArrowsIn as Minimize, SidebarSimple as PanelLeft, Plus, Paperclip, Globe, Chat as MessageSquare, NotePencil as NotebookPen, NotePencil as PenBox, DotsThree as MoreHorizontal, PushPin as Pin, PushPinSlash as PinOff, PencilSimple as Pencil, Check, CaretRight as ChevronRight, Folder, FolderPlus, FolderOpen as FolderInput, CheckSquare, MagnifyingGlass as Search, Trash as Trash2, CaretDown as ChevronDown, X, Binoculars as Telescope, List as Menu, Sun, Moon, Question as CircleHelp, Microphone as Mic, BookOpen, Flask as FlaskConical, FolderOpen, FileText, CircleNotch as Loader2, At as AtSign, Info, Warning } from "@phosphor-icons/react/ssr";
 import { cn } from '@/lib/utils';
+import { SideRailSearch } from '@/components/patterns/side-rail';
 import { recordRumEvent } from '@/lib/rum';
 import { AnalyticsEvent } from '@/lib/analytics/events';
 import {
@@ -4593,17 +4594,13 @@ export function RightSidebar({
                       </>
                     )}
                   </div>
-                  {/* Search chats */}
-                  <div className="relative shrink-0 px-0.5 pb-1">
-                    <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-sidebar-foreground/45" />
-                    <input
-                      value={historyQuery}
-                      onChange={(e) => setHistoryQuery(e.target.value)}
-                      placeholder="Search chats…"
-                      aria-label="Search chats"
-                      className="h-8 w-full rounded-lg border border-[color:var(--glass-border)] bg-background/50 pl-8 pr-2 text-sm text-sidebar-foreground outline-none placeholder:text-sidebar-foreground/40 focus:border-[color:color-mix(in_srgb,var(--n9-accent)_45%,var(--border))]"
-                    />
-                  </div>
+                  {/* Search chats — shared rail search (compact, swells while typing) */}
+                  <SideRailSearch
+                    value={historyQuery}
+                    onChange={setHistoryQuery}
+                    placeholder="Search chats…"
+                    aria-label="Search chats"
+                  />
                   {/* List - same structure as lab notes */}
                   <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
                     {showHistorySkeleton ? (
