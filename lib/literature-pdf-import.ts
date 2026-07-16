@@ -1114,6 +1114,26 @@ export async function tryImportPdfForPaper(params: {
   /** Signed-in user's email — passed to Unpaywall as the polite-pool contact. */
   contactEmail?: string | null
 }): Promise<TryImportPdfResult> {
+  console.log(
+    `[lit] import-try literatureId=${params.literatureId} source=${params.matchSource} doi=${params.paper.doi ?? "-"} pmid=${params.paper.pmid ?? "-"}`,
+  )
+
+  // Deterministic "already have it" short-circuit. Every entry point (stage a
+  // search hit, save to library, drag-drop) funnels through here, so checking the
+  // row's own stored PDF once — not just the TTL OA cache below, which expires —
+  // is what stops the same paper being re-resolved and re-downloaded on reopen.
+  const { data: existingRow } = await params.supabase
+    .from("literature_reviews")
+    .select("pdf_storage_path, pdf_import_status")
+    .eq("id", params.literatureId)
+    .maybeSingle()
+  if (existingRow?.pdf_import_status === "success" && existingRow.pdf_storage_path) {
+    console.log(
+      `[lit] import-skip literatureId=${params.literatureId} reason=already_stored path=${existingRow.pdf_storage_path}`,
+    )
+    return { ok: true as const, resolvedAbstract: params.paper.abstract ?? null }
+  }
+
   // Shared OA-PDF cache: if this exact paper was already downloaded (e.g. tagged
   // into chat first), reuse those bytes instead of re-resolving + re-downloading.
   const cacheKey = oaPdfCacheKey(params.paper)
@@ -1131,6 +1151,7 @@ export async function tryImportPdfForPaper(params: {
           matchSource: params.matchSource,
           catalogNote: "reused_shared_oa_pdf_cache",
         })
+        console.log(`[lit] import-cache-hit literatureId=${params.literatureId} key=${cacheKey}`)
         return { ok: true as const, resolvedAbstract: params.paper.abstract ?? null }
       } catch {
         // Persisting the cached copy failed — fall through to a fresh fetch.
@@ -1150,6 +1171,7 @@ export async function tryImportPdfForPaper(params: {
         pdf_metadata: { note: "no_open_access_pdf_resolved" },
       })
       .eq("id", params.literatureId)
+    console.log(`[lit] import-none literatureId=${params.literatureId} reason=no_open_access_pdf`)
     return { ok: false as const, reason: "no_open_access_pdf" as const, resolvedAbstract }
   }
 
@@ -1206,6 +1228,7 @@ export async function tryImportPdfForPaper(params: {
         },
       })
       .eq("id", params.literatureId)
+    console.log(`[lit] import-fail literatureId=${params.literatureId} reason=fetch_failed msg=${message}`)
     return { ok: false as const, reason: "fetch_failed" as const, message, resolvedAbstract }
   }
 }

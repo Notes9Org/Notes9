@@ -115,7 +115,12 @@ export function dedupeKeyForPaper(p: SearchPaper): string {
   if (p.pmid) return `pmid:${p.pmid}`
   const dk = normalizeDoiKey(p.doi)
   if (dk) return `doi:${dk}`
-  return `title:${titleDedupeKey(p.title, p.year)}`
+  // A blank/near-blank title collapses distinct papers onto one key (e.g.
+  // "na|"), so attaching a second identifier-less paper dedupes against an
+  // unrelated one and the OLD chip stays tagged. Only use the title key when
+  // the title is actually present; otherwise key on the paper's own id.
+  if (p.title?.trim()) return `title:${titleDedupeKey(p.title, p.year)}`
+  return `id:${p.id}`
 }
 
 export function stablePublicId(p: SearchPaper): string {

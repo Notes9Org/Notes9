@@ -209,12 +209,18 @@ export async function attachPaperToCatalyst(
 
   const key = paperIdentityKey(paper, { savedId: opts.savedPdf?.id })
 
+  console.log(
+    `[lit] ask-catalyst attach paperKey=${key} branch=${opts.savedPdf ? "stored-pdf" : "ephemeral-download"} savedId=${opts.savedPdf?.id ?? "-"} title="${title.slice(0, 60)}"`,
+  )
+
   if (opts.savedPdf) {
     attachToCatalyst(
       [
         {
           url: `/api/literature/${opts.savedPdf.id}/viewer-pdf`,
-          name: `${title.slice(0, 100)}.pdf`,
+          // Same name the optimistic spinner chip used (expectedName), so the
+          // real attachment REPLACES it instead of stacking a second chip.
+          name: expectedName,
           contentType: "application/pdf",
           paperKey: key,
         },
@@ -237,7 +243,11 @@ export async function attachPaperToCatalyst(
         [
           {
             url: data.url as string,
-            name: (data.name as string) || `${title.slice(0, 100)}.pdf`,
+            // Must equal expectedName (the spinner-chip name) so the real
+            // attachment replaces the optimistic chip rather than duplicating it.
+            // ponytail: name-match keys on the 80-char title prefix; two papers
+            // sharing that prefix would collide — switch to paperKey if it bites.
+            name: expectedName,
             contentType: "application/pdf",
             paperKey: key,
             storagePath: (data.storagePath as string) || undefined,

@@ -228,6 +228,30 @@ export function LiteratureSearchForm({
         {isListening && (
           <VoiceWaveform getWaveformData={getWaveformData} className="shrink-0" />
         )}
+        <Input
+          /* type="text" (not "search") so the browser's native clear "×" never
+             appears — we render our own below. Placeholder cycles example
+             research questions to signal natural-language AI search. */
+          type="text"
+          placeholder={placeholder}
+          className="h-12 flex-1 border-0 bg-transparent px-0 text-base shadow-none placeholder:text-muted-foreground/70 focus-visible:ring-0 focus-visible:ring-offset-0"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          enterKeyHint="search"
+          aria-label="Literature search query"
+        />
+        {showFilters && (
+          <div className="shrink-0">
+            <AiSearchFilters
+              value={filters!}
+              onChange={onFiltersChange!}
+              triggerClassName="h-10 rounded-xl"
+            />
+          </div>
+        )}
         {showHistory && (
           <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
             <PopoverTrigger asChild>
@@ -294,30 +318,6 @@ export function LiteratureSearchForm({
               )}
             </PopoverContent>
           </Popover>
-        )}
-        <Input
-          /* type="text" (not "search") so the browser's native clear "×" never
-             appears — we render our own below. Placeholder cycles example
-             research questions to signal natural-language AI search. */
-          type="text"
-          placeholder={placeholder}
-          className="h-12 flex-1 border-0 bg-transparent px-0 text-base shadow-none placeholder:text-muted-foreground/70 focus-visible:ring-0 focus-visible:ring-offset-0"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          enterKeyHint="search"
-          aria-label="Literature search query"
-        />
-        {showFilters && (
-          <div className="shrink-0">
-            <AiSearchFilters
-              value={filters!}
-              onChange={onFiltersChange!}
-              triggerClassName="h-10 rounded-xl"
-            />
-          </div>
         )}
         {/* Right control. Searching → Stop. Has text → Clear (×). Empty → a
             faint AI sparkle mark, so the bar reads as AI search. Press Enter to

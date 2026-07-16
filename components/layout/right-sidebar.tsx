@@ -116,7 +116,8 @@ import {
   setCatalystOrigin,
   getCatalystOrigin,
 } from '@/lib/catalyst-launch';
-import { maybeNotifyCreditThreshold } from '@/lib/limits/credit-notices';
+import { maybeNotifyCreditThreshold, type CreditNotice } from '@/lib/limits/credit-notices';
+import { LimitNotice } from '@/components/limits/limit-notice';
 import {
   getCatalystCoPilot,
   clearCatalystCoPilot,
@@ -1395,6 +1396,9 @@ export function RightSidebar({
   // When a Catalyst turn finishes (busy → idle), check monthly AI-credit usage
   // and inject a 50%/90% notice bubble if a new threshold was crossed. The
   // helper self-throttles (once per month per tier) and never throws.
+  // Usage-limit card shown ABOVE the composer (dismissible popover, not a chat
+  // bubble) when a monthly-credit threshold is newly crossed.
+  const [limitNotice, setLimitNotice] = useState<CreditNotice | null>(null);
   const wasBusyRef = useRef(false);
   useEffect(() => {
     const busy =
@@ -1402,7 +1406,9 @@ export function RightSidebar({
       status === 'streaming' ||
       agentStream.isStreaming;
     if (wasBusyRef.current && !busy) {
-      void maybeNotifyCreditThreshold();
+      void maybeNotifyCreditThreshold().then((n) => {
+        if (n) setLimitNotice(n);
+      });
     }
     wasBusyRef.current = busy;
   }, [status, agentStream.isStreaming]);
@@ -1851,8 +1857,16 @@ export function RightSidebar({
       if (unifiedRaw) {
         try {
           const p = JSON.parse(unifiedRaw) as CatalystMentionDragPayload;
-          if (p?.id && p?.title && p.kind) {
-            appendMentionToInput({ kind: p.kind, id: p.id, title: p.title });
+          // Literature rows imported without metadata store their UUID (or blank)
+          // as the title. Route them through the shared resolver — the same
+          // choke-point the @-mention picker uses — so the chip shows a human
+          // title, not a UUID, whatever the drag source is. Other kinds keep theirs.
+          const title =
+            p?.kind === 'literature_review'
+              ? resolveLiteratureTitle({ title: p.title })
+              : p?.title;
+          if (p?.id && title && p.kind) {
+            appendMentionToInput({ kind: p.kind, id: p.id, title });
             return true;
           }
         } catch {
@@ -1864,11 +1878,13 @@ export function RightSidebar({
       if (!raw) return false;
       try {
         const p = JSON.parse(raw) as LiteratureDragPayload;
-        if (p?.id && p?.title) {
+        // Gate on id only; resolve the title so UUID/blank-title rows still drop
+        // with a readable label (and aren't silently ignored when title is empty).
+        if (p?.id) {
           appendMentionToInput({
             kind: 'literature_review',
             id: p.id,
-            title: p.title,
+            title: resolveLiteratureTitle({ title: p.title }),
           });
           return true;
         }
@@ -3652,6 +3668,14 @@ export function RightSidebar({
 
     return (
     <>
+    {limitNotice && (
+      <LimitNotice
+        message={limitNotice.message}
+        severity={limitNotice.severity}
+        onDismiss={() => setLimitNotice(null)}
+        className="mb-2"
+      />
+    )}
     {coPilot && messages.length === 0 && (
       <div className="mb-2 flex items-start gap-2 rounded-xl border border-primary/25 bg-primary/[0.05] px-3 py-2 text-xs">
         <Telescope className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden />
@@ -3697,18 +3721,28 @@ export function RightSidebar({
         )}
         {(attachments.length > 0 || uploadQueue.length > 0 || fetchingPaperNames.length > 0) && (
           <div className="flex flex-wrap gap-1.5 px-3 pt-2 pb-0.5">
-            {attachments.map((a) => (
+            {attachments.map((a) => {
+              // Key on the stable `paperKey` — same identity the insert-dedupe
+              // uses. The signed `url` rotates on every "Ask Catalyst" press, so
+              // keying on it makes React reuse the wrong chip and removal filter
+              // the wrong entry.
+              const attachKey = a.paperKey || a.url || a.name
+              return (
               <PreviewAttachment
-                key={a.url || a.name}
+                key={attachKey}
                 attachment={a}
                 compact
-                onRemove={() =>
+                onRemove={() => {
                   setAttachments((prev) =>
-                    prev.filter((x) => (x.url || x.name) !== (a.url || a.name)),
+                    prev.filter((x) => (x.paperKey || x.url || x.name) !== attachKey),
                   )
-                }
+                  attachmentsRef.current = attachmentsRef.current.filter(
+                    (x) => (x.paperKey || x.url || x.name) !== attachKey,
+                  )
+                }}
               />
-            ))}
+              )
+            })}
             {uploadQueue.map((name) => (
               <PreviewAttachment
                 key={`uploading-${name}`}
