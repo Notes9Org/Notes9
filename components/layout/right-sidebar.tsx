@@ -3333,7 +3333,7 @@ export function RightSidebar({
   }, [isPageVariant, router]);
 
   const applyCatalystLaunch = useCallback(
-    (launch: { query?: string; projectId?: string; attachments?: Array<{ url: string; name: string; contentType: string; size?: number }>; literatureSources?: AgentLiteratureSource[]; webSearch?: boolean; autoSend?: boolean; sessionId?: string; expectAttachment?: boolean; expectedAttachmentName?: string }) => {
+    (launch: { query?: string; projectId?: string; attachments?: Array<{ url: string; name: string; contentType: string; size?: number }>; literatureSources?: AgentLiteratureSource[]; webSearch?: boolean; autoSend?: boolean; sessionId?: string; expectAttachment?: boolean; expectedAttachmentName?: string; literatureMention?: { id: string; title: string } }) => {
       // Gate the first Send while a paper attachment is being fetched, so the user
       // can't fire the message before it lands. A later launch (the closed-access
       // fallback re-open) or the attach/notice events release the gate.
@@ -3374,6 +3374,27 @@ export function RightSidebar({
           ...pendingLiteratureSourcesRef.current,
           ...launch.literatureSources,
         ]);
+      }
+      // "Ask Catalyst" on a saved/staged paper attaches it as an @-mention TAG —
+      // the same representation as dragging it in from the library, so every
+      // entry point behaves identically. Focus the composer + drop the caret at
+      // the end first, so appendMentionToInput renders the visible chip (it also
+      // updates selectedMentions, the agent's source of truth, regardless).
+      if (launch.literatureMention) {
+        const m = launch.literatureMention;
+        requestAnimationFrame(() => {
+          const el = inputRef.current;
+          if (el) {
+            el.focus();
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            range.collapse(false);
+            const sel = window.getSelection();
+            sel?.removeAllRanges();
+            sel?.addRange(range);
+          }
+          appendMentionToInput({ kind: 'literature_review', id: m.id, title: m.title });
+        });
       }
       const q = launch.query?.trim();
       if (q) {
@@ -3436,7 +3457,7 @@ export function RightSidebar({
         setWebSearchEnabled(launch.webSearch);
       }
     },
-    [resizeInput, supabase, armPendingAttach, clearPendingAttach],
+    [resizeInput, supabase, armPendingAttach, clearPendingAttach, appendMentionToInput],
   );
 
   useEffect(() => {
@@ -3464,6 +3485,7 @@ export function RightSidebar({
       // silently disabled the send-gate and the optimistic paper chip.
       expectAttachment: pendingLaunch.expectAttachment,
       expectedAttachmentName: pendingLaunch.expectedAttachmentName,
+      literatureMention: pendingLaunch.literatureMention,
     });
     onPendingLaunchConsumed?.();
   }, [

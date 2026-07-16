@@ -128,18 +128,15 @@ export function StagedPaperView({
     return () => clearTimeout(t)
   }, [lit.id, lit.pdf_storage_path])
 
-  // Ask Catalyst — mirrors the search-result card: open the panel with no text
-  // prefill (the paper rides in as an attachment), fly the PDF into the composer,
-  // and fall back to web search when there's no stored full text.
+  // Ask Catalyst — this paper lives in the library/staging, so it attaches as an
+  // @-mention TAG (via reviewId), identical to dragging it in from the library.
+  // The agent resolves the id to the row's metadata + imported full text.
   const askCatalyst = () => {
     const paper = rowToSearchPaper(lit)
     const decodedTitle = lit.title ? decodeHtmlEntities(lit.title) : paper.title
     void attachPaperToCatalyst(
       { ...paper, title: decodedTitle },
-      {
-        scope: "literature",
-        savedPdf: lit.pdf_storage_path ? { id: lit.id, storagePath: lit.pdf_storage_path } : null,
-      },
+      { scope: "literature", reviewId: lit.id },
     )
   }
 

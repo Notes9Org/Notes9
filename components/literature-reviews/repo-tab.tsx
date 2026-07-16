@@ -485,7 +485,7 @@ export function RepoTab({
         <div className="relative group transition-all">
           <div className="flex items-stretch bg-muted/15 rounded-lg overflow-hidden">
           {/* Pinned "All References" — always visible; only the paper tabs scroll. */}
-          <TabsList className="bg-transparent h-auto border-none rounded-none flex items-center flex-shrink-0 px-1 pt-0 pb-1.5">
+          <TabsList scrollable={false} className="bg-transparent h-auto border-none rounded-none flex items-center flex-shrink-0 px-1 pt-0 pb-1.5">
             <TabsTrigger
               value="list"
               data-value="list"
@@ -504,7 +504,7 @@ export function RepoTab({
             ref={scrollTabsRef}
             className="overflow-x-auto no-scrollbar scroll-smooth"
           >
-            <TabsList className="bg-transparent h-auto border-none rounded-none px-1 pt-0 pb-1.5 flex items-center justify-start gap-1.5 w-max flex-nowrap min-w-full">
+            <TabsList scrollable={false} className="bg-transparent h-auto border-none rounded-none px-1 pt-0 pb-1.5 flex items-center justify-start gap-1.5 w-max flex-nowrap min-w-full">
               {openTabs.map(id => {
                 const lit = literatureReviews?.find(l => l.id === id)
                 return (

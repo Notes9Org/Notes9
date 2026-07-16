@@ -66,6 +66,12 @@ export type CatalystLaunchDetail = {
   /** Force docking into the side panel even when currently on `/catalyst`
    *  (otherwise opening from `/catalyst` just re-seeds the full page). */
   dock?: boolean
+  /** Durable `literature_reviews` row to attach as an @-mention tag — the
+   *  canonical way to attach a SAVED/STAGED paper, identical to dragging it in
+   *  from the library. The agent resolves the id to the row's metadata + imported
+   *  full text, so no file attachment is needed. Unsaved search results (no id)
+   *  use the file-attachment path instead. */
+  literatureMention?: { id: string; title: string }
 }
 
 const ORIGIN_KEY = "notes9:catalyst-origin"
@@ -158,6 +164,10 @@ export type AttachPaperOptions = {
   /** Already-imported PDF for a saved/staged `literature_reviews` row — skips the
    *  ephemeral OA fetch and attaches the durable viewer-pdf route directly. */
   savedPdf?: { id: string; storagePath: string } | null
+  /** Durable `literature_reviews` id when the paper is saved/staged. When present
+   *  the paper is attached as an @-mention TAG (the canonical representation,
+   *  same as a library drag) instead of a file attachment. */
+  reviewId?: string | null
 }
 
 function litSourceFor(paper: SearchPaper, sourceUrl?: string | null): CatalystLaunchLiteratureSource[] | undefined {
@@ -195,6 +205,24 @@ export async function attachPaperToCatalyst(
     return
   }
   const title = paper.title?.trim() || "paper"
+
+  // Canonical path: a paper that lives in the library/staging (has a durable
+  // `literature_reviews` id) is attached as an @-mention TAG — the exact same
+  // representation as dragging it in from the library. The agent resolves the id
+  // to the row's metadata + imported full text, so no transient file attachment
+  // is needed. Only unsaved search results (no id) fall through to the ephemeral
+  // PDF attachment below. One rule, one behavior, decided in one place.
+  const reviewId = opts.reviewId ?? opts.savedPdf?.id ?? null
+  if (reviewId) {
+    openCatalystPanel({
+      scope,
+      webSearch: false,
+      autoSend: false,
+      literatureMention: { id: reviewId, title },
+    })
+    return
+  }
+
   const litSource = litSourceFor(paper, opts.sourceUrl)
   const expectedName = `${title.slice(0, 80).replace(/[^a-zA-Z0-9._ -]/g, "_").trim() || "paper"}.pdf`
 
@@ -207,28 +235,12 @@ export async function attachPaperToCatalyst(
     expectedAttachmentName: expectedName,
   })
 
-  const key = paperIdentityKey(paper, { savedId: opts.savedPdf?.id })
+  // No durable id (unsaved search result) — fetch an ephemeral open-access PDF.
+  const key = paperIdentityKey(paper)
 
   console.log(
-    `[lit] ask-catalyst attach paperKey=${key} branch=${opts.savedPdf ? "stored-pdf" : "ephemeral-download"} savedId=${opts.savedPdf?.id ?? "-"} title="${title.slice(0, 60)}"`,
+    `[lit] ask-catalyst attach paperKey=${key} branch=ephemeral-download title="${title.slice(0, 60)}"`,
   )
-
-  if (opts.savedPdf) {
-    attachToCatalyst(
-      [
-        {
-          url: `/api/literature/${opts.savedPdf.id}/viewer-pdf`,
-          // Same name the optimistic spinner chip used (expectedName), so the
-          // real attachment REPLACES it instead of stacking a second chip.
-          name: expectedName,
-          contentType: "application/pdf",
-          paperKey: key,
-        },
-      ],
-      litSource,
-    )
-    return
-  }
 
   try {
     const res = await fetch("/api/literature/ephemeral-attach", {

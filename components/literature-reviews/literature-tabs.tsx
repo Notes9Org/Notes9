@@ -1027,7 +1027,7 @@ export function LiteratureTabs({
     <div className="relative group transition-all">
       <div className="flex items-stretch bg-muted/15 rounded-lg overflow-hidden">
         {/* Pinned "Search results" — always visible; only the paper tabs scroll. */}
-        <TabsList className="bg-transparent h-auto border-none rounded-none flex items-center flex-shrink-0 px-1 pt-0 pb-1.5">
+        <TabsList scrollable={false} className="bg-transparent h-auto border-none rounded-none flex items-center flex-shrink-0 px-1 pt-0 pb-1.5">
           {hasSearched && (
             <TabsTrigger
               value="search"
@@ -1048,7 +1048,7 @@ export function LiteratureTabs({
           ref={scrollTabsRef}
           className="overflow-x-auto no-scrollbar scroll-smooth"
         >
-          <TabsList data-tour="lit-tabs" className="bg-transparent h-auto border-none rounded-none flex items-center justify-start flex-nowrap w-max min-w-full px-1 pt-0 pb-1.5 gap-1.5">
+          <TabsList data-tour="lit-tabs" scrollable={false} className="bg-transparent h-auto border-none rounded-none flex items-center justify-start flex-nowrap w-max min-w-full px-1 pt-0 pb-1.5 gap-1.5">
             {stripPaperIds.map((id) => {
               const lit = stagedByIdMerged.get(id) ?? repoById.get(id)
               const tabTitle = lit?.title ?? pendingTabTitles[id]

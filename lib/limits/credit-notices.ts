@@ -11,15 +11,18 @@
  * Copy: getMessage('ai_budget_monthly', 'approaching' | 'near').
  */
 
-import { notifyCatalyst } from "@/lib/catalyst-launch"
-import { getMessage } from "@/lib/limits/messages"
+import { getMessage, type LimitMessage, type LimitSeverity } from "@/lib/limits/messages"
 
-type Tier = 50 | 90
+type Tier = 50 | 90 | 100
 
-const THRESHOLDS: { tier: Tier; ratio: number }[] = [
-  { tier: 90, ratio: 0.9 },
-  { tier: 50, ratio: 0.5 },
+const THRESHOLDS: { tier: Tier; ratio: number; severity: LimitSeverity }[] = [
+  { tier: 100, ratio: 1, severity: "at_limit" },
+  { tier: 90, ratio: 0.9, severity: "near" },
+  { tier: 50, ratio: 0.5, severity: "approaching" },
 ]
+
+/** A crossed-threshold notice for the composer card (not a chat bubble). */
+export type CreditNotice = { message: LimitMessage; severity: LimitSeverity }
 
 /** Stable per-month key so the dedup resets when credits refresh. */
 function monthKeyFromResetAt(resetAt: string | null | undefined): string {
@@ -47,35 +50,30 @@ function markNotified(monthKey: string, tier: Tier): void {
   }
 }
 
-function buildMessage(tier: Tier): string {
-  const m = getMessage("ai_budget_monthly", tier === 90 ? "near" : "approaching")
-  // Compose a short, human bubble: what happened + reassurance + reset.
-  return [m.body, m.resetHint].filter(Boolean).join(" ")
-}
-
 /**
- * Check credit usage and inject a threshold notice if a new tier was crossed.
- * Safe to call on every turn completion — it self-throttles via localStorage.
- * Never throws.
+ * Check credit usage and return a threshold notice if a new tier was crossed —
+ * the caller renders it as a dismissible card above the composer (not a chat
+ * bubble). Safe to call on every turn completion: self-throttles via
+ * localStorage (once per tier per month) and never throws.
  */
-export async function maybeNotifyCreditThreshold(): Promise<void> {
+export async function maybeNotifyCreditThreshold(): Promise<CreditNotice | null> {
   try {
     const res = await fetch("/api/usage/summary", { cache: "no-store" })
-    if (!res.ok) return
+    if (!res.ok) return null
     const data = await res.json()
-    if (data?.mode === "off") return
+    if (data?.mode === "off") return null
 
     const budget = data?.ai_budget
     const used = Number(budget?.used_credits)
     const limit = Number(budget?.limit_credits)
-    if (!Number.isFinite(used) || !Number.isFinite(limit) || limit <= 0) return
+    if (!Number.isFinite(used) || !Number.isFinite(limit) || limit <= 0) return null
 
     const ratio = used / limit
     const crossed = THRESHOLDS.find((t) => ratio >= t.ratio)
-    if (!crossed) return
+    if (!crossed) return null
 
     const monthKey = monthKeyFromResetAt(budget?.reset_at)
-    if (alreadyNotified(monthKey, crossed.tier)) return
+    if (alreadyNotified(monthKey, crossed.tier)) return null
 
     // Mark this tier and every lower tier as seen, so a jump straight to 90%
     // doesn't also queue the 50% message next turn.
@@ -83,8 +81,9 @@ export async function maybeNotifyCreditThreshold(): Promise<void> {
       if (t.ratio <= crossed.ratio) markNotified(monthKey, t.tier)
     }
 
-    notifyCatalyst(buildMessage(crossed.tier), crossed.tier === 90 ? "warning" : "info")
+    return { message: getMessage("ai_budget_monthly", crossed.severity), severity: crossed.severity }
   } catch {
     /* metering is advisory — never disrupt the chat */
+    return null
   }
 }
