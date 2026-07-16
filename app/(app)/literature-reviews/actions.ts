@@ -54,7 +54,7 @@ export async function removeStagingLiterature(literatureId: string) {
       return { success: false as const, error: "Record not found" }
     }
     if (row.created_by !== user.id || row.catalog_placement !== "staging") {
-      return { success: false as const, error: "Not allowed to remove this staged item" }
+      return { success: false as const, error: "Not allowed to remove this paper" }
     }
 
     if (row.pdf_storage_path) {
@@ -71,7 +71,7 @@ export async function removeStagingLiterature(literatureId: string) {
     revalidatePath("/literature-reviews")
     return { success: true as const }
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Failed to remove staged paper"
+    const message = error instanceof Error ? error.message : "Failed to remove paper"
     return { success: false as const, error: message }
   }
 }

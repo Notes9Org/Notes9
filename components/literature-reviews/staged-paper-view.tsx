@@ -190,15 +190,12 @@ export function StagedPaperView({
             </Button>
           </div>
         </div>
-        {!isSavedToLibrary && stagedDaysLeft !== null ? (
+        {!isSavedToLibrary ? (
           <div className="mt-3 flex items-start gap-2 rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
             <BookmarkPlus className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>
-              You&apos;re reading this without adding it to your library. It stays available for{" "}
-              <span className="font-medium text-foreground">
-                {stagedDaysLeft} {stagedDaysLeft === 1 ? "day" : "days"}
-              </span>
-              , then it&apos;s removed automatically. <span className="font-medium text-foreground">Save to library</span> to keep it.
+              You&apos;re just reading this — it isn&apos;t in your library yet.{" "}
+              <span className="font-medium text-foreground">Save to library</span> to keep it.
             </span>
           </div>
         ) : null}
@@ -252,7 +249,7 @@ export function StagedPaperView({
           <div>
             <CardTitle className="text-lg">Paper Source & PDF</CardTitle>
             <CardDescription>
-              Automatic import skipped or failed for this reference.
+              Couldn&apos;t fetch an open-access PDF. Open via the links below, or upload one.
             </CardDescription>
           </div>
           <UploadLiteraturePdfDialog
@@ -289,11 +286,11 @@ export function StagedPaperView({
               <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-muted">
                 <FileText className="h-6 w-6 text-muted-foreground" />
               </div>
-              <h4 className="text-lg font-semibold text-foreground">No PDF from search link</h4>
+              <h4 className="text-lg font-semibold text-foreground">No open-access PDF found</h4>
               <p className="mx-auto mt-2 max-w-lg text-sm text-muted-foreground">
-                Staging only pulls the PDF URL from your search result. That link may be missing,
-                blocked for server download, or require a browser session. Download the PDF yourself
-                if needed, then upload it here to read and annotate.
+                The PDF link from your search result may be missing, blocked for server download,
+                or require a browser session. Open it via the links below, or download it yourself
+                and upload it here to read and annotate.
               </p>
               <div className="mt-6 flex flex-wrap items-center justify-center gap-4">
                 {lit.doi && (

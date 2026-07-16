@@ -215,8 +215,8 @@ function PaperSearchCardImpl({ paper, onStage, onOpenStaged, onSave, onSaveToRep
                   size="icon"
                   onClick={() => onRemove(paper.id)}
                   className="hover:bg-destructive hover:text-destructive-foreground"
-                  title="Close staged paper"
-                  aria-label="Close staged paper"
+                  title="Close reader"
+                  aria-label="Close reader"
                 >
                   <X size={14} />
                 </Button>
@@ -253,28 +253,28 @@ function PaperSearchCardImpl({ paper, onStage, onOpenStaged, onSave, onSaveToRep
                   disabled={isStaging}
                   title={
                     isStaged
-                      ? "View staged paper"
+                      ? "Open reader"
                       : isStaging
-                        ? "Staging…"
-                        : "Stage paper"
+                        ? "Opening…"
+                        : "Read paper"
                   }
                   aria-label={
                     isStaged
-                      ? "View staged paper"
+                      ? "Open reader"
                       : isStaging
-                        ? "Staging"
-                        : "Stage paper"
+                        ? "Opening"
+                        : "Read paper"
                   }
                   className="gap-1"
                 >
                   {isStaging ? (
                     <Loader2 size={14} className="animate-spin" />
                   ) : isStaged ? (
-                    "Staged"
+                    "Reading"
                   ) : (
                     <>
                       <Plus size={14} />
-                      Stage
+                      Read
                     </>
                   )}
                 </Button>
