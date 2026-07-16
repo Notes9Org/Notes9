@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import Image from "next/image"
 import { motion } from "framer-motion"
 import { CaretUp as ChevronUp, CaretUpDown, Check, Flask as FlaskConical, Folder, FolderOpen, NotePencil as NotebookPen, SidebarSimple as PanelLeft, Plus, MagnifyingGlass as Search, Gear as Settings, TestTube, FileText, NotePencil as FileEdit, CircleNotch as Loader2 } from "@phosphor-icons/react/ssr"
 import {
@@ -503,31 +502,13 @@ export function AppSidebar() {
         className="pointer-events-none absolute inset-x-0 top-0 h-44 bg-[radial-gradient(120%_100%_at_50%_0%,color-mix(in_oklab,var(--primary)_8%,transparent),transparent_70%)]"
       />
       {/* Header with Workspace Dropdown */}
-      <SidebarHeader
-        className={cn(
-          "p-2 shrink-0",
-          isIconMode && "gap-1 pb-1 pt-1.5"
-        )}
-      >
+      <SidebarHeader className="p-2 shrink-0">
         <SidebarMenu>
           <SidebarMenuItem>
             {isIconMode ? (
-              // Icon mode: logo + expand stacked, same width as nav icons (no horizontal gap)
-              <div className="flex w-full flex-col items-center gap-1">
-                <SidebarMenuButton asChild size="lg" className="h-9 w-9 p-0 [&>span]:hidden">
-                  <Link href="/dashboard" aria-label="Notes9 — go to dashboard">
-                    <div className="flex aspect-square size-8 items-center justify-center rounded-lg overflow-hidden">
-                      <Image
-                        src="/notes9-logo-mark-transparent.png"
-                        alt="Notes9 Logo"
-                        width={32}
-                        height={32}
-                        className="size-8 object-contain dark:invert dark:brightness-125"
-                      />
-                    </div>
-                  </Link>
-                </SidebarMenuButton>
-
+              // Icon mode: no logo — just the expand toggle. Keep the header the
+              // same height as expanded (min-h-12) so the rows below don't shift up.
+              <div className="flex min-h-12 w-full items-center justify-center">
                 <Button
                   variant="ghost"
                   size="icon"
@@ -574,15 +555,11 @@ export function AppSidebar() {
         </SidebarMenu>
       </SidebarHeader>
 
-      <SidebarContent
-        className={cn(
-          isIconMode && "gap-0 overflow-y-auto overflow-x-hidden pt-0"
-        )}
-      >
+      <SidebarContent>
         {/* Collapsed rail: a search icon stands in for the full field. Clicking
             it expands the sidebar and focuses the search input. Only in icon mode. */}
         {isIconMode && (
-          <SidebarGroup className="flex flex-col items-center px-1.5 pb-1 pt-0">
+          <SidebarGroup className="flex flex-col items-center px-1.5 py-2">
             <SidebarGroupContent className="w-full flex flex-col items-center">
               <SidebarMenu className="flex w-full flex-col items-center gap-0.5">
                 <SidebarMenuItem>
@@ -714,16 +691,24 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Global Create Button - Hidden in icon mode */}
-        <SidebarGroup className={cn(isIconMode && "hidden", "pt-0 pb-1")}>
-          <SidebarGroupContent className="px-2">
-            <SidebarMenu>
+        {/* Global Create Button — icon in collapsed mode so the New slot keeps
+            its height (rows below stay put) and collapsed users can still create. */}
+        <SidebarGroup className={cn("pt-0 pb-1", isIconMode && "flex flex-col items-center")}>
+          <SidebarGroupContent className={cn("px-2", isIconMode && "w-full flex flex-col items-center px-1.5")}>
+            <SidebarMenu className={cn(isIconMode && "flex w-full flex-col items-center")}>
               <SidebarMenuItem>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <SidebarMenuButton data-tour={TOUR.createNew} className="h-8 w-full justify-start gap-2 rounded-lg bg-[#e4ecd9] text-[13px] font-medium text-[#4f5f42] shadow-none ring-1 ring-inset ring-black/[0.04] transition-all duration-150 hover:bg-[#d6e3c7] hover:text-[#3d4a35] active:scale-[0.985] dark:bg-[#3d4a35] dark:text-[#e4ecd9] dark:ring-white/[0.06] dark:hover:bg-[#4f5f42]">
+                    <SidebarMenuButton
+                      data-tour={TOUR.createNew}
+                      tooltip={isIconMode ? "New" : undefined}
+                      className={cn(
+                        "h-8 rounded-lg bg-[#e4ecd9] text-[13px] font-medium text-[#4f5f42] shadow-none ring-1 ring-inset ring-black/[0.04] transition-all duration-150 hover:bg-[#d6e3c7] hover:text-[#3d4a35] active:scale-[0.985] dark:bg-[#3d4a35] dark:text-[#e4ecd9] dark:ring-white/[0.06] dark:hover:bg-[#4f5f42]",
+                        isIconMode ? "size-8 justify-center p-0" : "w-full justify-start gap-2",
+                      )}
+                    >
                       <Plus className="size-4 shrink-0" />
-                      <span>New</span>
+                      <span className={cn(isIconMode && "hidden")}>New</span>
                     </SidebarMenuButton>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent className="w-56 rounded-lg ml-2" side="right" align="start">
@@ -777,7 +762,9 @@ export function AppSidebar() {
         {/* Main navigation: one flat, minimal list. Icons only when collapsed. */}
         <SidebarGroup
           className={cn(
-            isIconMode && "flex flex-col items-center px-1.5 pb-1 pt-0 gap-0.5"
+            // Expanded: px-4 so the nav box's outer edge aligns with the search
+            // field / New button (both inset 16px = group p-2 + content px-2).
+            isIconMode ? "flex flex-col items-center px-1.5 pb-1 gap-0.5" : "px-4"
           )}
         >
           <SidebarGroupContent
@@ -904,7 +891,11 @@ export function AppSidebar() {
                                 // (NAV_ROW_CLASS), so without this the Link eats
                                 // the click and navigates instead of opening the
                                 // switcher.
-                                className="z-[2] !top-1/2 !-translate-y-1/2 size-5 rounded-[6px] bg-background text-muted-foreground shadow-sm transition-shadow duration-150 hover:shadow-md hover:text-primary data-[state=open]:text-primary dark:bg-sidebar-accent"
+                                // !top-4: center on the FIRST row (h-8 → 16px),
+                                // not on the whole item — the Experiments item
+                                // also holds the Lab notes/Data sub-rows, so
+                                // top-1/2 would sink the chevron down onto them.
+                                className="z-[2] !top-4 !-translate-y-1/2 size-5 rounded-[6px] bg-background text-muted-foreground shadow-sm transition-shadow duration-150 hover:shadow-md hover:text-primary data-[state=open]:text-primary dark:bg-sidebar-accent"
                               >
                                 <CaretUpDown weight="bold" className="!size-3" />
                               </SidebarMenuAction>
@@ -1041,7 +1032,7 @@ export function AppSidebar() {
                             inside experiments): indented tree rows sharing the
                             same sliding pill as the top level. */}
                         {!isIconMode && item.children && item.children.length > 0 && (
-                          <SidebarMenuSub className="mx-0 my-0.5 ml-[1.05rem] gap-0.5 border-l border-sidebar-border/70 py-0 pl-2 pr-0">
+                          <SidebarMenuSub className="mx-0 mt-0.5 mb-0 ml-[1.05rem] gap-0.5 border-l border-sidebar-border/70 py-0 pl-2 pr-0">
                             {item.children.map((child) => {
                               const ChildIcon = child.icon
                               const childActive =
@@ -1062,7 +1053,7 @@ export function AppSidebar() {
                                   <SidebarMenuSubButton
                                     asChild
                                     isActive={childActive}
-                                    className="relative z-[1] h-7 rounded-lg text-[13px] text-sidebar-foreground/70 transition-colors duration-150 [&_svg]:text-sidebar-foreground/50 hover:bg-background/60 hover:text-sidebar-foreground dark:hover:bg-background/40 data-[active=true]:bg-transparent data-[active=true]:font-medium data-[active=true]:text-sidebar-foreground data-[active=true]:[&_svg]:text-primary"
+                                    className="relative z-[1] h-8 rounded-lg text-[13px] text-sidebar-foreground/70 transition-colors duration-150 [&_svg]:text-sidebar-foreground/50 hover:bg-background/60 hover:text-sidebar-foreground dark:hover:bg-background/40 data-[active=true]:bg-transparent data-[active=true]:font-medium data-[active=true]:text-sidebar-foreground data-[active=true]:[&_svg]:text-primary"
                                   >
                                     <Link
                                       href={
