@@ -33,7 +33,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { BookOpen, ArrowSquareOut as ExternalLink, FileText, Plus, MagnifyingGlass as Search, Star, Trash as Trash2, X, CircleNotch as Loader2, CaretLeft as ChevronLeft, CaretRight as ChevronRight } from "@phosphor-icons/react/ssr";
+import { BookOpen, ArrowSquareOut as ExternalLink, FileText, Plus, MagnifyingGlass as Search, Star, Trash as Trash2, X, CircleNotch as Loader2 } from "@phosphor-icons/react/ssr";
 import Link from "next/link";
 import { toast } from "sonner";
 import { LiteratureDetailView } from "./literature-detail-view";
@@ -283,32 +283,6 @@ export function RepoTab({
   };
 
   const scrollTabsRef = useRef<HTMLDivElement>(null);
-  const [showLeftArrow, setShowLeftArrow] = useState(false);
-  const [showRightArrow, setShowRightArrow] = useState(false);
-
-  const checkScroll = () => {
-    if (scrollTabsRef.current) {
-      const { scrollLeft, scrollWidth, clientWidth } = scrollTabsRef.current;
-      setShowLeftArrow(scrollLeft > 0);
-      setShowRightArrow(scrollLeft < scrollWidth - clientWidth - 2);
-    }
-  };
-
-  useEffect(() => {
-    checkScroll();
-    window.addEventListener('resize', checkScroll);
-    return () => window.removeEventListener('resize', checkScroll);
-  }, [openTabs]);
-
-  const scrollTabs = (direction: 'left' | 'right') => {
-    if (scrollTabsRef.current) {
-      const scrollAmount = 250;
-      scrollTabsRef.current.scrollBy({
-        left: direction === 'left' ? -scrollAmount : scrollAmount,
-        behavior: 'smooth'
-      });
-    }
-  };
 
   // Scroll active tab into view
   useEffect(() => {
@@ -324,7 +298,6 @@ export function RepoTab({
         }
       }
     }
-    checkScroll();
   }, [activeTab]);
 
   const getStatusBadge = (status: string) => {
@@ -526,23 +499,10 @@ export function RepoTab({
             </TabsTrigger>
           </TabsList>
           <div className="relative flex-1 overflow-hidden">
-          {showLeftArrow && (
-            <div className="absolute left-0 top-0 bottom-0 z-20 flex items-center bg-gradient-to-r from-background via-background/80 to-transparent pr-10 pointer-events-none">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 rounded-full shadow-lg bg-background border pointer-events-auto hover:bg-muted ml-0.5 transform translate-y-[3px]"
-                onClick={() => scrollTabs('left')}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
           
           <div 
             ref={scrollTabsRef}
             className="overflow-x-auto no-scrollbar scroll-smooth"
-            onScroll={checkScroll}
           >
             <TabsList className="bg-transparent h-auto border-none rounded-none px-1 pt-0 pb-1.5 flex items-center justify-start gap-1.5 w-max flex-nowrap min-w-full">
               {openTabs.map(id => {
@@ -582,22 +542,9 @@ export function RepoTab({
                   </TabsTrigger>
                 )
               })}
-              <div className="w-10 flex-shrink-0" />
             </TabsList>
           </div>
 
-          {showRightArrow && (
-            <div className="absolute right-0 top-0 bottom-0 z-20 flex items-center bg-gradient-to-l from-background via-background/80 to-transparent pl-10 pointer-events-none">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 rounded-full shadow-lg bg-background border pointer-events-auto hover:bg-muted mr-0.5 transform translate-y-[3px]"
-                onClick={() => scrollTabs('right')}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
           </div>
           </div>
         </div>

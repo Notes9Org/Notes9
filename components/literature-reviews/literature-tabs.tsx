@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { MotionTabPanel, motion, useReducedMotion } from "@/components/literature-reviews/motion"
-import { MagnifyingGlass as SearchIcon, Database, CaretLeft as ChevronLeft, CaretRight as ChevronRight, CircleNotch as Loader2, X } from "@phosphor-icons/react/ssr"
+import { MagnifyingGlass as SearchIcon, Database, CircleNotch as Loader2, X } from "@phosphor-icons/react/ssr"
 import {
   LiteratureSearchForm,
   SearchTab,
@@ -603,32 +603,6 @@ export function LiteratureTabs({
   }, [topSection, pendingPdfImportIds, stagedByIdMerged, router])
 
   const scrollTabsRef = useRef<HTMLDivElement>(null)
-  const [showLeftArrow, setShowLeftArrow] = useState(false)
-  const [showRightArrow, setShowRightArrow] = useState(false)
-
-  const checkScroll = useCallback(() => {
-    if (scrollTabsRef.current) {
-      const { scrollLeft, scrollWidth, clientWidth } = scrollTabsRef.current
-      setShowLeftArrow(scrollLeft > 0)
-      setShowRightArrow(scrollLeft < scrollWidth - clientWidth - 2)
-    }
-  }, [])
-
-  useEffect(() => {
-    checkScroll()
-    window.addEventListener("resize", checkScroll)
-    return () => window.removeEventListener("resize", checkScroll)
-  }, [stripPaperIds, checkScroll])
-
-  const scrollTabs = useCallback((direction: "left" | "right") => {
-    if (scrollTabsRef.current) {
-      const scrollAmount = 250
-      scrollTabsRef.current.scrollBy({
-        left: direction === "left" ? -scrollAmount : scrollAmount,
-        behavior: "smooth",
-      })
-    }
-  }, [])
 
   useEffect(() => {
     if (resolvedActiveTab !== "search" && scrollTabsRef.current) {
@@ -644,8 +618,7 @@ export function LiteratureTabs({
         }
       }
     }
-    checkScroll()
-  }, [resolvedActiveTab, checkScroll])
+  }, [resolvedActiveTab])
 
   const markStagedPaperOpened = useCallback((literatureId: string) => {
     setOpenedStagedIds((prev) => (prev.includes(literatureId) ? prev : [...prev, literatureId]))
@@ -1070,23 +1043,10 @@ export function LiteratureTabs({
           )}
         </TabsList>
         <div className="relative flex-1 overflow-hidden">
-        {showLeftArrow && (
-          <div className="absolute left-0 top-0 bottom-0 z-20 flex items-center bg-gradient-to-r from-background via-background/80 to-transparent pr-10 pointer-events-none">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 rounded-full shadow-lg bg-background border pointer-events-auto hover:bg-muted ml-0.5 transform translate-y-[1.5px] transition-transform active:scale-95"
-              onClick={() => scrollTabs("left")}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-          </div>
-        )}
 
         <div
           ref={scrollTabsRef}
           className="overflow-x-auto no-scrollbar scroll-smooth"
-          onScroll={checkScroll}
         >
           <TabsList data-tour="lit-tabs" className="bg-transparent h-auto border-none rounded-none flex items-center justify-start flex-nowrap w-max min-w-full px-1 pt-0 pb-1.5 gap-1.5">
             {stripPaperIds.map((id) => {
@@ -1124,22 +1084,9 @@ export function LiteratureTabs({
                 </TabsTrigger>
               )
             })}
-            <div className="w-10 flex-shrink-0" />
           </TabsList>
         </div>
 
-        {showRightArrow && (
-          <div className="absolute right-0 top-0 bottom-0 z-20 flex items-center bg-gradient-to-l from-background via-background/80 to-transparent pl-10 pointer-events-none">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 rounded-full shadow-lg bg-background border pointer-events-auto hover:bg-muted mr-0.5 transform translate-y-[1.5px] transition-transform active:scale-95"
-              onClick={() => scrollTabs("right")}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        )}
         </div>
       </div>
     </div>
@@ -1329,6 +1276,7 @@ export function LiteratureTabs({
                               lit={lit}
                               onSavePaper={handleSaveFromStaging}
                               savingLiteratureId={savingStagingLiteratureId}
+                              onRemove={() => setRemoveTargetId(lit.id)}
                             />
                           ) : (
                             <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
