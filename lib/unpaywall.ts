@@ -22,6 +22,8 @@ const FETCH_TIMEOUT_MS = 8000
 type UnpaywallOaLocation = {
   url_for_pdf?: string | null
   url?: string | null
+  host_type?: string | null
+  version?: string | null
 }
 
 type UnpaywallResponse = {
@@ -85,11 +87,55 @@ export function extractPdfFromUnpaywallPayload(data: UnpaywallResponse): string 
 }
 
 /**
+ * Harvest EVERY OA PDF URL Unpaywall knows for a work, ordered by how likely the
+ * host is to serve the PDF without a bot-wall:
+ *   1. `best_oa_location` (Unpaywall's own pick)
+ *   2. repository / green-OA copies (institutional repos, PMC, arXiv, Zenodo) —
+ *      these almost never bot-wall, so they rescue papers whose publisher does
+ *      (Elsevier/Cell 403, Nature Cloudflare, etc.)
+ *   3. everything else (publisher gold-OA: Frontiers, PLOS, MDPI, …)
+ * Deduped, order-preserving. Returning many candidates lets the downloader race
+ * them and keep the first that actually yields PDF bytes — the core of robust,
+ * publisher-agnostic OA retrieval.
+ */
+export function extractAllPdfUrlsFromUnpaywallPayload(data: UnpaywallResponse): string[] {
+  const pdfOf = (loc: UnpaywallOaLocation | null | undefined): string | null => {
+    if (!loc) return null
+    const byPdf = firstHttpUrl(loc.url_for_pdf)
+    if (byPdf) return byPdf
+    if (loc.url && /\.pdf(\?|#|$)/i.test(String(loc.url))) return String(loc.url).trim()
+    return null
+  }
+  const locations = data.oa_locations ?? []
+  const repository = locations.filter((l) => (l.host_type ?? "").toLowerCase() === "repository")
+  const other = locations.filter((l) => (l.host_type ?? "").toLowerCase() !== "repository")
+
+  const ordered: Array<UnpaywallOaLocation | null | undefined> = [
+    data.best_oa_location,
+    ...repository,
+    ...other,
+  ]
+  const seen = new Set<string>()
+  const urls: string[] = []
+  for (const loc of ordered) {
+    const u = pdfOf(loc)
+    if (u && !seen.has(u)) {
+      seen.add(u)
+      urls.push(u)
+    }
+  }
+  return urls
+}
+
+/**
  * Raw Unpaywall lookup by (already-normalized) DOI + contact email. Timed out
  * via AbortController — same pattern as lib/supabase/middleware.ts — so one
  * slow/hanging Unpaywall response can't stall a request indefinitely.
  */
-async function fetchUnpaywallPdfUrl(normalizedDoi: string, email: string): Promise<string | null> {
+// Throws on any non-result (network error, not OA, no PDF) so the caller's cache
+// wrapper never stores a negative — a transient Unpaywall timeout must not
+// suppress a real OA PDF for the whole cache window.
+async function fetchUnpaywallPdfUrlsOrThrow(normalizedDoi: string, email: string): Promise<string[]> {
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
   try {
@@ -98,39 +144,50 @@ async function fetchUnpaywallPdfUrl(normalizedDoi: string, email: string): Promi
       headers: { Accept: "application/json" },
       signal: controller.signal,
     })
-    if (!res.ok) return null
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const data = (await res.json()) as UnpaywallResponse
-    if (data.error === true) return null
-    return extractPdfFromUnpaywallPayload(data)
-  } catch (e) {
-    console.warn("[unpaywall] lookup failed for DOI", normalizedDoi, e instanceof Error ? e.message : String(e))
-    return null
+    if (data.error === true) throw new Error("unpaywall error flag")
+    const urls = extractAllPdfUrlsFromUnpaywallPayload(data)
+    if (urls.length === 0) throw new Error("no OA PDF")
+    return urls
   } finally {
     clearTimeout(timeoutId)
   }
 }
 
-// A DOI → OA PDF URL mapping is effectively immutable (it only changes when a
-// new OA copy is deposited, which is rare and not latency-sensitive to pick up
-// same-day). Cache for a day so repeat lookups of the same DOI across users/
-// requests skip the network round-trip entirely.
-const cachedFetchUnpaywallPdfUrl = unstable_cache(
-  fetchUnpaywallPdfUrl,
+// A resolved DOI → OA PDF location set is effectively immutable, so cache
+// successes for a day. `unstable_cache` does NOT cache thrown errors, so
+// negatives (miss/timeout) are retried on the next lookup rather than pinned 24h.
+const cachedFetchUnpaywallPdfUrls = unstable_cache(
+  fetchUnpaywallPdfUrlsOrThrow,
   ["unpaywall-doi-lookup"],
   { revalidate: 60 * 60 * 24 },
 )
 
 /**
- * Resolve a single DOI to its best OA PDF URL via Unpaywall. Returns `null` on any
- * failure (no email configured, network error, not OA, no PDF) — best-effort.
+ * Resolve a DOI to ALL known OA PDF URLs via Unpaywall, ordered best/repository
+ * first. Returns `[]` on any failure (no email, network error, not OA) — best-effort.
  */
+export async function resolveUnpaywallPdfUrls(
+  doi: string | null | undefined,
+  contactEmail?: string | null,
+): Promise<string[]> {
+  const email = unpaywallContactEmail(contactEmail)
+  if (!email) return []
+  const normalized = normalizeDoi(doi)
+  if (!normalized) return []
+  try {
+    return await cachedFetchUnpaywallPdfUrls(normalized, email)
+  } catch (e) {
+    console.warn("[unpaywall] lookup failed for DOI", normalized, e instanceof Error ? e.message : String(e))
+    return []
+  }
+}
+
+/** Best single OA PDF URL for a DOI (first of {@link resolveUnpaywallPdfUrls}). */
 export async function resolveUnpaywallPdfUrl(
   doi: string | null | undefined,
   contactEmail?: string | null,
 ): Promise<string | null> {
-  const email = unpaywallContactEmail(contactEmail)
-  if (!email) return null
-  const normalized = normalizeDoi(doi)
-  if (!normalized) return null
-  return cachedFetchUnpaywallPdfUrl(normalized, email)
+  return (await resolveUnpaywallPdfUrls(doi, contactEmail))[0] ?? null
 }
