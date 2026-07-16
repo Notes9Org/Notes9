@@ -676,9 +676,21 @@ async function fetchAndValidatePdf(
   signal: AbortSignal,
   maxBytes: number,
 ): Promise<{ pdf: PdfDownloadResult | null; retryable: boolean }> {
+  const startedAt = Date.now()
+  const host = safeHost(url)
+  const log = (outcome: string, extra?: Record<string, unknown>) =>
+    console.log(
+      `[oa] fetch host=${host} outcome=${outcome} ms=${Date.now() - startedAt}` +
+        (extra ? " " + Object.entries(extra).map(([k, v]) => `${k}=${v}`).join(" ") : ""),
+    )
+
   const res = await fetch(url, { headers: pdfFetchHeaders(url), redirect: "follow", signal })
-  if (!res.ok || !res.body) return { pdf: null, retryable: res.status === 403 || res.status === 429 }
   const ct = (res.headers.get("content-type") || "").toLowerCase()
+  if (!res.ok || !res.body) {
+    const retryable = res.status === 403 || res.status === 429
+    log("http-error", { status: res.status, retryable })
+    return { pdf: null, retryable }
+  }
 
   const reader = res.body.getReader()
   const chunks: Uint8Array[] = []
@@ -702,15 +714,24 @@ async function fetchAndValidatePdf(
           if (filled >= 8) break
         }
         // Reject an HTML bot/verification page before downloading its whole body.
-        if (looksLikeHtmlInterstitial(ct, head)) return { pdf: null, retryable: true }
+        if (looksLikeHtmlInterstitial(ct, head)) {
+          log("html-wall", { ct })
+          return { pdf: null, retryable: true }
+        }
       }
-      if (total > maxBytes) return { pdf: null, retryable: false }
+      if (total > maxBytes) {
+        log("too-big", { bytes: total, maxBytes })
+        return { pdf: null, retryable: false }
+      }
     }
   } finally {
     reader.cancel().catch(() => {})
   }
 
-  if (total === 0) return { pdf: null, retryable: false }
+  if (total === 0) {
+    log("empty")
+    return { pdf: null, retryable: false }
+  }
   const buf = new Uint8Array(total)
   let offset = 0
   for (const c of chunks) {
@@ -718,9 +739,20 @@ async function fetchAndValidatePdf(
     offset += c.length
   }
   if (ct.includes("application/pdf") || isPdfMagic(buf)) {
+    log("ok", { bytes: total, ct: ct || "none" })
     return { pdf: { buffer: buf.buffer as ArrayBuffer, usedUrl: url }, retryable: false }
   }
+  log("not-pdf", { bytes: total, ct: ct || "none" })
   return { pdf: null, retryable: false }
+}
+
+/** Host of a URL for logging; never throws on a malformed URL. */
+function safeHost(url: string): string {
+  try {
+    return new URL(url).host
+  } catch {
+    return "invalid-url"
+  }
 }
 
 async function tryDownloadOnePdf(
@@ -892,6 +924,12 @@ export async function importLiteraturePdfFromRemote(params: {
     throw new Error("No PDF URLs to try")
   }
 
+  console.log(
+    `[oa] import-start literatureId=${params.literatureId} candidates=${params.pdfUrls.length}` +
+      ` hosts=[${params.pdfUrls.map(safeHost).join(",")}]` +
+      (params.oaPackageTgzUrl ? " tgz=1" : ""),
+  )
+
   // Content verification (Phase 3 of snuggly-meandering-pinwheel).
   // When the expected title and an access token are provided, route the
   // candidate URLs through catalyst first so we only download PDFs that
@@ -938,6 +976,11 @@ export async function importLiteraturePdfFromRemote(params: {
     buffer = fromTgz.buffer
     usedUrl = fromTgz.usedUrl
   }
+
+  console.log(
+    `[oa] import-ok literatureId=${params.literatureId} won=${safeHost(usedUrl)}` +
+      ` bytes=${buffer.byteLength}`,
+  )
 
   const triedUrls = [...params.pdfUrls, ...(params.oaPackageTgzUrl ? [params.oaPackageTgzUrl] : [])]
   await persistLiteraturePdfBuffer({

@@ -469,6 +469,12 @@ export async function resolveOaSourcesUncached(
       pdfUrls.push(url)
     }
   }
+  console.log(
+    `[oa] resolve doi=${normalizedDoi ?? "none"} pmid=${paper.pmid ?? "none"}` +
+      ` openalex=${openAlex.pdfUrls.length} europepmc=${europePmc.pdfUrl ? 1 : 0}` +
+      ` core=${coreUrl ? 1 : 0} preprint=${preprintUrls.length} s2=${s2Url ? 1 : 0}` +
+      ` merged=${pdfUrls.length}`,
+  )
   const abstract = openAlex.abstract ?? europePmc.abstract ?? null
   return { pdfUrls, oaPackageTgzUrl: null, abstract }
 }
