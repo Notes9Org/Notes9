@@ -96,8 +96,42 @@ export async function GET(request: Request): Promise<NextResponse> {
     if (rows.length < BATCH_SIZE) break;
   }
 
-  console.log("staged_literature_cleanup_done", { hard_deleted: hardDeleted });
-  return NextResponse.json({ ok: true, hard_deleted: hardDeleted });
+  // Transient-chunk TTL sweep: staged papers chunk into semantic_chunks carrying
+  // an expires_at (migration 099). Deleting the parent row above also enqueues a
+  // chunk-delete via the DB trigger, but sweeping expired chunks directly makes
+  // the TTL self-enforcing and cleans any orphans. Batched + idempotent; a chunk
+  // failure logs but never fails the whole cron.
+  let chunksDeleted = 0;
+  while (chunksDeleted < MAX_ROWS_PER_RUN) {
+    const { data: crows, error: cErr } = await supabase
+      .from("semantic_chunks")
+      .select("id")
+      .not("expires_at", "is", null)
+      .lt("expires_at", nowIso)
+      .limit(BATCH_SIZE);
+    if (cErr) {
+      console.error("staged_chunk_cleanup_select_failed", { error: cErr.message });
+      break;
+    }
+    if (!crows || crows.length === 0) break;
+    const cids = crows.map((r) => r.id).filter(Boolean);
+    const { error: cDelErr } = await supabase
+      .from("semantic_chunks")
+      .delete()
+      .in("id", cids);
+    if (cDelErr) {
+      console.error("staged_chunk_cleanup_delete_failed", { error: cDelErr.message });
+      break;
+    }
+    chunksDeleted += cids.length;
+    if (crows.length < BATCH_SIZE) break;
+  }
+
+  console.log("staged_literature_cleanup_done", {
+    hard_deleted: hardDeleted,
+    chunks_deleted: chunksDeleted,
+  });
+  return NextResponse.json({ ok: true, hard_deleted: hardDeleted, chunks_deleted: chunksDeleted });
 }
 
 // Also accept POST for manual incident-response calls.

@@ -275,6 +275,15 @@ export async function savePaperToRepository(
         return { success: false, error: updateError?.message ?? "Failed to save paper" }
       }
 
+      // Promoted to the library → make any existing transient chunks permanent
+      // immediately so the staged-chunk TTL sweep can't delete them in the gap
+      // before the re-index lands. Best-effort; the re-index will backfill anyway.
+      await supabase
+        .from("semantic_chunks")
+        .update({ expires_at: null })
+        .eq("source_type", "literature_review")
+        .eq("source_id", stagingRow.id)
+
       let warning: string | null = null
       const { data: withPdf } = await supabase
         .from("literature_reviews")
