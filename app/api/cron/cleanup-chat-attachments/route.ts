@@ -209,6 +209,18 @@ export async function GET(request: Request): Promise<NextResponse> {
         );
       } else {
         tombstonesHardDeleted += ids.length;
+        // Phase 5: remove any semantic_chunks these attachments produced (they
+        // may have been chunked for retrieval). Best-effort — a failure here
+        // doesn't undo the row delete, and the transient-chunk TTL sweep in
+        // cleanup-staged-literature is the backstop.
+        const { error: chunkErr } = await supabase
+          .from("semantic_chunks")
+          .delete()
+          .eq("source_type", "chat_attachment")
+          .in("source_id", ids);
+        if (chunkErr) {
+          console.error("chat_attachment_chunk_delete_failed", { error: chunkErr.message });
+        }
       }
     }
 
