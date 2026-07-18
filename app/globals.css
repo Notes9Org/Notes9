@@ -2037,3 +2037,24 @@ body > [data-radix-popper-content-wrapper] {
     animation: none !important;
   }
 }
+
+/* Citation click → result-card flash: a brief accent ring so the user sees
+   which paper the AI-summary citation refers to. */
+.n9-cite-flash {
+  animation: n9-cite-flash 1.6s ease-out;
+  border-radius: 0.75rem;
+}
+@keyframes n9-cite-flash {
+  0%,
+  35% {
+    box-shadow: 0 0 0 2px var(--n9-accent);
+  }
+  100% {
+    box-shadow: 0 0 0 2px transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .n9-cite-flash {
+    animation: none;
+  }
+}

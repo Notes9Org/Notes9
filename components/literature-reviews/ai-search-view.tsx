@@ -163,8 +163,17 @@ export function AiSearchView({
     const handler = (e: Event) => {
       const label = (e as CustomEvent<{ citeLabel: string }>).detail?.citeLabel
       if (!label) return
-      const card = document.querySelector(`[data-cite-label="${label}"]`)
-      card?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      // :not(.notes9-cite) excludes the citation chips (which also carry
+      // data-cite-label and precede the cards) so we scroll to the paper card.
+      const card = document.querySelector(`[data-cite-label="${label}"]:not(.notes9-cite)`)
+      if (!card) return
+      card.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      // Flash the card so the user sees which paper the citation meant.
+      card.classList.remove('n9-cite-flash')
+      // Force a reflow so re-clicking the same citation restarts the animation.
+      void (card as HTMLElement).offsetWidth
+      card.classList.add('n9-cite-flash')
+      window.setTimeout(() => card.classList.remove('n9-cite-flash'), 1700)
     }
     window.addEventListener('literature:scroll-to-citation', handler)
     return () => window.removeEventListener('literature:scroll-to-citation', handler)
@@ -373,7 +382,10 @@ export function AiSearchView({
         const renderCard = (r: (typeof displayed)[number], i: number) => (
           <MotionResultCard
             key={`${r.paper?.id ?? r.sourceUrl ?? r.aiTitle ?? r.citeLabel}`}
-            data-cite-label={r.citeLabel}
+            // Anchor by the VISIBLE badge (String(i+1), same value shown on the
+            // card and used by the [N] citation chips), not the raw r.citeLabel —
+            // otherwise clicking [8] can't find the card the user sees as "8".
+            data-cite-label={String(i + 1)}
             className="rounded-xl"
             delay={Math.min(i, 8) * 0.05}
           >

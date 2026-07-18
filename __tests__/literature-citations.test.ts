@@ -181,3 +181,26 @@ describe('dedupeLiteratureSources', () => {
     expect(dedupeLiteratureSources([])).toEqual([])
   })
 })
+
+describe('scrollToLiteratureCitationCard', () => {
+  it('returns false when no matching card is rendered (caller opens the link)', async () => {
+    const { scrollToLiteratureCitationCard } = await import('../lib/literature-citations')
+    document.body.innerHTML = ''
+    expect(scrollToLiteratureCitationCard('7')).toBe(false)
+  })
+
+  it('dispatches the scroll event when the card exists, base-label fallback for sub-citations', async () => {
+    const { scrollToLiteratureCitationCard } = await import('../lib/literature-citations')
+    document.body.innerHTML = '<div data-cite-label="3"></div>'
+    const seen: string[] = []
+    const handler = (e: Event) => seen.push((e as CustomEvent<{ citeLabel: string }>).detail.citeLabel)
+    window.addEventListener('literature:scroll-to-citation', handler)
+    try {
+      expect(scrollToLiteratureCitationCard('3')).toBe(true)
+      expect(scrollToLiteratureCitationCard('3.1')).toBe(true)
+      expect(seen).toEqual(['3', '3'])
+    } finally {
+      window.removeEventListener('literature:scroll-to-citation', handler)
+    }
+  })
+})

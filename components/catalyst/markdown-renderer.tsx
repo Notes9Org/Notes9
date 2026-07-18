@@ -501,12 +501,17 @@ function MarkdownRendererImpl({
     (e: React.MouseEvent<HTMLDivElement>) => {
       const chipEl = (e.target as HTMLElement).closest<HTMLElement>('.notes9-cite');
       if (!chipEl) return;
+      const chip = readChipData(chipEl);
+      // Host override first (e.g. literature search scrolls to the result card)
+      // — consulted even for anchor chips so a web-sourced citation whose paper
+      // is listed in-page stays in-product; host returns false → link opens.
+      if (onCitationClick && onCitationClick(chip.label) !== false) {
+        e.preventDefault();
+        return;
+      }
       // Anchor variants are real links — let the browser handle them.
       if (chipEl.tagName === 'A') return;
       e.preventDefault();
-      const chip = readChipData(chipEl);
-      // Host override (e.g. literature search scrolls to the result card).
-      if (onCitationClick && onCitationClick(chip.label) !== false) return;
       // When we have a supporting span/excerpt, open the source viewer so the
       // user can read the exact passage highlighted in context (G3). Otherwise
       // fall back to the legacy deep-link navigation.
@@ -547,12 +552,16 @@ function MarkdownRendererImpl({
     (e: React.KeyboardEvent<HTMLDivElement>) => {
       if (e.key !== 'Enter' && e.key !== ' ') return;
       const chipEl = (e.target as HTMLElement).closest<HTMLElement>('.notes9-cite');
-      if (!chipEl || chipEl.tagName === 'A') return;
-      e.preventDefault();
+      if (!chipEl) return;
       const chip = readChipData(chipEl);
       // Honor the host override (literature summary scrolls to the result card)
-      // so keyboard activation matches a mouse click.
-      if (onCitationClick && onCitationClick(chip.label) !== false) return;
+      // so keyboard activation matches a mouse click — anchors included.
+      if (onCitationClick && onCitationClick(chip.label) !== false) {
+        e.preventDefault();
+        return;
+      }
+      if (chipEl.tagName === 'A') return;
+      e.preventDefault();
       if (chip.citedText || chip.excerpt) {
         openViewer(chip);
       } else {
