@@ -19,9 +19,10 @@ export interface ChatSession {
 export interface ChatMessage {
   id: string;
   session_id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'system';
   content: string;
   created_at: string;
+  metadata?: Record<string, unknown>;
 }
 
 /** Stored in `content_diffs.diff_segments` — word-level fragments plus `_` skips for unchanged runs (no full-body snapshots). */
