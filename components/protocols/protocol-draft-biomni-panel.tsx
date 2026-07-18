@@ -6,7 +6,7 @@ import { useLiteratureAgentStream } from "@/hooks/use-literature-agent-stream"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
+import { usePinnedAutoScroll } from "@/hooks/use-pinned-auto-scroll"
 import { CircleNotch as Loader2, Chat as MessageSquare, SidebarSimple as PanelRightClose, PaperPlaneTilt as Send, Sparkle as Sparkles, X } from "@phosphor-icons/react/ssr"
 import type { LiteraturePaperItem } from "./protocol-literature-panel"
 import { cn } from "@/lib/utils"
@@ -92,11 +92,8 @@ export function ProtocolDraftBiomniPanel({
     [templateShellHtml]
   )
 
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
-  }, [messages, steps, error])
+  // Pinned auto-scroll — follows new messages/steps only while the user is at the bottom.
+  const { onScroll } = usePinnedAutoScroll(scrollRef, [messages, steps, error])
 
   const buildQuery = useCallback(
     (userLine: string) => {
@@ -216,8 +213,9 @@ export function ProtocolDraftBiomniPanel({
         </div>
       </div>
 
-      <ScrollArea className="flex-1 min-h-0">
-        <div ref={scrollRef} className="px-3 py-2 space-y-3">
+      {/* Plain div so the ref targets the real scroll container */}
+      <div ref={scrollRef} onScroll={onScroll} className="flex-1 min-h-0 overflow-y-auto">
+        <div className="px-3 py-2 space-y-3">
           {clarify && (
             <div className="rounded-md border bg-card p-2 text-xs space-y-2">
               <p className="font-medium text-foreground">{clarify.question}</p>
@@ -311,7 +309,7 @@ export function ProtocolDraftBiomniPanel({
             <p className="text-xs text-destructive">{error}</p>
           )}
         </div>
-      </ScrollArea>
+      </div>
 
       <div className="border-t p-2 space-y-2 shrink-0 bg-background">
         <div className="n9-composer flex gap-1.5 overflow-hidden">
