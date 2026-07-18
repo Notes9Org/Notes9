@@ -831,6 +831,11 @@ export function LiteratureTabs({
     return m.placement === 'repository' ? 'saved' : 'staged'
   }
 
+  // Ask Catalyst on a search result: papers already in the library attach as an
+  // @-mention of their literature_reviews row (same as the opened-paper view)
+  // instead of re-downloading the PDF via ephemeral-attach.
+  const getPaperReviewId = (paper: SearchPaper) => resolvePaperMembership(paper)?.id ?? null
+
   const handleOpenStaged = (paper: SearchPaper) => {
     const id = resolveOpenableLiteratureId(paper)
     if (id) openPaperTab(id, paper.title)
@@ -1228,6 +1233,7 @@ export function LiteratureTabs({
                         onOpenStaged={handleOpenStaged}
                         isPaperStaged={isPaperStaged}
                         getPaperMembership={getPaperMembership}
+                        getPaperReviewId={getPaperReviewId}
                         isPaperStaging={(paperId) => stagingPaperId === paperId}
                         onPaperSaved={handlePaperSaved}
                         sortMode={searchSort}
@@ -1307,6 +1313,7 @@ export function LiteratureTabs({
               onStagePaper={handleStagePaper}
               onOpenStaged={handleOpenStaged}
               isPaperStaged={isPaperStaged}
+              getPaperReviewId={getPaperReviewId}
               isPaperStaging={(paperId) => stagingPaperId === paperId}
               onPaperSaved={handlePaperSaved}
               sortMode={searchSort}

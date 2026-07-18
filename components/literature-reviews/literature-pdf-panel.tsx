@@ -189,21 +189,22 @@ export function LiteraturePdfPanel({
 
   const openPaperInCatalyst = useCallback((selectedText?: string) => {
     const trimmedSelection = selectedText?.trim()
+    // Same canonical path as every other "Ask Catalyst about this paper" entry
+    // point: the row already lives in the library, so attach it as an @-mention
+    // tag instead of re-attaching the PDF as a file.
     openCatalystPanel({
       scope: 'literature',
-      query: trimmedSelection
-        ? `"${trimmedSelection}"\n\nAsk Catalyst about this selection in the attached paper.`
-        : 'Ask Catalyst about this paper.',
-      attachments: pdfUrl
-        ? [{
-            url: pdfUrl,
-            name: pdfFileName ?? 'paper.pdf',
-            contentType: 'application/pdf',
-          }]
-        : undefined,
+      webSearch: false,
       autoSend: false,
+      query: trimmedSelection
+        ? `"${trimmedSelection}"\n\nAsk Catalyst about this selection in this paper.`
+        : undefined,
+      literatureMention: {
+        id: literatureId,
+        title: (pdfFileName ?? 'paper').replace(/\.pdf$/i, ''),
+      },
     })
-  }, [pdfFileName, pdfUrl])
+  }, [literatureId, pdfFileName])
 
   return (
     <Collapsible open={annotationsOpen} onOpenChange={setAnnotationsOpen}>
