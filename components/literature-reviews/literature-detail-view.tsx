@@ -514,6 +514,7 @@ ER  - `;
               <LiteraturePdfPanel
                 literatureId={literature.id}
                 pdfUrl={`/api/literature/${literature.id}/viewer-pdf?v=${literature.pdf_uploaded_at ?? ""}`}
+                title={literature.title ? decodeHtmlEntities(literature.title) : literature.title}
                 pdfFileName={literature.pdf_file_name}
                 openInNewTabFallbackUrl={`/api/literature/${literature.id}/viewer-pdf?v=${literature.pdf_uploaded_at ?? ""}`}
                 highlightExcerpt={

@@ -236,6 +236,7 @@ export function StagedPaperView({
         <LiteraturePdfPanel
           literatureId={lit.id}
           pdfUrl={`/api/literature/${lit.id}/viewer-pdf`}
+          title={lit.title ? decodeHtmlEntities(lit.title) : lit.title}
           pdfFileName={lit.pdf_file_name || "paper.pdf"}
           openInNewTabFallbackUrl={`/api/literature/${lit.id}/viewer-pdf`}
           highlightExcerpt={activeHighlight?.excerpt ?? null}
