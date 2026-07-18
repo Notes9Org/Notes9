@@ -15,7 +15,7 @@ import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
 export default async function LiteratureReviewsPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ project?: string; tab?: string }>
+  searchParams?: Promise<{ project?: string; tab?: string; openPaper?: string }>
 }) {
   const sp = searchParams ? await searchParams : {}
   const user = await requireUser()
@@ -133,6 +133,7 @@ export default async function LiteratureReviewsPage({
         experiments={safeExperiments}
         initialProjectId={initialProjectId}
         initialTab={initialTab}
+        openPaperId={sp.openPaper ?? null}
       />
     </div>
   )

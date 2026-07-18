@@ -244,3 +244,28 @@ export function dedupeLiteratureSources<T extends LiteratureSource>(sources: T[]
   }
   return out
 }
+
+/**
+ * Citation-chip click handler for the literature AI summary surfaces: scroll
+ * the results list to the cited paper's card when it is rendered in-page.
+ * Returns false when no card exists so the renderer falls back to its default
+ * (web-sourced chips open their external link) — users only leave the product
+ * when the paper genuinely isn't in the results below.
+ */
+export function scrollToLiteratureCitationCard(label: string): boolean {
+  if (typeof document === 'undefined') return false
+  // Sub-citations like "3.1" anchor to their base paper card. Exclude the
+  // citation chips themselves (`.notes9-cite`) — they also carry data-cite-label
+  // and sit above the cards, so an unscoped query would match the clicked chip.
+  const base = label.split('.')[0]
+  const card =
+    document.querySelector(`[data-cite-label="${CSS.escape(label)}"]:not(.notes9-cite)`) ??
+    document.querySelector(`[data-cite-label="${CSS.escape(base)}"]:not(.notes9-cite)`)
+  if (!card) return false
+  window.dispatchEvent(
+    new CustomEvent('literature:scroll-to-citation', {
+      detail: { citeLabel: card.getAttribute('data-cite-label') ?? base },
+    })
+  )
+  return true
+}

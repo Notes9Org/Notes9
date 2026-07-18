@@ -122,6 +122,9 @@ interface LiteratureTabsProps {
   experiments: { id: string; name: string; project_id: string }[]
   initialProjectId?: string | null
   initialTab?: "search" | "repo"
+  /** When set (from ?openPaper=<id>), open that paper's read-mode tab on mount —
+   * how a Catalyst citation lands here from another page. */
+  openPaperId?: string | null
 }
 
 /**
@@ -150,6 +153,7 @@ export function LiteratureTabs({
   experiments,
   initialProjectId = null,
   initialTab = "search",
+  openPaperId = null,
 }: LiteratureTabsProps) {
   const router = useRouter()
   const reduce = useReducedMotion()
@@ -642,6 +646,18 @@ export function LiteratureTabs({
     },
     [markStagedPaperOpened]
   )
+
+  // Catalyst citation entry: navigation lands on
+  // /literature-reviews?openPaper=<id>; open that paper's read-mode tab once its
+  // row is loaded. Runs once per id (guarded) so re-renders don't re-trigger.
+  const openedParamRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!openPaperId || openedParamRef.current === openPaperId) return
+    const lit = stagedByIdMerged.get(openPaperId) ?? repoById.get(openPaperId)
+    if (!lit) return
+    openedParamRef.current = openPaperId
+    openPaperTab(openPaperId, lit.title)
+  }, [openPaperId, openPaperTab, stagedByIdMerged, repoById])
 
   const resolveStagedLiteratureId = useCallback(
     (paper: SearchPaper): string | null => {

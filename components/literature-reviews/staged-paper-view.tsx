@@ -8,6 +8,8 @@ import { BookOpen, Bookmark as BookmarkCheck, Bookmark as BookmarkPlus, ArrowSqu
 import { FlareIcon } from "@/components/ui/flare-icon"
 import { LiteraturePdfPanel } from "./literature-pdf-panel"
 import { UploadLiteraturePdfDialog } from "./upload-literature-pdf-dialog"
+import { useHighlightNavigation } from "@/hooks/use-highlight-navigation"
+import { normalizeAgentSourceType } from "@/lib/document-highlight"
 import { decodeHtmlEntities } from "@/lib/literature-abstract-display"
 import { attachPaperToCatalyst } from "@/lib/catalyst-launch"
 import { MotionReveal } from "@/components/literature-reviews/motion"
@@ -111,6 +113,17 @@ export function StagedPaperView({
       ? Math.max(0, Math.ceil((new Date(stagedExpiresAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000)))
       : null
   const isSaving = savingLiteratureId === lit.id
+
+  // Citation deep-link: resolve the ?highlight= param to this paper so the PDF
+  // reader highlights the exact cited span (same mechanism as the detail page).
+  const { highlightTarget } = useHighlightNavigation()
+  const activeHighlight =
+    highlightTarget &&
+    normalizeAgentSourceType(highlightTarget.sourceType) === "literature_review" &&
+    highlightTarget.sourceId === String(lit.id)
+      ? highlightTarget
+      : null
+
   const isClosedSource =
     !lit.pdf_storage_path &&
     (lit.pdf_import_status === "none" || lit.pdf_import_status === "failed")
@@ -225,6 +238,8 @@ export function StagedPaperView({
           pdfUrl={`/api/literature/${lit.id}/viewer-pdf`}
           pdfFileName={lit.pdf_file_name || "paper.pdf"}
           openInNewTabFallbackUrl={`/api/literature/${lit.id}/viewer-pdf`}
+          highlightExcerpt={activeHighlight?.excerpt ?? null}
+          highlightPageNumber={activeHighlight?.pageNumber ?? null}
           headerActions={
             <UploadLiteraturePdfDialog
               literatureReviews={[

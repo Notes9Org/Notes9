@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import {
   buildHighlightUrl,
   dispatchDocumentHighlight,
+  encodeHighlightParam,
+  HIGHLIGHT_PARAM,
   normalizeAgentSourceType,
   type HighlightTarget,
 } from '@/lib/document-highlight'
@@ -84,6 +86,18 @@ export function useSourceNavigation(): (desc: SourceNavDescriptor) => void {
           if (beforeNav.defaultPrevented) return
         }
         router.push(dest)
+      }
+
+      // Literature papers always resolve to the search/read-mode reader (the
+      // inline PDF reader), never the separate detail-page layout. The search
+      // shell opens the paper's read tab from ?openPaper on mount; the
+      // ?highlight= span drives the PDF highlight there (StagedPaperView reads
+      // it via useHighlightNavigation, same as the detail page).
+      if (normalizedType === 'literature_review') {
+        const params = new URLSearchParams({ openPaper: desc.sourceId })
+        if (spanText) params.set(HIGHLIGHT_PARAM, encodeHighlightParam(target))
+        navigate(`/literature-reviews?${params.toString()}`)
+        return
       }
 
       if (normalizedType === 'lab_note') {

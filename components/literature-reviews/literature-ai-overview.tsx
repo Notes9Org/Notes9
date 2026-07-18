@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Sparkle as Sparkles, CaretDown as ChevronDown } from '@phosphor-icons/react/ssr'
 import { MarkdownRenderer } from '@/components/catalyst/markdown-renderer'
+import { scrollToLiteratureCitationCard } from '@/lib/literature-citations'
 import type { CatalystLiterature } from '@/lib/catalyst-literature'
 
 /**
@@ -46,14 +47,7 @@ export function LiteratureAiOverview({
           showCursor={lit.streaming}
           className="w-full min-w-0 text-[13.5px] leading-relaxed break-words"
           citationsManifest={lit.manifest ?? null}
-          onCitationClick={(label) => {
-            window.dispatchEvent(
-              new CustomEvent('literature:scroll-to-citation', {
-                detail: { citeLabel: label },
-              })
-            )
-            return true
-          }}
+          onCitationClick={scrollToLiteratureCitationCard}
         />
         {!expanded && !lit.streaming && (
           <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-card to-transparent" />
