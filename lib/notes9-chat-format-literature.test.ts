@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatLiteratureAssistantMarkdown } from './literature-agent-chat-format';
+import { formatLiteratureAssistantMarkdown } from './notes9-chat-format';
 
 describe('formatLiteratureAssistantMarkdown', () => {
   it('renumbers inline citations and references by answer-source appearance', () => {

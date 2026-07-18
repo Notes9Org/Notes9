@@ -47,7 +47,7 @@ import {
 } from '@/lib/notes9-chat-format';
 import type { DonePayload } from '@/lib/agent-stream-types';
 import { ChatMessage } from '@/components/catalyst/chat-message';
-import { formatLiteratureAssistantMarkdown } from '@/lib/literature-agent-chat-format';
+import { formatLiteratureAssistantMarkdown } from '@/lib/notes9-chat-format';
 import { previewFromLiteratureSseTokenBuffer } from '@/lib/literature-stream-preview';
 import {
   parseLiteratureAssistantStoredContent,

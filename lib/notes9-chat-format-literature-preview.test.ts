@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatLiteratureAssistantMarkdown } from './literature-agent-chat-format';
+import { formatLiteratureAssistantMarkdown } from './notes9-chat-format';
 
 describe('formatLiteratureAssistantMarkdown live preview mode', () => {
   it('preserves raw citation labels when renumbering is disabled', () => {

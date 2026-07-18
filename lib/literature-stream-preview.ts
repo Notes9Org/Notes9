@@ -1,4 +1,4 @@
-import { formatLiteratureAssistantMarkdown } from '@/lib/literature-agent-chat-format';
+import { formatLiteratureAssistantMarkdown } from '@/lib/notes9-chat-format';
 import { normalizeLiteratureAgentResponse } from '@/lib/literature-agent-types';
 
 export type LiteratureLiveStreamPreview =

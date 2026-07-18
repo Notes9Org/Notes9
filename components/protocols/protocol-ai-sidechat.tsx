@@ -43,7 +43,7 @@ import { IceMascot } from "@/components/ui/ice-mascot"
 import { useChatSessions } from "@/hooks/use-chat-sessions"
 import type { ChatMessage as DbChatMessage } from "@/hooks/use-chat-sessions"
 import { LiteratureSourcesDropdown } from "@/components/literature-sources-dropdown"
-import { formatLiteratureAssistantMarkdown } from "@/lib/literature-agent-chat-format"
+import { formatLiteratureAssistantMarkdown } from "@/lib/notes9-chat-format"
 import { formatNotes9AssistantMarkdown } from "@/lib/notes9-chat-format"
 import {
   appendSourcesMarkdownSection,
