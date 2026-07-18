@@ -20,25 +20,23 @@ function expectPulseSkeleton(container: HTMLElement) {
 }
 
 describe("Skeleton loading components", () => {
-  it("DashboardLoading matches lab overview (greeting, composer, 3 cards)", () => {
+  it("DashboardLoading matches lab overview (masthead, composer, 2x2 card grid)", () => {
     const { container } = render(<DashboardLoading />)
     expectPulseSkeleton(container)
-    expect(container.querySelector(".xl\\:col-span-4")).toBeInTheDocument()
-    expect(container.querySelector(".xl\\:col-span-5")).toBeInTheDocument()
-    expect(container.querySelector(".xl\\:col-span-3")).toBeInTheDocument()
     expect(container.querySelector(".min-h-\\[132px\\]")).toBeInTheDocument()
+    expect(container.querySelector(".xl\\:grid-cols-2")).toBeInTheDocument()
+    expect(container.querySelectorAll(".bg-card").length).toBeGreaterThanOrEqual(4)
   })
 
   // PlannerLoading resolves to the dashboard loading route (there is no
   // separate planner route). The dashboard loading now renders the lab grid
-  // skeleton (greeting + composer + 3-card grid), so we assert that layout.
-  it("PlannerLoading renders greeting, composer, and lab grid", () => {
+  // skeleton (masthead + composer + 2x2 card grid), so we assert that layout.
+  it("PlannerLoading renders masthead, composer, and lab grid", () => {
     const { container } = render(<PlannerLoading />)
     expectPulseSkeleton(container)
-    expect(container.querySelector(".xl\\:col-span-4")).toBeInTheDocument()
-    expect(container.querySelector(".xl\\:col-span-5")).toBeInTheDocument()
-    expect(container.querySelector(".xl\\:col-span-3")).toBeInTheDocument()
     expect(container.querySelector(".min-h-\\[132px\\]")).toBeInTheDocument()
+    expect(container.querySelector(".xl\\:grid-cols-2")).toBeInTheDocument()
+    expect(container.querySelectorAll(".bg-card").length).toBeGreaterThanOrEqual(4)
   })
 
   it("ProjectsLoading has composer and table", () => {
@@ -94,11 +92,13 @@ describe("Skeleton loading components", () => {
     expect(container.querySelectorAll(".rounded-xl").length).toBeGreaterThanOrEqual(3)
   })
 
-  it("PapersLoading renders composer and workspace split", () => {
+  // Papers now uses the shared Catalyst list-page skeleton (composer +
+  // toolbar + filter + table), not the old workspace split.
+  it("PapersLoading renders composer and table", () => {
     const { container } = render(<PapersLoading />)
     expectPulseSkeleton(container)
     expect(container.querySelector(".min-h-\\[112px\\]")).toBeInTheDocument()
-    expect(container.querySelector(".lg\\:grid-cols-\\[minmax\\(0\\,280px\\)_1fr\\]")).toBeInTheDocument()
+    expect(container.querySelectorAll(".border-b").length).toBeGreaterThanOrEqual(3)
   })
 
   it("ReportsLoading renders composer and table", () => {

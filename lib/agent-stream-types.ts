@@ -236,6 +236,15 @@ export interface ErrorPayload {
   error: string;
 }
 
+/** SSE event: notice – plain, user-facing informational strip (NOT an
+ * assistant reply). Emitted when a requested capability is unavailable for the
+ * selected model (e.g. no native web search); `code` lets the UI branch. */
+export interface NoticePayload {
+  message: string;
+  code?: string | null;
+  [key: string]: unknown;
+}
+
 /** SSE event: ping – keep-alive */
 export interface PingPayload {
   ts?: number;
@@ -315,6 +324,7 @@ export type SseEvent =
   | { event: "synthesis_step"; data: SynthesisStepPayload }
   | { event: "done"; data: DonePayload }
   | { event: "error"; data: ErrorPayload }
+  | { event: "notice"; data: NoticePayload }
   | { event: "ping"; data: PingPayload };
 
 // ── Source-name normalizer (AD1: structured fields → view model) ──────────────
@@ -400,6 +410,7 @@ const KNOWN_EVENT_TYPES = new Set([
   "synthesis_step",
   "done",
   "error",
+  "notice",
   "ping",
 ] as const);
 
