@@ -33,12 +33,9 @@ import { useAwsTranscribe } from '@/hooks/use-aws-transcribe';
 import { VoiceWaveform } from '@/components/text-editor/voice-waveform';
 import { toast } from 'sonner';
 
-const ALLOWED_ATTACHMENT_TYPES = [
-  'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-  'application/pdf', 'text/csv',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-];
+import { ALLOWED_MIME_TYPES, ATTACHMENT_MAX_FILE_SIZE } from '@/lib/attachment-types';
+
+const ALLOWED_ATTACHMENT_TYPES: readonly string[] = ALLOWED_MIME_TYPES;
 
 // ---------------------------------------------------------------------------
 // Module-level message-content helpers (no component state closure needed)
@@ -244,7 +241,7 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
   });
 
   const uploadFile = useCallback(async (file: File): Promise<Attachment | null> => {
-    if (file.size > 10 * 1024 * 1024) { toast.error(`${file.name} is too large (max 10MB)`); return null; }
+    if (file.size > ATTACHMENT_MAX_FILE_SIZE) { toast.error(`${file.name} is too large (max 10MB)`); return null; }
     if (!ALLOWED_ATTACHMENT_TYPES.includes(file.type)) { toast.error(`${file.name} type not supported`); return null; }
     try {
       const fd = new FormData();

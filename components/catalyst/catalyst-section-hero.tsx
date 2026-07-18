@@ -15,13 +15,10 @@ import { VoiceWaveform } from "@/components/text-editor/voice-waveform"
 
 export type { CatalystSectionScope } from "@/lib/catalyst-launch"
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024
-const ALLOWED_TYPES = [
-  "image/jpeg", "image/png", "image/gif", "image/webp",
-  "application/pdf", "text/csv",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-]
+import { ALLOWED_MIME_TYPES, ATTACHMENT_MAX_FILE_SIZE } from "@/lib/attachment-types"
+
+const MAX_FILE_SIZE = ATTACHMENT_MAX_FILE_SIZE
+const ALLOWED_TYPES: readonly string[] = ALLOWED_MIME_TYPES
 
 // The unified glass composer (`.n9-composer`, globals.css) with the Catalyst
 // AI identity modifier (sienna ring + apricot glow) and the moving neon
