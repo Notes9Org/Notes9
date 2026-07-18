@@ -28,7 +28,7 @@ const Tooltip = ({ children }: TooltipStubProps) => <>{children}</>
 const TooltipTrigger = ({ children }: TooltipStubProps) => <>{children}</>
 const TooltipContent = (_props: TooltipStubProps) => null
 
-import { Square, ArrowUp, ClockCounterClockwise as History, ArrowsOut as Maximize, ArrowsIn as Minimize, SidebarSimple as PanelLeft, Plus, Paperclip, Globe, Chat as MessageSquare, NotePencil as NotebookPen, NotePencil as PenBox, DotsThree as MoreHorizontal, PushPin as Pin, PushPinSlash as PinOff, PencilSimple as Pencil, Check, CaretRight as ChevronRight, Folder, FolderPlus, FolderOpen as FolderInput, CheckSquare, MagnifyingGlass as Search, Trash as Trash2, CaretDown as ChevronDown, X, Binoculars as Telescope, List as Menu, Sun, Moon, Question as CircleHelp, Microphone as Mic, BookOpen, Flask as FlaskConical, FolderOpen, FileText, CircleNotch as Loader2, At as AtSign, Info, Warning, UploadSimple } from "@phosphor-icons/react/ssr";
+import { Square, ArrowUp, ClockCounterClockwise as History, ArrowsOut as Maximize, ArrowsIn as Minimize, SidebarSimple as PanelLeft, Plus, Paperclip, Globe, Chat as MessageSquare, NotePencil as NotebookPen, NotePencil as PenBox, DotsThree as MoreHorizontal, PushPin as Pin, PushPinSlash as PinOff, PencilSimple as Pencil, Check, CaretRight as ChevronRight, Folder, FolderPlus, FolderOpen as FolderInput, CheckSquare, MagnifyingGlass as Search, Trash as Trash2, CaretDown as ChevronDown, X, Binoculars as Telescope, List as Menu, Sun, Moon, Question as CircleHelp, Microphone as Mic, BookOpen, Flask as FlaskConical, FolderOpen, FileText, CircleNotch as Loader2, At as AtSign, Info, Warning, UploadSimple, Quotes } from "@phosphor-icons/react/ssr";
 import { cn } from '@/lib/utils';
 import { SideRailSearch } from '@/components/patterns/side-rail';
 import { recordRumEvent } from '@/lib/rum';
@@ -973,6 +973,10 @@ export function RightSidebar({
   // Closed-access papers hit with "Ask Catalyst" ride here as citable literature_sources
   // for the next send (they have no PDF to attach), then are cleared. See Step 7.
   const pendingLiteratureSourcesRef = useRef<AgentLiteratureSource[]>([]);
+  // PDF text selection from an Ask-Catalyst launch: shown as a dismissible
+  // excerpt strip above the composer and folded into the next send's model
+  // query (state, not ref — the strip renders from it).
+  const [pendingSelections, setPendingSelections] = useState<Array<{ text: string; title?: string }>>([]);
   // Set when an Ask-Catalyst launch signals a paper attachment is being fetched
   // (launch.expectAttachment); cleared when the attachment lands, a notice fires,
   // or a bounded timeout elapses. Gates the first Send so the user can't fire the
@@ -1081,9 +1085,10 @@ export function RightSidebar({
     sessionInternalGrantedRef.current = sessionInternalGranted;
   }, [sessionInternalGranted]);
 
+  // ponytail: `options.tags` (legacy annotation, ignored by the backend) is no
+  // longer emitted — tagged records ride top-level `attachments` only.
   const buildNotes9StreamOptions = useCallback(
-    (tags: Array<{ kind: CatalystMentionKind; id: string; title: string }>) => ({
-      tags,
+    () => ({
       web_search: webSearchEnabledRef.current ? ('on' as const) : ('off' as const),
       internal_data_permission: internalDataPermissionRef.current,
       internal_data_session_granted: sessionInternalGrantedRef.current,
@@ -1517,6 +1522,16 @@ export function RightSidebar({
   const appendMentionToInput = useCallback(
     (item: { kind: CatalystMentionKind; id: string; title: string }) => {
       const composer = inputRef.current;
+      // Already tagged (e.g. two "Ask Catalyst" selections from the same paper)?
+      // selectedMentions dedupes for the payload, but the visible chip would
+      // double up — skip inserting a second identical pill.
+      if (
+        composer?.querySelector(
+          `[data-caty-tag-id="${item.id}"][data-caty-tag-kind="${item.kind}"]`,
+        )
+      ) {
+        return;
+      }
       const sel = window.getSelection();
       if (composer && sel && sel.rangeCount > 0) {
         const range = sel.getRangeAt(0);
@@ -2561,9 +2576,21 @@ export function RightSidebar({
       const litPreamble = litSummary
         ? `Earlier you gave this literature summary:\n\n${litSummary}\n\n${ctxPreamble}`.trim()
         : ctxPreamble;
+      // Fold pending PDF excerpts into the MODEL query only (one-shot, like
+      // litPreamble) — the visible user bubble stays the clean typed question.
+      const sels = pendingSelections;
+      if (sels.length > 0) setPendingSelections([]);
+      const selPrefix = sels.length > 0
+        ? sels
+            .map(
+              (s) =>
+                `Regarding this excerpt from "${s.title ?? 'the attached paper'}":\n> ${s.text.replace(/\n/g, '\n> ')}`,
+            )
+            .join('\n\n') + '\n\n'
+        : '';
       const notes9ModelQuery = litPreamble
-        ? `${litPreamble}\n\n## User question\n${text}`
-        : text;
+        ? `${litPreamble}\n\n## User question\n${selPrefix}${text}`
+        : `${selPrefix}${text}`;
       // Citable literature grounding: pass the session's papers (and any closed-access
       // paper the user hit "Ask Catalyst" on) through the content-bearing
       // literature_sources channel so the agent produces real inline [N] citations.
@@ -2582,7 +2609,7 @@ export function RightSidebar({
           file_attachments:
             fileAttachments.length > 0 ? fileAttachments : undefined,
           literature_sources: litSources.length > 0 ? litSources : undefined,
-          options: buildNotes9StreamOptions(requestTags),
+          options: buildNotes9StreamOptions(),
         },
         token
       );
@@ -2796,7 +2823,7 @@ export function RightSidebar({
             attachments: tagsToAttachments(requestTags),
             file_attachments:
               editFileAttachments.length > 0 ? editFileAttachments : undefined,
-            options: buildNotes9StreamOptions(requestTags),
+            options: buildNotes9StreamOptions(),
           },
           token
         );
@@ -2970,7 +2997,7 @@ export function RightSidebar({
           session_id: sid,
           history,
           attachments: tagsToAttachments(requestTags),
-          options: buildNotes9StreamOptions(requestTags),
+          options: buildNotes9StreamOptions(),
         },
         token
       );
@@ -3193,6 +3220,7 @@ export function RightSidebar({
       // A fresh chat drops the pinned literature summary + its co-pilot context.
       setCatalystLiterature(null);
       clearCatalystCoPilot();
+      setPendingSelections([]);
     }
   };
 
@@ -3217,6 +3245,7 @@ export function RightSidebar({
     // Drop the live literature panel so a persisted literature session renders
     // as its saved messages instead of doubling up with the pinned summary.
     setCatalystLiterature(null);
+    setPendingSelections([]);
     loadMessages(sessionId).then((msgs) => {
       const chatMessages = msgs.map((m) => {
         let text = m.content;
@@ -3334,7 +3363,7 @@ export function RightSidebar({
   }, [isPageVariant, router]);
 
   const applyCatalystLaunch = useCallback(
-    (launch: { query?: string; projectId?: string; attachments?: Array<{ url: string; name: string; contentType: string; size?: number }>; literatureSources?: AgentLiteratureSource[]; webSearch?: boolean; autoSend?: boolean; sessionId?: string; expectAttachment?: boolean; expectedAttachmentName?: string; literatureMention?: { id: string; title: string } }) => {
+    (launch: { query?: string; projectId?: string; attachments?: Array<{ url: string; name: string; contentType: string; size?: number }>; literatureSources?: AgentLiteratureSource[]; webSearch?: boolean; autoSend?: boolean; sessionId?: string; expectAttachment?: boolean; expectedAttachmentName?: string; literatureMention?: { id: string; title: string }; literatureSelection?: { text: string; title?: string } }) => {
       // Gate the first Send while a paper attachment is being fetched, so the user
       // can't fire the message before it lands. A later launch (the closed-access
       // fallback re-open) or the attach/notice events release the gate.
@@ -3428,6 +3457,22 @@ export function RightSidebar({
           appendMentionToInput({ kind: 'literature_review', id: m.id, title: m.title });
         });
       }
+      if (launch.literatureSelection?.text) {
+        // PDF text selection rides as a structured excerpt chip (dismissible),
+        // never as raw text seeded into the input. Selections ACCUMULATE so the
+        // user can quote several passages (even across papers) into one question;
+        // identical text is deduped and the newest 5 are kept.
+        // ponytail: 2000-char cap here (the single consumer) covers all dispatchers
+        const incoming = {
+          text: launch.literatureSelection.text.slice(0, 2000),
+          title: launch.literatureSelection.title,
+        };
+        setPendingSelections((prev) =>
+          prev.some((s) => s.text === incoming.text)
+            ? prev
+            : [...prev.slice(-4), incoming],
+        );
+      }
       const projectId = launch.projectId?.trim();
       if (projectId && isLikelyUuid(projectId)) {
         supabase
@@ -3489,6 +3534,7 @@ export function RightSidebar({
       expectAttachment: pendingLaunch.expectAttachment,
       expectedAttachmentName: pendingLaunch.expectedAttachmentName,
       literatureMention: pendingLaunch.literatureMention,
+      literatureSelection: pendingLaunch.literatureSelection,
     });
     onPendingLaunchConsumed?.();
   }, [
@@ -3731,6 +3777,39 @@ export function RightSidebar({
         )}
         id="tour-ai-chat"
       >
+        {/* PDF excerpt from "Ask Catalyst" on a text selection: compact
+            Cursor-style reference chip (source + snippet on one line, full
+            excerpt on hover, X to remove) — never raw text in the input; folded
+            into the next send's model query in handleSubmit. */}
+        {pendingSelections.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 px-3 pt-2 pb-0.5">
+            {pendingSelections.map((sel, i) => (
+              <span
+                key={`${sel.text.slice(0, 40)}-${i}`}
+                className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-border/60 bg-muted/40 px-2 py-1 text-xs text-muted-foreground"
+                title={sel.text}
+              >
+                <Quotes className="size-3.5 shrink-0" />
+                {sel.title && (
+                  <span className="max-w-[10rem] shrink-0 truncate font-medium text-foreground">
+                    {sel.title}
+                  </span>
+                )}
+                <span className="truncate italic">&ldquo;{sel.text}&rdquo;</span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPendingSelections((prev) => prev.filter((s) => s !== sel))
+                  }
+                  aria-label="Remove excerpt"
+                  className="shrink-0 rounded p-0.5 hover:text-foreground"
+                >
+                  <X className="size-3.5" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
         {/* "N papers attached" affordance for a literature dive: the search papers
             already ground follow-ups (forwarded as literature_sources via
             effectiveLitCtx in handleSubmit); this just makes that context visible

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { DownloadSimple as Download, CircleNotch as Loader2, SidebarSimple as PanelRightOpen } from "@phosphor-icons/react/ssr"
 import { openCatalystPanel } from '@/lib/catalyst-launch'
+import { isLikelyUuid } from '@/lib/url-project-param'
 
 import { LiteraturePdfAnnotationSidebar } from "@/components/literature-reviews/literature-pdf-annotation-sidebar"
 import { motion, useReducedMotion } from "@/components/literature-reviews/motion"
@@ -19,6 +20,8 @@ import type { LiteraturePdfAnnotation } from "@/types/literature-pdf"
 interface LiteraturePdfPanelProps {
   literatureId: string
   pdfUrl: string
+  /** Paper title for the Ask Catalyst mention chip; falls back to the PDF filename. */
+  title?: string | null
   pdfFileName?: string | null
   /** Direct Supabase/public URL for “Open” when `pdfUrl` is the authenticated viewer proxy. */
   openInNewTabFallbackUrl?: string | null
@@ -32,6 +35,7 @@ interface LiteraturePdfPanelProps {
 export function LiteraturePdfPanel({
   literatureId,
   pdfUrl,
+  title,
   pdfFileName,
   openInNewTabFallbackUrl,
   highlightExcerpt,
@@ -191,20 +195,25 @@ export function LiteraturePdfPanel({
     const trimmedSelection = selectedText?.trim()
     // Same canonical path as every other "Ask Catalyst about this paper" entry
     // point: the row already lives in the library, so attach it as an @-mention
-    // tag instead of re-attaching the PDF as a file.
+    // tag instead of re-attaching the PDF as a file. Selected text rides as a
+    // structured excerpt (dismissible strip in the composer), never raw input text.
+    // Imported OA PDFs are stored as `<literatureId>.pdf`, so a UUID-looking
+    // filename must never become the visible chip label.
+    const fileTitle = (pdfFileName ?? '').replace(/\.pdf$/i, '').trim()
+    const chipTitle =
+      title?.trim() ||
+      (isLikelyUuid(fileTitle) ? '' : fileTitle) ||
+      'paper'
     openCatalystPanel({
       scope: 'literature',
       webSearch: false,
       autoSend: false,
-      query: trimmedSelection
-        ? `"${trimmedSelection}"\n\nAsk Catalyst about this selection in this paper.`
+      literatureMention: { id: literatureId, title: chipTitle },
+      literatureSelection: trimmedSelection
+        ? { text: trimmedSelection, title: chipTitle }
         : undefined,
-      literatureMention: {
-        id: literatureId,
-        title: (pdfFileName ?? 'paper').replace(/\.pdf$/i, ''),
-      },
     })
-  }, [literatureId, pdfFileName])
+  }, [literatureId, pdfFileName, title])
 
   return (
     <Collapsible open={annotationsOpen} onOpenChange={setAnnotationsOpen}>

@@ -72,6 +72,10 @@ export type CatalystLaunchDetail = {
    *  full text, so no file attachment is needed. Unsaved search results (no id)
    *  use the file-attachment path instead. */
   literatureMention?: { id: string; title: string }
+  /** Text the user selected in the open PDF. Rendered as a dismissible excerpt
+   *  strip near the composer and folded into the NEXT send's model query; the
+   *  paper itself rides as the literatureMention tag, so no wire change. */
+  literatureSelection?: { text: string; title?: string }
 }
 
 const ORIGIN_KEY = "notes9:catalyst-origin"
