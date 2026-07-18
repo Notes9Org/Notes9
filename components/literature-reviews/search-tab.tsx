@@ -377,6 +377,7 @@ interface SearchTabProps {
   onOpenStaged?: (paper: SearchPaper) => void
   isPaperStaged: (paperId: string) => boolean
   getPaperMembership?: (paperId: string) => 'saved' | 'staged' | null
+  getPaperReviewId?: (paper: SearchPaper) => string | null
   isPaperStaging?: (paperId: string) => boolean
   /** Refresh the host's library membership after a successful save-to-library. */
   onPaperSaved?: () => void
@@ -423,6 +424,7 @@ export function SearchTab({
   onOpenStaged,
   isPaperStaged,
   getPaperMembership,
+  getPaperReviewId,
   isPaperStaging,
   onPaperSaved,
   sortMode,
@@ -486,6 +488,7 @@ export function SearchTab({
           onOpenStaged={onOpenStaged}
           isPaperStaged={isPaperStaged}
           getPaperMembership={getPaperMembership}
+          getPaperReviewId={getPaperReviewId}
           isPaperStaging={isPaperStaging}
           onPaperSaved={onPaperSaved}
           onResults={onResults}

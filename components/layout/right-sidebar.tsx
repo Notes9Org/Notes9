@@ -3376,27 +3376,6 @@ export function RightSidebar({
           ...launch.literatureSources,
         ]);
       }
-      // "Ask Catalyst" on a saved/staged paper attaches it as an @-mention TAG —
-      // the same representation as dragging it in from the library, so every
-      // entry point behaves identically. Focus the composer + drop the caret at
-      // the end first, so appendMentionToInput renders the visible chip (it also
-      // updates selectedMentions, the agent's source of truth, regardless).
-      if (launch.literatureMention) {
-        const m = launch.literatureMention;
-        requestAnimationFrame(() => {
-          const el = inputRef.current;
-          if (el) {
-            el.focus();
-            const range = document.createRange();
-            range.selectNodeContents(el);
-            range.collapse(false);
-            const sel = window.getSelection();
-            sel?.removeAllRanges();
-            sel?.addRange(range);
-          }
-          appendMentionToInput({ kind: 'literature_review', id: m.id, title: m.title });
-        });
-      }
       const q = launch.query?.trim();
       if (q) {
         setInput(q);
@@ -3424,6 +3403,29 @@ export function RightSidebar({
               preventDefault() {},
             } as unknown as React.FormEvent);
           }
+        });
+      }
+      if (launch.literatureMention) {
+        // "Ask Catalyst" on a saved/staged paper attaches it as an @-mention TAG —
+        // the same representation as dragging it in from the library, so every
+        // entry point behaves identically (appendMentionToInput also updates
+        // selectedMentions, the agent's source of truth).
+        const m = launch.literatureMention;
+        // Queued AFTER the query rAF above: seeding the contentEditable via
+        // textContent would wipe an already-appended chip, so the chip must
+        // land second when a launch carries both a query and a mention.
+        requestAnimationFrame(() => {
+          const el = inputRef.current;
+          if (el) {
+            el.focus();
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            range.collapse(false);
+            const sel = window.getSelection();
+            sel?.removeAllRanges();
+            sel?.addRange(range);
+          }
+          appendMentionToInput({ kind: 'literature_review', id: m.id, title: m.title });
         });
       }
       const projectId = launch.projectId?.trim();

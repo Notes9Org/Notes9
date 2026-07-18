@@ -76,6 +76,7 @@ export function AiSearchView({
   onOpenStaged,
   isPaperStaged,
   getPaperMembership,
+  getPaperReviewId,
   isPaperStaging,
   onPaperSaved,
   onResults,
@@ -101,6 +102,7 @@ export function AiSearchView({
   onOpenStaged?: (paper: SearchPaper) => void
   isPaperStaged?: (id: string) => boolean
   getPaperMembership?: (id: string) => 'saved' | 'staged' | null
+  getPaperReviewId?: (paper: SearchPaper) => string | null
   isPaperStaging?: (id: string) => boolean
   /** Refresh the host's library membership after a successful save-to-library. */
   onPaperSaved?: () => void
@@ -387,6 +389,7 @@ export function AiSearchView({
               onSaved={() => onPaperSaved?.()}
               onStage={onStagePaper}
               onOpenStaged={onOpenStaged}
+              getPaperReviewId={getPaperReviewId}
               isStaged={r.paper ? (isPaperStaged?.(r.paper.id) ?? false) : false}
               membership={r.paper ? (getPaperMembership?.(r.paper.id) ?? null) : null}
               isStaging={r.paper ? (isPaperStaging?.(r.paper.id) ?? false) : false}

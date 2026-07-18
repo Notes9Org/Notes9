@@ -160,6 +160,7 @@ function AiPaperCardImpl({
   onSaved,
   onStage,
   onOpenStaged,
+  getPaperReviewId,
   isStaged = false,
   membership = null,
   isStaging = false,
@@ -185,6 +186,10 @@ function AiPaperCardImpl({
   /** Same stage action the database card uses — stages + opens a reader tab. */
   onStage?: (paper: SearchPaper) => void | Promise<void>
   onOpenStaged?: (paper: SearchPaper) => void
+  /** Resolves a search result to its literature_reviews row id when the paper is
+   *  already staged/saved — Ask Catalyst then @-mentions the row instead of
+   *  re-downloading the PDF. */
+  getPaperReviewId?: (paper: SearchPaper) => string | null
   isStaged?: boolean
   membership?: 'saved' | 'staged' | null
   isStaging?: boolean
@@ -322,7 +327,12 @@ function AiPaperCardImpl({
     if (asking) return
     setAsking(true)
     try {
-      await attachPaperToCatalyst(result.paper, { scope: 'literature', sourceUrl: readUrl(result) })
+      const reviewId = result.paper ? (getPaperReviewId?.(result.paper) ?? null) : null
+      await attachPaperToCatalyst(result.paper, {
+        scope: 'literature',
+        sourceUrl: readUrl(result),
+        ...(reviewId ? { reviewId } : {}),
+      })
     } finally {
       setAsking(false)
     }
