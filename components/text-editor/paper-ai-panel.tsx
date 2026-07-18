@@ -172,7 +172,9 @@ export function PaperAIPanel({
   }, [chatHistory.currentSession])
 
   /** Pinned auto-scroll of the chat list only — avoid scrollIntoView (scrolls ancestors / breaks under TipTap fullscreen). */
-  const { onScroll } = usePinnedAutoScroll(scrollRef, [messages, diffPreview])
+  // smooth: true preserves this panel's original animated scroll (it had a
+  // working smooth autoscroll before the pinned-hook migration).
+  const { onScroll } = usePinnedAutoScroll(scrollRef, [messages, diffPreview], { smooth: true })
 
   useEffect(() => {
     if (open && !showHistory) setTimeout(() => textareaRef.current?.focus(), 100)
