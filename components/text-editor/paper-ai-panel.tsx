@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
 import { usePaperChatHistory, type PaperChatMessage } from "@/hooks/use-paper-chat-history"
+import { usePinnedAutoScroll } from "@/hooks/use-pinned-auto-scroll"
 import {
   CITATION_STYLE_OPTIONS,
   DEFAULT_CITATION_STYLE as DEFAULT_TIPTAP_CITATION_STYLE,
@@ -170,16 +171,8 @@ export function PaperAIPanel({
     }
   }, [chatHistory.currentSession])
 
-  /** Scroll only the chat list — avoid scrollIntoView (scrolls ancestors / breaks under TipTap fullscreen). */
-  useEffect(() => {
-    const el = scrollRef.current
-    if (!el) return
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        el.scrollTo({ top: el.scrollHeight, behavior: "smooth" })
-      })
-    })
-  }, [messages, diffPreview])
+  /** Pinned auto-scroll of the chat list only — avoid scrollIntoView (scrolls ancestors / breaks under TipTap fullscreen). */
+  const { onScroll } = usePinnedAutoScroll(scrollRef, [messages, diffPreview])
 
   useEffect(() => {
     if (open && !showHistory) setTimeout(() => textareaRef.current?.focus(), 100)
@@ -498,7 +491,7 @@ export function PaperAIPanel({
       ) : (
         <>
           {/* Messages */}
-          <div ref={scrollRef} className="flex-1 overflow-y-auto">
+          <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto">
             {messages.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
                 <div className="relative mb-1 flex justify-center">

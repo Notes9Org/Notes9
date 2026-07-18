@@ -8,7 +8,6 @@
  * and fall back to the existing `CHAT_API_URL` so no new env var is needed.
  *
  * Used by:
- *  - `app/api/search-papers/route.ts` → POST /literature/search
  *  - `lib/literature-pdf-import.ts`    → POST /literature/pdf/verify (Phase 3)
  *  - ~19 proxy routes under `app/api/{chat,agent,ai,literature,reports,usage}/*`
  *

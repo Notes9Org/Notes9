@@ -16,6 +16,7 @@ import { useLiteratureAgentStream } from "@/hooks/use-literature-agent-stream"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { usePinnedAutoScroll } from "@/hooks/use-pinned-auto-scroll"
 import { cn } from "@/lib/utils"
 import { ArrowUp, BookOpen, Check, CaretDown as ChevronDown, CaretRight as ChevronRight, Copy, FileText, ClockCounterClockwise as History, CircleNotch as Loader2, Chat as MessageSquare, NotePencil as NotebookPen, NotePencil as PenBox, Plus, Square, Trash as Trash2, X, SidebarSimple as PanelRightClose } from "@phosphor-icons/react/ssr"
 import { usePathname, useRouter } from "next/navigation"
@@ -43,7 +44,7 @@ import { IceMascot } from "@/components/ui/ice-mascot"
 import { useChatSessions } from "@/hooks/use-chat-sessions"
 import type { ChatMessage as DbChatMessage } from "@/hooks/use-chat-sessions"
 import { LiteratureSourcesDropdown } from "@/components/literature-sources-dropdown"
-import { formatLiteratureAssistantMarkdown } from "@/lib/literature-agent-chat-format"
+import { formatLiteratureAssistantMarkdown } from "@/lib/notes9-chat-format"
 import { formatNotes9AssistantMarkdown } from "@/lib/notes9-chat-format"
 import {
   appendSourcesMarkdownSection,
@@ -508,12 +509,8 @@ export function ProtocolAiSidechat({
     }
   }, [activeSessionId, loadMessages])
 
-  // Scroll to bottom on new messages/steps
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
-  }, [messages, steps, error])
+  // Pinned auto-scroll — follows new messages/steps only while the user is at the bottom.
+  const { onScroll } = usePinnedAutoScroll(scrollRef, [messages, steps, error])
 
   const createNewSession = useCallback(() => {
     if (isAnyStreaming) return
@@ -1176,11 +1173,13 @@ export function ProtocolAiSidechat({
               </div>
             </div>
           ) : (
-            <ScrollArea className="min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]]:overflow-x-hidden [&_[data-slot=scroll-area-viewport]>div]:!max-w-full [&_[data-slot=scroll-area-viewport]>div]:!block">
-              <div
-                ref={scrollRef}
-                className="w-full min-w-0 max-w-full space-y-3 overflow-x-hidden px-3 py-4"
-              >
+            // Plain div so the ref targets the real scroll container
+            <div
+              ref={scrollRef}
+              onScroll={onScroll}
+              className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden"
+            >
+              <div className="w-full min-w-0 max-w-full space-y-3 overflow-x-hidden px-3 py-4">
                 {(sessionsLoading || messagesLoading) && (
                   <p className="py-6 text-center text-xs text-muted-foreground">Loading chat…</p>
                 )}
@@ -1325,7 +1324,7 @@ export function ProtocolAiSidechat({
                   <p className="break-words text-xs text-destructive">{notes9Error}</p>
                 )}
               </div>
-            </ScrollArea>
+            </div>
           )}
         </div>
 

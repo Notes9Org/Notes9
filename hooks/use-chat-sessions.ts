@@ -88,14 +88,8 @@ function isFolderSchemaError(error: unknown): boolean {
   );
 }
 
-export interface ChatMessage {
-  id: string;
-  session_id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  created_at: string;
-  metadata?: Record<string, unknown>;
-}
+import type { ChatMessage } from '@/lib/db/schema';
+export type { ChatMessage };
 
 
 /**

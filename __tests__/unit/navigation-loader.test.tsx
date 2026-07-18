@@ -27,7 +27,7 @@ describe("NavigationLoader timeout values and console warning", () => {
     vi.restoreAllMocks()
   })
 
-  it("MAX_LOADER_DURATION_MS is 8000ms for standard pages", async () => {
+  it("MAX_LOADER_DURATION_MS is 20000ms for standard pages", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
 
     const { container } = render(<NavigationLoader />)
@@ -51,11 +51,11 @@ describe("NavigationLoader timeout values and console warning", () => {
 
     // Advance time to just before the safety timeout
     await act(async () => {
-      vi.advanceTimersByTime(7999)
+      vi.advanceTimersByTime(19999)
     })
 
     // The loader should still be visible (safety timeout hasn't fired yet)
-    // Advance to exactly 8000ms
+    // Advance to exactly 20000ms
     await act(async () => {
       vi.advanceTimersByTime(1)
     })
@@ -69,7 +69,7 @@ describe("NavigationLoader timeout values and console warning", () => {
     warnSpy.mockRestore()
   })
 
-  it("AUTH_MAX_LOADER_DURATION_MS is 12000ms for auth pages", async () => {
+  it("AUTH_MAX_LOADER_DURATION_MS is 20000ms for auth pages", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
 
     render(<NavigationLoader />)
@@ -87,15 +87,15 @@ describe("NavigationLoader timeout values and console warning", () => {
       window.dispatchEvent(event)
     })
 
-    // Advance to just before 12000ms
+    // Advance to just before 20000ms
     await act(async () => {
-      vi.advanceTimersByTime(11999)
+      vi.advanceTimersByTime(19999)
     })
 
     // console.warn should NOT have been called yet
     expect(warnSpy).not.toHaveBeenCalled()
 
-    // Advance to exactly 12000ms
+    // Advance to exactly 20000ms
     await act(async () => {
       vi.advanceTimersByTime(1)
     })
@@ -131,7 +131,7 @@ describe("NavigationLoader timeout values and console warning", () => {
 
     // Fire the safety timeout
     await act(async () => {
-      vi.advanceTimersByTime(8000)
+      vi.advanceTimersByTime(20000)
     })
 
     expect(warnSpy).toHaveBeenCalledWith(
