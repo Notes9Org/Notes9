@@ -104,8 +104,11 @@ FOR EACH ROW EXECUTE FUNCTION public.queue_experiment_summary_chunk_job();
 
 -- 3) Backfill (re-runnable): enqueue experiments with no summary chunks and no
 --    pending job. Safe to re-execute any time to pick up linked-title drift.
+-- operation='update' (NOT 'create'): the worker deletes existing chunks first,
+-- so partial rows from an interrupted run never collide with a retry —
+-- backfills must be idempotent.
 INSERT INTO public.chunk_jobs (source_type, source_id, operation, payload, created_by)
-SELECT 'experiment_summary', e.id, 'create', public.experiment_summary_payload(e), e.created_by
+SELECT 'experiment_summary', e.id, 'update', public.experiment_summary_payload(e), e.created_by
 FROM public.experiments e
 WHERE NOT EXISTS (
   SELECT 1 FROM public.semantic_chunks sc
