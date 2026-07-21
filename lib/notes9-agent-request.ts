@@ -16,6 +16,8 @@
  * optional web search; use **`POST /notes9`** for SQL/RAG over lab data.
  */
 
+import { getPreferredAiModel } from "@/lib/ai-model-preference";
+
 import type { AllowedMimeType } from './attachment-types';
 
 export type Notes9AgentHistoryItem = { role: string; content: string };
@@ -168,6 +170,12 @@ export function buildNotes9AgentRequestBody(params: Notes9AgentRequestInput): Re
     session_id: params.session_id,
     history: includeHistory && params.history?.length ? params.history : [],
   };
+  // Settings → AI model: abstract key ("haiku"|"sonnet"|"opus"); omitted =
+  // server default. One insertion point covers every agent request path.
+  const preferredModel = getPreferredAiModel();
+  if (preferredModel) {
+    body.model = preferredModel;
+  }
   if (params.options !== undefined) {
     body.options = params.options;
   }
