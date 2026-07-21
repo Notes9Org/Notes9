@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { InviteDialog, type InviteRole } from "@/components/org/invite-dialog"
 import { DashboardLabSection } from "@/components/org/dashboard-lab-section"
+import { orgCollaborationEnabled } from "@/lib/collab-flag"
 
 export type DashboardLabMemberPreview = {
   id: string
@@ -39,12 +40,17 @@ export function DashboardMyLab({ lab }: { lab: DashboardLabSummary }) {
   const [inviteOpen, setInviteOpen] = useState(false)
   const { organization, memberCount, pendingInviteCount, previewMembers, isAdmin, inviteRoles } =
     lab
+  const collab = orgCollaborationEnabled()
 
   return (
     <DashboardLabSection
-      eyebrow="Collaborate"
+      eyebrow={collab ? "Collaborate" : "Workspace"}
       title="My Lab"
-      description="Your research group lives here — invite teammates, assign roles, and manage lab settings without leaving the dashboard."
+      description={
+        collab
+          ? "Your research group lives here — invite teammates, assign roles, and manage lab settings without leaving the dashboard."
+          : "Your research group lives here — manage your lab settings without leaving the dashboard."
+      }
     >
       <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0 space-y-3">
@@ -63,7 +69,7 @@ export function DashboardMyLab({ lab }: { lab: DashboardLabSummary }) {
               <Users className="size-4 shrink-0" aria-hidden />
               {memberCount} member{memberCount !== 1 ? "s" : ""}
             </span>
-            {isAdmin && pendingInviteCount > 0 ? (
+            {collab && isAdmin && pendingInviteCount > 0 ? (
               <span className="inline-flex items-center gap-1.5 text-amber-700 dark:text-amber-400">
                 <Mail className="size-4 shrink-0" aria-hidden />
                 {pendingInviteCount} pending invite
@@ -97,7 +103,7 @@ export function DashboardMyLab({ lab }: { lab: DashboardLabSummary }) {
         </div>
 
         <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
-          {isAdmin ? (
+          {collab && isAdmin ? (
             <Button type="button" onClick={() => setInviteOpen(true)} className="gap-2">
               <UserPlus className="size-4" aria-hidden />
               Invite member
@@ -112,7 +118,7 @@ export function DashboardMyLab({ lab }: { lab: DashboardLabSummary }) {
         </div>
       </div>
 
-      {isAdmin ? (
+      {collab && isAdmin ? (
         <InviteDialog
           roles={inviteRoles}
           open={inviteOpen}

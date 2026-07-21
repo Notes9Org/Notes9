@@ -245,6 +245,16 @@ export interface NoticePayload {
   [key: string]: unknown;
 }
 
+/** SSE event: clarify – the agent's ask_clarification tool ended the turn with
+ * a structured question (emitted instead of token-streaming the question).
+ * Rendered as a ClarifyCard; the answer goes back as a normal user message. */
+export interface ClarifyPayload {
+  question: string;
+  options?: string[];
+  source?: string;
+  [key: string]: unknown;
+}
+
 /** SSE event: ping – keep-alive */
 export interface PingPayload {
   ts?: number;
@@ -325,6 +335,7 @@ export type SseEvent =
   | { event: "done"; data: DonePayload }
   | { event: "error"; data: ErrorPayload }
   | { event: "notice"; data: NoticePayload }
+  | { event: "clarify"; data: ClarifyPayload }
   | { event: "ping"; data: PingPayload };
 
 // ── Source-name normalizer (AD1: structured fields → view model) ──────────────
@@ -411,6 +422,7 @@ const KNOWN_EVENT_TYPES = new Set([
   "done",
   "error",
   "notice",
+  "clarify",
   "ping",
 ] as const);
 

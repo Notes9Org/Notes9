@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server"
 import { getCurrentUser } from "@/lib/auth/current-user"
 import { createServiceRoleClient } from "@/lib/supabase-service-role"
 import { isSystemAdminRow } from "@/lib/org/require-admin"
+import { orgCollaborationEnabled } from "@/lib/collab-flag"
 
 const deleteMemberSchema = z.object({
   memberId: z.string().uuid("Invalid member ID"),
@@ -69,6 +70,13 @@ async function authenticateAdmin() {
 // DELETE - Deactivate a member
 export async function DELETE(req: NextRequest) {
   try {
+    if (!orgCollaborationEnabled()) {
+      return NextResponse.json(
+        { error: "Collaboration is not available yet" },
+        { status: 403 }
+      )
+    }
+
     const auth = await authenticateAdmin()
     if ("error" in auth && auth.error) return auth.error
     const { organizationId, admin } = auth as {
