@@ -229,7 +229,8 @@ erDiagram
 | `calendar_events` | User-scoped calendar entries with project/experiment context. |
 | `dashboard_tasks` | Personal TODO tasks on the dashboard. |
 | `audit_log` | System-level audit log (create/update/delete per table). |
-| `chunk_jobs` | Async queue for embedding chunk jobs (create/update/delete operations on embeddable records). |
+| `chunk_jobs` | Async queue for embedding chunk jobs (create/update/delete operations on embeddable records, including the derived `experiment_summary` source type — see `docs/CONTEXT_MANAGEMENT.md`). |
+| `recently_touched` | Per-`(user, entity)` last-write-wins register of the most recently viewed/edited entities. Feeds the recency half of the agent's focus signal; owner-only RLS. See `docs/CONTEXT_MANAGEMENT.md`. |
 | `mcp_servers` | User-configured MCP server endpoints (for future agent tool integrations). |
 | `usage_events` | Product telemetry events (feature usage, session metrics). |
 
