@@ -7,6 +7,7 @@ import {
   useState,
   useRef,
   useEffect,
+  useLayoutEffect,
   useCallback,
   useMemo,
   type ChangeEvent,
@@ -611,6 +612,67 @@ interface SidebarChatMessageItemProps {
   onRegenerate: (() => Promise<void>) | undefined;
 }
 
+/** Height above which a completed assistant message collapses behind Show more. */
+const LONG_MESSAGE_COLLAPSED_PX = 480;
+
+/**
+ * Caps very tall completed assistant messages at a fixed height with an inner
+ * scroll (wheel on hover reveals the full message) plus a Show more / Show less
+ * toggle for full expansion — so one long reply doesn't wall the whole thread.
+ * The latest assistant message (including while it streams) always renders
+ * fully expanded, and toggling never scrolls the thread — usePinnedAutoScroll
+ * stays the only scroll authority.
+ */
+function CollapsibleLongMessage({
+  collapsible,
+  children,
+}: {
+  collapsible: boolean;
+  children: React.ReactNode;
+}) {
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [isTall, setIsTall] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+
+  useLayoutEffect(() => {
+    if (!collapsible) return;
+    const el = bodyRef.current;
+    if (!el) return;
+    // scrollHeight reports full content height even when max-h clips it.
+    // +80px hysteresis: not worth collapsing a message barely over the cap.
+    setIsTall(el.scrollHeight > LONG_MESSAGE_COLLAPSED_PX + 80);
+  }, [collapsible, children]);
+
+  const collapsed = collapsible && isTall && !expanded;
+
+  return (
+    <div className="min-w-0">
+      <div
+        ref={bodyRef}
+        className={
+          collapsed
+            ? 'max-h-[480px] overflow-y-auto overscroll-contain [scrollbar-gutter:stable]'
+            : undefined
+        }
+      >
+        {children}
+      </div>
+      {collapsible && isTall && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-1.5 flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ChevronDown
+            className={cn('size-3.5 transition-transform', expanded && 'rotate-180')}
+          />
+          {expanded ? 'Show less' : 'Show more'}
+        </button>
+      )}
+    </div>
+  );
+}
+
 const SidebarChatMessageItem = memo(function SidebarChatMessageItem({
   message,
   rawContent,
@@ -806,7 +868,7 @@ const SidebarChatMessageItem = memo(function SidebarChatMessageItem({
               className={cn(
                 'text-sm leading-[1.45] break-words',
                 message.role === 'user'
-                  ? 'whitespace-pre-wrap bg-primary/5 text-foreground px-4 py-2.5 rounded-2xl rounded-tr-sm'
+                  ? 'whitespace-pre-wrap bg-primary/5 text-foreground px-4 py-2.5 rounded-2xl rounded-tr-sm max-h-[300px] overflow-y-auto overscroll-contain'
                   : 'min-w-0 text-foreground whitespace-normal'
               )}
             >
@@ -822,11 +884,13 @@ const SidebarChatMessageItem = memo(function SidebarChatMessageItem({
                   content
                 )
               ) : (
-                <MarkdownRenderer
-                  content={content}
-                  className="text-sm text-foreground break-words [overflow-wrap:anywhere] [&_pre]:max-w-full [&_pre]:overflow-auto [&_pre]:whitespace-pre [&_code]:break-all"
-                  citationsManifest={effectiveManifest}
-                />
+                <CollapsibleLongMessage collapsible={!isLastAssistant}>
+                  <MarkdownRenderer
+                    content={content}
+                    className="text-sm text-foreground break-words [overflow-wrap:anywhere] [&_pre]:max-w-full [&_pre]:overflow-auto [&_pre]:whitespace-pre [&_code]:break-all"
+                    citationsManifest={effectiveManifest}
+                  />
+                </CollapsibleLongMessage>
               )}
             </div>
             {/* No bottom "Sources" block: the per-citation hover cards rendered
@@ -3890,7 +3954,7 @@ export function RightSidebar({
               : 'Ask Catalyst anything. Use @ to tag notes, experiments, projects, protocols, and literature.'
           }
           className={cn(
-            'w-full resize-none bg-transparent focus-visible:outline-2 focus-visible:outline-ring/40 focus-visible:outline-offset-2 scrollbar-hide empty:before:pointer-events-none empty:before:text-muted-foreground/60 empty:before:content-[attr(data-placeholder)]',
+            'w-full resize-none bg-transparent focus-visible:outline-2 focus-visible:outline-ring/40 focus-visible:outline-offset-2 max-h-[40vh] overflow-y-auto overscroll-contain scrollbar-hide empty:before:pointer-events-none empty:before:text-muted-foreground/60 empty:before:content-[attr(data-placeholder)]',
             heroStyle
               ? 'min-h-[120px] px-5 py-4 text-[15px] leading-relaxed'
               : 'min-h-[68px] px-4 py-2.5 text-sm',
