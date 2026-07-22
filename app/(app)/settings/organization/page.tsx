@@ -20,6 +20,7 @@ import {
 import { InviteDialog, type InviteRole } from "@/components/org/invite-dialog"
 import { OrgSettingsForm } from "@/components/org/org-settings-form"
 import { isOrgAdmin, type OrgMember as OrgMemberPerm } from "@/lib/org/permissions"
+import { orgCollaborationEnabled } from "@/lib/collab-flag"
 import { createClient } from "@/lib/supabase/client"
 import { useAuthUser } from "@/components/auth/auth-provider"
 
@@ -45,6 +46,7 @@ export default function OrganizationSettingsPage() {
   const [invitations, setInvitations] = useState<OrgInvitation[]>([])
   const [isAdmin, setIsAdmin] = useState(false)
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false)
+  const collab = orgCollaborationEnabled()
 
   const fetchData = useCallback(async () => {
     const supabase = createClient()
@@ -255,7 +257,7 @@ export default function OrganizationSettingsPage() {
             </span>
           </div>
         </div>
-        {isAdmin && (
+        {collab && isAdmin && (
           <Button
             className="cursor-pointer"
             onClick={() => setInviteDialogOpen(true)}
@@ -277,10 +279,12 @@ export default function OrganizationSettingsPage() {
             <Shield className="mr-1.5 h-4 w-4" />
             Roles
           </TabsTrigger>
-          <TabsTrigger value="invitations">
-            <Mail className="mr-1.5 h-4 w-4" />
-            Invitations
-          </TabsTrigger>
+          {collab && (
+            <TabsTrigger value="invitations">
+              <Mail className="mr-1.5 h-4 w-4" />
+              Invitations
+            </TabsTrigger>
+          )}
           <TabsTrigger value="settings">
             <Settings className="mr-1.5 h-4 w-4" />
             Settings
@@ -290,7 +294,7 @@ export default function OrganizationSettingsPage() {
         <TabsContent value="members" forceMount className="data-[state=inactive]:hidden">
           <MembersTable
             members={members}
-            isAdmin={isAdmin}
+            isAdmin={collab && isAdmin}
             onMemberRemoved={handleMemberRemoved}
           />
         </TabsContent>
@@ -304,13 +308,15 @@ export default function OrganizationSettingsPage() {
           />
         </TabsContent>
 
-        <TabsContent value="invitations" forceMount className="data-[state=inactive]:hidden">
-          <InvitationsTable
-            invitations={invitations}
-            isAdmin={isAdmin}
-            onInvitationRevoked={handleInvitationRevoked}
-          />
-        </TabsContent>
+        {collab && (
+          <TabsContent value="invitations" forceMount className="data-[state=inactive]:hidden">
+            <InvitationsTable
+              invitations={invitations}
+              isAdmin={isAdmin}
+              onInvitationRevoked={handleInvitationRevoked}
+            />
+          </TabsContent>
+        )}
 
         <TabsContent value="settings" forceMount className="data-[state=inactive]:hidden">
           {isAdmin ? (
@@ -324,12 +330,14 @@ export default function OrganizationSettingsPage() {
       </Tabs>
 
       {/* Invite Dialog */}
-      <InviteDialog
-        roles={inviteRoles}
-        open={inviteDialogOpen}
-        onOpenChange={setInviteDialogOpen}
-        onInvitesSent={handleInvitesSent}
-      />
+      {collab && (
+        <InviteDialog
+          roles={inviteRoles}
+          open={inviteDialogOpen}
+          onOpenChange={setInviteDialogOpen}
+          onInvitesSent={handleInvitesSent}
+        />
+      )}
     </div>
   )
 }

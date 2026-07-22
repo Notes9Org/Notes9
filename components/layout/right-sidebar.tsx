@@ -2297,7 +2297,9 @@ export function RightSidebar({
     resizeInput();
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // `overrideText` lets programmatic senders (ClarifyCard answer/skip) reuse
+  // the exact composer send path with text that isn't in the input box.
+  const handleSubmit = async (e: React.FormEvent, overrideText?: string) => {
     e.preventDefault();
     // Drop second-and-later fires until the first send has finished kicking
     // off its async work (createSession, then streaming start). Without this,
@@ -2341,7 +2343,7 @@ export function RightSidebar({
     if (agentMode === 'literature' && isLiteratureRoute) {
       if (!canSendLiterature || isLoading || isUploading) return;
     } else if (
-      (!input.trim() && attachments.length === 0) ||
+      (!overrideText?.trim() && !input.trim() && attachments.length === 0) ||
       isLoading ||
       isUploading
     ) {
@@ -2354,7 +2356,10 @@ export function RightSidebar({
     const text =
       agentMode === 'literature' && isLiteratureRoute
         ? literaturePlain
-        : (getCatalystComposerPlainText(inputRef.current).trim() || input).trim();
+        : (
+            overrideText ??
+            (getCatalystComposerPlainText(inputRef.current).trim() || input)
+          ).trim();
     const mentionsBefore =
       agentMode === 'literature' && isLiteratureRoute && litEl
         ? getMentionsFromLiteratureEditable(litEl)
@@ -5166,6 +5171,28 @@ export function RightSidebar({
                             options={literatureAgentStream.clarify.options}
                             onAnswer={handleLiteratureClarifyAnswer}
                             onSkip={handleLiteratureClarifySkip}
+                          />
+                        </div>
+                      )}
+                      {agentMode === 'notes9' &&
+                        !agentStream.isStreaming &&
+                        agentStream.clarify && (
+                        <div className="flex w-full justify-start pl-10">
+                          <ClarifyCard
+                            question={agentStream.clarify.question}
+                            options={agentStream.clarify.options}
+                            onAnswer={(answer) =>
+                              void handleSubmit(
+                                { preventDefault: () => {} } as React.FormEvent,
+                                answer
+                              )
+                            }
+                            onSkip={() =>
+                              void handleSubmit(
+                                { preventDefault: () => {} } as React.FormEvent,
+                                'Proceed with your best judgment.'
+                              )
+                            }
                           />
                         </div>
                       )}

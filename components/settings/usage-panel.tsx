@@ -103,12 +103,18 @@ export function UsagePanel() {
               Full capacity returns {formatResetDate(search.reset_at)}
             </span>
           </div>
-          <UsageMeter
-            code="lit_search_weekly"
-            used={search.used}
-            total={search.limit}
-            unit="searches"
-          />
+          {search.used == null ? (
+            <p className="text-xs text-muted-foreground">
+              Usage temporarily unavailable — your searches are still counted.
+            </p>
+          ) : (
+            <UsageMeter
+              code="lit_search_weekly"
+              used={search.used}
+              total={search.limit}
+              unit="searches"
+            />
+          )}
           <p className="text-xs text-muted-foreground">
             AI-powered literature searches this week, on the Free plan.
           </p>
@@ -123,13 +129,19 @@ export function UsagePanel() {
               Credits refresh {formatResetDate(budget.reset_at)}
             </span>
           </div>
-          <UsageMeter
-            code="ai_budget_monthly"
-            used={budget.used_credits}
-            total={budget.limit_credits}
-            unit="credits"
-            formatValue={formatCredits}
-          />
+          {budget.used_credits == null ? (
+            <p className="text-xs text-muted-foreground">
+              Usage temporarily unavailable — your credits are still counted.
+            </p>
+          ) : (
+            <UsageMeter
+              code="ai_budget_monthly"
+              used={budget.used_credits}
+              total={budget.limit_credits}
+              unit="credits"
+              formatValue={formatCredits}
+            />
+          )}
           <p className="text-xs text-muted-foreground">
             You get {budget.limit_credits} free credits each month. Credits cover
             Catalyst chat, literature summaries, web search, and other AI

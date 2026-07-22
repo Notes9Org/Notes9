@@ -5,6 +5,7 @@ import { AppLayout } from "@/components/layout/app-layout"
 import { TermsAcceptanceModal } from "@/components/marketing/terms-acceptance-modal"
 import { CURRENT_TERMS_VERSION } from "@/lib/constants"
 import { AuthEventTracker } from "@/components/auth-event-tracker"
+import { ActivityBeacon } from "@/components/activity-beacon"
 import { AuthProvider } from "@/components/auth/auth-provider"
 import { FeatureTimerProvider } from "@/components/telemetry/feature-timer-provider"
 import { ReactQueryProvider } from "@/components/providers/react-query-provider"
@@ -43,6 +44,9 @@ export default async function AppGroupLayout({
           <AuthEventTracker />
         </Suspense>
         <FeatureTimerProvider />
+        <Suspense>
+          <ActivityBeacon />
+        </Suspense>
         <AppLayout>{children}</AppLayout>
       </ReactQueryProvider>
     </AuthProvider>

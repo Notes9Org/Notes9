@@ -17,6 +17,15 @@ export const runtime = 'edge';
 
 const NOTES9_API_BASE = tryCatalystBaseUrl();
 
+function byokHeaders(request: Request): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const h of ['x-byok-provider', 'x-byok-api-key', 'x-byok-model']) {
+    const v = request.headers.get(h);
+    if (v) out[h] = v;
+  }
+  return out;
+}
+
 export async function POST(req: Request) {
   // Pre-parse: Content-Length ceiling before the body is buffered.
   const preParseBlocked = enforceLimits('agent_stream', [checkBodyBytes(req)]);
@@ -123,6 +132,9 @@ export async function POST(req: Request) {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
+          // BYOK: pass the user's own provider key through untouched (never
+          // logged here; the AI service keeps it request-scoped only).
+          ...byokHeaders(req),
         },
         body: JSON.stringify(upstreamBody),
       });

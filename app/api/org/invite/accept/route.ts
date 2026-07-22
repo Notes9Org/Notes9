@@ -4,6 +4,7 @@ import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentUser } from "@/lib/auth/current-user"
 import { createServiceRoleClient } from "@/lib/supabase-service-role"
+import { orgCollaborationEnabled } from "@/lib/collab-flag"
 
 const acceptSchema = z.object({
   token: z.string().min(1, "Invitation token is required"),
@@ -11,6 +12,13 @@ const acceptSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
+    if (!orgCollaborationEnabled()) {
+      return NextResponse.json(
+        { error: "Collaboration is not available yet" },
+        { status: 403 }
+      )
+    }
+
     // Authenticate the user via session cookie
     const supabase = await createClient()
     const user = await getCurrentUser()
