@@ -303,6 +303,16 @@ export interface AgentStreamState {
   donePayload: DonePayload | null;
   error: string | null;
   isStreaming: boolean;
+  /** Estimated prompt tokens vs the model context window for the current
+   * turn (`context_usage` events). Drives the small usage circle in the chat
+   * composer. Survives across turns within a session; reset on session switch. */
+  contextUsage: ContextUsage | null;
+}
+
+export interface ContextUsage {
+  usedTokens: number;
+  windowTokens: number;
+  percent: number;
 }
 
 function normalizeNotes9AgentResponse(raw: Record<string, unknown>): DonePayload {
@@ -465,6 +475,7 @@ export function useAgentStream() {
     donePayload: null,
     error: null,
     isStreaming: false,
+    contextUsage: null,
   });
 
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -518,7 +529,7 @@ export function useAgentStream() {
       // locally so the caller persists the FINAL manifest, not the render-time null.
       let collectedManifest: CitationsManifest | null = null;
 
-      setState({
+      setState((s) => ({
         thinkingSteps: [],
         currentStage: null,
         currentThinkingMessage: null,
@@ -542,7 +553,10 @@ export function useAgentStream() {
         donePayload: null,
         error: null,
         isStreaming: true,
-      });
+        // Carry the last known context usage across turns so the ring doesn't
+        // blank out between a send and the next context_usage event.
+        contextUsage: s.contextUsage,
+      }));
 
       let donePayload: DonePayload | null = null;
       let streamError: string | null = null;
@@ -662,6 +676,29 @@ export function useAgentStream() {
             switch (ev) {
               case 'ping':
                 break;
+              case 'context_usage': {
+                const p = (payload ?? {}) as Record<string, unknown>;
+                const used = typeof p.used_tokens === 'number' ? p.used_tokens : null;
+                const windowTokens =
+                  typeof p.window_tokens === 'number' && p.window_tokens > 0
+                    ? p.window_tokens
+                    : null;
+                if (used !== null && windowTokens !== null) {
+                  const percent =
+                    typeof p.percent === 'number'
+                      ? p.percent
+                      : (used * 100) / windowTokens;
+                  setState((s) => ({
+                    ...s,
+                    contextUsage: {
+                      usedTokens: used,
+                      windowTokens,
+                      percent: Math.max(0, Math.min(100, percent)),
+                    },
+                  }));
+                }
+                break;
+              }
               case 'run_started': {
                 // Carries the cancel handle for this run. Only emitted when the
                 // backend HITL flag is on; absent ⇒ the Stop button stays hidden.
@@ -1305,6 +1342,7 @@ export function useAgentStream() {
       donePayload: null,
       error: null,
       isStreaming: false,
+      contextUsage: null,
     });
     runIdRef.current = null;
   }, []);

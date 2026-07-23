@@ -54,7 +54,7 @@ import {
   parseLiteratureAssistantStoredContent,
   serializeLiteratureAssistantStoredContent,
 } from '@/lib/literature-assistant-stored';
-import { useAgentStream, type AgentFileAttachment, type AgentLiteratureSource, type CitationsManifest, type CitationsManifestEntry, type AgentGraph } from '@/hooks/use-agent-stream';
+import { useAgentStream, type AgentFileAttachment, type AgentLiteratureSource, type CitationsManifest, type CitationsManifestEntry, type AgentGraph, type ContextUsage } from '@/hooks/use-agent-stream';
 import { useResolvedCitationTitles, type ResolvableCite } from '@/hooks/use-resolved-citation-titles';
 import { isPlaceholderTitle } from '@/lib/citation-title';
 import { resolveLiteratureTitle } from '@/lib/literature-title';
@@ -610,6 +610,39 @@ interface SidebarChatMessageItemProps {
   onSetEditingMessageId: (id: string | null) => void;
   onSaveEdit: (messageId: string, newContent: string) => Promise<void>;
   onRegenerate: (() => Promise<void>) | undefined;
+}
+
+/**
+ * Cursor-style context ring: how much of the model's context window the
+ * conversation currently occupies (from `context_usage` SSE events). Hidden
+ * until the first event arrives; amber past 80%.
+ */
+function ContextUsageRing({ usage }: { usage: ContextUsage | null }) {
+  if (!usage) return null;
+  const pct = Math.max(0, Math.min(100, usage.percent));
+  const r = 5.5;
+  const c = 2 * Math.PI * r;
+  return (
+    <div
+      className="flex items-center px-1"
+      title={`Context: ${Math.round(pct)}% used (~${Math.round(usage.usedTokens / 1000)}k of ${Math.round(usage.windowTokens / 1000)}k tokens). Older turns are summarized automatically when the limit nears.`}
+    >
+      <svg width="16" height="16" viewBox="0 0 16 16" className="-rotate-90 shrink-0">
+        <circle cx="8" cy="8" r={r} fill="none" strokeWidth="2" className="stroke-border" />
+        <circle
+          cx="8"
+          cy="8"
+          r={r}
+          fill="none"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeDasharray={c}
+          strokeDashoffset={c * (1 - pct / 100)}
+          className={pct >= 80 ? 'stroke-amber-500' : 'stroke-[var(--n9-accent)]'}
+        />
+      </svg>
+    </div>
+  );
 }
 
 /** Height above which a completed assistant message collapses behind Show more. */
@@ -4084,6 +4117,7 @@ export function RightSidebar({
               {micListening && <VoiceWaveform getWaveformData={getWaveformData} />}
             </div>
 
+            <ContextUsageRing usage={agentStream.contextUsage} />
             {isLoading ? (
               <Button
                 type="button"
