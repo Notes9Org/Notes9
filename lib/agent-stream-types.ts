@@ -255,6 +255,15 @@ export interface ClarifyPayload {
   [key: string]: unknown;
 }
 
+/** SSE event: context_usage – estimated prompt tokens vs the model context
+ * window for the current turn. Drives the small usage circle in the chat UI. */
+export interface ContextUsagePayload {
+  used_tokens: number;
+  window_tokens: number;
+  percent: number;
+  [key: string]: unknown;
+}
+
 /** SSE event: ping – keep-alive */
 export interface PingPayload {
   ts?: number;
@@ -336,6 +345,7 @@ export type SseEvent =
   | { event: "error"; data: ErrorPayload }
   | { event: "notice"; data: NoticePayload }
   | { event: "clarify"; data: ClarifyPayload }
+  | { event: "context_usage"; data: ContextUsagePayload }
   | { event: "ping"; data: PingPayload };
 
 // ── Source-name normalizer (AD1: structured fields → view model) ──────────────
@@ -423,6 +433,7 @@ const KNOWN_EVENT_TYPES = new Set([
   "error",
   "notice",
   "clarify",
+  "context_usage",
   "ping",
 ] as const);
 
