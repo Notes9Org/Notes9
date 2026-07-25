@@ -11,6 +11,7 @@ import { normalizeSourceNames } from '@/lib/agent-stream-types'
 import { byokRequestHeaders } from '@/lib/byok-preference';
 import type { AllowedMimeType } from '@/lib/attachment-types';
 import { buildNotes9AgentRequestBody } from '@/lib/notes9-agent-request';
+import { entityFromPath } from '@/lib/entity-from-path';
 import { splitSseBuffer, parseSseDataJson } from '@/lib/sse-event-blocks';
 import { recordRumEvent } from '@/lib/rum';
 import { AnalyticsEvent } from '@/lib/analytics/events';
@@ -600,7 +601,19 @@ export function useAgentStream() {
             // BYOK: user's own Anthropic key (Settings) — runs on their account
             ...byokRequestHeaders(),
           },
-          body: JSON.stringify(buildNotes9AgentRequestBody(params)),
+          body: JSON.stringify(
+            buildNotes9AgentRequestBody({
+              ...params,
+              // What the user has open on screen when they hit send (URL → entity).
+              // Explicit @-tags in `params` always win; the server enforces the
+              // @-tags > focus > recency precedence and ignores focus unless
+              // NOTES9_FOCUS_ENVELOPE is on, so this is always safe to send.
+              focus:
+                entityFromPath(
+                  typeof window !== 'undefined' ? window.location.pathname : null,
+                ) ?? undefined,
+            }),
+          ),
           signal,
         });
 

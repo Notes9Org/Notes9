@@ -19,6 +19,7 @@
 import { getPreferredAiModel } from "@/lib/ai-model-preference";
 
 import type { AllowedMimeType } from './attachment-types';
+import type { PathEntity } from './entity-from-path';
 
 export type Notes9AgentHistoryItem = { role: string; content: string };
 
@@ -75,6 +76,10 @@ export type Notes9AgentRequestInput = {
   /** Transient papers (title + abstract + ids) grounded + inline-cited without a
    * literature_review row — follow-up context / closed-access "Ask Catalyst". */
   literature_sources?: Notes9LiteratureSource[];
+  /** What the user has open on screen (URL → entity). The backend grounds the
+   * turn in it when no explicit @-tag is present (FocusEnvelope; consumed only
+   * when NOTES9_FOCUS_ENVELOPE is on, so it is safe to always send). */
+  focus?: PathEntity;
   options?: {
     debug?: boolean;
     max_retries?: number;
@@ -199,6 +204,11 @@ export function buildNotes9AgentRequestBody(params: Notes9AgentRequestInput): Re
     if (literatureSources.length > 0) {
       body.literature_sources = literatureSources;
     }
+  }
+  // What the user has open on screen. Precedence (@-tags > focus > recency) is
+  // enforced server-side; inert when NOTES9_FOCUS_ENVELOPE is off.
+  if (params.focus) {
+    body.focus = params.focus;
   }
   return body;
 }
