@@ -22,7 +22,7 @@ export default async function DataAnalysisPage() {
       .select(
         `
         id, file_name, file_type, file_size, data_type, created_at,
-        experiment_id, project_id,
+        experiment_id, project_id, file_url, tabular_format,
         experiment:experiments(id, name),
         project:projects(id, name)
       `,
@@ -45,6 +45,8 @@ export default async function DataAnalysisPage() {
       created_at: row.created_at,
       experiment_id: row.experiment_id,
       project_id: row.project_id,
+      file_url: row.file_url,
+      tabular_format: row.tabular_format ?? null,
       experiment_name: experiment?.name ?? null,
       project_name: project?.name ?? null,
     }
