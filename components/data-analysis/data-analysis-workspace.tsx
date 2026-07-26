@@ -55,6 +55,7 @@ import type { DataFileRow } from "@/components/data-analysis/data-files-list"
 import { UniverWorkbookView, type SheetSelection } from "@/components/spreadsheet/univer-workbook-view"
 import { CatalystSectionHero } from "@/components/catalyst/catalyst-section-hero"
 import { PlotlyChart, type PlotlyEdits, type ChartExportFn, type ChartElement, type ChartMenuGroup } from "@/components/data-analysis/plotly-chart"
+import { ExportMenu } from "@/components/data-analysis/export-menu"
 import { openCatalystPanel } from "@/lib/catalyst-launch"
 import type { ExportFormat } from "@/lib/data-analysis/chart-export"
 import { useStatsPanel, type Table } from "@/components/data-analysis/stats-panel"
@@ -308,19 +309,16 @@ export function DataAnalysisWorkspace({
   // Publication export
   const chartExportRef = useRef<ChartExportFn | null>(null)
   const chartImageRef = useRef<(() => Promise<string | null>) | null>(null)
+  const chartBoxRef = useRef<HTMLDivElement | null>(null)
   const [saveChartOpen, setSaveChartOpen] = useState(false)
-  const [exFormat, setExFormat] = useState<ExportFormat>("png")
-  const [exDpi, setExDpi] = useState(600)
-  const [exporting, setExporting] = useState(false)
-  const doExport = useCallback(async () => {
-    if (!chartExportRef.current) return
-    setExporting(true)
-    try {
-      await chartExportRef.current({ format: exFormat, dpi: exDpi, filename: (title || "figure").replace(/\s+/g, "-").toLowerCase() })
-    } finally {
-      setExporting(false)
-    }
-  }, [exFormat, exDpi, title])
+  const runExport = useCallback(async (opts: { format: ExportFormat; dpi: number; filename: string }) => {
+    if (chartExportRef.current) await chartExportRef.current(opts)
+  }, [])
+  const getChartSize = useCallback(() => {
+    const el = chartBoxRef.current
+    return el ? { width: el.clientWidth, height: el.clientHeight } : null
+  }, [])
+  const getChartPng = useCallback(() => (chartImageRef.current ? chartImageRef.current() : Promise.resolve(null)), [])
 
   const seededRef = useRef(false)
   if (!seededRef.current && table.columns.length) {
@@ -692,10 +690,13 @@ export function DataAnalysisWorkspace({
   const chartCanvas = (
     <div className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-card/80 shadow-sm backdrop-blur-sm">
       <PaneHeader Icon={ChartLine} title="Chart">
-        <span className="ml-auto hidden text-[11px] text-muted-foreground sm:block">Double-click title / axes to edit · drag to move · menu → SVG</span>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="hidden text-[11px] text-muted-foreground lg:block">Double-click to edit · right-click for menu</span>
+          <ExportMenu variant="ghost" disabled={!hasPlot} defaultName={title} onExport={runExport} getPng={getChartPng} getCanvasSize={getChartSize} onSaveToLibrary={() => setSaveChartOpen(true)} />
+        </div>
       </PaneHeader>
       <div className="p-2">
-        <div className="h-[560px] w-full">
+        <div ref={chartBoxRef} className="h-[560px] w-full">
           {hasPlot ? (
             <PlotlyChart data={plotData} layout={plotLayout} onEdit={handleChartEdit} onEditElement={onEditElement} extraGroups={chartMenuGroups} exportApiRef={chartExportRef} renderApiRef={chartImageRef} className="h-full w-full" />
           ) : (
@@ -921,33 +922,11 @@ export function DataAnalysisWorkspace({
         </div>
       </div>
 
-      {/* Publication export */}
+      {/* Publication export — same advanced menu as the chart header */}
       <div className="border-t border-border pt-3">
         <SectionLabel><DownloadSimple className="h-3.5 w-3.5" /> Export figure</SectionLabel>
-        <div className="grid grid-cols-4 gap-1.5">
-          {(["png", "jpeg", "tiff", "svg"] as ExportFormat[]).map((f) => (
-            <button key={f} onClick={() => setExFormat(f)}
-              className={cn("rounded-md border py-1.5 text-[11px] font-medium uppercase transition-colors",
-                exFormat === f ? "border-[var(--n9-accent,#965034)]/40 bg-[var(--n9-accent,#965034)]/10 text-[var(--n9-accent,#965034)]" : "border-border text-muted-foreground hover:text-foreground")}>
-              {f === "jpeg" ? "JPG" : f}
-            </button>
-          ))}
-        </div>
-        <div className="mt-2 flex items-center gap-2">
-          <div className={cn("inline-flex flex-1 rounded-lg border border-border bg-background p-0.5 text-xs", exFormat === "svg" && "pointer-events-none opacity-40")}>
-            {[300, 600].map((d) => (
-              <button key={d} onClick={() => setExDpi(d)}
-                className={cn("flex-1 rounded-md px-2 py-1 font-medium transition-colors", exDpi === d ? "bg-[var(--n9-accent,#965034)] text-white" : "text-muted-foreground hover:text-foreground")}>
-                {d} dpi
-              </button>
-            ))}
-          </div>
-        </div>
-        <button onClick={doExport} disabled={!hasPlot || exporting}
-          className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-[var(--n9-accent,#965034)] px-3 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50">
-          <DownloadSimple className="h-4 w-4" /> {exporting ? "Rendering…" : exFormat === "svg" ? "Download SVG (vector)" : `Download ${exFormat === "jpeg" ? "JPG" : exFormat.toUpperCase()} · ${exDpi} dpi`}
-        </button>
-        <p className="mt-1.5 text-[11px] text-muted-foreground">TIFF & PNG embed the DPI for print; SVG is vector (scale-free). Or use the chart menu’s camera icon.</p>
+        <ExportMenu variant="solid" disabled={!hasPlot} defaultName={title} onExport={runExport} getPng={getChartPng} getCanvasSize={getChartSize} onSaveToLibrary={() => setSaveChartOpen(true)} />
+        <p className="mt-1.5 text-[11px] text-muted-foreground">Pick a format, type any DPI, and copy or save straight to your data files.</p>
       </div>
     </div>
   )
@@ -1196,7 +1175,7 @@ export function DataAnalysisWorkspace({
         projects={projects}
         experiments={experiments}
         defaultName={title}
-        getPng={() => (chartImageRef.current ? chartImageRef.current() : Promise.resolve(null))}
+        getPng={getChartPng}
         onSaved={() => router.refresh()}
       />
     </div>
