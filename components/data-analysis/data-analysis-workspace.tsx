@@ -76,7 +76,10 @@ import {
 function buildSnapshotFromAoa(aoa: (string | number)[][], sheetName: string, fileName: string): UniverWorkbookSnapshot {
   const ws = XLSX.utils.aoa_to_sheet(aoa)
   const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, sheetName)
+  // Excel/SheetJS reject : \ / ? * [ ] and names > 31 chars, so sanitize
+  // (e.g. "Bradford / BCA protein" would otherwise throw and abort the apply).
+  const safeName = (sheetName || "Sheet1").replace(/[:\\/?*[\]]/g, " ").replace(/\s+/g, " ").trim().slice(0, 31) || "Sheet1"
+  XLSX.utils.book_append_sheet(wb, ws, safeName)
   return buildSpreadsheetWorkbookSnapshot(fileName, wb)
 }
 
@@ -680,9 +683,13 @@ export function DataAnalysisWorkspace({
   const [templatesOpen, setTemplatesOpen] = useState(false)
   const applyTemplate = useCallback(
     (t: AnalysisTemplate) => {
-      if (t.aoa) loadSnapshot(buildSnapshotFromAoa(t.aoa, t.name.slice(0, 28), `${t.name}.xlsx`))
-      applyConfig({ ...t.config, phase: t.phase })
-      toast.success(`Applied “${t.name}”`)
+      try {
+        if (t.aoa) loadSnapshot(buildSnapshotFromAoa(t.aoa, t.name, `${t.name}.xlsx`))
+        applyConfig({ ...t.config, phase: t.phase })
+        toast.success(`Applied “${t.name}”`)
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Couldn't apply that template")
+      }
     },
     [loadSnapshot, applyConfig],
   )

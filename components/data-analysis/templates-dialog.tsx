@@ -160,14 +160,13 @@ export function TemplatesDialog({
           <section>
             <div className="mb-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/70">Start from a template</div>
             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-              {BUILTIN_TEMPLATES.map((t, i) => {
+              {BUILTIN_TEMPLATES.map((t) => {
                 const style = CATEGORY_STYLE[t.category] ?? CATEGORY_STYLE.Custom
                 return (
+                  // No opacity entrance here: a stalled fade (background tab, reduced
+                  // motion, slow device) would leave these clickable cards invisible.
                   <motion.button
                     key={t.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.25, delay: i * 0.035, ease: [0.22, 1, 0.36, 1] }}
                     whileHover={{ y: -2 }}
                     onClick={() => { onApplyBuiltin(t); onOpenChange(false) }}
                     className="group flex items-start gap-3 rounded-2xl border border-border bg-card/60 p-3.5 text-left shadow-sm transition-colors hover:border-[var(--n9-accent,#965034)]/40 hover:bg-[var(--n9-accent,#965034)]/[0.04] hover:shadow-md"
