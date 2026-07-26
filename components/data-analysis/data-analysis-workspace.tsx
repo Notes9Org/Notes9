@@ -36,6 +36,11 @@ import {
   MagnifyingGlass,
   SquaresFour,
   Cube,
+  Cursor,
+  ArrowRight,
+  ArrowUp,
+  Plus,
+  Check,
 } from "@phosphor-icons/react/ssr"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -709,26 +714,61 @@ export function DataAnalysisWorkspace({
 
   const chartSettings = (
     <div className="space-y-4">
-      {/* Bind the selected sheet cell → chart title / axis / series */}
-      {sheetSel && (sheetSel.text !== "" || selColumn) && (
-        <div className="rounded-xl border border-[var(--n9-accent,#965034)]/25 bg-[var(--n9-accent,#965034)]/[0.06] p-3">
-          <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--n9-accent,#965034)]">
-            <span className="h-1.5 w-1.5 rounded-full bg-[var(--n9-accent,#965034)]" />
-            Selected cell {sheetSel.a1}
-          </div>
-          <div className="truncate text-sm font-medium">{sheetSel.text || "(empty)"}</div>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            <ApplyChip onClick={() => setTitle(sheetSel.text)} disabled={!sheetSel.text}>Chart title</ApplyChip>
-            <ApplyChip onClick={() => { setXLabel(sheetSel.text); setXUnit("") }} disabled={!sheetSel.text}>X title</ApplyChip>
-            <ApplyChip onClick={() => { setYLabel(sheetSel.text); setYUnit("") }} disabled={!sheetSel.text}>Y title</ApplyChip>
-            {selColumn && <ApplyChip onClick={() => setXKey(selColumn)}>X = {selColumn}</ApplyChip>}
-            {selColumn && selNumeric && (
-              <ApplyChip onClick={() => setYKeys((p) => (p.includes(selColumn) ? p : [...p, selColumn]))}>+ Y = {selColumn}</ApplyChip>
-            )}
-          </div>
-          <p className="mt-1.5 text-[11px] text-muted-foreground">Click a cell in the sheet, then apply it here.</p>
-        </div>
-      )}
+      {/* Bind the selected sheet cell → chart title / axis / series.
+          Two clearly-separated intents: use the cell's TEXT as a title, or
+          plot its COLUMN as data. */}
+      <AnimatePresence initial={false}>
+        {sheetSel && (sheetSel.text !== "" || selColumn) && (
+          <motion.div
+            key="sheet-sel"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="overflow-hidden"
+          >
+            <div className="rounded-xl border border-[var(--n9-accent,#965034)]/25 bg-gradient-to-b from-[var(--n9-accent,#965034)]/[0.09] to-[var(--n9-accent,#965034)]/[0.02]">
+              <div className="flex items-center gap-2 border-b border-[var(--n9-accent,#965034)]/15 px-3 py-2">
+                <Cursor className="h-4 w-4 text-[var(--n9-accent,#965034)]" weight="fill" />
+                <span className="text-sm font-medium">From the sheet</span>
+                <span className="ml-auto rounded-md bg-[var(--n9-accent,#965034)]/12 px-1.5 py-0.5 font-mono text-[11px] font-medium text-[var(--n9-accent,#965034)]">{sheetSel.a1}</span>
+              </div>
+              <div className="space-y-3 p-3">
+                <div className="rounded-lg border border-border/60 bg-background/70 px-2.5 py-1.5">
+                  <div className="truncate text-sm font-medium" title={sheetSel.text}>
+                    {sheetSel.text || <span className="text-muted-foreground">(empty cell)</span>}
+                  </div>
+                </div>
+
+                {sheetSel.text && (
+                  <div>
+                    <p className="mb-1.5 text-xs text-muted-foreground">Set a title from this text</p>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <BindBtn icon={ChartLine} label="Chart" active={title === sheetSel.text} onClick={() => setTitle(sheetSel.text)} />
+                      <BindBtn icon={ArrowRight} label="X axis" active={xLabel === sheetSel.text} onClick={() => { setXLabel(sheetSel.text); setXUnit("") }} />
+                      <BindBtn icon={ArrowUp} label="Y axis" active={yLabel === sheetSel.text} onClick={() => { setYLabel(sheetSel.text); setYUnit("") }} />
+                    </div>
+                  </div>
+                )}
+
+                {selColumn && (
+                  <div>
+                    <p className="mb-1.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                      Plot column
+                      <span className="max-w-[10rem] truncate font-medium text-foreground" title={selColumn}>{selColumn}</span>
+                      <span className={cn("rounded px-1 py-px text-[10px] font-medium", selNumeric ? "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400" : "bg-muted text-muted-foreground")}>{selNumeric ? "numeric" : "text"}</span>
+                    </p>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <BindBtn icon={ArrowRight} label="Set as X" active={xKey === selColumn} onClick={() => setXKey(selColumn)} />
+                      <BindBtn icon={Plus} label="Add as Y" active={yKeys.includes(selColumn)} disabled={!selNumeric} onClick={() => setYKeys((p) => (p.includes(selColumn) ? p : [...p, selColumn]))} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <div>
         <SectionLabel><FnIcon className="h-3.5 w-3.5" /> Chart type</SectionLabel>
         <div className="grid grid-cols-4 gap-1.5">
@@ -1190,14 +1230,23 @@ function RangeRow({ label, value, min, max, step, onChange }: { label: string; v
 function toHex(c: string): string {
   return /^#[0-9a-f]{6}$/i.test(c) ? c : "#000000"
 }
-function ApplyChip({ onClick, disabled, children }: { onClick: () => void; disabled?: boolean; children: React.ReactNode }) {
+/** Action button in the "From the sheet" pane. When `active`, the target
+    already holds this value, so it reads as done (accent fill + check). */
+function BindBtn({ icon: Icon, label, active, disabled, onClick }: { icon: React.ComponentType<{ className?: string }>; label: string; active?: boolean; disabled?: boolean; onClick: () => void }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       disabled={disabled}
-      className="rounded-md border border-[var(--n9-accent,#965034)]/30 bg-background px-2 py-0.5 text-[11px] font-medium text-[var(--n9-accent,#965034)] transition-colors hover:bg-[var(--n9-accent,#965034)]/12 disabled:cursor-not-allowed disabled:opacity-40"
+      className={cn(
+        "flex items-center justify-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+        active
+          ? "border-[var(--n9-accent,#965034)] bg-[var(--n9-accent,#965034)] text-white"
+          : "border-input bg-background text-foreground hover:border-[var(--n9-accent,#965034)]/40 hover:bg-[var(--n9-accent,#965034)]/[0.06]",
+      )}
     >
-      {children}
+      {active ? <Check className="h-3.5 w-3.5" weight="bold" /> : <Icon className="h-3.5 w-3.5" />}
+      {label}
     </button>
   )
 }
