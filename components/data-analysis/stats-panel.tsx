@@ -279,5 +279,5 @@ function Card({ title, subtitle, children }: { title: string; subtitle?: string;
   )
 }
 function Labeled({ label, children }: { label: string; children: ReactNode }) {
-  return (<div><label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/80">{label}</label>{children}</div>)
+  return (<div><label className="mb-1.5 block text-xs font-medium text-muted-foreground">{label}</label>{children}</div>)
 }

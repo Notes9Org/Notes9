@@ -282,7 +282,7 @@ function Group({ title, subtitle, children }: { title: string; subtitle?: string
   )
 }
 function Labeled({ label, children }: { label: string; children: ReactNode }) {
-  return (<div><label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/80">{label}</label>{children}</div>)
+  return (<div><label className="mb-1.5 block text-xs font-medium text-muted-foreground">{label}</label>{children}</div>)
 }
 function NumIn({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   return <input type="number" min={1} value={value} onChange={(e) => onChange(Number(e.target.value) || 1)} className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm font-mono" />

@@ -40,7 +40,6 @@ import {
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
@@ -763,13 +762,10 @@ export function DataAnalysisWorkspace({
       </Field>
       {chartType === "bubble" && (
         <Field label="Bubble size (column)">
-          <Select value={sizeKey || "__y__"} onValueChange={(v) => setSizeKey(v === "__y__" ? "" : v)}>
-            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__y__">Same as Y</SelectItem>
-              {numericCols.map((c) => (<SelectItem key={c} value={c}>{c}</SelectItem>))}
-            </SelectContent>
-          </Select>
+          <NativeSelect value={sizeKey || "__y__"} onChange={(v) => setSizeKey(v === "__y__" ? "" : v)}>
+            <option value="__y__">Same as Y</option>
+            {numericCols.map((c) => (<option key={c} value={c}>{c}</option>))}
+          </NativeSelect>
         </Field>
       )}
       <div id="cs-title" className={cn("space-y-4 rounded-lg transition-shadow", flashId === "cs-title" && "ring-2 ring-[var(--n9-accent,#965034)]/40")}>
@@ -836,18 +832,12 @@ export function DataAnalysisWorkspace({
             <RangeRow label="Line width" value={curStyle.width ?? (chartType === "area" ? 2 : 2.5)} min={0.5} max={6} step={0.5} onChange={(v) => setStyle(editKey, { width: v })} />
             <RangeRow label="Marker size" value={curStyle.size ?? 7} min={0} max={20} step={1} onChange={(v) => setStyle(editKey, { size: v })} />
             <RangeRow label="Opacity" value={curStyle.opacity ?? 1} min={0.1} max={1} step={0.05} onChange={(v) => setStyle(editKey, { opacity: v })} />
-            <div className="grid grid-cols-2 gap-2">
-              <Field label="Line style">
-                <select value={curStyle.dash ?? "solid"} onChange={(e) => setStyle(editKey, { dash: e.target.value })} className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm capitalize">
-                  {DASH_OPTIONS.map((d) => (<option key={d} value={d}>{d}</option>))}
-                </select>
-              </Field>
-              <Field label="Marker">
-                <select value={curStyle.marker ?? "circle"} onChange={(e) => setStyle(editKey, { marker: e.target.value })} className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm capitalize">
-                  {MARKER_OPTIONS.map((m) => (<option key={m} value={m}>{m.replace("-", " ")}</option>))}
-                </select>
-              </Field>
-            </div>
+            <Field label="Line style">
+              <DashPicker value={curStyle.dash ?? "solid"} onChange={(v) => setStyle(editKey, { dash: v })} />
+            </Field>
+            <Field label="Marker">
+              <MarkerPicker value={curStyle.marker ?? "circle"} onChange={(v) => setStyle(editKey, { marker: v })} />
+            </Field>
             <div className="flex items-center justify-between gap-2 pt-0.5">
               <span className="text-xs text-muted-foreground">Y axis (dual-axis)</span>
               <div className="inline-flex rounded-md border border-border bg-background p-0.5 text-xs">
@@ -881,9 +871,9 @@ export function DataAnalysisWorkspace({
       <div className="border-t border-border pt-3">
         <SectionLabel><TextAa className="h-3.5 w-3.5" /> Typography</SectionLabel>
         <Field label="Font family">
-          <select value={fontFamily} onChange={(e) => setFontFamily(e.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm">
+          <NativeSelect value={fontFamily} onChange={setFontFamily}>
             {FONT_OPTIONS.map((f) => (<option key={f.label} value={f.value}>{f.label}</option>))}
-          </select>
+          </NativeSelect>
         </Field>
         <div className="mt-2 grid grid-cols-2 gap-2">
           <RangeRow label="Title size" value={titleSize} min={11} max={28} step={1} onChange={setTitleSize} />
@@ -1189,8 +1179,8 @@ function RangeRow({ label, value, min, max, step, onChange }: { label: string; v
   return (
     <div>
       <div className="mb-1 flex items-center justify-between">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/80">{label}</span>
-        <span className="font-mono text-[11px] text-muted-foreground">{value}</span>
+        <span className="text-xs font-medium text-muted-foreground">{label}</span>
+        <span className="rounded bg-muted/60 px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-foreground/70">{value}</span>
       </div>
       <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} className="w-full accent-[var(--n9-accent,#965034)]" />
     </div>
@@ -1228,8 +1218,87 @@ function AssignBtn({ active, disabled, onClick, children }: { active: boolean; d
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="min-w-0">
-      <Label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/80">{label}</Label>
+      <Label className="mb-1.5 block text-xs font-medium text-muted-foreground">{label}</Label>
       {children}
+    </div>
+  )
+}
+/** Native <select> styled to look modern, with a Phosphor chevron — no shadcn. */
+function NativeSelect({ value, onChange, className, children }: { value: string; onChange: (v: string) => void; className?: string; children: React.ReactNode }) {
+  return (
+    <div className="relative">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={cn("h-9 w-full appearance-none rounded-lg border border-input bg-background pl-3 pr-8 text-sm outline-none transition-colors hover:border-border focus:border-[var(--n9-accent,#965034)]/50 focus:ring-2 focus:ring-[var(--n9-accent,#965034)]/20", className)}
+      >
+        {children}
+      </select>
+      <CaretDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+    </div>
+  )
+}
+
+const DASH_DASHARRAY: Record<string, string> = { solid: "", dash: "6 3", dot: "1.5 3", dashdot: "6 3 1.5 3" }
+/** Segmented control for the line dash style, each option a live line preview. */
+function DashPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="grid grid-cols-4 gap-1.5">
+      {DASH_OPTIONS.map((d) => {
+        const active = (value || "solid") === d
+        return (
+          <button
+            key={d}
+            type="button"
+            onClick={() => onChange(d)}
+            title={d}
+            className={cn(
+              "flex h-9 items-center justify-center rounded-lg border transition-colors",
+              active ? "border-[var(--n9-accent,#965034)] bg-[var(--n9-accent,#965034)]/10 text-[var(--n9-accent,#965034)]" : "border-input bg-background text-muted-foreground hover:border-border",
+            )}
+          >
+            <svg width="30" height="8" viewBox="0 0 30 8">
+              <line x1="1" y1="4" x2="29" y2="4" stroke="currentColor" strokeWidth="2" strokeDasharray={DASH_DASHARRAY[d]} strokeLinecap="round" />
+            </svg>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function markerGlyph(m: string) {
+  switch (m) {
+    case "square": return <rect x="2.5" y="2.5" width="7" height="7" />
+    case "diamond": return <path d="M6 1.5 L10.5 6 L6 10.5 L1.5 6 Z" />
+    case "triangle-up": return <path d="M6 2 L10.5 10 L1.5 10 Z" />
+    case "cross": return <path d="M4.5 1.8 h3 v2.7 h2.7 v3 h-2.7 v2.7 h-3 v-2.7 h-2.7 v-3 h2.7 Z" />
+    case "x": return <path d="M3 3 L9 9 M9 3 L3 9" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    case "star": return <path d="M6 1 L7.15 4.3 L10.6 4.4 L7.85 6.5 L8.8 9.9 L6 7.9 L3.2 9.9 L4.15 6.5 L1.4 4.4 L4.85 4.3 Z" />
+    default: return <circle cx="6" cy="6" r="3.8" />
+  }
+}
+/** Glyph grid for the marker shape, each option rendered as its true shape. */
+function MarkerPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="grid grid-cols-7 gap-1.5">
+      {MARKER_OPTIONS.map((m) => {
+        const active = (value || "circle") === m
+        return (
+          <button
+            key={m}
+            type="button"
+            onClick={() => onChange(m)}
+            title={m.replace("-", " ")}
+            className={cn(
+              "flex h-9 items-center justify-center rounded-lg border transition-colors",
+              active ? "border-[var(--n9-accent,#965034)] bg-[var(--n9-accent,#965034)]/10 text-[var(--n9-accent,#965034)]" : "border-input bg-background text-muted-foreground hover:border-border",
+            )}
+          >
+            <svg width="14" height="14" viewBox="0 0 12 12" fill="currentColor">{markerGlyph(m)}</svg>
+          </button>
+        )
+      })}
     </div>
   )
 }

@@ -8,10 +8,31 @@ import { fetchOrganizationIdForExperiment } from "@/lib/experiment-storage"
 import { USER_STORAGE_BUCKET, createExperimentDataStoragePath } from "@/lib/user-storage-bucket"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { ChartLine, CircleNotch } from "@phosphor-icons/react/ssr"
+import { cn } from "@/lib/utils"
+import { CaretDown, ChartLine, CircleNotch } from "@phosphor-icons/react/ssr"
+
+/** Native <select> styled to match the workspace — no shadcn. */
+function NativeSelect({ value, onChange, disabled, id, children }: { value: string; onChange: (v: string) => void; disabled?: boolean; id?: string; children: React.ReactNode }) {
+  return (
+    <div className="relative">
+      <select
+        id={id}
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
+        className={cn(
+          "h-9 w-full appearance-none rounded-lg border border-input bg-background pl-3 pr-8 text-sm outline-none transition-colors hover:border-border focus:border-[var(--n9-accent,#965034)]/50 focus:ring-2 focus:ring-[var(--n9-accent,#965034)]/20",
+          disabled && "cursor-not-allowed opacity-50",
+        )}
+      >
+        {children}
+      </select>
+      <CaretDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+    </div>
+  )
+}
 
 type Option = { id: string; name: string }
 type ExperimentOption = Option & { project_id: string | null }
@@ -118,21 +139,17 @@ export function SaveChartDialog({
         <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="save-chart-project">Project (required)</Label>
-            <Select value={projectId} onValueChange={(v) => { setProjectId(v); setExperimentId("") }}>
-              <SelectTrigger id="save-chart-project"><SelectValue placeholder="Choose a project" /></SelectTrigger>
-              <SelectContent>
-                {projects.map((p) => (<SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>))}
-              </SelectContent>
-            </Select>
+            <NativeSelect id="save-chart-project" value={projectId} onChange={(v) => { setProjectId(v); setExperimentId("") }}>
+              <option value="" disabled>Choose a project</option>
+              {projects.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
+            </NativeSelect>
           </div>
           <div className="space-y-2">
             <Label htmlFor="save-chart-experiment">Experiment (required)</Label>
-            <Select value={experimentId} onValueChange={setExperimentId} disabled={!projectId}>
-              <SelectTrigger id="save-chart-experiment"><SelectValue placeholder={projectId ? "Choose an experiment" : "Choose a project first"} /></SelectTrigger>
-              <SelectContent>
-                {experimentOptions.map((e) => (<SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>))}
-              </SelectContent>
-            </Select>
+            <NativeSelect id="save-chart-experiment" value={experimentId} onChange={setExperimentId} disabled={!projectId}>
+              <option value="" disabled>{projectId ? "Choose an experiment" : "Choose a project first"}</option>
+              {experimentOptions.map((e) => (<option key={e.id} value={e.id}>{e.name}</option>))}
+            </NativeSelect>
             <p className="text-xs text-muted-foreground">Data files live inside an experiment — both are required.</p>
           </div>
           <div className="space-y-2">

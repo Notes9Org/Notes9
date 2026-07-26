@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState, type ReactNode } from "react"
+import { CaretDown } from "@phosphor-icons/react/ssr"
 import { cn } from "@/lib/utils"
 import { Switch } from "@/components/ui/switch"
 import { PlotlyChart } from "@/components/data-analysis/plotly-chart"
@@ -298,11 +299,18 @@ function Tag({ tone, children }: { tone: "ok" | "warn" | "muted"; children: Reac
 }
 function Sel({ cols, value, onChange, placeholder }: { cols: string[]; value: string; onChange: (v: string) => void; placeholder?: string }) {
   return (
-    <select value={value} onChange={(e) => onChange(e.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm">
-      {cols.map((c) => (<option key={c} value={c}>{c === "" ? placeholder ?? "— none —" : c}</option>))}
-    </select>
+    <div className="relative">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-9 w-full appearance-none rounded-lg border border-input bg-background pl-3 pr-8 text-sm outline-none transition-colors hover:border-border focus:border-[var(--n9-accent,#965034)]/50 focus:ring-2 focus:ring-[var(--n9-accent,#965034)]/20"
+      >
+        {cols.map((c) => (<option key={c} value={c}>{c === "" ? placeholder ?? "— none —" : c}</option>))}
+      </select>
+      <CaretDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+    </div>
   )
 }
 function Labeled({ label, children }: { label: string; children: ReactNode }) {
-  return (<div><label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/80">{label}</label>{children}</div>)
+  return (<div><label className="mb-1.5 block text-xs font-medium text-muted-foreground">{label}</label>{children}</div>)
 }
