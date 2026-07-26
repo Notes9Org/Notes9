@@ -10,10 +10,14 @@ import {
 } from "@/lib/spreadsheet-workbook"
 import { USER_STORAGE_BUCKET, resolveExperimentDataStoragePath } from "@/lib/user-storage-bucket"
 
-type RouteParams = { params: Promise<{ experimentId: string; fileId: string }> }
+// Next 16's generated route validator types `context.params` as
+// `Promise<unknown>`; accept that (a supertype of the specific shape) and
+// narrow via a cast so the handler stays assignable under strictFunctionTypes.
+type RouteParams = { params: Promise<unknown> }
+type WorkbookRouteParams = { experimentId: string; fileId: string }
 
 export async function GET(_request: Request, { params }: RouteParams) {
-  const { experimentId, fileId } = await params
+  const { experimentId, fileId } = (await params) as WorkbookRouteParams
   const supabase = await createClient()
   const user = await getCurrentUser()
   if (!user) {
@@ -38,7 +42,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
 }
 
 export async function PATCH(request: Request, { params }: RouteParams) {
-  const { experimentId, fileId } = await params
+  const { experimentId, fileId } = (await params) as WorkbookRouteParams
   const supabase = await createClient()
   const user = await getCurrentUser()
   if (!user) {
@@ -166,7 +170,7 @@ function isSafeStorageUrl(raw: string): boolean {
 
 /** Backfill snapshot from public file URL (server-side fetch). */
 export async function POST(_request: Request, { params }: RouteParams) {
-  const { experimentId, fileId } = await params
+  const { experimentId, fileId } = (await params) as WorkbookRouteParams
   const supabase = await createClient()
   const user = await getCurrentUser()
   if (!user) {

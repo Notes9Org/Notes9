@@ -21,7 +21,7 @@ import dotenv from "dotenv"
 import puppeteer, { type Page } from "puppeteer"
 import * as fs from "fs"
 import * as path from "path"
-import { addCaptureInitScripts } from "@/lib/capture-sanitize"
+import { addCaptureInitScripts, sanitizeForDemo, sanitizeLightForDemo } from "@/lib/capture-sanitize"
 
 dotenv.config({ path: path.join(process.cwd(), ".env") })
 
@@ -32,7 +32,8 @@ const CAPTURE_OUTPUT_SUBDIR = process.env.CAPTURE_OUTPUT_SUBDIR || ""
 const OUTPUT_DIR = path.join(process.cwd(), "public", "demo", CAPTURE_OUTPUT_SUBDIR)
 const CAPTURE_THEME = (process.env.CAPTURE_THEME || "light").toLowerCase()
 
-const VIEWPORT = { width: 1920, height: 1080 }
+const DEVICE_SCALE_FACTOR = Number(process.env.CAPTURE_SCALE || "2")
+const VIEWPORT = { width: 1920, height: 1080, deviceScaleFactor: DEVICE_SCALE_FACTOR }
 
 async function applyCaptureTheme(page: Page) {
   if (CAPTURE_THEME !== "dark") return
@@ -143,6 +144,7 @@ async function capture(
     await new Promise((r) => setTimeout(r, 800))
   }
 
+  await sanitizeForDemo(page)
   const filePath = path.join(OUTPUT_DIR, output)
   await page.screenshot({ path: filePath, type: "png" })
   console.log(`Captured ${output} from ${route}`)
@@ -170,6 +172,7 @@ async function captureExistingLabNoteFromExperiment(page: Page, experimentPath: 
     await new Promise((r) => setTimeout(r, 2000))
   }
 
+  await sanitizeForDemo(page)
   const filePath = path.join(OUTPUT_DIR, "new-lab-note.png")
   await page.screenshot({ path: filePath, type: "png" })
   console.log(`Captured new-lab-note.png from existing note at ${experimentPath}?tab=notes`)
@@ -192,22 +195,71 @@ async function captureLiteratureSearchResults(page: Page): Promise<void> {
   }
 
   await page.waitForSelector("input", { visible: true, timeout: 10000 })
-  const typed = await page.evaluate((query: string) => {
-    const input = Array.from(document.querySelectorAll<HTMLInputElement>("input")).find((el) => {
-      const placeholder = (el.placeholder || "").toLowerCase()
-      return placeholder.includes("search database") || placeholder.includes("ask a research question")
-    })
-    if (!input) return false
-    input.focus()
-    input.value = ""
-    input.dispatchEvent(new Event("input", { bubbles: true }))
-    return true
-  }, LITERATURE_QUERY)
-  if (!typed) return
+  // The search input placeholder now cycles example questions, so match it
+  // structurally: the widest visible textual input in the MAIN content area,
+  // explicitly excluding the sidebar's global ⌘K search (which appears first
+  // in the DOM and would otherwise steal the query).
+  const tagged = await page.evaluate(() => {
+    const inSidebar = (el: Element) =>
+      !!(el.closest && el.closest("[data-sidebar], aside, nav, [data-slot='sidebar']"))
+    const scopes = [
+      ...Array.from(document.querySelectorAll("main")),
+      ...Array.from(document.querySelectorAll("[role='main']")),
+      document.body,
+    ]
+    for (const scope of scopes) {
+      const inputs = Array.from(scope.querySelectorAll<HTMLInputElement>("input"))
+      const candidate = inputs
+        .filter((el) => {
+          const t = (el.getAttribute("type") || "text").toLowerCase()
+          const textual = t === "text" || t === "search"
+          const rect = el.getBoundingClientRect()
+          return textual && !inSidebar(el) && rect.width > 240 && rect.height > 0 && el.offsetParent !== null
+        })
+        .sort((a, b) => b.getBoundingClientRect().width - a.getBoundingClientRect().width)[0]
+      if (candidate) {
+        candidate.setAttribute("data-capture-search", "1")
+        return true
+      }
+    }
+    return false
+  })
+  if (!tagged) {
+    console.warn("Could not find literature search input, skipping literature-search.png")
+    return
+  }
 
-  await page.keyboard.type(LITERATURE_QUERY, { delay: 25 })
+  // page.type clicks-to-focus the exact element, so the query can't leak elsewhere.
+  await page.type('input[data-capture-search="1"]', LITERATURE_QUERY, { delay: 25 })
   await page.keyboard.press("Enter")
-  await new Promise((r) => setTimeout(r, 5000))
+  // AI literature search returns papers, then streams a cited AI overview.
+  // Wait for results to arrive, then poll until the overview stops summarizing.
+  await new Promise((r) => setTimeout(r, 6000))
+  // Wait for papers to arrive first (fast), then — when CAPTURE_WAIT_AI_OVERVIEW
+  // is set — keep waiting for the cited AI overview to finish streaming (it can
+  // take ~4 min). Default runs don't block on it.
+  await page
+    .waitForFunction(() => /\bcitations?\b/.test((document.body.innerText || "").toLowerCase()), {
+      timeout: 25000,
+      polling: 1000,
+    })
+    .catch(() => {})
+  if (process.env.CAPTURE_WAIT_AI_OVERVIEW === "1") {
+    await page
+      .waitForFunction(
+        () => {
+          const body = (document.body.innerText || "").toLowerCase()
+          const working =
+            body.includes("gathering papers") ||
+            body.includes("summarizing") ||
+            body.includes("analyzing relevance")
+          return /\bcitations?\b/.test(body) && !working
+        },
+        { timeout: 280000, polling: 2000 }
+      )
+      .catch(() => {})
+  }
+  await new Promise((r) => setTimeout(r, 2000))
 
   const totalHeight = await page.evaluate(() => Math.max(document.body.scrollHeight, document.documentElement.scrollHeight))
   await page.evaluate(async (height: number) => {
@@ -228,6 +280,12 @@ async function captureLiteratureSearchResults(page: Page): Promise<void> {
   }, totalHeight)
   await new Promise((r) => setTimeout(r, 700))
 
+  // Hide the Next.js dev indicator/error badge (covers the Next 16 badge too).
+  await page.addStyleTag({
+    content:
+      "nextjs-portal, #nextjs-build-indicator, [data-nextjs-toast], [data-next-badge-root], [data-next-badge] { display: none !important; }",
+  })
+  await sanitizeLightForDemo(page)
   const filePath = path.join(OUTPUT_DIR, "literature-search.png")
   await page.screenshot({ path: filePath, type: "png", fullPage: true })
   console.log(`Captured literature-search.png from live search for "${LITERATURE_QUERY}"`)
@@ -258,29 +316,13 @@ async function getFirstDetailLink(
 }
 
 async function captureProtocolDetails(page: Page) {
-  await page.goto(`${BASE_URL}/protocols`, { waitUntil: "networkidle2", timeout: 30000 })
-  await page.addStyleTag({ content: 'nextjs-portal, #nextjs-build-indicator, [data-nextjs-toast] { display: none !important; }' })
-  await new Promise(r => setTimeout(r, 2000))
-
-  const clicked = await page.evaluate(() => {
-    const spans = Array.from(document.querySelectorAll("span"))
-    const target = spans.find(s => s.textContent?.trim() === "View Details")
-    if (target) {
-      ;(target as HTMLElement).click()
-      return true
-    }
-    return false
-  })
-  
-  if (clicked) {
-    await new Promise(r => setTimeout(r, 3000))
-    await page.addStyleTag({ content: 'nextjs-portal, #nextjs-build-indicator, [data-nextjs-toast] { display: none !important; }' })
-    const filePath = path.join(OUTPUT_DIR, "protocol-details.png")
-    await page.screenshot({ path: filePath, type: "png" })
-    console.log("Captured protocol-details.png from /protocols")
-  } else {
-    console.warn("Could not find 'View Details' button in /protocols")
+  // Protocols link out via /protocols/<id> anchors (no "View Details" button).
+  const protoPath = await getFirstDetailLink(page, "/protocols", "/protocols")
+  if (!protoPath) {
+    console.warn("No protocol detail link found in /protocols, skipping protocol-details.png")
+    return
   }
+  await capture(page, protoPath, "protocol-details.png")
 }
 
 async function captureResearchMapLiterature(page: Page) {
@@ -301,6 +343,7 @@ async function captureResearchMapLiterature(page: Page) {
   if (clicked) {
     console.log("Clicked Literature filter, waiting 4s for rerender...")
     await new Promise(r => setTimeout(r, 4000))
+    await sanitizeForDemo(page)
     const filePath = path.join(OUTPUT_DIR, "research-map-literature.png")
     await page.screenshot({ path: filePath, type: "png" })
     console.log("Captured research-map-literature.png from /research-map")
@@ -370,6 +413,7 @@ async function captureWritingEditor(page: Page) {
 
     await new Promise(r => setTimeout(r, 4000)) // wait for sidebar to open
     await page.addStyleTag({ content: 'nextjs-portal, #nextjs-build-indicator, [data-nextjs-toast] { display: none !important; }' })
+    await sanitizeForDemo(page)
     const filePath = path.join(OUTPUT_DIR, "writing-editor.png")
     await page.screenshot({ path: filePath, type: "png" })
     console.log("Captured writing-editor.png from /papers")

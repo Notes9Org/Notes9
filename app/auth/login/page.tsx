@@ -2,22 +2,14 @@
 
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { AuthShell } from "@/components/auth/auth-shell"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import Link from "next/link"
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useState, useEffect, Suspense } from "react"
 import { Separator } from "@/components/ui/separator"
-import { InteractiveParticles } from "@/components/ui/interactive-particles"
-import { Notes9Brand } from "@/components/brand/notes9-brand"
-import { Eye, EyeSlash as EyeOff, Flask as FlaskConical } from "@phosphor-icons/react/ssr"
+import { Eye, EyeSlash as EyeOff } from "@phosphor-icons/react/ssr"
 
 /** Only allow in-app relative paths (same rules as auth/callback). */
 function safeNextPath(raw: string | null): string {
@@ -153,7 +145,9 @@ function LoginForm() {
     try {
       const callbackUrl = inviteToken
         ? `${window.location.origin}/auth/callback?token=${encodeURIComponent(inviteToken)}`
-        : `${window.location.origin}/auth/callback`
+        : nextPath !== "/dashboard"
+          ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`
+          : `${window.location.origin}/auth/callback`
 
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
@@ -176,36 +170,10 @@ function LoginForm() {
     }
   }
   return (
-    <div className="flex min-h-screen w-full items-center justify-center p-6 bg-background relative overflow-hidden">
-      <InteractiveParticles />
-      {/* Dark overlay for better text visibility */}
-      <div className="absolute inset-0 z-0 bg-background/30 backdrop-blur-[1px]" />
-      <div className="absolute inset-0 z-0 bg-[radial-gradient(circle_800px_at_center,theme(colors.background)_30%,transparent_100%)]" />
-
-      <div className="w-full max-w-md relative z-10">
-        <div className="flex flex-col gap-6">
-          <div className="flex flex-col items-center gap-3 text-center">
-            <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-card/80 px-3 py-1 text-micro font-medium uppercase tracking-[0.18em] text-muted-foreground shadow-sm backdrop-blur-sm">
-              <FlaskConical className="size-3.5 text-primary/80" />
-              Research workspace access
-            </div>
-            <Notes9Brand stacked iconClassName="h-[56px] w-[56px]" textClassName="h-9 w-auto" />
-            <div className="space-y-1">
-              <h1 className="text-2xl font-bold">Continue your research</h1>
-              <p className="text-sm text-muted-foreground">
-                Sign in to open your workspace, notes, experiments, and literature in one place.
-              </p>
-            </div>
-          </div>
-
-          <Card className="border-border/70 bg-card/92 shadow-[0_24px_60px_-32px_rgba(44,36,24,0.28)] backdrop-blur-sm">
-            <CardHeader>
-              <CardTitle className="text-xl">Sign In</CardTitle>
-              <CardDescription>
-                Enter your credentials to access your laboratory workspace
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
+    <AuthShell
+      title="Continue your research"
+      subtitle="Sign in to open your workspace, notes, experiments, and literature in one place."
+    >
               {/* OAuth Buttons */}
               <div className="flex flex-col gap-3 mb-6">
                 <Button
@@ -351,7 +319,13 @@ function LoginForm() {
                 <div className="mt-4 text-center text-sm">
                   Don't have an account?{" "}
                   <Link
-                    href={inviteToken ? `/auth/sign-up?token=${encodeURIComponent(inviteToken)}` : "/auth/sign-up"}
+                    href={
+                      inviteToken
+                        ? `/auth/sign-up?token=${encodeURIComponent(inviteToken)}`
+                        : nextPath !== "/dashboard"
+                          ? `/auth/sign-up?next=${encodeURIComponent(nextPath)}`
+                          : "/auth/sign-up"
+                    }
                     className="underline underline-offset-4 hover:text-primary"
                   >
                     Sign up
@@ -366,11 +340,7 @@ function LoginForm() {
                   </Link>
                 </div>
               </form>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    </div>
+    </AuthShell>
   )
 }
 

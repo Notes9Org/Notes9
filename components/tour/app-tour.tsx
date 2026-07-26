@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { useAuthUser } from "@/components/auth/auth-provider"
 import { ProductTour } from "@/components/tour/product-tour"
@@ -44,6 +44,7 @@ export function requestStartTour() {
 export function AppTour() {
   const user = useAuthUser()
   const router = useRouter()
+  const pathname = usePathname()
   const [mounted, setMounted] = useState(false)
   const [mode, setMode] = useState<TourMode>("idle")
   const [pageSteps, setPageSteps] = useState<ReturnType<typeof buildContextualSteps>>([])
@@ -95,6 +96,16 @@ export function AppTour() {
     if (!mounted || !user) return
     // Defer onboarding until terms are accepted. The effect re-runs once `termsAccepted` flips.
     if (!termsAccepted) return
+
+    // Don't interrupt the post-signup payoff: when a new user lands on the
+    // literature page from the hero search (?autorun=1), let the query execute
+    // and the cited results appear FIRST. The welcome wizard fires on their
+    // next navigation instead (this effect re-runs on `pathname` change).
+    const onAutorunLanding =
+      pathname?.startsWith("/literature-reviews") &&
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("autorun") === "1"
+    if (onAutorunLanding) return
 
     let cancelled = false
     const run = async () => {
@@ -148,7 +159,7 @@ export function AppTour() {
     return () => {
       cancelled = true
     }
-  }, [mounted, user, termsAccepted])
+  }, [mounted, user, termsAccepted, pathname])
 
   // ---- event wiring: page help + manual tour restart ---------------------
   useEffect(() => {

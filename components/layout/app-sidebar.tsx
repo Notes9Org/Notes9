@@ -55,7 +55,7 @@ import { withFromDashboard } from "@/lib/from-dashboard"
 const SCOPED_NAV_HREFS = new Set([
   "/experiments",
   "/lab-notes",
-  "/data",
+  "/data-analysis",
   "/literature-reviews",
   "/papers",
   "/reports",

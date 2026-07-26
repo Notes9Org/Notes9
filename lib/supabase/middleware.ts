@@ -164,5 +164,28 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 
+  // Carry a hero literature query through auth. The marketing hero drops a
+  // short-lived `n9_pending_lit_query` cookie before routing to sign-up; once
+  // the now-signed-in user lands on ANY protected page (dashboard, etc.), send
+  // them to the literature page to auto-run that query. This is method-agnostic
+  // (email/password, OAuth, email verification all funnel through here), so the
+  // prompt always reaches the search. Clear the cookie in the same response so
+  // it fires exactly once and can't loop.
+  const pendingLitQuery = request.cookies.get("n9_pending_lit_query")?.value
+  if (pendingLitQuery && !request.nextUrl.pathname.startsWith("/literature-reviews")) {
+    const litUrl = new URL("/literature-reviews", request.url)
+    let q = pendingLitQuery
+    try {
+      q = decodeURIComponent(pendingLitQuery)
+    } catch {
+      // keep raw value if it isn't valid percent-encoding
+    }
+    litUrl.searchParams.set("q", q)
+    litUrl.searchParams.set("autorun", "1")
+    const res = NextResponse.redirect(litUrl)
+    res.cookies.set("n9_pending_lit_query", "", { maxAge: 0, path: "/" })
+    return res
+  }
+
   return supabaseResponse
 }

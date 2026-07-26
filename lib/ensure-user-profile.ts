@@ -1,12 +1,59 @@
 import "server-only"
 
 import { cache } from "react"
+import { after } from "next/server"
 import type { User } from "@supabase/supabase-js"
 import { createClient } from "@/lib/supabase/server"
+import { createServiceRoleClient } from "@/lib/supabase-service-role"
+import { seedDemoProject } from "@/lib/seed-demo-project"
 
 type EnsureResult =
   | { ok: true; profile: { id: string; organization_id: string; first_name: string | null; last_name: string | null } }
   | { ok: false; reason: string }
+
+// Warm-instance cache of users we've already confirmed seeded, to avoid a
+// post-response DB read on every page load for long-standing users.
+const seededThisInstance = new Set<string>()
+
+/**
+ * Seed the demo project for a new user exactly once, AFTER the response is sent
+ * (so it never delays the first page — e.g. the auto-run literature search).
+ * Reads the `demo_seeded_at` guard with the service-role client and tolerates
+ * the column being absent (returns quietly), so this is safe to ship before the
+ * scripts/099 migration is applied. Idempotent across concurrent requests: the
+ * seed's project insert has a UNIQUE (org, name) constraint.
+ */
+function scheduleDemoSeed(userId: string, organizationId: string): void {
+  if (seededThisInstance.has(userId)) return
+  try {
+    after(async () => {
+      try {
+        const admin = createServiceRoleClient()
+        const prof = await admin
+          .from("profiles")
+          .select("demo_seeded_at")
+          .eq("id", userId)
+          .maybeSingle()
+        // Column missing / read error → skip silently (migration not applied yet).
+        if (prof.error) return
+        if (prof.data?.demo_seeded_at) {
+          seededThisInstance.add(userId)
+          return
+        }
+        await seedDemoProject(admin, userId, organizationId)
+        await admin
+          .from("profiles")
+          .update({ demo_seeded_at: new Date().toISOString() })
+          .eq("id", userId)
+        seededThisInstance.add(userId)
+      } catch (err) {
+        console.error("[ensureUserProfile] demo seed skipped:", err)
+      }
+    })
+  } catch {
+    // after() unavailable outside a request scope — skip.
+  }
+}
 
 /**
  * Idempotently guarantees that an authenticated user has a `profiles` row and
@@ -37,6 +84,7 @@ export const ensureUserProfile = cache(async (user: User): Promise<EnsureResult>
     .maybeSingle()
 
   if (existing.data?.organization_id) {
+    scheduleDemoSeed(existing.data.id as string, existing.data.organization_id as string)
     return {
       ok: true,
       profile: {
@@ -132,6 +180,7 @@ export const ensureUserProfile = cache(async (user: User): Promise<EnsureResult>
     return { ok: false, reason: "profile still missing after create" }
   }
 
+  scheduleDemoSeed(retry.data.id as string, retry.data.organization_id as string)
   return {
     ok: true,
     profile: {

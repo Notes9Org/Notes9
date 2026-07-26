@@ -1,111 +1,79 @@
 "use client"
 
-import { useRef } from "react"
+import type { CSSProperties } from "react"
 import Link from "next/link"
-import { motion, useScroll, useTransform } from "framer-motion"
 import { ArrowRight, Play } from "@phosphor-icons/react/ssr"
 import { Button } from "@/components/ui/button"
-import { HeroSequence } from "@/components/marketing/hero-sequence"
-import { PretextReveal } from "@/components/ui/fluid-text"
+import { HeroSearch } from "@/components/marketing/hero-search"
 
+/** Inline helper to set the staggered reveal delay CSS var. */
+const rise = (delay: number): CSSProperties => ({ ["--n9-rise-delay" as string]: `${delay}ms` } as CSSProperties)
 
 export function AcademicHero() {
-  const sectionRef = useRef<HTMLElement>(null)
-
-  const { scrollYProgress } = useScroll({
-    target: sectionRef,
-    offset: ["start start", "end start"],
-  })
-  const heroY = useTransform(scrollYProgress, [0, 1], [0, 40])
-
   return (
-    <section ref={sectionRef} className="relative overflow-x-clip overflow-y-hidden pb-8 sm:pb-0">
+    <section className="sticky top-16 z-0 flex min-h-[calc(100vh-4rem)] min-h-[calc(100svh-4rem)] items-center overflow-x-clip overflow-y-hidden py-12 sm:py-16">
+      {/* Modern aurora + depth-of-field background */}
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute left-1/2 top-[-10%] h-[420px] w-[540px] -translate-x-1/2 rounded-full bg-[var(--n9-accent)]/[0.07] blur-[90px] sm:h-[600px] sm:w-[800px] sm:blur-[120px] animate-[drift_20s_ease-in-out_infinite]" />
-        <div className="absolute right-[-18%] top-[20%] h-[260px] w-[320px] rounded-full bg-amber-600/[0.04] blur-[72px] sm:right-[-10%] sm:h-[400px] sm:w-[500px] sm:blur-[100px] animate-[drift_25s_ease-in-out_infinite_reverse]" />
-        <div className="absolute left-[-12%] bottom-[10%] h-[220px] w-[280px] rounded-full bg-[var(--n9-accent)]/[0.05] blur-[72px] sm:left-[-5%] sm:h-[350px] sm:w-[450px] sm:blur-[100px] animate-[drift_22s_ease-in-out_infinite_2s]" />
+        <div className="n9-dotgrid n9-mask-radial absolute inset-0 opacity-70" />
+        <div className="n9-aurora absolute left-1/2 top-[-14%] h-[520px] w-[680px] -translate-x-1/2 rounded-full bg-[var(--n9-accent)]/[0.10] blur-[110px] sm:h-[680px] sm:w-[900px]" />
+        <div className="n9-aurora absolute right-[-12%] top-[6%] h-[360px] w-[440px] rounded-full bg-amber-500/[0.06] blur-[100px] [animation-delay:-8s] sm:h-[460px] sm:w-[560px]" />
+        <div className="n9-aurora absolute bottom-[2%] left-[-10%] h-[320px] w-[420px] rounded-full bg-[var(--n9-accent)]/[0.07] blur-[100px] [animation-delay:-15s] sm:h-[400px] sm:w-[520px]" />
+        <div className="absolute inset-x-0 top-0 h-[420px] bg-[radial-gradient(58%_60%_at_50%_0%,var(--n9-accent-glow),transparent_70%)]" />
       </div>
 
-      <div className="container relative z-10 mx-auto px-4 pb-10 pt-6 sm:px-6 sm:pb-14 sm:pt-14 lg:px-8">
-        <motion.div
-          initial={{ opacity: 0, y: 28 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.75, delay: 0.15, ease: "easeOut" }}
-          style={{ y: heroY }}
-          className="mt-2 grid w-full min-w-0 items-start gap-6 sm:mt-4 sm:gap-8 lg:mt-10 lg:grid-cols-2 lg:gap-10 xl:grid-cols-[5fr_7fr] xl:gap-12"
-        >
-          <div className="relative order-1 min-w-0 lg:pt-2 xl:pt-4">
-            <div className="relative z-10 space-y-5 sm:space-y-7">
-            <div className="max-w-3xl text-left font-serif text-[2.35rem] font-bold tracking-tight text-foreground sm:text-5xl lg:text-[3.45rem] lg:leading-[1.14] leading-[1.12]">
-              <PretextReveal text="AI that answers from" />{" "}
-              <motion.span
-                className="n9-gradient-text inline-block"
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.45, ease: [0.22, 1, 0.36, 1] }}
-              >
-                your lab&rsquo;s actual work.
-              </motion.span>
-            </div>
+      <div className="container relative z-10 mx-auto w-full px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-4xl space-y-6 text-center sm:space-y-8">
+          <h1
+            className="n9-rise mx-auto max-w-4xl font-serif text-[2.6rem] font-bold leading-[1.04] tracking-[-0.02em] text-foreground sm:text-[3.4rem] lg:text-[4.3rem] lg:leading-[1.0]"
+            style={rise(80)}
+          >
+            AI that answers from{" "}
+            <span className="n9-gradient-text n9-shimmer inline-block">your lab&rsquo;s actual work.</span>
+          </h1>
 
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.2 }}
-              className="max-w-2xl text-left text-[1.05rem] leading-relaxed text-muted-foreground sm:text-[22px] sm:leading-relaxed"
-            >
-              <p className="text-pretty">
-                <span className="font-semibold text-foreground">Stop re-explaining your project to AI.</span>{" "}
-                Your papers, experiments, data and notes live in Notes9, so its AI reasons from your
-                real work - and cites every claim.
-              </p>
-            </motion.div>
+          <p
+            className="n9-rise mx-auto max-w-2xl text-pretty text-[1.05rem] leading-relaxed text-muted-foreground sm:text-[22px] sm:leading-relaxed"
+            style={rise(180)}
+          >
+            <span className="font-semibold text-foreground">Stop re-explaining your project to AI.</span>{" "}
+            Your papers, experiments, data and notes live in Notes9, so its AI reasons from your real
+            work - and cites every claim.
+          </p>
 
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.3 }}
-              className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-start sm:gap-4"
-            >
-              <Button
-                asChild
-                size="lg"
-                className="group h-14 w-full rounded-full px-10 text-[17px] font-semibold bg-[linear-gradient(115deg,var(--n9-accent),color-mix(in_oklab,var(--n9-accent)_58%,#d9a24a))] text-white shadow-[0_14px_44px_-12px_var(--n9-accent-glow)] transition-all duration-300 hover:opacity-95 hover:shadow-[0_22px_56px_-12px_var(--n9-accent-glow)] sm:w-auto"
-              >
-                <Link href="/auth/sign-up">
-                  Start free
-                  <ArrowRight className="ml-2 h-5 w-5 transition-transform duration-200 group-hover:translate-x-1" />
-                </Link>
-              </Button>
-              <Button
-                asChild
-                variant="outline"
-                size="lg"
-                className="h-14 w-full rounded-full border-border/60 px-10 text-[17px] font-semibold transition-colors duration-200 hover:border-[var(--n9-accent)]/40 sm:w-auto"
-              >
-                <Link href="/#contact">
-                  <Play className="mr-2 h-5 w-5" />
-                  Book a demo
-                </Link>
-              </Button>
-            </motion.div>
-
-            <motion.p
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.4 }}
-              className="text-[14px] text-muted-foreground/80"
-            >
-              Free for students and postdocs · under a minute to start.
-            </motion.p>
-            </div>
+          <div className="n9-rise" style={rise(280)}>
+            <HeroSearch />
           </div>
 
-          <div className="order-2 min-w-0">
-            <HeroSequence />
+          <div
+            className="n9-rise flex flex-col items-center gap-3 sm:flex-row sm:justify-center sm:gap-4"
+            style={rise(380)}
+          >
+            <Button
+              asChild
+              size="lg"
+              className="group h-12 w-full rounded-full bg-[linear-gradient(115deg,var(--n9-accent),color-mix(in_oklab,var(--n9-accent)_58%,#d9a24a))] px-8 text-[16px] font-semibold text-white shadow-[0_14px_44px_-12px_var(--n9-accent-glow)] transition-all duration-300 hover:opacity-95 hover:shadow-[0_22px_56px_-12px_var(--n9-accent-glow)] sm:w-auto"
+            >
+              <Link href="/auth/sign-up">
+                Start free
+                <ArrowRight className="ml-2 h-5 w-5 transition-transform duration-200 group-hover:translate-x-1" />
+              </Link>
+            </Button>
+            <Button
+              asChild
+              variant="ghost"
+              size="lg"
+              className="h-12 w-full rounded-full px-6 text-[16px] font-semibold text-muted-foreground transition-colors duration-200 hover:text-foreground sm:w-auto"
+            >
+              <Link href="/#contact">
+                <Play className="mr-2 h-5 w-5" />
+                Book a demo
+              </Link>
+            </Button>
+            <span className="hidden text-[13px] text-muted-foreground/70 sm:inline">
+              Free credits when you sign up
+            </span>
           </div>
-        </motion.div>
-
+        </div>
       </div>
     </section>
   )

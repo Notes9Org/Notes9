@@ -91,10 +91,30 @@ export type UniverWorkbookViewProps = {
    * `embed` — compact sheet (notes). `workspace` — full ribbon (Start / Formulas / …), toolbars, closer to desktop Excel.
    */
   variant?: "embed" | "workspace"
+  /**
+   * Chromeless grid: hides the toolbar / formula bar / status footer, leaving a
+   * clean sheet (column & row headers + cells). Right-click menu stays. Use for
+   * narrow rails where the full ribbon is too heavy. Opt-in; defaults off.
+   */
+  compact?: boolean
   /** Outer scroll boundary height */
   heightClass?: string
   /** Changes remount Univer instance */
   instanceKey?: string | number
+  /** Fires when the active cell/selection changes (for wiring cells → chart). */
+  onSelectionChange?: (sel: SheetSelection | null) => void
+}
+
+/** The active sheet selection surfaced to callers. */
+export type SheetSelection = {
+  /** A1 notation of the active cell, e.g. "B2". */
+  a1: string
+  row: number
+  col: number
+  /** Display text of the active cell. */
+  text: string
+  /** Text of the header cell (row 1) in the active cell's column. */
+  columnHeader: string
 }
 
 export function UniverWorkbookView({
@@ -105,8 +125,10 @@ export function UniverWorkbookView({
   onPersistSnapshot,
   readOnly = false,
   variant = "embed",
+  compact = false,
   heightClass = "h-[520px]",
   instanceKey = 0,
+  onSelectionChange,
 }: UniverWorkbookViewProps) {
   const isDark = useIsDark()
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -123,6 +145,8 @@ export function UniverWorkbookView({
   const onPersistSnapshotRef = useRef(onPersistSnapshot)
   onPersistEncodedRef.current = onPersistEncoded
   onPersistSnapshotRef.current = onPersistSnapshot
+  const onSelectionChangeRef = useRef(onSelectionChange)
+  onSelectionChangeRef.current = onSelectionChange
 
   const workbookEncodedPropRef = useRef(workbookEncoded)
   const workbookSnapshotPropRef = useRef(workbookSnapshot)
@@ -222,13 +246,14 @@ export function UniverWorkbookView({
 
         const presetConfig: Record<string, unknown> = {
           container: mountHost,
-          header: true,
-          toolbar: true,
-          formulaBar: true,
-          footer: true,
-          menu: true,
+          // Compact mode strips the ribbon/formula-bar/footer for a clean grid.
+          header: !compact,
+          toolbar: !compact,
+          formulaBar: !compact,
+          footer: !compact,
+          menu: !compact,
           contextMenu: true,
-          statusBarStatistic: true,
+          statusBarStatistic: !compact,
           // Always disable Univer auto-focus so it does not fight Radix Dialog focus / cell editor.
           disableAutoFocus: true,
           ribbonType: "classic",
@@ -320,6 +345,48 @@ export function UniverWorkbookView({
                 }
               }),
             ]
+
+        // Surface the active selection (best-effort via the Facade API) so
+        // callers can bind sheet cells to chart title/axis/series. Defensive:
+        // if the facade shape differs, the feature simply stays inert.
+        if (onSelectionChangeRef.current) {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const api = univerAPI as any
+            const evt = api.Event?.SelectionChanged ?? api.Event?.SelectionMoveEnd
+            const emit = () => {
+              try {
+                const wb = api.getActiveWorkbook?.()
+                const sheet = wb?.getActiveSheet?.()
+                const range = sheet?.getActiveRange?.()
+                if (!range) return onSelectionChangeRef.current?.(null)
+                const rawValue = typeof range.getValue === "function" ? range.getValue() : null
+                const row = typeof range.getRow === "function" ? range.getRow() : 0
+                const col = typeof range.getColumn === "function" ? range.getColumn() : 0
+                const a1 = typeof range.getA1Notation === "function" ? range.getA1Notation() : ""
+                let columnHeader = ""
+                try {
+                  const h = sheet?.getRange?.(0, col)?.getValue?.()
+                  columnHeader = h == null ? "" : String(h)
+                } catch {
+                  /* header lookup optional */
+                }
+                onSelectionChangeRef.current?.({
+                  a1: String(a1 ?? ""),
+                  row,
+                  col,
+                  text: rawValue == null ? "" : String(rawValue),
+                  columnHeader,
+                })
+              } catch {
+                onSelectionChangeRef.current?.(null)
+              }
+            }
+            if (evt) disposables.push(univerAPI.addEvent(evt, emit))
+          } catch {
+            /* selection wiring is optional */
+          }
+        }
 
         cleanup = () => {
           mountedRef.current = false
@@ -429,7 +496,7 @@ export function UniverWorkbookView({
     // destroy+recreate on every theme toggle, wiping unsaved in-memory edits.
     // Dark-mode appearance updates apply on the next legitimate remount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [instanceKey, variant, readOnly, fileName, dataRevision, canAttemptMount])
+  }, [instanceKey, variant, compact, readOnly, fileName, dataRevision, canAttemptMount])
 
   useEffect(() => {
     if (variant === "embed") {
