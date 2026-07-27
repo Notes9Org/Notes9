@@ -59,6 +59,9 @@ import { ExportMenu } from "@/components/data-analysis/export-menu"
 import { openCatalystPanel } from "@/lib/catalyst-launch"
 import type { ExportFormat } from "@/lib/data-analysis/chart-export"
 import { useStatsPanel, type Table } from "@/components/data-analysis/stats-panel"
+import { describe as describeStats } from "@/lib/data-analysis/statistics"
+import { normalInv } from "@/lib/data-analysis/distributions"
+import { rocCurve, kaplanMeier, blandAltman } from "@/lib/data-analysis/chart-transforms"
 import { useStandardCurve } from "@/components/data-analysis/standard-curve-panel"
 import { usePlate, usePlateModel } from "@/components/data-analysis/plate-view"
 import { TemplatesDialog } from "@/components/data-analysis/templates-dialog"
@@ -104,10 +107,81 @@ function snapshotToTable(snapshot: UniverWorkbookSnapshot): Table {
   }
 }
 
+/** Error-bar representation for aggregated replicates. */
+type ErrorMode = "none" | "sd" | "sem" | "ci95"
+
+/**
+ * Aggregate rows sharing an X value into mean ± error, preserving first-seen
+ * order. Powers Prism-style bar/point charts with error bars and an optional
+ * overlay of the individual replicate points.
+ */
+function aggregateByX(
+  rows: Record<string, number | string>[],
+  xKey: string,
+  yKey: string,
+  errKind: "sd" | "sem" | "ci95",
+): { cats: (string | number)[]; mean: number[]; err: number[]; points: { x: string | number; y: number }[] } {
+  const order: (string | number)[] = []
+  const groups = new Map<string, number[]>()
+  const catOf = new Map<string, string | number>()
+  for (const r of rows) {
+    const xv = r[xKey] as string | number
+    const key = String(xv)
+    if (!groups.has(key)) {
+      groups.set(key, [])
+      order.push(xv)
+      catOf.set(key, xv)
+    }
+    const yv = Number(r[yKey])
+    if (isFinite(yv)) groups.get(key)!.push(yv)
+  }
+  const cats: (string | number)[] = []
+  const mean: number[] = []
+  const err: number[] = []
+  const points: { x: string | number; y: number }[] = []
+  for (const xv of order) {
+    const ys = groups.get(String(xv))!
+    if (!ys.length) continue
+    const d = describeStats(ys)
+    cats.push(xv)
+    mean.push(d.mean)
+    err.push(errKind === "sd" ? d.sd : errKind === "sem" ? d.sem : d.ci95[1] - d.mean)
+    for (const y of ys) points.push({ x: xv, y })
+  }
+  return { cats, mean, err, points }
+}
+
+/** Pearson r between two paired numeric arrays (for correlation matrices). */
+function pearsonR(a: number[], b: number[]): number {
+  const xs: number[] = []
+  const ys: number[] = []
+  for (let i = 0; i < Math.min(a.length, b.length); i++) {
+    if (isFinite(a[i]) && isFinite(b[i])) {
+      xs.push(a[i])
+      ys.push(b[i])
+    }
+  }
+  const n = xs.length
+  if (n < 2) return NaN
+  const mx = xs.reduce((s, v) => s + v, 0) / n
+  const my = ys.reduce((s, v) => s + v, 0) / n
+  let sxy = 0
+  let sxx = 0
+  let syy = 0
+  for (let i = 0; i < n; i++) {
+    sxy += (xs[i] - mx) * (ys[i] - my)
+    sxx += (xs[i] - mx) ** 2
+    syy += (ys[i] - my) ** 2
+  }
+  return sxx === 0 || syy === 0 ? NaN : sxy / Math.sqrt(sxx * syy)
+}
+
 /* ── Chart types ────────────────────────────────────────────────────────── */
 type ChartType =
   | "line" | "scatter" | "bar" | "barStacked" | "barH" | "area"
-  | "box" | "violin" | "histogram" | "bubble" | "pie"
+  | "box" | "violin" | "histogram" | "ecdf" | "qq" | "bubble" | "pie"
+  | "heatmap" | "corrMatrix"
+  | "volcano" | "blandAltman" | "roc" | "km" | "forest"
   | "scatter3d" | "mesh3d"
 
 const CHART_TYPES: { id: ChartType; label: string; Icon: React.ComponentType<{ className?: string; weight?: "bold" | "fill" }>; group: string }[] = [
@@ -122,11 +196,31 @@ const CHART_TYPES: { id: ChartType; label: string; Icon: React.ComponentType<{ c
   { id: "box", label: "Box", Icon: ChartBarHorizontal, group: "Distribution" },
   { id: "violin", label: "Violin", Icon: Waveform, group: "Distribution" },
   { id: "histogram", label: "Histogram", Icon: ChartLineUp, group: "Distribution" },
+  { id: "ecdf", label: "Cumulative (ECDF)", Icon: ChartLineUp, group: "Distribution" },
+  { id: "qq", label: "Q–Q (normal)", Icon: ChartScatter, group: "Distribution" },
+  { id: "heatmap", label: "Heatmap", Icon: GridNine, group: "Matrix" },
+  { id: "corrMatrix", label: "Correlation matrix", Icon: GridNine, group: "Matrix" },
+  { id: "volcano", label: "Volcano", Icon: ChartScatter, group: "Scientific" },
+  { id: "blandAltman", label: "Bland–Altman", Icon: ChartScatter, group: "Scientific" },
+  { id: "roc", label: "ROC curve", Icon: TrendUp, group: "Scientific" },
+  { id: "km", label: "Kaplan–Meier", Icon: ChartLineUp, group: "Scientific" },
+  { id: "forest", label: "Forest", Icon: ChartBarHorizontal, group: "Scientific" },
   { id: "scatter3d", label: "3D Scatter", Icon: Cube, group: "3D" },
   { id: "mesh3d", label: "3D Mesh", Icon: Cube, group: "3D" },
 ]
 
 const is3D = (t: ChartType) => t === "scatter3d" || t === "mesh3d"
+
+/** Per-chart column-assignment guidance for charts with special role semantics. */
+const BINDING_HINTS: Partial<Record<ChartType, string>> = {
+  volcano: "X = log₂ fold-change · Y = p-value",
+  blandAltman: "Y = the two methods to compare (assign 2 columns)",
+  roc: "X = binary truth (0/1) · Y = score",
+  km: "X = time · Y = event (1 = event, 0 = censored)",
+  forest: "X = estimate · Y = lower & upper CI (2 columns); label = first text column",
+  heatmap: "Y = value columns (rows form the matrix)",
+  corrMatrix: "Y = columns to correlate (defaults to all numeric)",
+}
 
 const PALETTES: Record<string, string[]> = {
   "Okabe–Ito": ["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9", "#F0E442"],
@@ -305,6 +399,14 @@ export function DataAnalysisWorkspace({
   const [fontFamily, setFontFamily] = useState("system-ui, -apple-system, sans-serif")
   const [titleSize, setTitleSize] = useState(17)
   const [axisTitleSize, setAxisTitleSize] = useState(13)
+  // Prism-style chart features
+  const [errorMode, setErrorMode] = useState<ErrorMode>("none")
+  const [showPoints, setShowPoints] = useState(false)
+  const [subtitle, setSubtitle] = useState("")
+  const [legendPos, setLegendPos] = useState<"bottom" | "right" | "top">("bottom")
+  const [hlines, setHlines] = useState("")
+  const [vlines, setVlines] = useState("")
+  const [chartH, setChartH] = useState(560)
   const setStyle = useCallback((series: string, patch: Partial<SeriesStyle>) => {
     setSeriesStyles((prev) => ({ ...prev, [series]: { ...prev[series], ...patch } }))
   }, [])
@@ -362,6 +464,119 @@ export function DataAnalysisWorkspace({
         ...(chartType === "violin" ? { meanline: { visible: true }, points: "all" } : {}),
       }))
     }
+    if (chartType === "ecdf") {
+      return activeY.map((k, i) => {
+        const vals = table.rows.map((r) => Number(r[k])).filter((v) => isFinite(v)).sort((a, b) => a - b)
+        const n = vals.length
+        return { type: "scatter", mode: "lines", line: { shape: "hv", color: palette[i % palette.length], width: 2 }, x: vals, y: vals.map((_, idx) => (idx + 1) / n), name: k }
+      })
+    }
+    if (chartType === "qq") {
+      return activeY.map((k, i) => {
+        const vals = table.rows.map((r) => Number(r[k])).filter((v) => isFinite(v)).sort((a, b) => a - b)
+        const n = vals.length
+        const theo = vals.map((_, idx) => normalInv((idx + 0.5) / n))
+        return { type: "scatter", mode: "markers", x: theo, y: vals, name: k, marker: { color: palette[i % palette.length], size: 7 } }
+      })
+    }
+    if (chartType === "heatmap") {
+      const cols = activeY.length ? activeY : numericCols
+      if (!cols.length) return []
+      const z = rows.map((r) => cols.map((c) => Number(r[c])))
+      const yLabels = rows.map((r, i) => (r[xKey] != null && r[xKey] !== "" ? String(r[xKey]) : `${i + 1}`))
+      return [{ type: "heatmap", z, x: cols, y: yLabels, colorscale: "Viridis", colorbar: { thickness: 12 } }]
+    }
+    if (chartType === "corrMatrix") {
+      const cols = (activeY.length >= 2 ? activeY : numericCols).filter((c) => numericCols.includes(c))
+      if (cols.length < 2) return []
+      const series = cols.map((c) => table.rows.map((r) => Number(r[c])))
+      const z = series.map((a) => series.map((b) => pearsonR(a, b)))
+      return [{ type: "heatmap", z, x: cols, y: cols, colorscale: "RdBu", reversescale: true, zmid: 0, zmin: -1, zmax: 1, colorbar: { thickness: 12 }, hovertemplate: "%{x} · %{y}: r = %{z:.2f}<extra></extra>" }]
+    }
+    if (chartType === "volcano") {
+      // X = log₂ fold-change column, Y = p-value column → plot vs −log₁₀(p).
+      const fcCol = xKey
+      const pCol = activeY[0]
+      if (!fcCol || !pCol) return []
+      const pts = table.rows
+        .map((r) => ({ x: Number(r[fcCol]), p: Number(r[pCol]) }))
+        .filter((d) => isFinite(d.x) && isFinite(d.p) && d.p > 0)
+      if (!pts.length) return []
+      const yv = pts.map((d) => -Math.log10(d.p))
+      const xVals = pts.map((d) => d.x)
+      const colors = pts.map((d) => (Math.abs(d.x) >= 1 && d.p < 0.05 ? (d.x > 0 ? "#D55E00" : "#0072B2") : "#9aa0a6"))
+      const xr = [Math.min(...xVals), Math.max(...xVals)]
+      const yThresh = -Math.log10(0.05)
+      const yMaxV = Math.max(...yv, yThresh + 0.5)
+      return [
+        { type: "scatter", mode: "markers", x: xVals, y: yv, marker: { color: colors, size: 6 }, name: "points", hovertemplate: "log₂FC %{x:.2f}<br>−log₁₀p %{y:.2f}<extra></extra>" },
+        { type: "scatter", mode: "lines", x: xr, y: [yThresh, yThresh], line: { dash: "dot", color: "#999", width: 1 }, showlegend: false, hoverinfo: "skip" },
+        { type: "scatter", mode: "lines", x: [1, 1], y: [0, yMaxV], line: { dash: "dot", color: "#999", width: 1 }, showlegend: false, hoverinfo: "skip" },
+        { type: "scatter", mode: "lines", x: [-1, -1], y: [0, yMaxV], line: { dash: "dot", color: "#999", width: 1 }, showlegend: false, hoverinfo: "skip" },
+      ]
+    }
+    if (chartType === "blandAltman") {
+      // First two Y columns = the two measurement methods.
+      const [aCol, bCol] = activeY
+      if (!aCol || !bCol) return []
+      const ba = blandAltman(table.rows.map((r) => Number(r[aCol])), table.rows.map((r) => Number(r[bCol])))
+      if (!ba.mean.length) return []
+      const xr = [Math.min(...ba.mean), Math.max(...ba.mean)]
+      const hline = (v: number, color: string, dash: string, name: string) => ({ type: "scatter", mode: "lines", x: xr, y: [v, v], line: { color, dash, width: 1.4 }, name, hoverinfo: "skip" })
+      return [
+        { type: "scatter", mode: "markers", x: ba.mean, y: ba.diff, marker: { color: palette[0], size: 8 }, name: "differences" },
+        hline(ba.bias, "#965034", "solid", `bias ${ba.bias.toFixed(2)}`),
+        hline(ba.loaHigh, "#D55E00", "dash", "+1.96 SD"),
+        hline(ba.loaLow, "#D55E00", "dash", "−1.96 SD"),
+      ]
+    }
+    if (chartType === "roc") {
+      // X = binary truth column, Y = score column.
+      const truthCol = xKey
+      const scoreCol = activeY[0]
+      if (!truthCol || !scoreCol) return []
+      const roc = rocCurve(table.rows.map((r) => Number(r[truthCol])), table.rows.map((r) => Number(r[scoreCol])))
+      if (!roc.fpr.length) return []
+      return [
+        { type: "scatter", mode: "lines", x: roc.fpr, y: roc.tpr, name: `ROC (AUC = ${isFinite(roc.auc) ? roc.auc.toFixed(3) : "—"})`, line: { color: palette[0], width: 2.5, shape: "hv" }, fill: "tozeroy", fillcolor: "rgba(0,114,178,0.12)" },
+        { type: "scatter", mode: "lines", x: [0, 1], y: [0, 1], line: { dash: "dash", color: "#999", width: 1 }, showlegend: false, hoverinfo: "skip" },
+      ]
+    }
+    if (chartType === "km") {
+      // X = time column, Y = event column (1 = event, 0 = censored).
+      const timeCol = xKey
+      const eventCol = activeY[0]
+      if (!timeCol || !eventCol) return []
+      const km = kaplanMeier(table.rows.map((r) => Number(r[timeCol])), table.rows.map((r) => Number(r[eventCol])))
+      if (!km.time.length) return []
+      return [{ type: "scatter", mode: "lines", line: { shape: "hv", color: palette[0], width: 2 }, x: km.time, y: km.survival, name: "survival" }]
+    }
+    if (chartType === "forest") {
+      // X = point-estimate column, Y = [lower CI, upper CI] columns; row label
+      // is the first non-numeric column.
+      const estCol = xKey
+      const [lowCol, highCol] = activeY
+      if (!estCol || !lowCol || !highCol) return []
+      const labelCol = table.columns.find((c) => !numericCols.includes(c))
+      const items = table.rows
+        .map((r, i) => ({
+          label: labelCol && r[labelCol] != null && r[labelCol] !== "" ? String(r[labelCol]) : `Row ${i + 1}`,
+          est: Number(r[estCol]),
+          low: Number(r[lowCol]),
+          high: Number(r[highCol]),
+        }))
+        .filter((d) => isFinite(d.est) && isFinite(d.low) && isFinite(d.high))
+      if (!items.length) return []
+      return [{
+        type: "scatter",
+        mode: "markers",
+        x: items.map((d) => d.est),
+        y: items.map((d) => d.label),
+        error_x: { type: "data", symmetric: false, array: items.map((d) => d.high - d.est), arrayminus: items.map((d) => d.est - d.low), thickness: 1.4, width: 5, color: palette[0] },
+        marker: { color: palette[0], size: 9, symbol: "square" },
+        name: "effect",
+      }]
+    }
     if (is3D(chartType)) {
       const yk = activeY[0]
       if (!yk || !zKey) return []
@@ -372,24 +587,49 @@ export function DataAnalysisWorkspace({
       const st = seriesStyles[yk] ?? {}
       return [{ type: "scatter3d", mode: "markers", x: x3, y: y3, z: z3, name: yk, marker: { size: st.size ?? 4, color: st.color ?? z3, colorscale: st.color ? undefined : "Viridis", showscale: !st.color } }]
     }
-    return activeY.map((k, i) => {
+    // 2D charts — optionally aggregate replicates by X into mean ± error, with
+    // an overlay of the individual points (the Prism bar/scatter idiom).
+    const traces: Record<string, unknown>[] = []
+    const canAggregate = errorMode !== "none" && ["line", "scatter", "bar", "barStacked", "barH", "area"].includes(chartType)
+    activeY.forEach((k, i) => {
       const st = seriesStyles[k] ?? {}
       const color = st.color ?? palette[i % palette.length]
       const opacity = st.opacity ?? 1
       const yaxis = st.axis === "y2" ? "y2" : "y"
+
+      if (canAggregate) {
+        const agg = aggregateByX(rows, xKey, k, errorMode as "sd" | "sem" | "ci95")
+        const errBar = { type: "data", array: agg.err, visible: true, thickness: 1.4, width: 5, color }
+        if (chartType === "bar" || chartType === "barStacked")
+          traces.push({ type: "bar", x: agg.cats, y: agg.mean, name: k, opacity, yaxis, marker: { color }, error_y: errBar })
+        else if (chartType === "barH")
+          traces.push({ type: "bar", orientation: "h", y: agg.cats, x: agg.mean, name: k, opacity, marker: { color }, error_x: errBar })
+        else if (chartType === "area")
+          traces.push({ type: "scatter", mode: "lines", fill: "tozeroy", x: agg.cats, y: agg.mean, name: k, opacity, yaxis, line: { color, width: st.width ?? 2, dash: st.dash ?? "solid" }, error_y: errBar })
+        else if (chartType === "scatter")
+          traces.push({ type: "scatter", mode: "markers", x: agg.cats, y: agg.mean, name: k, opacity, yaxis, marker: { color, size: st.size ?? 9, symbol: st.marker ?? "circle" }, error_y: errBar })
+        else
+          traces.push({ type: "scatter", mode: lineMode, x: agg.cats, y: agg.mean, name: k, opacity, yaxis, line: { color, width: st.width ?? 2.5, dash: st.dash ?? "solid" }, marker: { color, size: st.size ?? 7, symbol: st.marker ?? "circle" }, error_y: errBar })
+        if (showPoints)
+          traces.push({ type: "scatter", mode: "markers", x: agg.points.map((p) => p.x), y: agg.points.map((p) => p.y), name: `${k} points`, yaxis, showlegend: false, opacity: 0.55, marker: { color, size: 5, symbol: "circle-open" } })
+        return
+      }
+
       const y = rows.map((r) => Number(r[k]))
-      if (chartType === "bar" || chartType === "barStacked") return { type: "bar", x, y, name: k, opacity, yaxis, marker: { color } }
-      if (chartType === "barH") return { type: "bar", orientation: "h", y: x, x: y, name: k, opacity, marker: { color } }
-      if (chartType === "area") return { type: "scatter", mode: "lines", fill: "tozeroy", x, y, name: k, opacity, yaxis, line: { color, width: st.width ?? 2, dash: st.dash ?? "solid" } }
-      if (chartType === "scatter") return { type: "scatter", mode: "markers", x, y, name: k, opacity, yaxis, marker: { color, size: st.size ?? 9, symbol: st.marker ?? "circle" } }
+      if (chartType === "bar" || chartType === "barStacked") { traces.push({ type: "bar", x, y, name: k, opacity, yaxis, marker: { color } }); return }
+      if (chartType === "barH") { traces.push({ type: "bar", orientation: "h", y: x, x: y, name: k, opacity, marker: { color } }); return }
+      if (chartType === "area") { traces.push({ type: "scatter", mode: "lines", fill: "tozeroy", x, y, name: k, opacity, yaxis, line: { color, width: st.width ?? 2, dash: st.dash ?? "solid" } }); return }
+      if (chartType === "scatter") { traces.push({ type: "scatter", mode: "markers", x, y, name: k, opacity, yaxis, marker: { color, size: st.size ?? 9, symbol: st.marker ?? "circle" } }); return }
       if (chartType === "bubble") {
         const sizes = sizeKey ? rows.map((r) => Number(r[sizeKey])) : y
         const mx = Math.max(...sizes.map((s) => Math.abs(s)), 1)
-        return { type: "scatter", mode: "markers", x, y, name: k, opacity, yaxis, marker: { color, symbol: st.marker ?? "circle", size: sizes.map((s) => 8 + (Math.abs(s) / mx) * 34), sizemode: "diameter" } }
+        traces.push({ type: "scatter", mode: "markers", x, y, name: k, opacity, yaxis, marker: { color, symbol: st.marker ?? "circle", size: sizes.map((s) => 8 + (Math.abs(s) / mx) * 34), sizemode: "diameter" } })
+        return
       }
-      return { type: "scatter", mode: lineMode, x, y, name: k, opacity, yaxis, line: { color, width: st.width ?? 2.5, dash: st.dash ?? "solid" }, marker: { color, size: st.size ?? 7, symbol: st.marker ?? "circle" } }
+      traces.push({ type: "scatter", mode: lineMode, x, y, name: k, opacity, yaxis, line: { color, width: st.width ?? 2.5, dash: st.dash ?? "solid" }, marker: { color, size: st.size ?? 7, symbol: st.marker ?? "circle" } })
     })
-  }, [rows, xKey, activeY, zKey, chartType, palette, markers, sizeKey, table.rows, seriesStyles])
+    return traces
+  }, [rows, xKey, activeY, zKey, chartType, palette, markers, sizeKey, table.rows, numericCols, seriesStyles, errorMode, showPoints])
 
   const plotLayout = useMemo<Record<string, unknown>>(() => {
     const horizontal = chartType === "barH"
@@ -397,9 +637,16 @@ export function DataAnalysisWorkspace({
     const xRange = num(xMin) != null && num(xMax) != null ? [num(xMin), num(xMax)] : undefined
     const yRange = num(yMin) != null && num(yMax) != null ? [num(yMin), num(yMax)] : undefined
     const tickN = num(nticks) ?? undefined
+    const refColor = isDark ? "#8a7a68" : "#b0a08c"
+    const parseNums = (s: string) => s.split(",").map((v) => Number(v.trim())).filter((v) => isFinite(v))
+    const shapes: Record<string, unknown>[] = [
+      ...parseNums(hlines).map((v) => ({ type: "line", xref: "paper", x0: 0, x1: 1, yref: "y", y0: v, y1: v, line: { color: refColor, width: 1, dash: "dash" } })),
+      ...parseNums(vlines).map((v) => ({ type: "line", yref: "paper", y0: 0, y1: 1, xref: "x", x0: v, x1: v, line: { color: refColor, width: 1, dash: "dash" } })),
+    ]
     return {
-      title: { text: title, font: { size: titleSize, color: ink } },
-      margin: { t: 48, r: 20, b: 60, l: 70 },
+      title: { text: subtitle ? `${title}<br><span style="font-size:${Math.round(titleSize * 0.62)}px;opacity:0.62">${subtitle}</span>` : title, font: { size: titleSize, color: ink } },
+      margin: { t: subtitle ? 66 : 48, r: 20, b: 60, l: 70 },
+      shapes,
       paper_bgcolor: "rgba(0,0,0,0)",
       plot_bgcolor: "rgba(0,0,0,0)",
       font: { family: fontFamily, color: ink, size: 12 },
@@ -418,7 +665,12 @@ export function DataAnalysisWorkspace({
         ...(yRange ? { range: yRange, autorange: false } : {}),
       },
       showlegend: showLegend,
-      legend: { orientation: "h", y: -0.22 },
+      legend:
+        legendPos === "right"
+          ? { orientation: "v", x: 1.02, y: 1 }
+          : legendPos === "top"
+            ? { orientation: "h", y: 1.12 }
+            : { orientation: "h", y: -0.22 },
       barmode: chartType === "barStacked" ? "stack" : "group",
       violingap: 0.3,
       ...(is3D(chartType)
@@ -442,7 +694,7 @@ export function DataAnalysisWorkspace({
           }
         : {}),
     }
-  }, [title, ink, palette, xAxisLabel, yAxisLabel, showGrid, gridColor, chartType, yLog, showLegend, xMin, xMax, yMin, yMax, nticks, fontFamily, titleSize, axisTitleSize, zKey, activeY, seriesStyles])
+  }, [title, ink, palette, xAxisLabel, yAxisLabel, showGrid, gridColor, chartType, yLog, showLegend, xMin, xMax, yMin, yMax, nticks, fontFamily, titleSize, axisTitleSize, zKey, activeY, seriesStyles, subtitle, legendPos, hlines, vlines, isDark])
 
   // Edits made directly on the chart (double-click title / axis) flow back here.
   const handleChartEdit = useCallback((e: PlotlyEdits) => {
@@ -542,6 +794,7 @@ export function DataAnalysisWorkspace({
   const buildConfig = () => ({
     chartType, xKey, yKeys, zKey, sizeKey, title, xLabel, xUnit, yLabel, yUnit, yLog, showGrid, showLegend, markers, paletteName,
     seriesStyles, xMin, xMax, yMin, yMax, nticks, fontFamily, titleSize, axisTitleSize,
+    errorMode, showPoints, subtitle, legendPos, hlines, vlines, chartH,
     plate: { format: plateModel.format, originRow: plateModel.originRow, originCol: plateModel.originCol, roleOverrides: plateModel.roleOverrides, annOverrides: plateModel.annOverrides },
     phase,
   })
@@ -572,6 +825,13 @@ export function DataAnalysisWorkspace({
     if (typeof c.fontFamily === "string") setFontFamily(c.fontFamily)
     if (typeof c.titleSize === "number") setTitleSize(c.titleSize)
     if (typeof c.axisTitleSize === "number") setAxisTitleSize(c.axisTitleSize)
+    if (typeof c.errorMode === "string") setErrorMode(c.errorMode)
+    if (typeof c.showPoints === "boolean") setShowPoints(c.showPoints)
+    if (typeof c.subtitle === "string") setSubtitle(c.subtitle)
+    if (typeof c.legendPos === "string") setLegendPos(c.legendPos)
+    if (typeof c.hlines === "string") setHlines(c.hlines)
+    if (typeof c.vlines === "string") setVlines(c.vlines)
+    if (typeof c.chartH === "number") setChartH(c.chartH)
     if (c.plate) {
       if (c.plate.format) plateModel.setFormat(c.plate.format)
       if (typeof c.plate.originRow === "number") plateModel.setOriginRow(c.plate.originRow)
@@ -703,7 +963,7 @@ export function DataAnalysisWorkspace({
         </div>
       </PaneHeader>
       <div className="p-2">
-        <div ref={chartBoxRef} className="h-[560px] w-full">
+        <div ref={chartBoxRef} className="w-full" style={{ height: chartH }}>
           {hasPlot ? (
             <PlotlyChart data={plotData} layout={plotLayout} onEdit={handleChartEdit} onEditElement={onEditElement} extraGroups={chartMenuGroups} exportApiRef={chartExportRef} renderApiRef={chartImageRef} className="h-full w-full" />
           ) : (
@@ -807,6 +1067,9 @@ export function DataAnalysisWorkspace({
           })}
         </div>
         <p className="mt-1 text-[11px] text-muted-foreground">Click a column&rsquo;s X / Y{is3D(chartType) ? " / Z" : ""} to plot it. Multiple Y series overlay.</p>
+        {BINDING_HINTS[chartType] && (
+          <p className="mt-1 rounded-md bg-[var(--n9-accent,#965034)]/8 px-2 py-1 text-[11px] font-medium text-[var(--n9-accent,#965034)]">{BINDING_HINTS[chartType]}</p>
+        )}
       </Field>
       {chartType === "bubble" && (
         <Field label="Bubble size (column)">
@@ -818,6 +1081,7 @@ export function DataAnalysisWorkspace({
       )}
       <div id="cs-title" className={cn("space-y-4 rounded-lg transition-shadow", flashId === "cs-title" && "ring-2 ring-[var(--n9-accent,#965034)]/40")}>
         <Field label="Chart title"><Input className="h-9" value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
+        <Field label="Subtitle"><Input className="h-9" value={subtitle} onChange={(e) => setSubtitle(e.target.value)} placeholder="optional" /></Field>
         <div className="grid grid-cols-2 gap-2">
           <Field label="X label"><Input className="h-9" value={xLabel} onChange={(e) => setXLabel(e.target.value)} /></Field>
           <Field label="X unit"><Input className="h-9" value={xUnit} onChange={(e) => setXUnit(e.target.value)} /></Field>
@@ -851,6 +1115,38 @@ export function DataAnalysisWorkspace({
         <Toggle label="Log Y axis" checked={yLog} onChange={setYLog} />
         <Toggle label="Gridlines" checked={showGrid} onChange={setShowGrid} />
         <Toggle label="Legend" checked={showLegend} onChange={setShowLegend} />
+        {showLegend && (
+          <div className="flex items-center justify-between gap-2 pl-0.5">
+            <span className="text-xs text-muted-foreground">Legend position</span>
+            <div className="inline-flex rounded-md border border-border bg-background p-0.5 text-xs">
+              {(["bottom", "right", "top"] as const).map((pos) => (
+                <button key={pos} onClick={() => setLegendPos(pos)}
+                  className={cn("rounded px-2 py-0.5 capitalize transition-colors", legendPos === pos ? "bg-[var(--n9-accent,#965034)] text-white" : "text-muted-foreground hover:text-foreground")}>
+                  {pos}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Error bars, individual points & reference lines (Prism-style) */}
+      <div className="flex flex-col gap-2.5 border-t border-border pt-3">
+        <SectionLabel><TrendUp className="h-3.5 w-3.5" /> Error &amp; annotations</SectionLabel>
+        <Field label="Error bars (aggregate replicate rows sharing an X value)">
+          <NativeSelect value={errorMode} onChange={(v) => setErrorMode(v as ErrorMode)}>
+            <option value="none">None</option>
+            <option value="sd">Mean ± SD</option>
+            <option value="sem">Mean ± SEM</option>
+            <option value="ci95">Mean ± 95% CI</option>
+          </NativeSelect>
+        </Field>
+        {errorMode !== "none" && <Toggle label="Overlay individual points" checked={showPoints} onChange={setShowPoints} />}
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Reference line — Y"><Input className="h-9" value={hlines} onChange={(e) => setHlines(e.target.value)} placeholder="e.g. 0, 1.5" /></Field>
+          <Field label="Reference line — X"><Input className="h-9" value={vlines} onChange={(e) => setVlines(e.target.value)} placeholder="e.g. 10" /></Field>
+        </div>
+        <RangeRow label="Canvas height" value={chartH} min={320} max={820} step={20} onChange={setChartH} />
       </div>
 
       {/* Per-series style inspector */}

@@ -5,15 +5,32 @@ import { CaretDown } from "@phosphor-icons/react/ssr"
 import { cn } from "@/lib/utils"
 import { Switch } from "@/components/ui/switch"
 import { PlotlyChart } from "@/components/data-analysis/plotly-chart"
-import { fitCurve, curvePoints, type FitModel } from "@/lib/data-analysis/curve-fitting"
+import { fitCurve, curvePoints, confidenceBand, type FitModel, type WeightMode } from "@/lib/data-analysis/curve-fitting"
 import type { Table } from "@/components/data-analysis/stats-panel"
 import type { PlateModel } from "@/components/data-analysis/plate-view"
 
 const MODELS: { id: FitModel; label: string; hint: string }[] = [
-  { id: "4pl", label: "4-parameter logistic", hint: "ELISA / dose-response standard" },
-  { id: "5pl", label: "5-parameter logistic", hint: "Asymmetric sigmoid" },
+  { id: "4pl", label: "4PL logistic", hint: "ELISA / dose-response" },
+  { id: "5pl", label: "5PL logistic", hint: "asymmetric sigmoid" },
+  { id: "3pl", label: "3PL (Hill = 1)", hint: "fixed-slope sigmoid" },
+  { id: "boltzmann", label: "Boltzmann sigmoid", hint: "V50, slope" },
+  { id: "michaelisMenten", label: "Michaelis–Menten", hint: "Vmax, Km" },
+  { id: "oneSiteBinding", label: "One-site binding", hint: "Bmax, Kd" },
+  { id: "twoSiteBinding", label: "Two-site binding", hint: "two Bmax / Kd" },
+  { id: "expDecay", label: "Exponential decay", hint: "one-phase" },
+  { id: "expDecay2", label: "Two-phase decay", hint: "fast + slow" },
+  { id: "expGrowth", label: "Exponential growth", hint: "Y₀·e^{kx}" },
+  { id: "gaussian", label: "Gaussian", hint: "peak fit" },
+  { id: "poly2", label: "Quadratic", hint: "2nd-order polynomial" },
+  { id: "poly3", label: "Cubic", hint: "3rd-order polynomial" },
   { id: "linear", label: "Linear", hint: "y = m·x + b" },
   { id: "semilog", label: "Semi-log", hint: "y = m·log₁₀(x) + b" },
+]
+
+const WEIGHTS: { id: WeightMode; label: string }[] = [
+  { id: "none", label: "None" },
+  { id: "1/Y", label: "1/Y" },
+  { id: "1/Y^2", label: "1/Y²" },
 ]
 
 const num = (v: number, d = 3) => (isFinite(v) ? v.toFixed(d) : "—")
@@ -35,6 +52,8 @@ export function useStandardCurve(table: Table, numericCols: string[], plate: Pla
   const [dilKey, setDilKey] = useState("")
   const [model, setModel] = useState<FitModel>("4pl")
   const [logX, setLogX] = useState(true)
+  const [weight, setWeight] = useState<WeightMode>("none")
+  const [showBand, setShowBand] = useState(false)
   const [blankMode, setBlankMode] = useState<"none" | "auto" | "manual">("none")
   const [blankManual, setBlankManual] = useState("")
   // Where standards come from: sheet columns, or the shared plate layout.
@@ -94,7 +113,7 @@ export function useStandardCurve(table: Table, numericCols: string[], plate: Pla
     return { stdX, stdY, standardsTable, unknowns }
   }, [source, plate.standards, plate.samples, table.rows, concCol, signalCol, labelKey, dilKey, blank])
 
-  const fit = useMemo(() => (stdX.length >= 2 ? fitCurve(model, stdX, stdY) : null), [model, stdX, stdY])
+  const fit = useMemo(() => (stdX.length >= 2 ? fitCurve(model, stdX, stdY, weight) : null), [model, stdX, stdY, weight])
 
   const results = useMemo(() => {
     if (!fit) return []
@@ -118,8 +137,14 @@ export function useStandardCurve(table: Table, numericCols: string[], plate: Pla
       const posX = stdX.filter((v) => v > 0)
       const lo = Math.min(...(logX && posX.length ? posX : stdX))
       const hi = Math.max(...stdX)
+      // 95% confidence band (drawn under the fit line).
+      if (showBand) {
+        const band = confidenceBand(fit, lo, hi)
+        data.push({ type: "scatter", mode: "lines", x: band.x, y: band.lower, line: { width: 0 }, showlegend: false, hoverinfo: "skip" })
+        data.push({ type: "scatter", mode: "lines", x: band.x, y: band.upper, fill: "tonexty", fillcolor: "rgba(213,94,0,0.13)", line: { width: 0 }, name: "95% CI", hoverinfo: "skip" })
+      }
       const pts = curvePoints(fit, lo, hi)
-      data.push({ type: "scatter", mode: "lines", x: pts.x, y: pts.y, name: `${model.toUpperCase()} fit`, line: { color: "#D55E00", width: 2.5 } })
+      data.push({ type: "scatter", mode: "lines", x: pts.x, y: pts.y, name: `${MODELS.find((m) => m.id === model)?.label ?? model} fit`, line: { color: "#D55E00", width: 2.5 } })
     }
     // overlay back-calculated unknowns
     const okResults = results.filter((r) => isFinite(r.conc / (r.dil || 1)))
@@ -131,7 +156,7 @@ export function useStandardCurve(table: Table, numericCols: string[], plate: Pla
       })
     }
     return data
-  }, [stdX, stdY, fit, model, logX, results])
+  }, [stdX, stdY, fit, model, logX, results, showBand])
 
   const layout = useMemo<Record<string, unknown>>(() => ({
     margin: { t: 20, r: 16, b: 54, l: 64 },
@@ -273,17 +298,38 @@ export function useStandardCurve(table: Table, numericCols: string[], plate: Pla
           ))}
         </div>
       </Labeled>
+      <Labeled label="Weighting">
+        <div className="inline-flex w-full rounded-lg border border-border bg-background p-0.5 text-xs">
+          {WEIGHTS.map((w) => (
+            <button key={w.id} onClick={() => setWeight(w.id)}
+              className={cn("flex-1 rounded-md px-2 py-1 transition-colors", weight === w.id ? "bg-[var(--n9-accent,#965034)] text-white" : "text-muted-foreground hover:text-foreground")}>
+              {w.label}
+            </button>
+          ))}
+        </div>
+        <p className="mt-1.5 text-[11px] text-muted-foreground">Relative weighting stabilizes fits when signal variance scales with Y.</p>
+      </Labeled>
       <label className="flex cursor-pointer items-center justify-between text-sm text-foreground">
         <span>Log₁₀ X axis</span>
         <Switch checked={logX} onCheckedChange={setLogX} className="data-[state=checked]:bg-[var(--n9-accent,#965034)]" />
       </label>
+      <label className="flex cursor-pointer items-center justify-between text-sm text-foreground">
+        <span>95% confidence band</span>
+        <Switch checked={showBand} onCheckedChange={setShowBand} className="data-[state=checked]:bg-[var(--n9-accent,#965034)]" />
+      </label>
 
       {fit && (
         <div className="rounded-lg border border-border bg-muted/20 p-3 text-xs">
-          <div className="mb-1.5 font-semibold uppercase tracking-wide text-muted-foreground/70">Fit parameters</div>
+          <div className="mb-1.5 font-semibold uppercase tracking-wide text-muted-foreground/70">Fit parameters (± SE)</div>
           <div className="space-y-1 font-mono tabular-nums">
-            {fit.paramNames.map((pn, i) => (<div key={pn} className="flex justify-between"><span className="text-muted-foreground">{pn}</span><span className="font-semibold">{num(fit.params[i], 4)}</span></div>))}
-            <div className="flex justify-between border-t border-border pt-1"><span className="text-muted-foreground">R² / RMSE</span><span className="font-semibold">{num(fit.r2, 4)} / {num(fit.rmse, 3)}</span></div>
+            {fit.paramNames.map((pn, i) => (
+              <div key={pn} className="flex justify-between gap-2">
+                <span className="text-muted-foreground">{pn}</span>
+                <span className="font-semibold">{num(fit.params[i], 4)}<span className="ml-1 font-normal text-muted-foreground">± {num(fit.paramSE[i], 3)}</span></span>
+              </div>
+            ))}
+            <div className="flex justify-between border-t border-border pt-1"><span className="text-muted-foreground">R² / adj. R²</span><span className="font-semibold">{num(fit.r2, 4)} / {num(fit.adjR2, 4)}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Sy.x / AICc</span><span className="font-semibold">{num(fit.syx, 3)} / {num(fit.aicc, 1)}</span></div>
           </div>
         </div>
       )}

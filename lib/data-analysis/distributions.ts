@@ -242,3 +242,189 @@ export function normalInv(p: number): number {
     ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1)
   )
 }
+
+/* ── Probability density functions ───────────────────────────────────────── */
+
+/** Normal PDF (standard by default). */
+export function normalPdf(x: number, mu = 0, sigma = 1): number {
+  const z = (x - mu) / sigma
+  return Math.exp(-0.5 * z * z) / (sigma * Math.sqrt(2 * Math.PI))
+}
+
+/** Student's t PDF for `df` degrees of freedom. */
+export function tPdf(t: number, df: number): number {
+  const lg = logGamma((df + 1) / 2) - logGamma(df / 2)
+  return (Math.exp(lg) / Math.sqrt(df * Math.PI)) * (1 + (t * t) / df) ** (-(df + 1) / 2)
+}
+
+/** Chi-square PDF. */
+export function chiSquarePdf(x: number, df: number): number {
+  if (x <= 0) return 0
+  const k = df / 2
+  return Math.exp((k - 1) * Math.log(x) - x / 2 - k * Math.log(2) - logGamma(k))
+}
+
+/** F-distribution PDF. */
+export function fPdf(x: number, d1: number, d2: number): number {
+  if (x <= 0) return 0
+  const lg = logGamma((d1 + d2) / 2) - logGamma(d1 / 2) - logGamma(d2 / 2)
+  const logpdf =
+    lg +
+    (d1 / 2) * Math.log(d1 / d2) +
+    (d1 / 2 - 1) * Math.log(x) -
+    ((d1 + d2) / 2) * Math.log(1 + (d1 / d2) * x)
+  return Math.exp(logpdf)
+}
+
+/* ── Inverse CDFs (quantile functions) via bracketed bisection ───────────── */
+
+/** Find x such that `cdf(x) = p` for a monotone-increasing `cdf` on [lo, hi]. */
+function quantileBisect(cdf: (x: number) => number, p: number, lo: number, hi: number): number {
+  let a = lo
+  let b = hi
+  for (let i = 0; i < 200; i++) {
+    const mid = (a + b) / 2
+    if (cdf(mid) < p) a = mid
+    else b = mid
+    if (b - a < 1e-12 * (Math.abs(a) + Math.abs(b) + 1)) break
+  }
+  return (a + b) / 2
+}
+
+/** Inverse Student's t CDF (lower-tail quantile). */
+export function tInv(p: number, df: number): number {
+  if (p <= 0) return -Infinity
+  if (p >= 1) return Infinity
+  if (Math.abs(p - 0.5) < 1e-15) return 0
+  return quantileBisect((t) => studentTCdf(t, df), p, -1e6, 1e6)
+}
+
+/** Two-sided t critical value: the t with `1 − alpha/2` in the lower tail. */
+export function tCritical(alpha: number, df: number): number {
+  return tInv(1 - alpha / 2, df)
+}
+
+/** Inverse chi-square CDF (lower-tail quantile). */
+export function chiSquareInv(p: number, df: number): number {
+  if (p <= 0) return 0
+  if (p >= 1) return Infinity
+  let hi = df + 10 * Math.sqrt(2 * df) + 10
+  let guard = 0
+  while (chiSquareCdf(hi, df) < p && guard++ < 200) hi *= 2
+  return quantileBisect((x) => chiSquareCdf(x, df), p, 0, hi)
+}
+
+/** Inverse F CDF (lower-tail quantile). */
+export function fInv(p: number, d1: number, d2: number): number {
+  if (p <= 0) return 0
+  if (p >= 1) return Infinity
+  let hi = 10
+  let guard = 0
+  while (fCdf(hi, d1, d2) < p && guard++ < 200) hi *= 2
+  return quantileBisect((x) => fCdf(x, d1, d2), p, 0, hi)
+}
+
+/* ── Studentized range (Tukey HSD) ───────────────────────────────────────── */
+
+/**
+ * CDF of the range of `k` i.i.d. standard normals: P(range ≤ w).
+ * `P(range ≤ w) = k · ∫ φ(z) · [Φ(z) − Φ(z − w)]^{k−1} dz`, via Simpson's rule
+ * over the effective normal support.
+ */
+function normalRangeCdf(w: number, k: number): number {
+  if (w <= 0) return 0
+  const lo = -8
+  const hi = 8
+  const N = 240 // even
+  const h = (hi - lo) / N
+  let sum = 0
+  for (let i = 0; i <= N; i++) {
+    const z = lo + i * h
+    const inner = Math.exp(-0.5 * z * z) / Math.sqrt(2 * Math.PI) * (normalCdf(z) - normalCdf(z - w)) ** (k - 1)
+    const weight = i === 0 || i === N ? 1 : i % 2 === 1 ? 4 : 2
+    sum += weight * inner
+  }
+  return Math.min(1, Math.max(0, (k * h * sum) / 3))
+}
+
+/**
+ * CDF of the studentized range distribution: P(Q ≤ q) for `k` groups and `df`
+ * error degrees of freedom. Integrates the normal range CDF against the
+ * distribution of the studentizing scale s (s² ~ χ²_df/df). This is the exact
+ * distribution GraphPad Prism uses for Tukey/Newman–Keuls critical values.
+ */
+export function studentizedRangeCdf(q: number, k: number, df: number): number {
+  if (q <= 0 || k < 2) return 0
+  if (!isFinite(df) || df > 3000) return normalRangeCdf(q, k)
+  // s concentrated near 1; integrate a generous window with Simpson's rule.
+  const sHi = 1 + 12 / Math.sqrt(2 * df) + 0.5
+  const N = 160 // even
+  const h = sHi / N
+  let sum = 0
+  for (let i = 0; i <= N; i++) {
+    const s = i * h
+    const fs = i === 0 ? 0 : chiSquarePdf(df * s * s, df) * 2 * df * s // pdf of s
+    const val = fs * normalRangeCdf(q * s, k)
+    const weight = i === 0 || i === N ? 1 : i % 2 === 1 ? 4 : 2
+    sum += weight * val
+  }
+  return Math.min(1, Math.max(0, (h * sum) / 3))
+}
+
+/** Upper-tail p-value for a studentized range statistic q. */
+export function studentizedRangeUpperP(q: number, k: number, df: number): number {
+  return 1 - studentizedRangeCdf(q, k, df)
+}
+
+/** Critical studentized range value q(1−alpha, k, df) — inverse of the CDF. */
+export function studentizedRangeCritical(alpha: number, k: number, df: number): number {
+  const p = 1 - alpha
+  return quantileBisect((q) => studentizedRangeCdf(q, k, df), p, 0, 100)
+}
+
+/* ── Discrete distributions ──────────────────────────────────────────────── */
+
+/** log(n choose k). */
+export function logChoose(n: number, k: number): number {
+  if (k < 0 || k > n) return -Infinity
+  return logGamma(n + 1) - logGamma(k + 1) - logGamma(n - k + 1)
+}
+
+/** Binomial PMF: P(X = k) for n trials, success prob p. */
+export function binomialPmf(k: number, n: number, p: number): number {
+  if (k < 0 || k > n) return 0
+  if (p <= 0) return k === 0 ? 1 : 0
+  if (p >= 1) return k === n ? 1 : 0
+  return Math.exp(logChoose(n, k) + k * Math.log(p) + (n - k) * Math.log(1 - p))
+}
+
+/** Binomial CDF: P(X ≤ k). */
+export function binomialCdf(k: number, n: number, p: number): number {
+  let s = 0
+  const kk = Math.floor(k)
+  for (let i = 0; i <= kk; i++) s += binomialPmf(i, n, p)
+  return Math.min(1, s)
+}
+
+/** Poisson PMF: P(X = k) for rate lambda. */
+export function poissonPmf(k: number, lambda: number): number {
+  if (k < 0) return 0
+  return Math.exp(k * Math.log(lambda) - lambda - logGamma(k + 1))
+}
+
+/** Poisson CDF: P(X ≤ k). */
+export function poissonCdf(k: number, lambda: number): number {
+  let s = 0
+  const kk = Math.floor(k)
+  for (let i = 0; i <= kk; i++) s += poissonPmf(i, lambda)
+  return Math.min(1, s)
+}
+
+/**
+ * Hypergeometric PMF: drawing `n` items from a population of `N` containing `K`
+ * successes, probability of exactly `k` successes. Basis of Fisher's exact test.
+ */
+export function hypergeometricPmf(k: number, N: number, K: number, n: number): number {
+  if (k < 0 || k > K || n - k < 0 || n - k > N - K) return 0
+  return Math.exp(logChoose(K, k) + logChoose(N - K, n - k) - logChoose(N, n))
+}

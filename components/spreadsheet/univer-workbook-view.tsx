@@ -261,19 +261,40 @@ export function UniverWorkbookView({
 
         const theme = isDark ? buildDarkUniverTheme(defaultTheme as Record<string, unknown>) : defaultTheme
 
+        // The `workspace` variant (data-analysis workbench + full-screen data
+        // editor) gets the Excel-grade feature suite — sort, filter, find &
+        // replace, conditional formatting, data validation, structured tables,
+        // notes, threaded comments, hyperlinks, images. The lean `embed`
+        // variant used inside note pages stays core-only. Loaded dynamically so
+        // the notes editor never bundles the extra plugins.
+        let featurePresets: unknown[] = []
+        let localeBundle: typeof sheetsCoreEnUS = sheetsCoreEnUS
+        if (variant === "workspace") {
+          try {
+            const { buildWorkspaceSheetFeatures } = await import(
+              "@/components/spreadsheet/univer-workspace-presets"
+            )
+            if (disposed || !containerRef.current) return
+            const features = buildWorkspaceSheetFeatures()
+            featurePresets = features.presets
+            localeBundle = features.locale
+          } catch (error) {
+            console.warn(
+              "Univer workspace feature presets failed to load; using core preset only.",
+              error
+            )
+          }
+        }
+
         const { univer, univerAPI } = createUniver({
           locale: LocaleType.EN_US,
           locales: {
-            [LocaleType.EN_US]: sheetsCoreEnUS,
+            [LocaleType.EN_US]: localeBundle,
           },
           theme,
           presets: [
-            [
-              UniverSheetsCorePreset(presetConfig),
-              {
-                lazy: false,
-              },
-            ],
+            UniverSheetsCorePreset(presetConfig),
+            ...featurePresets,
           ],
         })
 
