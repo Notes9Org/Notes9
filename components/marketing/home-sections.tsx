@@ -557,7 +557,7 @@ export function FinalCtaSection() {
             </Button>
           </div>
           <p className="mt-5 text-[14px] text-muted-foreground/80">
-            Free for students and postdocs · under a minute to start.
+            Free credits when you sign up · under a minute to start.
           </p>
         </div>
       </div>

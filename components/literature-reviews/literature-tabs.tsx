@@ -127,6 +127,10 @@ interface LiteratureTabsProps {
   /** When set (from ?openPaper=<id>), open that paper's read-mode tab on mount —
    * how a Catalyst citation lands here from another page. */
   openPaperId?: string | null
+  /** Query to auto-fill (from the marketing hero → sign-up → here). */
+  initialQuery?: string
+  /** When true, run a live search for initialQuery once on mount. */
+  autoRunSearch?: boolean
 }
 
 /**
@@ -156,15 +160,19 @@ export function LiteratureTabs({
   initialProjectId = null,
   initialTab = "search",
   openPaperId = null,
+  initialQuery,
+  autoRunSearch = false,
 }: LiteratureTabsProps) {
   const router = useRouter()
   const reduce = useReducedMotion()
   const sessionKey = initialProjectId ?? "global"
   const savedSession = literatureSearchSessions.get(sessionKey) ?? null
 
-  const [topSection, setTopSection] = useState<"search" | "repo">(savedSession?.topSection ?? initialTab)
+  const [topSection, setTopSection] = useState<"search" | "repo">(
+    savedSession?.topSection ?? (autoRunSearch ? "search" : initialTab)
+  )
 
-  const [query, setQuery] = useState(savedSession?.query ?? "")
+  const [query, setQuery] = useState(savedSession?.query ?? initialQuery ?? "")
   // The query the AI search actually ran on — updated only on submit, NOT on
   // every keystroke, so typing a new query doesn't re-trigger / flash the AI.
   const [submittedQuery, setSubmittedQuery] = useState(savedSession?.submittedQuery ?? "")
@@ -803,6 +811,19 @@ export function LiteratureTabs({
     // restore (not fresh): keep results — the seeded cache repopulates via onResults.
     syncTabsForSearchSession()
   }
+
+  // One-shot auto-run when arriving from the marketing hero (query typed on the
+  // home page → sign-up → here). Fires once, then clears the durable cookie so
+  // a later manual visit to /literature-reviews doesn't re-trigger it.
+  const autoRanRef = useRef(false)
+  useEffect(() => {
+    if (autoRanRef.current) return
+    if (!autoRunSearch || !initialQuery?.trim()) return
+    autoRanRef.current = true
+    document.cookie = "n9_pending_lit_query=; path=/; max-age=0; samesite=lax"
+    handleSearch(initialQuery, { fresh: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRunSearch, initialQuery])
 
   // --- Search history (last 10 + see all) ---------------------------------
   // Sessions already load newest-first server-side; kind='literature' rows

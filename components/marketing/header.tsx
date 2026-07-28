@@ -10,6 +10,7 @@ import { Notes9Brand } from "@/components/brand/notes9-brand"
 const pageLinks = [
   { href: "/", label: "Home" },
   { href: "/platform", label: "Platform" },
+  { href: "/how-it-works", label: "How it works" },
   { href: "/pricing", label: "Pricing" },
   { href: "/resources", label: "Resources" },
   { href: "/about", label: "About" },

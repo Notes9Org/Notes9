@@ -29,6 +29,16 @@ export const AnalyticsEvent = {
   AI_LIMIT_REACHED: 'ai_limit_reached',
   AI_LIMIT_NOTICE_SHOWN: 'ai_limit_notice_shown',
 
+  // Onboarding — first run, starter content, and the getting-started checklist
+  ONBOARDING_QUESTION_ANSWERED: 'onboarding_question_answered',
+  ONBOARDING_QUESTION_SKIPPED: 'onboarding_question_skipped',
+  ONBOARDING_COMPLETED: 'onboarding_completed',
+  STARTER_CONTENT_SEEDED: 'starter_content_seeded',
+  CHECKLIST_TASK_COMPLETED: 'checklist_task_completed',
+  CHECKLIST_DISMISSED: 'checklist_dismissed',
+  CHECKLIST_RESTORED: 'checklist_restored',
+  TOUR_STARTED_FROM_CHECKLIST: 'tour_started_from_checklist',
+
   // Records CRUD / usage
   SAMPLE_CREATED: 'sample_created',
   PROTOCOL_LINKED_TO_EXPERIMENT: 'protocol_linked_to_experiment',

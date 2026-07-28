@@ -13,25 +13,44 @@ import { StartTourButton } from "@/components/tour/start-tour-button"
 
 /**
  * First-run dashboard surface — rendered in place of Schedule/Tasks/Whiteboard
- * when the user has zero projects. The bench panels are useless without a
- * project to ground them, so this teaches the entity hierarchy upfront and
- * routes the user to the canonical first action: create a project.
+ * when the user has no project of their own. The bench panels are useless
+ * without a project to ground them, so this teaches the entity hierarchy upfront
+ * and routes the user to the canonical first action: create a project.
+ *
+ * This is the backstop for the required create-project step in the welcome
+ * wizard. Anyone who gets past the wizard without a project — closed the tab
+ * mid-flow, or deleted their only one — lands here until they make one.
  *
  * The four item rows mirror the entities the user will see inside a project
  * workspace — this is the same vocabulary they'll encounter once they create
  * one, so the mental model is primed before they get there.
+ *
+ * `hasStarterContent` is true once the seeded demo project exists, which changes
+ * the pitch: the user is not staring at an empty product, they just have nowhere
+ * of their own to put work yet.
  */
-export function DashboardFirstRun() {
+export function DashboardFirstRun({
+  hasStarterContent = false,
+}: {
+  hasStarterContent?: boolean
+}) {
   return (
     <Empty className="border border-dashed bg-muted/20">
       <EmptyHeader>
         <EmptyMedia variant="icon">
           <FlaskConical aria-hidden />
         </EmptyMedia>
-        <EmptyTitle>Start with a project</EmptyTitle>
+        <EmptyTitle>Create your first project</EmptyTitle>
         <EmptyDescription>
           Projects are the home for your research. Each one holds the experiments you run, the
           samples and protocols you use, and the lab notes you write — all in one place.
+          {hasStarterContent && (
+            <>
+              {" "}
+              We&apos;ve set up a sample project you can explore in the meantime, but your own work
+              needs a project of its own.
+            </>
+          )}
         </EmptyDescription>
       </EmptyHeader>
 

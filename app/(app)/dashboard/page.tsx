@@ -16,6 +16,9 @@ import {
 } from "@/components/org/dashboard-my-lab"
 import { isOrgAdmin, type OrgMember as OrgMemberPerm } from "@/lib/org/permissions"
 import { CatalystSectionHero } from "@/components/catalyst/catalyst-section-hero"
+import { GettingStarted } from "@/components/onboarding/getting-started"
+import { measureChecklist } from "@/lib/onboarding/measure-checklist"
+import { resolveChecklist } from "@/lib/onboarding/checklist"
 import { DashboardGreeting } from "./dashboard-greeting"
 import { DashboardFirstRun } from "./dashboard-first-run"
 import { DashboardScheduleTasks } from "./dashboard-schedule-tasks"
@@ -40,7 +43,7 @@ export default async function DashboardPage() {
   // are needed later for the "My Lab" footer; folding them in here avoids two
   // extra serial roundtrips after the main fan-out completes.
   const [
-    projectsHeadRes,
+    checklistMeasurement,
     activeExperimentsRes,
     recentNotesRes,
     recentPapersRes,
@@ -51,7 +54,10 @@ export default async function DashboardPage() {
     profileResult,
     orgMembershipRes,
   ] = await Promise.all([
-    supabase.from("projects").select("id", { count: "exact", head: true }).limit(1),
+    // Replaces the old bare project-count probe: this measures the same thing
+    // (does the user have a project of their own?) while also gathering the
+    // Getting Started signals, and it discounts the seeded demo project.
+    measureChecklist(supabase, user.id),
     supabase
       .from("experiments")
       .select("id,name,status,updated_at,project_id")
@@ -102,11 +108,21 @@ export default async function DashboardPage() {
       .maybeSingle(),
   ])
 
-  const hasProjects = (projectsHeadRes.count ?? 0) > 0
-  if (!hasProjects) {
+  const checklist = resolveChecklist(
+    checklistMeasurement.signals,
+    checklistMeasurement.state
+  )
+
+  // A project of the user's own is required, not encouraged — every experiment,
+  // note, sample and paper hangs off one, so the bench panels below have nothing
+  // to show without it. The seeded demo project deliberately does not satisfy
+  // this: it is there to explore, not to work in. Anyone who reaches the
+  // dashboard without a project (skipped the wizard, closed the tab mid-way, or
+  // deleted their only project) lands back here until they make one.
+  if (checklistMeasurement.measured && checklistMeasurement.signals.ownProjectCount === 0) {
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-6 md:gap-8 pb-8 min-w-0">
-        <DashboardFirstRun />
+        <DashboardFirstRun hasStarterContent={checklistMeasurement.demoProjectIds.length > 0} />
       </div>
     )
   }
@@ -274,6 +290,13 @@ export default async function DashboardPage() {
         />
         <DashboardGreeting name={greetingName} />
       </header>
+
+      {/* Getting Started — the single recovery path for anything skipped during
+          onboarding. Hidden once the user dismisses it (Settings → Preferences
+          brings it back). */}
+      {!checklistMeasurement.state.dismissed && (
+        <GettingStarted checklist={checklist} primaryGoal={checklistMeasurement.primaryGoal} />
+      )}
 
       {/* Catalyst AI composer */}
       <CatalystSectionHero size="lg" scope="lab" shrinkOnScroll />

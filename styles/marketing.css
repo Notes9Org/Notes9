@@ -252,6 +252,215 @@
   .marketing-theme .n9-marquee-track { animation: none; }
 }
 
+/* ── Hero: modern effect revamp ──────────────────────────────────────────
+   CSS-driven so entrance reveals always play (even if a browser extension
+   breaks React hydration on the client subtree — JS-driven opacity could
+   otherwise stick at 0). Aurora + conic search aura + shimmering headline. */
+
+/* Robust staggered entrance reveal. */
+@keyframes n9-rise {
+  from { opacity: 0; transform: translate3d(0, 26px, 0); filter: blur(6px); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); filter: blur(0); }
+}
+.marketing-theme .n9-rise {
+  opacity: 0;
+  animation: n9-rise 0.85s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: var(--n9-rise-delay, 0ms);
+  will-change: opacity, transform;
+}
+
+/* Shimmer sweep across the gradient headline. */
+@keyframes n9-text-shimmer {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+.marketing-theme .n9-gradient-text.n9-shimmer {
+  background-image: linear-gradient(
+    115deg,
+    var(--n9-accent) 0%,
+    color-mix(in oklab, var(--n9-accent) 45%, #e7b970) 34%,
+    #d9a24a 50%,
+    color-mix(in oklab, var(--n9-accent) 45%, #e7b970) 66%,
+    var(--n9-accent) 100%
+  );
+  background-size: 220% 100%;
+  animation: n9-text-shimmer 6.5s linear infinite;
+}
+
+/* Slowly rotating, breathing conic aura behind the hero search bar. */
+@keyframes n9-aura-spin { to { transform: rotate(360deg); } }
+@keyframes n9-aura-breathe {
+  0%, 100% { opacity: 0.45; }
+  50%      { opacity: 0.8; }
+}
+.marketing-theme .n9-search-aura {
+  position: absolute;
+  inset: -70% -8%;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: 9999px;
+  filter: blur(48px);
+  opacity: 0.5;
+  background: conic-gradient(
+    from 0deg,
+    color-mix(in oklab, var(--n9-accent) 55%, transparent),
+    color-mix(in oklab, #d9a24a 60%, transparent),
+    color-mix(in oklab, var(--n9-accent) 45%, transparent),
+    color-mix(in oklab, #e7b970 55%, transparent),
+    color-mix(in oklab, var(--n9-accent) 55%, transparent)
+  );
+  animation: n9-aura-spin 20s linear infinite, n9-aura-breathe 7s ease-in-out infinite;
+}
+
+/* Aurora ribbons drifting behind the hero. */
+@keyframes n9-aurora-drift {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
+  33%      { transform: translate3d(4%, -3%, 0) rotate(6deg) scale(1.08); }
+  66%      { transform: translate3d(-3%, 2%, 0) rotate(-5deg) scale(0.95); }
+}
+.marketing-theme .n9-aurora {
+  animation: n9-aurora-drift 26s ease-in-out infinite;
+  will-change: transform;
+}
+
+/* Radial fade mask for the hero dot-grid. */
+.marketing-theme .n9-mask-radial {
+  -webkit-mask-image: radial-gradient(62% 55% at 50% 38%, #000 0%, transparent 78%);
+  mask-image: radial-gradient(62% 55% at 50% 38%, #000 0%, transparent 78%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marketing-theme .n9-rise { opacity: 1; animation: none; filter: none; }
+  .marketing-theme .n9-gradient-text.n9-shimmer,
+  .marketing-theme .n9-search-aura,
+  .marketing-theme .n9-aurora { animation: none; }
+}
+
+/* Apple-style scroll reveal: each section rises, unblurs, and settles as it
+   scrolls into view. An IntersectionObserver toggles .n9-reveal-in. Elements
+   already in view on load reveal immediately (IO fires on observe). */
+.marketing-theme .n9-reveal {
+  opacity: 0;
+  transform: translate3d(0, 46px, 0) scale(0.99);
+  filter: blur(6px);
+  transition:
+    opacity 1.05s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 1.05s cubic-bezier(0.16, 1, 0.3, 1),
+    filter 1.05s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+.marketing-theme .n9-reveal-in {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
+  filter: blur(0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .marketing-theme .n9-reveal {
+    opacity: 1;
+    transform: none;
+    filter: none;
+    transition: none;
+  }
+}
+
+/* ── Modern stacked layout ────────────────────────────────────────────────
+   Full-screen sticky "pages" that lock over one another as you scroll. Each
+   card pins under the header; the next rises up and covers it. A luminous top
+   hairline + deep shadow separate the layers without rounded corners. */
+/* Content-height layered panels — NOT full-screen pinned. Full-screen pinning
+   clips any content taller than the viewport (which changes with zoom/device),
+   so every section here is its natural height and always scrolls fully into
+   view at any zoom, browser, or device. The layered look comes from the opaque
+   surface + top hairline + shadow, and the reveal-on-scroll (.n9-stack-reveal).
+   A comfortable min-height keeps short sections from feeling cramped, but never
+   forces content off-screen. */
+.marketing-theme .n9-stack-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: min(calc(100svh - 4rem), 42rem);
+  background: var(--background);
+  box-shadow: 0 -24px 64px -36px rgba(44, 36, 24, 0.24);
+}
+.marketing-theme .n9-stack-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, var(--n9-accent) 45%, transparent),
+    transparent
+  );
+}
+.dark .marketing-theme .n9-stack-card {
+  box-shadow: 0 -34px 90px -34px rgba(0, 0, 0, 0.7);
+}
+/* NOTE: no scroll-driven (animation-timeline: view()) transform here — those
+   FREEZE mid-value on a sticky element once it pins, permanently displacing the
+   card so it never reaches the top and the layer beneath shows through. Motion
+   is added via a one-shot IntersectionObserver reveal on the inner content
+   instead (see .n9-stack-reveal), which completes and never freezes. */
+
+/* One-shot content reveal as each stacked layer locks in. Toggled by JS. */
+.marketing-theme .n9-stack-reveal {
+  opacity: 0;
+  transform: translateY(26px) scale(0.985);
+  transition:
+    opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+.marketing-theme .n9-stack-reveal.is-in {
+  opacity: 1;
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .marketing-theme .n9-stack-reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+/* Warm-highlight band (stays LIGHT) — a soft amber-tinted backdrop with a top
+   glow so a product moment (Catalyst) stands out against the cream narrative
+   without introducing any dark surface in light mode. */
+.marketing-theme .n9-stack-card.n9-highlight {
+  background:
+    radial-gradient(120% 80% at 50% -10%, color-mix(in oklab, var(--n9-accent) 12%, transparent), transparent 55%),
+    linear-gradient(180deg, var(--n9-accent-light) 0%, var(--background) 72%);
+}
+.marketing-theme .n9-stack-card.n9-highlight::before {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, var(--n9-accent) 60%, transparent),
+    transparent
+  );
+}
+
+/* Fine film grain over the whole marketing surface — adds richness/depth that
+   flat fills lack. Fixed, non-interactive, very low opacity. */
+.marketing-theme::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+}
+
+/* Smoother, springier micro-interactions on marketing controls. */
+.marketing-theme a,
+.marketing-theme button {
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 /* Video/media resilience on the marketing homepage */
 .marketing-theme video,
 .marketing-theme img {

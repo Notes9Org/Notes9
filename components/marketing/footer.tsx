@@ -24,6 +24,7 @@ const socials: { label: string; href: string; Icon: React.ComponentType<{ classN
 const footerLinks = {
   product: [
     { name: "Platform", href: "/platform" },
+    { name: "How it works", href: "/how-it-works" },
     { name: "Pricing", href: "/pricing" },
     { name: "Resources", href: "/resources" },
   ],

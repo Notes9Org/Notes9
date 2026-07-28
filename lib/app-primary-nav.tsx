@@ -2,7 +2,6 @@ import type { ComponentType } from "react"
 import {
   BookOpen,
   ChartLine,
-  Database,
   FileText,
   Flask as FlaskConical,
   Folder,
@@ -33,16 +32,17 @@ export type NavItem = {
  *
  * One flat, minimal list ordered by the research loop our marketing tells
  * (read → method → run → materials → publish): Literature → Protocols →
- * Experiments (lab notes / data inside) → Samples → Writing → Reports, with
- * Catalyst reasoning over all of it. The only nesting is Lab notes / Data
- * under Experiments. The active project/experiment context lives in the
- * sidebar's dedicated context card (see app-sidebar), not in this list.
+ * Experiments (lab notes inside) → Samples → Writing → Data → Reports, with
+ * Catalyst reasoning over all of it. The only nesting is Lab notes under
+ * Experiments. The active project/experiment context lives in the sidebar's
+ * dedicated context card (see app-sidebar), not in this list.
  *
- * Lab notes / Data nest strictly under Experiments (they only exist inside an
+ * Lab notes nest strictly under Experiments (they only exist inside an
  * experiment): with an experiment open they land inside that experiment's
- * tab; otherwise they show the pick-a-context list. Protocols / Literature /
- * Samples are lab-wide libraries and always open unscoped from the sidebar;
- * `?project=` deep links still filter.
+ * tab; otherwise they show the pick-a-context list. Data is a top-level hub
+ * (Analysis workspace + Data files browser, replacing the old /data); its
+ * files browser still honors `?project=`/`?experiment=` deep links. Protocols
+ * / Literature / Samples are lab-wide libraries and always open unscoped.
  *
  * Dashboard / Planner are deliberately separate after the 2026-05 split:
  *   - Dashboard = lab status overview (active experiments, recently edited, today).
@@ -59,13 +59,14 @@ export const APP_PRIMARY_NAV: NavItem[] = [
     icon: FlaskConical,
     children: [
       { name: "Lab notes", href: "/lab-notes", icon: NotebookPen },
-      { name: "Data", href: "/data", icon: Database },
     ],
   },
   // Analysis reads experiment data, so it sits right after Experiments.
   { name: "Analysis", href: "/analysis", icon: ChartLine },
   { name: "Samples", href: "/samples", icon: TestTube },
   { name: "Writing", href: "/papers", icon: PenNib },
+  // Unified Data hub: Analysis workspace + Data files browser (retired /data).
+  { name: "Data", href: "/data-analysis", icon: ChartLine },
   { name: "Reports", href: "/reports", icon: FileText },
   // Concave four-point flare (custom SVG) — Catalyst's glyph after ruling
   // out sparkles, brain/head-circuit, lightning, atom and galaxy: a single
