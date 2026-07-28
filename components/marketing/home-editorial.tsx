@@ -33,95 +33,117 @@ export function HeroEditorial() {
         <div className="n9-vignette" />
       </div>
 
-      <div className="container mx-auto px-4 pb-20 pt-16 sm:px-6 sm:pb-28 sm:pt-24 lg:px-8">
-        <p className="n9-label n9-rise" style={{ ["--n9-rise-delay" as string]: "60ms" }}>
-          The connected research workspace
-        </p>
-
-        {/* Copy left, live product right. Every hero worth copying — Hex,
-            Framer, Dovetail, Chronicle — puts the product in the hero at size.
-            An all-typography hero reads as a poster, which is what made this
-            one feel dated no matter how good the type was. */}
-        <div className="mt-7 grid gap-12 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:items-center lg:gap-16">
-          <div>
-            <h1 className="font-serif tracking-[-0.03em] text-[clamp(2.4rem,5.4vw,4.6rem)] leading-[0.98]">
-              <span
-                className="n9-rise block text-foreground"
-                style={{ ["--n9-rise-delay" as string]: "140ms" }}
-              >
-                AI that answers from
-              </span>
-              {/* Second line at full muted-foreground, not a fraction of it.
-                  At /55 this failed contrast in both themes and read as a
-                  rendering fault rather than a deliberate two-tone. */}
-              <span
-                className="n9-rise block text-muted-foreground"
-                style={{ ["--n9-rise-delay" as string]: "240ms" }}
-              >
-                your lab&apos;s actual work.
-              </span>
-            </h1>
-
-            <p
-              className="n9-rise mt-6 max-w-md text-[16px] leading-7 text-foreground/75"
-              style={{ ["--n9-rise-delay" as string]: "320ms" }}
-            >
-              Notes9 keeps your literature, protocols, experiments, data and drafts in one
-              record — so the AI you ask has already read it.
-            </p>
-
-            <div
-              className="n9-rise mt-8 max-w-lg"
-              style={{ ["--n9-rise-delay" as string]: "380ms" }}
-            >
-              <HeroSearch />
-            </div>
-
-            <div
-              className="n9-rise mt-7 flex flex-wrap items-center gap-3"
-              style={{ ["--n9-rise-delay" as string]: "440ms" }}
-            >
-              <Link
-                href="/auth/sign-up"
-                className="n9-press inline-flex h-12 items-center gap-2 rounded-full bg-[var(--n9-accent)] px-7 text-[15px] font-semibold text-white shadow-[0_14px_44px_-12px_var(--n9-accent-glow)] transition-colors hover:bg-[var(--n9-accent-hover)]"
-              >
-                Start free
-                <ArrowRight className="size-4" aria-hidden />
-              </Link>
-              <Link
-                href="/how-it-works"
-                className="inline-flex h-12 items-center gap-2 rounded-full border border-border px-6 text-[15px] font-semibold text-foreground transition-colors hover:bg-muted"
-              >
-                See how it works
-              </Link>
-            </div>
-          </div>
-
-          {/* The real product, mid-work. A synthetic chart lived here first and
-              read as exactly that — a marketing graphic. A genuine capture of
-              Catalyst drafting a protocol against the user's own workspace is
-              both more convincing and more honest about what the product does. */}
-          <div
-            className="n9-rise"
-            style={{ ["--n9-rise-delay" as string]: "500ms" }}
+      <div className="container mx-auto px-4 pt-16 sm:px-6 sm:pt-24 lg:px-8">
+        <div className="mx-auto flex max-w-3xl flex-col items-center text-center">
+          <p
+            className="n9-label n9-rise"
+            style={{ ["--n9-rise-delay" as string]: "60ms" }}
           >
-            <BrowserFrame
-              src="catalyst-protocol"
-              alt="Catalyst drafting an ELISA protocol: it finds the existing protocol in the workspace, reads it, and streams a section-by-section outline"
-            />
-            <p className="mt-3 text-center font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-              Catalyst drafting a protocol from your workspace
-            </p>
-          </div>
-        </div>
+            The connected research workspace
+          </p>
 
-        <div className="mt-16 flex items-center gap-3 text-muted-foreground">
-          <span className="flex size-9 items-center justify-center rounded-full border border-border">
-            <ArrowDown className="size-4" aria-hidden />
-          </span>
-          <span className="n9-label !text-muted-foreground/70">Why it matters</span>
+          <h1 className="mt-7 font-serif tracking-[-0.03em] text-[clamp(2.5rem,6.2vw,5rem)] leading-[1.0]">
+            <span
+              className="n9-rise block text-foreground"
+              style={{ ["--n9-rise-delay" as string]: "140ms" }}
+            >
+              AI that answers from
+            </span>
+            <span
+              className="n9-rise block text-muted-foreground"
+              style={{ ["--n9-rise-delay" as string]: "240ms" }}
+            >
+              your lab&apos;s actual work.
+            </span>
+          </h1>
+
+          <p
+            className="n9-rise mt-6 max-w-xl text-[17px] leading-7 text-foreground/75"
+            style={{ ["--n9-rise-delay" as string]: "320ms" }}
+          >
+            Notes9 keeps your literature, protocols, experiments, data and drafts in one
+            record — so the AI you ask has already read it.
+          </p>
+
+          {/* The search bar is the primary call to action, not decoration: it
+              runs a real literature search and hands the query through signup. */}
+          <div
+            className="n9-rise mt-9 w-full max-w-xl"
+            style={{ ["--n9-rise-delay" as string]: "380ms" }}
+          >
+            <HeroSearch />
+          </div>
+
+          <div
+            className="n9-rise mt-7 flex flex-wrap items-center justify-center gap-3"
+            style={{ ["--n9-rise-delay" as string]: "440ms" }}
+          >
+            <Link
+              href="/auth/sign-up"
+              className="n9-press inline-flex h-12 items-center gap-2 rounded-full bg-[var(--n9-accent)] px-7 text-[15px] font-semibold text-white shadow-[0_14px_44px_-12px_var(--n9-accent-glow)] transition-colors hover:bg-[var(--n9-accent-hover)]"
+            >
+              Start free
+              <ArrowRight className="size-4" aria-hidden />
+            </Link>
+            <Link
+              href="/how-it-works"
+              className="inline-flex h-12 items-center gap-2 rounded-full border border-border px-6 text-[15px] font-semibold text-foreground transition-colors hover:bg-muted"
+            >
+              See how it works
+            </Link>
+          </div>
         </div>
       </div>
+
+      {/* Layered product composition, cropped at the bottom edge.
+          A single flat screenshot states that software exists; overlapping
+          surfaces state that they are connected, which is the whole argument.
+          The main frame carries the research map — the one screen that shows
+          the links — with the data workspace riding in front of it, so the
+          depth is doing narrative work rather than being decoration.
+          Cropping rather than floating the stack in space signals there is more
+          below the fold, the way incident.io, ClickUp and Passionfroot resolve
+          their heroes. */}
+      <div className="relative mt-16 sm:mt-20">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <div
+            className="n9-rise relative mx-auto max-w-6xl"
+            style={{ ["--n9-rise-delay" as string]: "520ms" }}
+          >
+            <div className="overflow-hidden rounded-t-2xl [mask-image:linear-gradient(to_bottom,#000_66%,transparent_99%)]">
+              <BrowserFrame
+                src="research-map"
+                alt="The Notes9 research map: projects, experiments, notes, papers and literature connected as a graph"
+                className="rounded-b-none shadow-[0_-10px_120px_-40px_var(--n9-accent-glow)]"
+              />
+            </div>
+
+            {/* Foreground card. Hidden below md, where overlapping two dense
+                screenshots would make both unreadable. */}
+            <div className="pointer-events-none absolute -bottom-2 left-2 hidden w-[46%] md:block lg:left-6 lg:w-[42%]">
+              <div className="overflow-hidden rounded-xl border border-border/60 bg-card shadow-[0_50px_120px_-40px_rgba(44,36,24,0.55)] [transform:perspective(1600px)_rotateY(4deg)] [mask-image:linear-gradient(to_bottom,#000_72%,transparent_99%)]">
+                <img
+                  src="/demo/light/data-analysis.png"
+                  alt=""
+                  aria-hidden
+                  loading="lazy"
+                  decoding="async"
+                  className="block w-full dark:hidden"
+                />
+                <img
+                  src="/demo/dark/data-analysis.png"
+                  alt=""
+                  aria-hidden
+                  loading="lazy"
+                  decoding="async"
+                  className="hidden w-full dark:block"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </section>
   )
 }
@@ -335,9 +357,9 @@ const CHAIN = [
   {
     n: "02",
     title: "Protocols",
-    body: "Write the method down once, versioned. Six months later you can still see which version produced which result, and what you changed between them.",
-    shot: "protocol-details",
-    alt: "A versioned protocol in the Notes9 protocol editor",
+    body: "Ask Catalyst to draft it and it works from the protocols already in your workspace. Everything is versioned, so six months later you can still see which version produced which result.",
+    shot: "catalyst-protocol",
+    alt: "Catalyst drafting an ELISA protocol: it finds the existing protocol in the workspace, reads it, and streams a section-by-section outline",
   },
   {
     n: "03",
