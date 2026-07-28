@@ -5,7 +5,6 @@ import Link from "next/link"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { ArrowRight, ArrowDown, Plus, Check, X } from "@phosphor-icons/react/ssr"
 import { HeroSearch } from "@/components/marketing/hero-search"
-import { HeroChartDemo } from "@/components/marketing/hero-chart-demo"
 import { BrowserFrame } from "@/components/marketing/browser-frame"
 import { cn } from "@/lib/utils"
 
@@ -52,8 +51,11 @@ export function HeroEditorial() {
               >
                 AI that answers from
               </span>
+              {/* Second line at full muted-foreground, not a fraction of it.
+                  At /55 this failed contrast in both themes and read as a
+                  rendering fault rather than a deliberate two-tone. */}
               <span
-                className="n9-rise block text-muted-foreground/55"
+                className="n9-rise block text-muted-foreground"
                 style={{ ["--n9-rise-delay" as string]: "240ms" }}
               >
                 your lab&apos;s actual work.
@@ -61,7 +63,7 @@ export function HeroEditorial() {
             </h1>
 
             <p
-              className="n9-rise mt-6 max-w-md text-[16px] leading-7 text-muted-foreground"
+              className="n9-rise mt-6 max-w-md text-[16px] leading-7 text-foreground/75"
               style={{ ["--n9-rise-delay" as string]: "320ms" }}
             >
               Notes9 keeps your literature, protocols, experiments, data and drafts in one
@@ -95,13 +97,20 @@ export function HeroEditorial() {
             </div>
           </div>
 
+          {/* The real product, mid-work. A synthetic chart lived here first and
+              read as exactly that — a marketing graphic. A genuine capture of
+              Catalyst drafting a protocol against the user's own workspace is
+              both more convincing and more honest about what the product does. */}
           <div
             className="n9-rise"
             style={{ ["--n9-rise-delay" as string]: "500ms" }}
           >
-            <HeroChartDemo />
-            <p className="mt-3 text-center font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70">
-              Live — switch the chart type
+            <BrowserFrame
+              src="catalyst-protocol"
+              alt="Catalyst drafting an ELISA protocol: it finds the existing protocol in the workspace, reads it, and streams a section-by-section outline"
+            />
+            <p className="mt-3 text-center font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+              Catalyst drafting a protocol from your workspace
             </p>
           </div>
         </div>
@@ -565,14 +574,30 @@ export function ClosingSection() {
             scale. Both share one opacity so they sink into the page together. */}
         <div
           aria-hidden
-          className="mt-16 flex select-none items-baseline gap-[0.12em] opacity-[0.09] sm:mt-20"
+          /* Alpha lives on the PARENT, not on `text-foreground/[0.09]`: a text
+             colour alpha tints the letters but leaves the <img> at full
+             strength, which rendered the mark as a solid spiral beside
+             9%-grey letters. Group opacity fades both identically. */
+          className="n9-wordmark mt-16 flex select-none items-baseline font-serif text-foreground opacity-[0.09] dark:opacity-[0.18] sm:mt-20"
         >
+          <span>N</span>
+          {/* The mark stands in for the "o" — that is the real lockup, so it
+              reads as the wordmark rather than as a logo placed beside text.
+              Sized in em so it tracks the clamped display size.
+              `items-baseline` already sits the image's bottom edge on the text
+              baseline, which is where a lowercase "o" belongs; the small
+              positive nudge only compensates for the transparent padding baked
+              into the asset. An earlier negative value lifted it clear of the
+              other letters.
+              The artwork is dark, so it needs the same dark-mode inversion the
+              header wordmark uses (components/brand/notes9-brand.tsx) or it
+              disappears against a dark background. */}
           <img
             src="/notes9-logo-mark-transparent.png"
             alt=""
-            className="h-[clamp(2.4rem,11.5vw,10.2rem)] w-auto translate-y-[0.06em] object-contain"
+            className="mx-[0.015em] h-[0.5em] w-auto translate-y-[0.03em] object-contain dark:invert dark:brightness-125"
           />
-          <p className="n9-wordmark font-serif text-foreground">Notes9</p>
+          <span>tes9</span>
         </div>
       </div>
     </section>
