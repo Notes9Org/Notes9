@@ -57,12 +57,18 @@ export function HeroLiterature() {
         <div className="n9-grain-overlay" />
         <div className="n9-vignette" />
 
-        {/* Chart and note sit ABOVE the wash, not under it. Underneath, the same
-            veil that makes the headline legible was also draining these two —
-            and they are the surfaces meant to be read. */}
-        <HeroChartPanel className="absolute right-[2.5%] top-[11%] hidden w-[24rem] lg:block xl:w-[27rem]" />
-        <HeroNotePanel className="absolute -bottom-10 left-[2.5%] hidden w-[24rem] lg:block xl:w-[27rem]" />
-        <HeroResearchMapPanel className="absolute -bottom-6 right-[2.5%] hidden w-[24rem] lg:block xl:w-[27rem]" />
+        {/* Above the wash, so they keep their own contrast — but graded by
+            depth rather than all sitting at full strength.
+
+            Maze does this well: cards float at different opacities and blurs so
+            some read as near and others as far. A uniform fade just looks like
+            a mistake; a graded one reads as depth of field. Nothing here is
+            fully opaque, and the further a panel is from the eye the softer it
+            gets. Shadows are lighter to match — a faded panel under a heavy
+            shadow reads as muddy. */}
+        <HeroChartPanel className="absolute right-[2.5%] top-[11%] hidden w-[24rem] opacity-[0.72] shadow-[0_20px_50px_-30px_rgba(44,36,24,0.3)] lg:block xl:w-[27rem]" />
+        <HeroResearchMapPanel className="absolute -bottom-6 right-[2.5%] hidden w-[24rem] opacity-[0.6] blur-[0.3px] lg:block xl:w-[27rem]" />
+        <HeroNotePanel className="absolute -bottom-10 left-[2.5%] hidden w-[24rem] opacity-[0.52] blur-[0.5px] lg:block xl:w-[27rem]" />
       </div>
 
       {/* ── The one live control ─────────────────────────────────────────── */}

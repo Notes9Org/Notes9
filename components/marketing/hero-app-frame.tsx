@@ -347,7 +347,7 @@ export function HeroChartPanel({ className }: { className?: string }) {
     <div
       aria-hidden
       className={cn(
-        "pointer-events-none select-none rounded-xl border border-border/60 bg-card/85 shadow-[0_28px_70px_-32px_rgba(44,36,24,0.4)] backdrop-blur-sm",
+        "pointer-events-none select-none rounded-xl border border-border/60 bg-card/85 shadow-[0_20px_54px_-32px_rgba(44,36,24,0.28)] backdrop-blur-sm",
         className
       )}
     >
@@ -473,7 +473,7 @@ export function HeroNotePanel({ className }: { className?: string }) {
     <div
       aria-hidden
       className={cn(
-        "pointer-events-none select-none overflow-hidden rounded-xl border border-border/60 bg-card/95 shadow-[0_32px_80px_-34px_rgba(44,36,24,0.45)] backdrop-blur-sm",
+        "pointer-events-none select-none overflow-hidden rounded-xl border border-border/60 bg-card/95 shadow-[0_22px_60px_-34px_rgba(44,36,24,0.3)] backdrop-blur-sm",
         className
       )}
     >
@@ -599,7 +599,7 @@ export function HeroResearchMapPanel({ className }: { className?: string }) {
     <div
       aria-hidden
       className={cn(
-        "pointer-events-none select-none overflow-hidden rounded-xl border border-border/60 bg-card/95 shadow-[0_32px_80px_-34px_rgba(44,36,24,0.45)] backdrop-blur-sm",
+        "pointer-events-none select-none overflow-hidden rounded-xl border border-border/60 bg-card/95 shadow-[0_22px_60px_-34px_rgba(44,36,24,0.3)] backdrop-blur-sm",
         className
       )}
     >
