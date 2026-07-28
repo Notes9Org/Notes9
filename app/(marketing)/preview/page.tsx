@@ -1,5 +1,5 @@
 import type { Metadata } from "next"
-import { HeroConstellation } from "@/components/marketing/hero-constellation"
+import { HeroLiterature } from "@/components/marketing/hero-literature"
 import {
   CatalystBand,
   ChainSection,
@@ -42,7 +42,7 @@ export const metadata: Metadata = {
 export default function HomePreviewPage() {
   return (
     <>
-      <HeroConstellation />
+      <HeroLiterature />
       <ProofBand />
       <FractureSection />
       <ChainSection />
