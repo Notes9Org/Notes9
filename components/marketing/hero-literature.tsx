@@ -4,6 +4,7 @@ import {
   HeroAppFrame,
   HeroChartPanel,
   HeroNotePanel,
+  HeroResearchMapPanel,
 } from "@/components/marketing/hero-app-frame"
 import { HeroSearch } from "@/components/marketing/hero-search"
 
@@ -61,6 +62,7 @@ export function HeroLiterature() {
             and they are the surfaces meant to be read. */}
         <HeroChartPanel className="absolute right-[2.5%] top-[11%] hidden w-[24rem] lg:block xl:w-[27rem]" />
         <HeroNotePanel className="absolute -bottom-10 left-[2.5%] hidden w-[24rem] lg:block xl:w-[27rem]" />
+        <HeroResearchMapPanel className="absolute -bottom-6 right-[2.5%] hidden w-[24rem] lg:block xl:w-[27rem]" />
       </div>
 
       {/* ── The one live control ─────────────────────────────────────────── */}

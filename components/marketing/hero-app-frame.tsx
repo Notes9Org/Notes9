@@ -24,6 +24,9 @@ import {
   ArrowClockwise,
   ArrowCounterClockwise,
   WarningCircle,
+  Check,
+  Minus,
+  ArrowsOut,
   Flag,
   Question,
   Moon,
@@ -551,6 +554,132 @@ export function HeroNotePanel({ className }: { className?: string }) {
         <span className="rounded-md bg-[var(--n9-accent)] px-2.5 py-1 text-[10px] font-semibold text-white">
           Accept &amp; Save
         </span>
+      </div>
+    </div>
+  )
+}
+
+/* ── Research map panel ─────────────────────────────────────────────────── */
+
+/** Node kinds, with the colours the app actually assigns them. */
+const MAP_NODES = [
+  { kind: "Drug Discovery Initiative", title: "Validation Run", c: "#7c3aed", x: 4, y: 12, w: 34 },
+  { kind: "Experiment", title: "Protocol: Cell Culture Setup", c: "#2563eb", x: 42, y: 12, w: 36 },
+  { kind: "Compound Screening", title: "Results Summary", c: "#dc2626", x: 82, y: 12, w: 32 },
+  { kind: "Protein Structure Study", title: "Integrating deep learning with physics-based modeling", c: "#0d9488", x: 42, y: 40, w: 36 },
+  { kind: "Gene Expression Analysis", title: "Observation Log — Day 1", c: "#ca8a04", x: 42, y: 68, w: 36 },
+  { kind: "Protein Structure Study", title: "CBM-AB: graph-based antibody antigen binding", c: "#0d9488", x: 82, y: 44, w: 32 },
+]
+
+const MAP_FILTERS = [
+  { label: "Project", icon: FolderSimple },
+  { label: "Experiment", icon: FlaskConical },
+  { label: "Protocol", icon: ClipboardText },
+  { label: "Literature", icon: Books },
+  { label: "Lab note", icon: NotePencil },
+]
+
+/**
+ * The research map, replicated from the real screen.
+ *
+ * What identifies this screen is not the graph — every product with a graph has
+ * a graph — but the filter bar above it: a scope select, an experiment
+ * dropdown, a name filter, and a row of checked entity types, each with its own
+ * icon and colour. That row is the product's data model stated out loud, so it
+ * carries more meaning than the nodes do. The zoom stack and the minimap are the
+ * other two things people recognise, so both are kept.
+ *
+ * Node and edge colours are the ones the app assigns per entity kind, not a
+ * decorative palette.
+ *
+ * Decorative: aria-hidden, pointer events off.
+ */
+export function HeroResearchMapPanel({ className }: { className?: string }) {
+  return (
+    <div
+      aria-hidden
+      className={cn(
+        "pointer-events-none select-none overflow-hidden rounded-xl border border-border/60 bg-card/95 shadow-[0_32px_80px_-34px_rgba(44,36,24,0.45)] backdrop-blur-sm",
+        className
+      )}
+    >
+      {/* Filter bar */}
+      <div className="flex flex-wrap items-center gap-1.5 border-b border-border/50 px-3 py-2.5">
+        <span className="rounded-md border border-border/70 px-2 py-1 text-[9.5px]">
+          Validation Run
+        </span>
+        <span className="flex items-center gap-1 rounded-md border border-border/70 px-2 py-1 text-[9.5px] text-muted-foreground">
+          All experiments
+          <CaretDown className="size-2" />
+        </span>
+        {MAP_FILTERS.map((f) => (
+          <span key={f.label} className="flex items-center gap-1">
+            <span className="flex size-2.5 items-center justify-center rounded-[2px] bg-[var(--n9-accent)]">
+              <Check className="size-1.5 text-white" weight="bold" />
+            </span>
+            <f.icon className="size-2.5 text-muted-foreground" />
+            <span className="text-[9px] text-muted-foreground">{f.label}</span>
+          </span>
+        ))}
+      </div>
+
+      {/* Canvas */}
+      <div className="relative h-[11.5rem] bg-[radial-gradient(circle,color-mix(in_oklab,var(--foreground)_10%,transparent)_0.6px,transparent_0.7px)] [background-size:9px_9px]">
+        <svg viewBox="0 0 120 100" preserveAspectRatio="none" className="absolute inset-0 h-full w-full">
+          <path d="M 21 16 H 44" stroke="#7c3aed" strokeWidth="0.5" fill="none" vectorEffect="non-scaling-stroke" />
+          <path d="M 62 20 V 44 H 60" stroke="#2563eb" strokeWidth="0.5" fill="none" vectorEffect="non-scaling-stroke" />
+          <path d="M 62 20 V 72 H 60" stroke="#ca8a04" strokeWidth="0.5" fill="none" vectorEffect="non-scaling-stroke" />
+          <path d="M 78 16 H 84" stroke="#dc2626" strokeWidth="0.5" fill="none" vectorEffect="non-scaling-stroke" />
+          <path d="M 78 48 H 84" stroke="#0d9488" strokeWidth="0.5" fill="none" vectorEffect="non-scaling-stroke" />
+        </svg>
+
+        {MAP_NODES.map((n) => (
+          <div
+            key={n.title}
+            className="absolute rounded-[3px] border bg-card px-1.5 py-1 shadow-sm"
+            style={{
+              left: `${n.x}%`,
+              top: `${n.y}%`,
+              width: `${n.w}%`,
+              borderColor: `color-mix(in oklab, ${n.c} 45%, transparent)`,
+              background: `color-mix(in oklab, ${n.c} 7%, var(--card))`,
+            }}
+          >
+            <p
+              className="truncate text-[4.5px] font-semibold uppercase tracking-[0.08em]"
+              style={{ color: n.c }}
+            >
+              {n.kind}
+            </p>
+            <p className="mt-px line-clamp-2 text-[5.5px] leading-tight text-foreground/85">
+              {n.title}
+            </p>
+          </div>
+        ))}
+
+        {/* Zoom stack */}
+        <div className="absolute bottom-2 left-2 overflow-hidden rounded-md border border-border/70 bg-card">
+          {[Plus, Minus, ArrowsOut].map((Icon, i) => (
+            <div
+              key={i}
+              className={cn(
+                "flex size-4 items-center justify-center",
+                i > 0 && "border-t border-border/60"
+              )}
+            >
+              <Icon className="size-2 text-muted-foreground" />
+            </div>
+          ))}
+        </div>
+
+        {/* Minimap */}
+        <div className="absolute bottom-2 right-2 h-9 w-14 rounded-sm border-[1.5px] border-[var(--n9-accent)]/70 bg-card p-1">
+          <div className="flex h-full flex-col justify-center gap-[1.5px] pl-3">
+            {["#7c3aed", "#2563eb", "#0d9488", "#0d9488", "#ca8a04", "#dc2626"].map((c, i) => (
+              <span key={i} className="h-[1.5px] w-3 rounded-full" style={{ background: c }} />
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   )
