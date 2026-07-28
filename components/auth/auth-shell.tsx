@@ -3,9 +3,19 @@ import Link from "next/link"
 import { Notes9Brand } from "@/components/brand/notes9-brand"
 
 /**
- * Modern shell for the sign-in / sign-up pages: a warm aurora + masked dot-grid
- * background with a floating glass card. Keeps the auth forms unchanged — only
- * the surrounding chrome is restyled.
+ * Shell for every auth page (sign in, sign up, invite, reset, error).
+ *
+ * Two columns on large screens: the form on the left, and on the right a panel
+ * that argues for finishing the form. Most auth screens put a testimonial or a
+ * stock illustration there; this one says what actually happens on the other
+ * side of the button, because that is the question someone hesitating over a
+ * signup form is asking.
+ *
+ * Below `lg` it collapses to the single centred column it was before — the
+ * right panel is supporting material, never a reason to scroll on a phone.
+ *
+ * The API is unchanged (`children`, `title`, `subtitle`, `aside`) so all seven
+ * auth pages pick this up without edits.
  */
 export function AuthShell({
   children,
@@ -20,34 +30,113 @@ export function AuthShell({
   aside?: ReactNode
 }) {
   return (
-    <div className="relative flex min-h-svh w-full items-center justify-center overflow-hidden bg-background p-5 sm:p-6">
-      {/* Aurora + depth background */}
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute left-1/2 top-[-12%] h-[520px] w-[680px] -translate-x-1/2 rounded-full bg-[var(--n9-accent)]/[0.13] blur-[120px]" />
-        <div className="absolute bottom-[-14%] right-[-8%] h-[440px] w-[540px] rounded-full bg-amber-500/[0.07] blur-[120px]" />
-        <div className="absolute bottom-[6%] left-[-8%] h-[360px] w-[440px] rounded-full bg-[var(--n9-accent)]/[0.08] blur-[110px]" />
-        <div className="absolute inset-0 [background-image:radial-gradient(rgba(150,80,52,0.10)_0.6px,transparent_0.7px)] [background-size:34px_34px] [mask-image:radial-gradient(58%_50%_at_50%_38%,#000,transparent_76%)]" />
-      </div>
+    <div className="relative min-h-svh w-full overflow-hidden bg-background">
+      <BackgroundField />
 
-      <div className="relative z-10 w-full max-w-md">
-        <Link
-          href="/"
-          className="mb-6 flex flex-col items-center gap-2 text-center transition-opacity hover:opacity-90"
-        >
-          <Notes9Brand stacked iconClassName="h-[54px] w-[54px]" textClassName="h-9 w-auto" />
-        </Link>
+      <div className="relative z-10 mx-auto grid min-h-svh w-full max-w-7xl grid-cols-1 items-center gap-16 px-5 py-10 sm:px-8 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:gap-24 lg:px-12">
+        {/* ── Form column ─────────────────────────────────────────────── */}
+        <div className="mx-auto w-full max-w-md lg:mx-0">
+          <Link
+            href="/"
+            className="mb-8 inline-flex transition-opacity hover:opacity-90"
+            aria-label="Notes9 home"
+          >
+            <Notes9Brand textClassName="h-8 w-auto" />
+          </Link>
 
-        <div className="mb-5 text-center">
-          <h1 className="font-serif text-[26px] font-bold tracking-tight text-foreground">{title}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
+          <h1 className="font-serif text-[30px] leading-tight tracking-tight text-foreground">
+            {title}
+          </h1>
+          <p className="mt-2 text-[15px] leading-6 text-muted-foreground">{subtitle}</p>
+
+          <div className="mt-8">{children}</div>
+
+          {aside && <div className="mt-6 text-xs text-muted-foreground/80">{aside}</div>}
         </div>
 
-        <div className="rounded-[26px] border border-border/60 bg-card/80 p-6 shadow-[0_1px_0_0_rgba(255,255,255,0.5)_inset,0_30px_80px_-42px_rgba(44,36,24,0.45)] backdrop-blur-xl sm:p-8">
-          {children}
-        </div>
-
-        {aside && <div className="mt-5 text-center text-xs text-muted-foreground/80">{aside}</div>}
+        {/* ── Proof column ────────────────────────────────────────────── */}
+        <aside className="hidden lg:block">
+          <ProofPanel />
+        </aside>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Same layered recipe as the marketing hero — technical grid, organic colour,
+ * grain, vignette — but written with inline values rather than the `.n9-*`
+ * classes, which are scoped to `.marketing-theme`. Auth deliberately sits
+ * outside that scope so it keeps the product colour tokens.
+ */
+function BackgroundField() {
+  return (
+    <div aria-hidden className="pointer-events-none absolute inset-0">
+      <div className="absolute inset-0 [background-image:linear-gradient(to_right,color-mix(in_oklab,var(--foreground)_4%,transparent)_1px,transparent_1px),linear-gradient(to_bottom,color-mix(in_oklab,var(--foreground)_4%,transparent)_1px,transparent_1px)] [background-size:56px_56px] [mask-image:radial-gradient(70%_60%_at_30%_35%,#000,transparent_78%)]" />
+
+      <div className="absolute -inset-[18%] opacity-90 blur-[72px] saturate-[1.15]">
+        <div className="absolute inset-0 [background:radial-gradient(58%_38%_at_50%_-6%,color-mix(in_oklab,#f6e4cf_58%,transparent),transparent_72%),radial-gradient(38%_52%_at_18%_28%,color-mix(in_oklab,var(--primary)_42%,transparent),transparent_68%),radial-gradient(34%_44%_at_80%_26%,color-mix(in_oklab,#c9a227_30%,transparent),transparent_66%),radial-gradient(46%_58%_at_66%_78%,color-mix(in_oklab,#7f8f74_36%,transparent),transparent_70%)]" />
+      </div>
+
+      <div className="absolute inset-0 bg-[image:var(--glass-grain-img)] bg-repeat opacity-[0.16] mix-blend-soft-light" />
+      <div className="absolute inset-0 [background:radial-gradient(120%_88%_at_40%_10%,transparent_44%,var(--background)_94%)]" />
+    </div>
+  )
+}
+
+/**
+ * What happens after signup, in the order it happens. Concrete and checkable —
+ * no invented customer quotes, no logo wall we have not earned.
+ */
+const STEPS = [
+  {
+    n: "01",
+    title: "Answer three questions",
+    body: "Your role, your field, what you want to do first. Under a minute, and every question is skippable.",
+  },
+  {
+    n: "02",
+    title: "Get a workspace built around your field",
+    body: "A sample project matched to your research — protocols, lab notes and real reference papers you can pull apart.",
+  },
+  {
+    n: "03",
+    title: "Create your first project",
+    body: "Then Catalyst can answer from your work instead of guessing, and cite the record behind every claim.",
+  },
+]
+
+function ProofPanel() {
+  return (
+    <div className="max-w-lg">
+      <p className="n9-auth-label flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+        <span className="size-1.5 rounded-[1px] bg-primary" />
+        What happens next
+      </p>
+
+      <h2 className="mt-6 font-serif text-[clamp(1.75rem,2.6vw,2.4rem)] leading-[1.12] tracking-[-0.02em] text-foreground">
+        Set up around your research, not a blank page.
+      </h2>
+
+      <ol className="mt-10 space-y-7">
+        {STEPS.map((s) => (
+          <li key={s.n} className="flex gap-5">
+            <span className="mt-1 font-mono text-xs tabular-nums text-primary">{s.n}</span>
+            <div className="min-w-0">
+              <p className="text-[15px] font-semibold leading-snug text-foreground">{s.title}</p>
+              <p className="mt-1.5 max-w-sm text-[14px] leading-6 text-muted-foreground">
+                {s.body}
+              </p>
+            </div>
+          </li>
+        ))}
+      </ol>
+
+      <hr className="mt-10 border-0 border-t border-border/60" />
+
+      <p className="mt-6 max-w-sm text-[13px] leading-6 text-muted-foreground">
+        Free to start, with AI credits included. No card required.
+      </p>
     </div>
   )
 }

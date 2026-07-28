@@ -348,14 +348,53 @@
   filter: blur(72px) saturate(122%);
   opacity: 0.9;
   background:
+    /* Directional key light from the top — a single implied light source reads
+       as photographed depth, where evenly-scattered blobs read as CSS. */
+    radial-gradient(58% 38% at 50% -6%, color-mix(in oklab, #f6e4cf 62%, transparent), transparent 72%),
     radial-gradient(38% 52% at 22% 30%, color-mix(in oklab, var(--n9-accent) 46%, transparent), transparent 68%),
     radial-gradient(34% 44% at 76% 24%, color-mix(in oklab, #c9a227 34%, transparent), transparent 66%),
+    /* Cool sage counterpoint keeps the field from collapsing into warm mush. */
     radial-gradient(46% 58% at 62% 74%, color-mix(in oklab, #7f8f74 40%, transparent), transparent 70%),
     radial-gradient(30% 40% at 34% 82%, color-mix(in oklab, var(--n9-accent) 30%, transparent), transparent 64%);
   will-change: transform;
   animation: n9-organic-drift 34s ease-in-out infinite;
 }
 .dark .marketing-theme .n9-organic { opacity: 0.62; filter: blur(84px) saturate(108%); }
+
+/* Film grain over the colour field. This is the single highest-leverage polish
+   step: an unbroken CSS gradient always reads as vector, and a little noise is
+   what makes it read as a photograph. Reuses the fractal-noise SVG already
+   defined for the glass surfaces. */
+.marketing-theme .n9-grain-overlay {
+  position: absolute;
+  inset: 0;
+  background-image: var(--glass-grain-img);
+  background-repeat: repeat;
+  opacity: 0.16;
+  mix-blend-mode: soft-light;
+}
+.dark .marketing-theme .n9-grain-overlay { opacity: 0.22; }
+
+/* Fine technical grid — a faint drafting-paper substrate under the colour.
+   Much tighter than the existing dot-grid, so it reads as precision rather than
+   as decoration. */
+.marketing-theme .n9-grid-fine {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, color-mix(in oklab, var(--foreground) 5%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--foreground) 5%, transparent) 1px, transparent 1px);
+  background-size: 56px 56px;
+  -webkit-mask-image: radial-gradient(64% 58% at 50% 34%, #000 0%, transparent 76%);
+  mask-image: radial-gradient(64% 58% at 50% 34%, #000 0%, transparent 76%);
+}
+
+/* Edge falloff, so the hero settles into the page instead of ending on a seam. */
+.marketing-theme .n9-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 88% at 50% 12%, transparent 46%, var(--background) 92%);
+}
 
 @keyframes n9-organic-drift {
   0%, 100% { transform: translate3d(0, 0, 0) scale(1.02) rotate(0deg); }

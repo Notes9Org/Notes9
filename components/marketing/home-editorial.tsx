@@ -22,8 +22,15 @@ const EASE = [0.22, 1, 0.36, 1] as const
 export function HeroEditorial() {
   return (
     <section className="relative isolate overflow-hidden">
+      {/* Four stacked layers, cheapest first: technical grid → organic colour →
+          film grain → edge vignette. The grain is what stops the gradient
+          reading as vector, and the vignette keeps the section from ending on a
+          hard seam. */}
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
+        <div className="n9-grid-fine" />
         <div className="n9-organic n9-organic-mask" />
+        <div className="n9-grain-overlay" />
+        <div className="n9-vignette" />
       </div>
 
       <div className="container mx-auto px-4 pb-20 pt-16 sm:px-6 sm:pb-28 sm:pt-24 lg:px-8">
@@ -533,14 +540,22 @@ export function ClosingSection() {
           </div>
         </div>
 
-        {/* Wordmark bleeds off the baseline, cropped by overflow — the device
-            reads as a masthead rather than a logo pasted at the end. */}
-        <p
+        {/* Masthead: the logo mark sits on the wordmark's baseline at cap height,
+            so the two read as one lockup rather than an image parked next to
+            text. Without the mark the wordmark looked unfinished — the mark is
+            the "o" in the real lockup, so its absence is legible even at this
+            scale. Both share one opacity so they sink into the page together. */}
+        <div
           aria-hidden
-          className="n9-wordmark mt-16 select-none font-serif text-foreground/[0.07] sm:mt-20"
+          className="mt-16 flex select-none items-baseline gap-[0.12em] opacity-[0.09] sm:mt-20"
         >
-          Notes9
-        </p>
+          <img
+            src="/notes9-logo-mark-transparent.png"
+            alt=""
+            className="h-[clamp(2.4rem,11.5vw,10.2rem)] w-auto translate-y-[0.06em] object-contain"
+          />
+          <p className="n9-wordmark font-serif text-foreground">Notes9</p>
+        </div>
       </div>
     </section>
   )
