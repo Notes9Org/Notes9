@@ -1,21 +1,24 @@
 "use client"
 
+import { HeroAppFrame } from "@/components/marketing/hero-app-frame"
 import { HeroSearch } from "@/components/marketing/hero-search"
 
 /**
  * Literature-search hero.
  *
  * The product is not shown *beside* the pitch here — it is the surface the
- * pitch sits on. A real capture of the literature page fills the section,
- * sidebar and all, so the visitor is looking at Notes9 before they have read a
- * word. The only live control is our own search bar, floating sharp above it.
+ * pitch sits on. The literature page fills the section, sidebar and all, so the
+ * visitor is looking at Notes9 before they have read a word. The only live
+ * control is our own search bar, floating above it.
+ *
+ * The backdrop is real markup rather than an image (HeroAppFrame): sharp at any
+ * viewport, theme-aware without needing a second capture, and free to download.
  *
  * Two deliberate constraints make that work:
  *
- *  1. The capture is pushed back — softened, desaturated and washed with the
- *     page background — so it reads as context rather than as an interface
- *     competing for clicks. Without that the visitor tries to use the app's own
- *     search field, which is a picture.
+ *  1. The UI is pushed back with a graded wash so it reads as context rather
+ *     than as an interface competing for clicks, and its own search field is
+ *     rendered flat. Without that the visitor tries to type into the wrong box.
  *  2. There are no other calls to action. The buttons that used to sit under
  *     the search bar were splitting attention three ways; here the single
  *     working control is the one the whole section is about. Sign-up is still a
@@ -26,16 +29,8 @@ export function HeroLiterature() {
     <section className="relative isolate flex min-h-[86svh] items-center overflow-hidden">
       {/* ── The product, as backdrop ─────────────────────────────────────── */}
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
-        <img
-          src="/demo/light/literature-search.png"
-          alt=""
-          className="absolute inset-0 hidden h-full w-full object-cover object-left-top saturate-[0.97] dark:hidden sm:block"
-        />
-        <img
-          src="/demo/dark/literature-search.png"
-          alt=""
-          className="absolute inset-0 hidden h-full w-full object-cover object-left-top saturate-[0.97] dark:sm:block"
-        />
+        {/* Rendered, not screenshotted — see HeroAppFrame for why. */}
+        <HeroAppFrame className="absolute inset-0 hidden h-full w-full sm:block" />
 
         {/* Legibility is handled locally rather than globally. A light overall
             veil keeps the capture from competing outright, and a much stronger
