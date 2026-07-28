@@ -692,8 +692,8 @@ export function HeroResearchMapPanel({ className }: { className?: string }) {
 
 const TOOL_CALLS = [
   { text: "Read 6 excerpts from your protocols", meta: "1 source · 2.2s" },
-  { text: "Found 1 protocol: Competitive ELISA PFS4845-mAb Study", meta: "1 source · 27.4s" },
-  { text: "Loaded: “Competitive ELISA PFS4845-mAb Study”", meta: "1 source · 0.1s" },
+  { text: "Found 1 protocol: Competitive ELISA — anti-mAb", meta: "1 source · 27.4s" },
+  { text: "Loaded: “Competitive ELISA — anti-mAb”", meta: "1 source · 0.1s" },
 ]
 
 const DESIGN_STEPS = [
