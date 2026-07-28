@@ -29,22 +29,25 @@ export function HeroLiterature() {
         <img
           src="/demo/light/literature-search.png"
           alt=""
-          className="absolute inset-0 hidden h-full w-full object-cover object-left-top blur-[2px] saturate-[0.85] dark:hidden sm:block"
+          className="absolute inset-0 hidden h-full w-full object-cover object-left-top saturate-[0.97] dark:hidden sm:block"
         />
         <img
           src="/demo/dark/literature-search.png"
           alt=""
-          className="absolute inset-0 hidden h-full w-full object-cover object-left-top blur-[2px] saturate-[0.85] dark:sm:block"
+          className="absolute inset-0 hidden h-full w-full object-cover object-left-top saturate-[0.97] dark:sm:block"
         />
 
-        {/* Wash. Heavier through the middle where the type sits, lighter at the
-            left edge so the sidebar stays legible as context. */}
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,color-mix(in_oklab,var(--background)_62%,transparent)_0%,color-mix(in_oklab,var(--background)_88%,transparent)_28%,color-mix(in_oklab,var(--background)_92%,transparent)_100%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(72%_58%_at_54%_46%,color-mix(in_oklab,var(--background)_84%,transparent),transparent_78%)]" />
+        {/* Legibility is handled locally rather than globally. A light overall
+            veil keeps the capture from competing outright, and a much stronger
+            radial sits only behind the type. Washing the whole image instead —
+            the first version did — buys the same contrast at the cost of every
+            detail in the product, which defeats the point of showing it. */}
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,color-mix(in_oklab,var(--background)_18%,transparent)_0%,color-mix(in_oklab,var(--background)_34%,transparent)_30%,color-mix(in_oklab,var(--background)_40%,transparent)_100%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(58%_50%_at_52%_46%,color-mix(in_oklab,var(--background)_94%,transparent)_0%,color-mix(in_oklab,var(--background)_80%,transparent)_45%,transparent_74%)]" />
 
         {/* Same warmth and texture the rest of the page uses, so this section
             still belongs to the site rather than to the app. */}
-        <div className="n9-organic n9-organic-mask opacity-70" />
+        <div className="n9-organic n9-organic-mask opacity-35" />
         <div className="n9-grain-overlay" />
         <div className="n9-vignette" />
       </div>
