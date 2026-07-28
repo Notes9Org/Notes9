@@ -25,6 +25,9 @@ import {
   ArrowCounterClockwise,
   WarningCircle,
   Check,
+  CheckCircle,
+  Circle,
+  CircleNotch,
   Minus,
   ArrowsOut,
   Flag,
@@ -677,6 +680,112 @@ export function HeroResearchMapPanel({ className }: { className?: string }) {
           <div className="flex h-full flex-col justify-center gap-[1.5px] pl-3">
             {["#7c3aed", "#2563eb", "#0d9488", "#0d9488", "#ca8a04", "#dc2626"].map((c, i) => (
               <span key={i} className="h-[1.5px] w-3 rounded-full" style={{ background: c }} />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ── Catalyst panel ─────────────────────────────────────────────────────── */
+
+const TOOL_CALLS = [
+  { text: "Read 6 excerpts from your protocols", meta: "1 source · 2.2s" },
+  { text: "Found 1 protocol: Competitive ELISA PFS4845-mAb Study", meta: "1 source · 27.4s" },
+  { text: "Loaded: “Competitive ELISA PFS4845-mAb Study”", meta: "1 source · 0.1s" },
+]
+
+const DESIGN_STEPS = [
+  { label: "Title & Document Control", state: "done" },
+  { label: "Table of Contents", state: "active" },
+  { label: "Scope & Purpose", state: "todo" },
+  { label: "Safety Considerations", state: "todo" },
+  { label: "Materials & Reagents", state: "todo" },
+]
+
+/**
+ * Catalyst mid-answer, replicated from a real run.
+ *
+ * The distinctive thing about this screen is not that an assistant replies — it
+ * is that the reply shows its work: a reasoning block, then tool calls naming
+ * the exact records it opened with a source count and a duration, then a
+ * section-by-section plan being ticked off live. That visible chain is the
+ * product's whole trust argument, so it is what gets reproduced here rather
+ * than a chat bubble.
+ *
+ * Decorative: aria-hidden, pointer events off.
+ */
+export function HeroCatalystPanel({ className }: { className?: string }) {
+  return (
+    <div
+      aria-hidden
+      className={cn(
+        "pointer-events-none select-none overflow-hidden rounded-xl border border-border/60 bg-card/95 shadow-[0_22px_60px_-34px_rgba(44,36,24,0.3)] backdrop-blur-sm",
+        className
+      )}
+    >
+      <div className="flex items-center gap-2 border-b border-border/50 px-3.5 py-2.5">
+        <Sparkles className="size-3.5 text-[var(--n9-accent)]" weight="fill" />
+        <span className="flex-1 text-[12.5px] font-medium">Catalyst</span>
+        <span className="rounded-md bg-[color-mix(in_oklab,#6c8a68_18%,transparent)] px-2 py-0.5 text-[9.5px] font-medium text-[#3f5a3c]">
+          New chat
+        </span>
+      </div>
+
+      <div className="space-y-1.5 px-3 py-2.5">
+        {/* Reasoning */}
+        <div className="rounded-lg border border-border/60 bg-muted/25 px-2.5 py-2">
+          <p className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
+            <Sparkles className="size-2.5" />
+            Reasoning…
+            <CaretDown className="ml-auto size-2.5" />
+          </p>
+          <p className="mt-1.5 text-[9px] leading-[1.65] text-muted-foreground">
+            I found your existing competitive ELISA protocol in your workspace. I&apos;ll use
+            that as grounding evidence and synthesize a properly formatted protocol.
+          </p>
+        </div>
+
+        {/* Tool calls, with the sources and timings that make the chain checkable */}
+        {TOOL_CALLS.map((t) => (
+          <div key={t.text} className="rounded-lg border border-border/60 px-2.5 py-1.5">
+            <p className="flex items-center gap-1.5">
+              <CheckCircle className="size-2.5 shrink-0 text-[#6c8a68]" weight="fill" />
+              <span className="flex-1 truncate text-[9.5px] text-foreground/85">{t.text}</span>
+              <span className="shrink-0 font-mono text-[7.5px] text-muted-foreground">
+                {t.meta}
+              </span>
+            </p>
+          </div>
+        ))}
+
+        <p className="flex items-center gap-1.5 pl-1 text-[9px] text-muted-foreground">
+          <span className="size-1 rounded-full bg-[var(--n9-accent)]" />
+          Gathering sources… 5
+        </p>
+
+        {/* Live plan */}
+        <div className="rounded-lg border border-border/60 px-2.5 py-2">
+          <p className="text-[10px] font-medium">Designing the protocol</p>
+          <div className="mt-1.5 space-y-1">
+            {DESIGN_STEPS.map((d) => (
+              <p key={d.label} className="flex items-center gap-1.5 text-[9px]">
+                {d.state === "done" ? (
+                  <CheckCircle className="size-2.5 text-[var(--n9-accent)]" weight="fill" />
+                ) : d.state === "active" ? (
+                  <CircleNotch className="size-2.5 text-[var(--n9-accent)]" />
+                ) : (
+                  <Circle className="size-2.5 text-muted-foreground/40" />
+                )}
+                <span
+                  className={cn(
+                    d.state === "todo" ? "text-muted-foreground/70" : "text-foreground/85"
+                  )}
+                >
+                  {d.label}
+                </span>
+              </p>
             ))}
           </div>
         </div>

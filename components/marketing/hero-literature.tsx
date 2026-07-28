@@ -5,6 +5,7 @@ import {
   HeroChartPanel,
   HeroNotePanel,
   HeroResearchMapPanel,
+  HeroCatalystPanel,
 } from "@/components/marketing/hero-app-frame"
 import { HeroSearch } from "@/components/marketing/hero-search"
 
@@ -57,18 +58,25 @@ export function HeroLiterature() {
         <div className="n9-grain-overlay" />
         <div className="n9-vignette" />
 
-        {/* Above the wash, so they keep their own contrast — but graded by
-            depth rather than all sitting at full strength.
+        {/* Two mirrored stacks flanking the centred column, each receding away
+            from the reader — rather than four panels dropped in four corners at
+            unrelated opacities, which is what this was.
 
-            Maze does this well: cards float at different opacities and blurs so
-            some read as near and others as far. A uniform fade just looks like
-            a mistake; a graded one reads as depth of field. Nothing here is
-            fully opaque, and the further a panel is from the eye the softer it
-            gets. Shadows are lighter to match — a faded panel under a heavy
-            shadow reads as muddy. */}
-        <HeroChartPanel className="absolute right-[2.5%] top-[11%] hidden w-[24rem] opacity-[0.72] shadow-[0_20px_50px_-30px_rgba(44,36,24,0.3)] lg:block xl:w-[27rem]" />
-        <HeroResearchMapPanel className="absolute -bottom-6 right-[2.5%] hidden w-[24rem] opacity-[0.6] blur-[0.3px] lg:block xl:w-[27rem]" />
-        <HeroNotePanel className="absolute -bottom-10 left-[2.5%] hidden w-[24rem] opacity-[0.52] blur-[0.5px] lg:block xl:w-[27rem]" />
+            The rule is stated once and applied consistently:
+
+              NEAR  outer, lower, full size, opacity .78, no blur
+              FAR   inset toward the centre, higher, 94% scale, opacity .5,
+                    0.6px blur
+
+            Which surface sits where follows the work, not the layout. The two
+            things a researcher produces — a figure and a written note — are
+            near. The two things the system does to get there — retrieval and
+            the map of what connects — recede behind them. */}
+        <HeroNotePanel className="absolute -bottom-8 left-[2%] hidden w-[24rem] opacity-[0.78] lg:block xl:w-[26rem]" />
+        <HeroCatalystPanel className="absolute left-[7%] top-[7%] hidden w-[21rem] scale-[0.94] opacity-50 blur-[0.6px] lg:block xl:w-[23rem]" />
+
+        <HeroChartPanel className="absolute -bottom-4 right-[2%] hidden w-[24rem] opacity-[0.78] lg:block xl:w-[26rem]" />
+        <HeroResearchMapPanel className="absolute right-[7%] top-[9%] hidden w-[21rem] scale-[0.94] opacity-50 blur-[0.6px] lg:block xl:w-[23rem]" />
       </div>
 
       {/* ── The one live control ─────────────────────────────────────────── */}
