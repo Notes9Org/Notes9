@@ -1,64 +1,98 @@
 "use client"
 
-import { useMemo, useState } from "react"
-import { AnimatePresence, motion } from "framer-motion"
-import { ArrowLeft, ArrowRight, Flask as Beaker, Buildings as Building2, Check, Compass, Flask as FlaskConical, GraduationCap, Bank as Landmark, Microscope, NotePencil as NotebookPen, Rocket, Sparkle as Sparkles, Stethoscope, Users } from "@phosphor-icons/react/ssr"
-import type { Icon as LucideIcon } from "@phosphor-icons/react"
+import { useCallback, useEffect, useRef, useState } from "react"
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
+import {
+  ArrowLeft,
+  ArrowRight,
+  Books,
+  Check,
+  Flask as FlaskConical,
+  FolderPlus,
+  GraduationCap,
+  Microscope,
+  NotePencil as NotebookPen,
+  Sparkle as Sparkles,
+  Users,
+} from "@phosphor-icons/react/ssr"
+import type { Icon as PhosphorIcon } from "@phosphor-icons/react"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { Spinner } from "@/components/ui/spinner"
+import { createClient } from "@/lib/supabase/client"
+import { createProject } from "@/lib/projects"
+import { createExperiment } from "@/lib/experiments"
+import { completeWelcomeAction } from "@/app/actions/onboarding"
+import { getUniqueNameErrorMessage } from "@/lib/unique-name-error"
+import { recordRumEvent } from "@/lib/rum"
+import { AnalyticsEvent } from "@/lib/analytics/events"
 import { cn } from "@/lib/utils"
 
 export type WelcomeResult = {
   jobTitle: string
-  sector: string
-  organizationName: string
   researchField: string
   primaryGoal: string
-  startTour: boolean
+  projectId: string | null
 }
 
-type OptionCard = { value: string; label: string; icon: LucideIcon; hint?: string }
+/**
+ * Question phases are skippable; `project` is not. A user must leave onboarding
+ * with a project of their own, because every experiment, note and paper in
+ * Notes9 hangs off one — landing on an empty workspace has nowhere to put work.
+ */
+type Phase = "role" | "field" | "goal" | "seeding" | "project"
+
+const QUESTION_PHASES: Phase[] = ["role", "field", "goal", "project"]
+
+/** House easing — matches `--n9-ease` and the shared EASE_OUT constant. */
+const EASE = [0.22, 1, 0.36, 1] as const
+
+type OptionCard = { value: string; label: string; icon: PhosphorIcon; hint?: string }
 
 const ROLES: OptionCard[] = [
-  { value: "Principal Investigator", label: "PI / Professor", icon: GraduationCap },
-  { value: "Postdoctoral Researcher", label: "Postdoc", icon: Microscope },
-  { value: "PhD / Graduate Student", label: "Grad student", icon: NotebookPen },
-  { value: "Research Scientist", label: "Research scientist", icon: FlaskConical },
-  { value: "Lab Manager / Technician", label: "Lab manager / tech", icon: Beaker },
-  { value: "Other", label: "Something else", icon: Users },
-]
-
-const SECTORS: OptionCard[] = [
-  { value: "Academic", label: "Academic", icon: GraduationCap, hint: "University or institute" },
-  { value: "Industry", label: "Industry", icon: Building2, hint: "Company R&D / biotech" },
-  { value: "Government", label: "Government", icon: Landmark, hint: "National or public lab" },
-  { value: "Clinical", label: "Clinical", icon: Stethoscope, hint: "Hospital or clinic" },
+  { value: "PhD / Graduate Student", label: "Grad student", icon: NotebookPen, hint: "PhD or masters" },
+  { value: "Postdoctoral Researcher", label: "Postdoc", icon: Microscope, hint: "Early career" },
+  { value: "Principal Investigator", label: "PI / lab head", icon: GraduationCap, hint: "Runs a group" },
+  { value: "Research Scientist", label: "Industry researcher", icon: FlaskConical, hint: "Company R&D" },
 ]
 
 const GOALS: OptionCard[] = [
-  { value: "Organize my research", label: "Organize my research", icon: FlaskConical },
+  { value: "Organize my research", label: "Organise my research", icon: FlaskConical },
+  { value: "Review the literature", label: "Review the literature", icon: Books },
+  { value: "Analyse my data", label: "Analyse my data", icon: Sparkles },
   { value: "Write up results & papers", label: "Write up results & papers", icon: NotebookPen },
-  { value: "Collaborate with my team", label: "Collaborate with my team", icon: Users },
-  { value: "Explore AI for my work", label: "Explore AI for my work", icon: Sparkles },
 ]
 
+/** Ordered so the first four cover the seeded demo packs. */
 const FIELD_SUGGESTIONS = [
   "Molecular biology",
-  "Chemistry",
   "Neuroscience",
-  "Genetics",
   "Microbiology",
-  "Immunology",
-  "Materials science",
+  "Chemistry",
   "Bioinformatics",
+  "Immunology",
+  "Genetics",
+  "Materials science",
 ]
 
-const TOTAL_STEPS = 6 // splash + 4 questions + finish
+/** Nudges the project-name placeholder toward something the user recognises. */
+function projectPlaceholder(field: string): string {
+  const f = field.toLowerCase()
+  if (f.includes("neuro")) return "e.g. Cortical excitability in layer 5"
+  if (f.includes("micro") || f.includes("bacteri")) return "e.g. Resistance profiling of clinical isolates"
+  if (f.includes("chem") || f.includes("material")) return "e.g. Ligand screen for biaryl coupling"
+  if (f.includes("bioinformat") || f.includes("computat") || f.includes("genom"))
+    return "e.g. RNA-seq differential expression"
+  return "e.g. Antibody expression optimisation"
+}
 
 /**
- * First-login welcome wizard. Presentational only — persistence and tour launch
- * are handled by the parent via `onComplete`. Optional questions can each be
- * skipped; nothing blocks the user from reaching the workspace.
+ * First-login welcome wizard.
+ *
+ * Owns its own persistence, unlike the previous version: `completeWelcomeAction`
+ * writes the answers and seeds field-matched starter content in one server
+ * round-trip, so the demo pack can actually observe the research field. The
+ * parent only learns that the flow finished.
  */
 export function WelcomeDialog({
   open,
@@ -69,27 +103,130 @@ export function WelcomeDialog({
   firstName: string
   onComplete: (result: WelcomeResult) => void
 }) {
-  const [step, setStep] = useState(0)
+  const reduceMotion = useReducedMotion()
+  const [phase, setPhase] = useState<Phase>("role")
   const [jobTitle, setJobTitle] = useState("")
-  const [sector, setSector] = useState("")
-  const [organizationName, setOrganizationName] = useState("")
-  const [researchField, setResearchField] = useState("")
-  const [primaryGoal, setPrimaryGoal] = useState("")
+  // Field and goal accept several answers — researchers rarely sit in one field,
+  // and most arrive wanting to do more than one thing. Stored comma-separated
+  // (first choice first) so the existing text columns still work and
+  // `resolveDemoPack` can honour the user's ordering.
+  const [fields, setFields] = useState<string[]>([])
+  const [customField, setCustomField] = useState("")
+  const [goals, setGoals] = useState<string[]>([])
+  const [projectName, setProjectName] = useState("")
+  const [experimentName, setExperimentName] = useState("")
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const result = useMemo<Omit<WelcomeResult, "startTour">>(
-    () => ({
-      jobTitle: jobTitle.trim(),
-      sector: sector.trim(),
-      organizationName: organizationName.trim(),
-      researchField: researchField.trim(),
-      primaryGoal: primaryGoal.trim(),
-    }),
-    [jobTitle, sector, organizationName, researchField, primaryGoal],
-  )
+  const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null)
+  const getSupabase = () => (supabaseRef.current ??= createClient())
 
-  const finish = (startTour: boolean) => onComplete({ ...result, startTour })
-  const next = () => setStep((s) => Math.min(TOTAL_STEPS - 1, s + 1))
-  const back = () => setStep((s) => Math.max(0, s - 1))
+  const stepIndex = QUESTION_PHASES.indexOf(phase)
+
+  const toggle = (list: string[], value: string) =>
+    list.includes(value) ? list.filter((v) => v !== value) : [...list, value]
+
+  /** Selected chips first, then anything typed in the "other" box. */
+  const researchField = [...fields, customField.trim()].filter(Boolean).join(", ")
+  const primaryGoal = goals.join(", ")
+
+  /**
+   * Persist answers and seed starter content, then move to the project step.
+   * Deliberately keeps a floor on how long the seeding screen shows: the action
+   * often resolves in a few hundred ms, and a panel that flashes past reads as a
+   * glitch rather than as work being done.
+   */
+  const runSeeding = useCallback(async () => {
+    setPhase("seeding")
+    // Counts only — never the free-text field the user typed.
+    recordRumEvent(AnalyticsEvent.ONBOARDING_QUESTION_ANSWERED, {
+      hasRole: Boolean(jobTitle),
+      fieldCount: fields.length + (customField.trim() ? 1 : 0),
+      goalCount: goals.length,
+    })
+    const started = Date.now()
+    try {
+      await completeWelcomeAction({
+        jobTitle: jobTitle.trim(),
+        researchField,
+        primaryGoal,
+      })
+    } catch (err) {
+      // A failed seed must never trap the user — ensureUserProfile retries later.
+      console.error("[welcome] seeding failed", err)
+    }
+    const elapsed = Date.now() - started
+    const floor = reduceMotion ? 0 : 1500
+    if (elapsed < floor) await new Promise((r) => setTimeout(r, floor - elapsed))
+    setPhase("project")
+  }, [jobTitle, fields, customField, goals, researchField, primaryGoal, reduceMotion])
+
+  /** Creates the user's first project (required) plus an optional experiment. */
+  const submitProject = async () => {
+    const name = projectName.trim()
+    if (!name || submitting) return
+
+    setSubmitting(true)
+    setError(null)
+    try {
+      const supabase = getSupabase()
+      const { data: auth } = await supabase.auth.getUser()
+      const userId = auth.user?.id
+      if (!userId) throw new Error("Your session expired — please sign in again.")
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("organization_id")
+        .eq("id", userId)
+        .maybeSingle()
+      const organizationId = profile?.organization_id as string | undefined
+      if (!organizationId) throw new Error("We couldn't find your lab. Try reloading the page.")
+
+      const { data: project, error: projectError } = await createProject(supabase, {
+        name,
+        organizationId,
+        createdBy: userId,
+        status: "active",
+        priority: "medium",
+      })
+
+      if (projectError || !project) {
+        setError(
+          projectError
+            ? getUniqueNameErrorMessage(projectError, "project")
+            : "We couldn't create that project. Please try again."
+        )
+        setSubmitting(false)
+        return
+      }
+
+      const expName = experimentName.trim()
+      if (expName) {
+        // Non-fatal: the project is the required artefact, the experiment is a bonus.
+        const { error: expError } = await createExperiment(supabase, {
+          name: expName,
+          projectId: project.id as string,
+          assignedTo: userId,
+          createdBy: userId,
+        })
+        if (expError) console.error("[welcome] first experiment failed", expError)
+      }
+
+      recordRumEvent(AnalyticsEvent.ONBOARDING_COMPLETED, {
+        withExperiment: Boolean(expName),
+      })
+
+      onComplete({
+        jobTitle: jobTitle.trim(),
+        researchField,
+        primaryGoal,
+        projectId: project.id as string,
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.")
+      setSubmitting(false)
+    }
+  }
 
   return (
     <Dialog open={open}>
@@ -102,231 +239,174 @@ export function WelcomeDialog({
       >
         <DialogTitle className="sr-only">Welcome to Notes9</DialogTitle>
 
-        {/* Progress header */}
-        {step > 0 && (
-          <div className="flex items-center gap-3 border-b border-border/60 bg-muted/30 px-6 py-3">
-            <img
-              src="/notes9-mascot-ui.png"
-              alt=""
-              aria-hidden
-              className="size-7 shrink-0 rounded-full object-contain"
-            />
-            <div className="flex flex-1 gap-1.5">
-              {Array.from({ length: TOTAL_STEPS - 1 }).map((_, i) => (
-                <span
-                  key={i}
-                  className={cn(
-                    "h-1.5 flex-1 rounded-full transition-colors duration-300",
-                    i < step ? "bg-primary" : "bg-border",
-                  )}
-                />
-              ))}
-            </div>
-            <span className="shrink-0 text-xs font-medium tabular-nums text-muted-foreground">
-              {step} / {TOTAL_STEPS - 1}
-            </span>
-          </div>
-        )}
+        <ProgressHeader stepIndex={stepIndex} total={QUESTION_PHASES.length} />
 
         <AnimatePresence mode="wait" initial={false}>
-          {/* ---- 0: Splash ---- */}
-          {step === 0 && (
-            <Panel key="splash">
-              <div className="flex flex-col items-center text-center">
-                <div className="relative mb-5">
-                  <div className="absolute inset-0 -z-10 rounded-full bg-[var(--n9-accent-glow,rgba(150,80,52,0.18))] blur-2xl" />
-                  <img
-                    src="/notes9-mascot-ui.png"
-                    alt=""
-                    aria-hidden
-                    className="tour-mascot-animate size-24 rounded-full object-contain"
-                  />
-                </div>
-                <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-                  Welcome to Notes9, {firstName}
-                </h2>
-                <p className="mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
-                  Your AI-native lab notebook for planning experiments, capturing results, and
-                  reasoning over your research. Let&apos;s set it up for the way{" "}
-                  <span className="font-medium text-foreground">you</span> work — it takes under a
-                  minute.
-                </p>
-
-                <div className="mt-6 grid w-full grid-cols-3 gap-2">
-                  {[
-                    { icon: FlaskConical, label: "Experiments" },
-                    { icon: NotebookPen, label: "Lab notes" },
-                    { icon: Sparkles, label: "Catalyst AI" },
-                  ].map(({ icon: Icon, label }) => (
-                    <div
-                      key={label}
-                      className="flex flex-col items-center gap-1.5 rounded-xl border border-border bg-muted/40 px-2 py-3"
-                    >
-                      <Icon className="size-5 text-primary" aria-hidden />
-                      <span className="text-[11px] font-medium text-foreground">{label}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <PrimaryButton onClick={next} label="Let's personalize it" full />
-              <button
-                type="button"
-                onClick={() => finish(false)}
-                className="mx-auto mt-3 block text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-              >
-                Skip setup
-              </button>
-            </Panel>
-          )}
-
-          {/* ---- 1: Role ---- */}
-          {step === 1 && (
-            <Panel key="role">
+          {phase === "role" && (
+            <Panel key="role" reduceMotion={reduceMotion}>
               <Heading
-                icon={GraduationCap}
-                title="What's your role?"
-                subtitle="So Notes9 and Catalyst can speak your language."
+                title={`Welcome to Notes9, ${firstName}`}
+                subtitle="Three quick questions so we can set up your workspace. Under a minute."
               />
               <CardGrid
                 options={ROLES}
-                value={jobTitle}
+                selected={jobTitle ? [jobTitle] : []}
                 onSelect={(v) => {
                   setJobTitle(v)
+                  setPhase("field")
                 }}
                 columns={2}
+                withHint
+                reduceMotion={reduceMotion}
               />
-              <NavRow onBack={back} onNext={next} canSkip onSkip={next} />
+              <NavRow onSkip={() => setPhase("field")} />
             </Panel>
           )}
 
-          {/* ---- 2: Sector ---- */}
-          {step === 2 && (
-            <Panel key="sector">
+          {phase === "field" && (
+            <Panel key="field" reduceMotion={reduceMotion}>
               <Heading
-                icon={Building2}
-                title="Where do you work?"
-                subtitle="Academia, industry, or somewhere else?"
+                title="What do you work on?"
+                subtitle="Pick as many as apply — your first choice decides the starter content."
+              />
+              <div className="mt-5 flex flex-wrap justify-center gap-2">
+                {FIELD_SUGGESTIONS.map((f) => (
+                  <Chip
+                    key={f}
+                    label={f}
+                    selected={fields.includes(f)}
+                    onClick={() => setFields((prev) => toggle(prev, f))}
+                    reduceMotion={reduceMotion}
+                  />
+                ))}
+              </div>
+              <Input
+                value={customField}
+                onChange={(e) => setCustomField(e.target.value)}
+                placeholder="Add another field…"
+                className="mt-4"
+                aria-label="Other research field"
+              />
+              <NavRow
+                onBack={() => setPhase("role")}
+                onNext={() => setPhase("goal")}
+                nextDisabled={!researchField}
+                onSkip={() => setPhase("goal")}
+              />
+            </Panel>
+          )}
+
+          {phase === "goal" && (
+            <Panel key="goal" reduceMotion={reduceMotion}>
+              <Heading
+                title="What would you like to do?"
+                subtitle="Pick as many as apply — we'll order your getting-started list around them."
               />
               <CardGrid
-                options={SECTORS}
-                value={sector}
-                onSelect={setSector}
-                columns={2}
-                withHint
+                options={GOALS}
+                selected={goals}
+                onSelect={(v) => setGoals((prev) => toggle(prev, v))}
+                columns={1}
+                reduceMotion={reduceMotion}
               />
-              <NavRow onBack={back} onNext={next} canSkip onSkip={next} />
+              <NavRow
+                onBack={() => setPhase("field")}
+                onNext={() => void runSeeding()}
+                nextDisabled={goals.length === 0}
+                onSkip={() => void runSeeding()}
+              />
             </Panel>
           )}
 
-          {/* ---- 3: Place of work + field ---- */}
-          {step === 3 && (
-            <Panel key="place">
+          {phase === "seeding" && (
+            <Panel key="seeding" reduceMotion={reduceMotion}>
+              <SeedingPanel field={researchField} reduceMotion={reduceMotion} />
+            </Panel>
+          )}
+
+          {phase === "project" && (
+            <Panel key="project" reduceMotion={reduceMotion}>
               <Heading
-                icon={Landmark}
-                title="Tell us a bit more"
-                subtitle="Optional — it helps tailor suggestions to your work."
+                icon={FolderPlus}
+                title="Create your first project"
+                subtitle="Experiments, notes, protocols and papers all live inside a project — so you'll need one to start."
               />
 
-              <label className="mt-4 block text-left">
-                <span className="mb-1.5 block text-xs font-medium text-foreground">
-                  Institution or company
-                </span>
-                <Input
-                  value={organizationName}
-                  onChange={(e) => setOrganizationName(e.target.value)}
-                  placeholder="e.g. Stanford University, Genentech…"
-                  aria-label="Institution or company"
-                />
-              </label>
-
-              <div className="mt-4 text-left">
-                <span className="mb-1.5 block text-xs font-medium text-foreground">
-                  Research field
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  {FIELD_SUGGESTIONS.map((f) => (
-                    <button
-                      key={f}
-                      type="button"
-                      onClick={() => setResearchField(f)}
-                      className={cn(
-                        "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
-                        researchField === f
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground",
-                      )}
-                    >
-                      {f}
-                    </button>
-                  ))}
-                </div>
-                <Input
-                  value={researchField}
-                  onChange={(e) => setResearchField(e.target.value)}
-                  placeholder="Or type your own…"
-                  className="mt-3"
-                  aria-label="Research field"
-                />
-              </div>
-
-              <NavRow onBack={back} onNext={next} canSkip onSkip={next} />
-            </Panel>
-          )}
-
-          {/* ---- 4: Goal ---- */}
-          {step === 4 && (
-            <Panel key="goal">
-              <Heading
-                icon={Rocket}
-                title="What would you like to do first?"
-                subtitle="We'll point you in the right direction."
-              />
-              <CardGrid options={GOALS} value={primaryGoal} onSelect={setPrimaryGoal} columns={1} />
-              <NavRow onBack={back} onNext={next} canSkip onSkip={next} nextLabel="Almost done" />
-            </Panel>
-          )}
-
-          {/* ---- 5: Finish ---- */}
-          {step === 5 && (
-            <Panel key="finish">
-              <div className="flex flex-col items-center text-center">
-                <div className="mb-4 flex size-14 items-center justify-center rounded-full bg-[var(--n9-accent-light)]">
-                  <Check className="size-7 text-primary" aria-hidden />
-                </div>
-                <h2 className="text-xl font-semibold text-foreground">You&apos;re all set, {firstName}</h2>
-                <p className="mt-2 max-w-sm text-sm text-muted-foreground">
-                  Take the interactive tour and we&apos;ll walk you through the workspace — you can
-                  click around as we go. Or jump straight in; the{" "}
-                  <span className="font-medium text-foreground">?</span> button reopens the tour
-                  anytime.
-                </p>
-              </div>
-
-              <div className="mt-6 flex flex-col gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => finish(true)}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
-                >
-                  <Compass className="size-4" />
-                  Take the interactive tour
-                </button>
-                <button
-                  type="button"
-                  onClick={() => finish(false)}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-                >
-                  Explore on my own
-                </button>
-              </div>
-              <button
-                type="button"
-                onClick={back}
-                className="mx-auto mt-3 flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+              <form
+                className="mt-5 space-y-4 text-left"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  void submitProject()
+                }}
               >
-                <ArrowLeft className="size-3.5" />
-                Back
-              </button>
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-medium text-foreground">
+                    Project name
+                  </span>
+                  <Input
+                    autoFocus
+                    value={projectName}
+                    onChange={(e) => {
+                      setProjectName(e.target.value)
+                      if (error) setError(null)
+                    }}
+                    placeholder={projectPlaceholder(researchField)}
+                    aria-label="Project name"
+                    aria-invalid={Boolean(error)}
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-medium text-foreground">
+                    First experiment{" "}
+                    <span className="font-normal text-muted-foreground">— optional</span>
+                  </span>
+                  <Input
+                    value={experimentName}
+                    onChange={(e) => setExperimentName(e.target.value)}
+                    placeholder="e.g. Pilot run — conditions A vs B"
+                    aria-label="First experiment name"
+                  />
+                </label>
+
+                <AnimatePresence initial={false}>
+                  {error && (
+                    <motion.p
+                      initial={reduceMotion ? false : { opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={reduceMotion ? undefined : { opacity: 0 }}
+                      transition={{ duration: 0.18, ease: EASE }}
+                      role="alert"
+                      className="text-xs font-medium text-destructive"
+                    >
+                      {error}
+                    </motion.p>
+                  )}
+                </AnimatePresence>
+
+                <button
+                  type="submit"
+                  disabled={!projectName.trim() || submitting}
+                  className="n9-press inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {submitting ? (
+                    <>
+                      <Spinner className="size-4" />
+                      Creating…
+                    </>
+                  ) : (
+                    <>
+                      Create project and finish
+                      <ArrowRight className="size-4" />
+                    </>
+                  )}
+                </button>
+
+                <p className="text-center text-xs text-muted-foreground">
+                  We&apos;ve also added a sample project so you have something to explore — you can
+                  delete it any time.
+                </p>
+              </form>
             </Panel>
           )}
         </AnimatePresence>
@@ -337,13 +417,49 @@ export function WelcomeDialog({
 
 /* ------------------------------- subcomponents ------------------------------ */
 
-function Panel({ children }: { children: React.ReactNode }) {
+function ProgressHeader({ stepIndex, total }: { stepIndex: number; total: number }) {
+  // The seeding phase reports -1; hold the bar at the last completed question.
+  const filled = stepIndex < 0 ? total - 1 : stepIndex
+  return (
+    <div className="flex items-center gap-3 border-b border-border/60 bg-muted/30 px-6 py-3">
+      <img
+        src="/notes9-mascot-ui.png"
+        alt=""
+        aria-hidden
+        className="size-7 shrink-0 rounded-full object-contain"
+      />
+      <div className="flex flex-1 gap-1.5" role="progressbar" aria-valuemin={1} aria-valuemax={total} aria-valuenow={filled + 1}>
+        {Array.from({ length: total }).map((_, i) => (
+          <span key={i} className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-border">
+            <motion.span
+              className="absolute inset-y-0 left-0 rounded-full bg-primary"
+              initial={false}
+              animate={{ width: i <= filled ? "100%" : "0%" }}
+              transition={{ duration: 0.42, ease: EASE }}
+            />
+          </span>
+        ))}
+      </div>
+      <span className="shrink-0 text-xs font-medium tabular-nums text-muted-foreground">
+        {Math.min(filled + 1, total)} / {total}
+      </span>
+    </div>
+  )
+}
+
+function Panel({
+  children,
+  reduceMotion,
+}: {
+  children: React.ReactNode
+  reduceMotion: boolean | null
+}) {
   return (
     <motion.div
-      initial={{ opacity: 0, x: 28 }}
+      initial={reduceMotion ? false : { opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: -28 }}
-      transition={{ duration: 0.22, ease: "easeOut" }}
+      exit={reduceMotion ? undefined : { opacity: 0, x: -20 }}
+      transition={{ duration: 0.24, ease: EASE }}
       className="px-6 pb-6 pt-6"
     >
       {children}
@@ -356,55 +472,102 @@ function Heading({
   title,
   subtitle,
 }: {
-  icon: LucideIcon
+  icon?: PhosphorIcon
   title: string
   subtitle: string
 }) {
   return (
     <div className="text-center">
-      <div className="mx-auto mb-3 flex size-11 items-center justify-center rounded-full bg-[var(--n9-accent-light)]">
-        <Icon className="size-5 text-primary" aria-hidden />
-      </div>
-      <h2 className="text-lg font-semibold text-foreground">{title}</h2>
-      <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
+      {Icon && (
+        <div className="mx-auto mb-3 flex size-11 items-center justify-center rounded-full bg-[var(--n9-accent-light)]">
+          <Icon className="size-5 text-primary" aria-hidden />
+        </div>
+      )}
+      <h2 className="text-lg font-semibold tracking-tight text-foreground">{title}</h2>
+      <p className="mx-auto mt-1.5 max-w-sm text-sm leading-relaxed text-muted-foreground">
+        {subtitle}
+      </p>
     </div>
   )
 }
 
+function Chip({
+  label,
+  selected,
+  onClick,
+  reduceMotion,
+}: {
+  label: string
+  selected: boolean
+  onClick: () => void
+  reduceMotion: boolean | null
+}) {
+  return (
+    <motion.button
+      type="button"
+      onClick={onClick}
+      aria-pressed={selected}
+      whileHover={reduceMotion ? undefined : { y: -1 }}
+      whileTap={reduceMotion ? undefined : { scale: 0.97 }}
+      transition={{ duration: 0.16, ease: EASE }}
+      className={cn(
+        "rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors",
+        selected
+          ? "border-primary bg-primary text-primary-foreground"
+          : "border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground"
+      )}
+    >
+      {label}
+    </motion.button>
+  )
+}
+
+/**
+ * Renders single- and multi-select alike — the caller decides by whether its
+ * `onSelect` replaces the selection or toggles it. `selected` is always a list
+ * so the checked state stays one code path.
+ */
 function CardGrid({
   options,
-  value,
+  selected: selectedValues,
   onSelect,
   columns,
   withHint = false,
+  reduceMotion,
 }: {
   options: OptionCard[]
-  value: string
+  selected: string[]
   onSelect: (v: string) => void
   columns: 1 | 2
   withHint?: boolean
+  reduceMotion: boolean | null
 }) {
   return (
     <div className={cn("mt-5 grid gap-2.5", columns === 2 ? "grid-cols-2" : "grid-cols-1")}>
-      {options.map(({ value: v, label, icon: Icon, hint }) => {
-        const selected = value === v
+      {options.map(({ value: v, label, icon: Icon, hint }, i) => {
+        const selected = selectedValues.includes(v)
         return (
-          <button
+          <motion.button
             key={v}
             type="button"
             onClick={() => onSelect(v)}
             aria-pressed={selected}
+            initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.28, ease: EASE, delay: reduceMotion ? 0 : i * 0.04 }}
+            whileHover={reduceMotion ? undefined : { y: -2 }}
+            whileTap={reduceMotion ? undefined : { scale: 0.99 }}
             className={cn(
-              "group flex items-center gap-3 rounded-xl border p-3 text-left transition-all",
+              "group flex items-center gap-3 rounded-xl border p-3 text-left transition-colors",
               selected
                 ? "border-primary bg-[var(--n9-accent-light)] ring-1 ring-primary"
-                : "border-border bg-background hover:border-primary/40 hover:bg-muted/40",
+                : "border-border bg-background hover:border-primary/40 hover:bg-muted/40"
             )}
           >
             <span
               className={cn(
                 "flex size-9 shrink-0 items-center justify-center rounded-lg transition-colors",
-                selected ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
+                selected ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
               )}
             >
               <Icon className="size-4" aria-hidden />
@@ -416,38 +579,108 @@ function CardGrid({
               )}
             </span>
             {selected && <Check className="size-4 shrink-0 text-primary" aria-hidden />}
-          </button>
+          </motion.button>
         )
       })}
     </div>
   )
 }
 
+/**
+ * Shown while `completeWelcomeAction` persists answers and seeds starter
+ * content. The staggered ticks are honest about what is happening rather than a
+ * generic spinner — the work really is those four things.
+ */
+function SeedingPanel({
+  field,
+  reduceMotion,
+}: {
+  field: string
+  reduceMotion: boolean | null
+}) {
+  const steps = [
+    field.trim() ? `Matching content to ${field.trim().toLowerCase()}` : "Matching starter content",
+    "Creating a sample project",
+    "Adding protocols and lab notes",
+    "Saving reference papers",
+  ]
+
+  return (
+    <div className="py-2 text-center">
+      <div className="relative mx-auto mb-5 w-fit">
+        <div className="absolute inset-0 -z-10 rounded-full bg-[var(--n9-accent-glow,rgba(150,80,52,0.18))] blur-2xl" />
+        <img
+          src="/notes9-mascot-ui.png"
+          alt=""
+          aria-hidden
+          className="tour-mascot-animate size-20 rounded-full object-contain"
+        />
+      </div>
+      <h2 className="text-lg font-semibold tracking-tight text-foreground">Setting up your lab</h2>
+      <p className="mt-1.5 text-sm text-muted-foreground">This takes a couple of seconds.</p>
+
+      <ul className="mx-auto mt-6 max-w-xs space-y-2.5 text-left">
+        {steps.map((label, i) => (
+          <motion.li
+            key={label}
+            initial={reduceMotion ? false : { opacity: 0, x: -8 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.3, ease: EASE, delay: reduceMotion ? 0 : 0.15 + i * 0.28 }}
+            className="flex items-center gap-2.5 text-sm text-muted-foreground"
+          >
+            <motion.span
+              initial={reduceMotion ? false : { scale: 0.4, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{
+                type: "spring",
+                stiffness: 320,
+                damping: 30,
+                mass: 0.8,
+                delay: reduceMotion ? 0 : 0.15 + i * 0.28,
+              }}
+              className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[var(--n9-accent-light)]"
+            >
+              <Check className="size-3 text-primary" aria-hidden />
+            </motion.span>
+            {label}
+          </motion.li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+/**
+ * Back / Skip / Continue row. There is intentionally no `onSkip` on the project
+ * phase — that step is required, so it renders its own submit button instead.
+ */
 function NavRow({
   onBack,
   onNext,
-  canSkip = false,
+  nextDisabled = false,
   onSkip,
-  nextLabel = "Continue",
 }: {
-  onBack: () => void
-  onNext: () => void
-  canSkip?: boolean
+  onBack?: () => void
+  onNext?: () => void
+  nextDisabled?: boolean
   onSkip?: () => void
-  nextLabel?: string
 }) {
   return (
     <div className="mt-6 flex items-center justify-between gap-3">
-      <button
-        type="button"
-        onClick={onBack}
-        className="inline-flex items-center gap-1 rounded-lg px-2.5 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" />
-        Back
-      </button>
+      {onBack ? (
+        <button
+          type="button"
+          onClick={onBack}
+          className="inline-flex items-center gap-1 rounded-lg px-2.5 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft className="size-4" />
+          Back
+        </button>
+      ) : (
+        <span />
+      )}
       <div className="flex items-center gap-2">
-        {canSkip && onSkip && (
+        {onSkip && (
           <button
             type="button"
             onClick={onSkip}
@@ -456,39 +689,18 @@ function NavRow({
             Skip
           </button>
         )}
-        <button
-          type="button"
-          onClick={onNext}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
-        >
-          {nextLabel}
-          <ArrowRight className="size-4" />
-        </button>
+        {onNext && (
+          <button
+            type="button"
+            onClick={onNext}
+            disabled={nextDisabled}
+            className="n9-press inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Continue
+            <ArrowRight className="size-4" />
+          </button>
+        )}
       </div>
     </div>
-  )
-}
-
-function PrimaryButton({
-  onClick,
-  label,
-  full = false,
-}: {
-  onClick: () => void
-  label: string
-  full?: boolean
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "mt-6 inline-flex items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90",
-        full && "w-full",
-      )}
-    >
-      {label}
-      <ArrowRight className="size-4" />
-    </button>
   )
 }

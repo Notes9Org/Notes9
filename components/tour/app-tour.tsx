@@ -68,19 +68,11 @@ export function AppTour() {
     void getSupabase().from("profiles").update(updates).eq("id", user.id)
   }
 
-  const persistWelcome = (result: WelcomeResult) => {
-    if (!user) return
-    localStorage.setItem(welcomeSeenKey(user.id), "true")
-    const updates: Record<string, string> = {
-      notes9_welcome_seen_at: new Date().toISOString(),
-    }
-    if (result.jobTitle) updates.job_title = result.jobTitle
-    if (result.sector) updates.sector = result.sector
-    if (result.organizationName) updates.organization_name = result.organizationName
-    if (result.researchField) updates.research_field = result.researchField
-    if (result.primaryGoal) updates.primary_goal = result.primaryGoal
-    void getSupabase().from("profiles").update(updates).eq("id", user.id)
-  }
+  // NB: the welcome answers are persisted server-side by `completeWelcomeAction`
+  // inside WelcomeDialog, not here. They have to be written before starter
+  // content is seeded (the demo pack is chosen from the research field), and a
+  // fire-and-forget client update could not guarantee that ordering. All this
+  // component still owns is the fast localStorage gate.
 
   // The welcome wizard must not appear until the user has accepted the current
   // terms — a brand-new signup sees the terms gate FIRST, then the tour. This is
@@ -188,14 +180,18 @@ export function AppTour() {
   }, [mounted, router])
 
   // ---- handlers ----------------------------------------------------------
-  const handleWelcomeComplete = (result: WelcomeResult) => {
-    persistWelcome(result)
-    if (result.startTour) {
-      setMode("onboarding")
-    } else {
-      finalizeTour("skipped")
-      setMode("idle")
-    }
+  /**
+   * The wizard no longer chains straight into the 12-step product tour. A new
+   * user has just answered questions and created a project; dropping them into
+   * another 12 steps is where onboarding used to lose people. The tour is now
+   * offered from the Getting Started checklist instead, so it stays available
+   * indefinitely rather than being a one-shot they miss.
+   */
+  const handleWelcomeComplete = (_result: WelcomeResult) => {
+    if (user) localStorage.setItem(welcomeSeenKey(user.id), "true")
+    setMode("idle")
+    // Pick up the project and starter content the wizard just created.
+    router.refresh()
   }
 
   if (!mounted) return null

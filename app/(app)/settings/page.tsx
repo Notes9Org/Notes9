@@ -22,6 +22,7 @@ import { SignOut as LogOut, Sun, Moon, Monitor, CircleNotch as Loader2 } from "@
 import { ChangePasswordDialog } from "@/components/change-password-dialog"
 import { UsagePanel } from "@/components/settings/usage-panel"
 import { PermissionsPanel } from "@/components/settings/permissions-panel"
+import { RestoreChecklistButton } from "@/components/onboarding/restore-checklist-button"
 import { PageHeading } from "@/components/ui/page-heading"
 import { useToast } from "@/hooks/use-toast"
 import { USER_STORAGE_BUCKET, createProfileAvatarStoragePath } from "@/lib/user-storage-bucket"
@@ -561,6 +562,13 @@ export default function SettingsPage(): ReactNode {
                     </Button>
                   </div>
                 ) : null}
+              </SettingsRow>
+
+              <SettingsRow
+                title="Getting started"
+                description="Bring the getting-started checklist back to your dashboard"
+              >
+                <RestoreChecklistButton />
               </SettingsRow>
 
               <SettingsRow
