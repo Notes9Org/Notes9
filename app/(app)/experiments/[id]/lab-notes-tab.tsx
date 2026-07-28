@@ -28,6 +28,7 @@ import type { Editor } from "@tiptap/react"
 import { NoteExportMenu, NotePrintButton } from "@/components/note-export-menu"
 import { useToast } from "@/hooks/use-toast"
 import { useAutoSave } from "@/hooks/use-auto-save"
+import { SampleConsumptionSidebar } from "./sample-consumption-sidebar"
 import { SaveStatusIndicator } from "@/components/ui/save-status"
 import {
   Plus,
@@ -42,6 +43,7 @@ import {
   List,
   Pencil,
   X,
+  FlaskConical,
 } from "lucide-react"
 import {
   Table,
@@ -170,6 +172,10 @@ export function LabNotesTab({
   const [noteEditorReady, setNoteEditorReady] = useState(false);
   const [inlineHighlightTarget, setInlineHighlightTarget] =
     useState<HighlightTarget | null>(null);
+
+  // Samples and Panel State
+  const [samples, setSamples] = useState<any[]>([]);
+  const [samplePanelOpen, setSamplePanelOpen] = useState(false);
 
   // Highlight from AI reference navigation — retries until content is loaded
   const highlightParam = searchParams.get(HIGHLIGHT_PARAM);
@@ -428,6 +434,21 @@ export function LabNotesTab({
     }
   }, [experimentId, isCreating, selectedNote?.id, toast]);
 
+  const fetchSamples = useCallback(async () => {
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("samples")
+        .select("id, sample_code, sample_type, quantity, quantity_unit, status")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setSamples(data || []);
+    } catch (error: any) {
+      console.error("Error fetching samples:", error);
+    }
+  }, []);
+
   // Fetch current user ID
   useEffect(() => {
     const fetchCurrentUser = async () => {
@@ -442,7 +463,8 @@ export function LabNotesTab({
 
   useEffect(() => {
     fetchNotes(noteIdFromQuery);
-  }, [experimentId, noteIdFromQuery, fetchNotes]);
+    fetchSamples();
+  }, [experimentId, noteIdFromQuery, fetchNotes, fetchSamples]);
 
   // Sync header breadcrumb: project › experiment › current note name
   useEffect(() => {
@@ -1083,6 +1105,19 @@ export function LabNotesTab({
       </Button>
       {!isCreating && selectedNote ? (
         <>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className={cn(
+              "m-0 shrink-0",
+              samplePanelOpen ? "text-primary hover:text-primary/80" : "text-muted-foreground hover:text-foreground"
+            )}
+            onClick={() => setSamplePanelOpen((open) => !open)}
+            aria-label="Toggle sample tracking"
+            title="Toggle sample tracking"
+          >
+            <FlaskConical className="h-4 w-4" />
+          </Button>
           <NotePrintButton
             getHtmlContent={() => formData.content || ""}
             title={resolvedExportTitle}
@@ -1511,6 +1546,19 @@ export function LabNotesTab({
                     </Button>
                     {!isCreating && selectedNote && (
                       <>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className={cn(
+                            "m-0",
+                            samplePanelOpen ? "text-primary hover:text-primary/80" : "text-muted-foreground hover:text-foreground"
+                          )}
+                          onClick={() => setSamplePanelOpen((open) => !open)}
+                          aria-label="Toggle sample tracking"
+                          title="Toggle sample tracking"
+                        >
+                          <FlaskConical className="h-4 w-4" />
+                        </Button>
                         <NotePrintButton
                           getHtmlContent={() => formData.content || ""}
                           title={resolvedExportTitle}
@@ -1554,33 +1602,44 @@ export function LabNotesTab({
                 ) : (
                   <>
                     {/* Same editor + approval column layout as protocol design mode */}
-                    <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
-                      <TiptapEditor
-                        content={formData.content}
-                        onChange={handleEditorContentChange}
-                        placeholder="Write your lab notes here... Use @ to tag protocols"
-                        title={resolvedExportTitle}
-                        minHeight="100%"
-                        fillParentHeight
-                        fullscreenWorkspaceRef={labNotesFullscreenShellRef}
-                        onEditorFullscreenChange={setNoteEditorFullscreen}
-                        leadingToolbarSlot={labNoteFullscreenToolbarLeading}
-                        trailingToolbarSlot={labNoteFullscreenToolbarTrailing}
-                        showAITools={true}
-                        showAiWritingDropdown={false}
-                        protocols={editorProtocols}
-                        hideExportControls
-                        exportIncludeCommentsInPdf
-                        enableMath
-                        className="min-h-0 flex-1"
-                        onOpenScientificCalculator={openScientificCalculator}
-                        onEditorReady={handleEditorReady}
-                      />
-                      <ScientificCalculatorSheet
-                        open={scientificCalculatorOpen}
-                        onOpenChange={setScientificCalculatorOpen}
-                        getEditor={() => noteEditorRef.current}
-                      />
+                    <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden flex flex-col lg:flex-row gap-4">
+                      <div className="flex-1 min-w-0 h-full relative">
+                        <TiptapEditor
+                          content={formData.content}
+                          onChange={handleEditorContentChange}
+                          placeholder="Write your lab notes here... Use @ to tag protocols, $ to tag samples"
+                          title={resolvedExportTitle}
+                          minHeight="100%"
+                          fillParentHeight
+                          fullscreenWorkspaceRef={labNotesFullscreenShellRef}
+                          onEditorFullscreenChange={setNoteEditorFullscreen}
+                          leadingToolbarSlot={labNoteFullscreenToolbarLeading}
+                          trailingToolbarSlot={labNoteFullscreenToolbarTrailing}
+                          showAITools={true}
+                          showAiWritingDropdown={false}
+                          protocols={editorProtocols}
+                          samples={samples}
+                          hideExportControls
+                          exportIncludeCommentsInPdf
+                          enableMath
+                          className="min-h-0 flex-1"
+                          onOpenScientificCalculator={openScientificCalculator}
+                          onEditorReady={handleEditorReady}
+                        />
+                        <ScientificCalculatorSheet
+                          open={scientificCalculatorOpen}
+                          onOpenChange={setScientificCalculatorOpen}
+                          getEditor={() => noteEditorRef.current}
+                        />
+                      </div>
+                      {samplePanelOpen && selectedNote && (
+                        <SampleConsumptionSidebar
+                          noteId={selectedNote.id}
+                          noteTitle={formData.title || selectedNote.title || "Lab note"}
+                          samples={samples}
+                          onQuantityUpdated={fetchSamples}
+                        />
+                      )}
                     </div>
                     {(selectedNote || isCreating) && !!formData.title.trim() && (
                       <LabNoteChangeApprovalBar

@@ -27,6 +27,7 @@ import Mention from "@tiptap/extension-mention"
 import { createProtocolSuggestion, ProtocolItem, ProtocolMention } from "./extensions/protocol-mention"
 import { createLabNoteSuggestion, LabNoteItem, LabNoteMention } from "./extensions/labnote-mention"
 import { createLiteratureSuggestion, LiteratureItem, LiteratureMention } from "./extensions/literature-mention"
+import { createSampleSuggestion, SampleItem, SampleMention } from "./extensions/sample-mention"
 
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -201,6 +202,7 @@ interface TiptapEditorProps {
   protocols?: ProtocolItem[]
   labNotes?: LabNoteItem[]
   literatureItems?: LiteratureItem[]
+  samples?: SampleItem[]
   /** Enable KaTeX math equation support (inline & block) */
   enableMath?: boolean
   /** Enable academic paper mode (auto-numbered sections, figures, tables) */
@@ -1385,6 +1387,7 @@ export function TiptapEditor({
   protocols = [],
   labNotes = [],
   literatureItems = [],
+  samples = [],
   enableMath = false,
   paperMode = false,
   panelEmbed = false,
@@ -1683,6 +1686,7 @@ export function TiptapEditor({
   const protocolsRef = useRef<ProtocolItem[]>(protocols)
   const labNotesRef = useRef<LabNoteItem[]>(labNotes)
   const literatureRef = useRef<LiteratureItem[]>(literatureItems)
+  const samplesRef = useRef<SampleItem[]>(samples)
 
   // Keep the refs in sync with props
   useEffect(() => {
@@ -1696,6 +1700,10 @@ export function TiptapEditor({
   useEffect(() => {
     literatureRef.current = literatureItems
   }, [literatureItems])
+
+  useEffect(() => {
+    samplesRef.current = samples
+  }, [samples])
 
 
 
@@ -1802,6 +1810,15 @@ export function TiptapEditor({
         suggestion: createLabNoteSuggestion(labNotesRef),
         renderLabel({ node }: { node: any }) {
           return `#${node.attrs.label ?? node.attrs.id}`
+        },
+      }),
+      SampleMention.configure({
+        HTMLAttributes: {
+          class: "mention-sample",
+        },
+        suggestion: createSampleSuggestion(samplesRef),
+        renderLabel({ node }: { node: any }) {
+          return `$${node.attrs.label ?? node.attrs.id}`
         },
       }),
       // LiteratureMention is available but omitted here to avoid conflicting with

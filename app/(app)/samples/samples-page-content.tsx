@@ -200,11 +200,34 @@ export function SamplesPageContent({ samples, statusCount }: SamplesPageContentP
               Table
             </Button>
           </div>
+          <Button asChild size="sm" variant="outline" className="gap-1.5 h-8 text-xs sm:flex hidden">
+            <Link href="/samples/new/bulk">
+              <Package className="h-3.5 w-3.5" />
+              Bulk Generate
+            </Link>
+          </Button>
+          <Button asChild size="sm" className="gap-1.5 h-8 text-xs sm:flex hidden">
+            <Link href="/samples/new">
+              <Plus className="h-3.5 w-3.5" />
+              Add Sample
+            </Link>
+          </Button>
           <Button
             asChild
             size="icon"
             variant="ghost"
-            className="size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            className="size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors sm:hidden flex"
+            aria-label="Bulk generate samples"
+          >
+            <Link href="/samples/new/bulk">
+              <Package className="size-4" />
+            </Link>
+          </Button>
+          <Button
+            asChild
+            size="icon"
+            variant="ghost"
+            className="size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors sm:hidden flex"
             aria-label="New sample"
           >
             <Link href="/samples/new">
@@ -308,17 +331,42 @@ export function SamplesEmptyState() {
         <p className="text-muted-foreground">
           Track and manage laboratory samples
         </p>
-        <Button
-          asChild
-          size="icon"
-          variant="ghost"
-          className="size-8 shrink-0 rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          aria-label="New sample"
-        >
-          <Link href="/samples/new">
-            <Plus className="size-4" />
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button asChild size="sm" variant="outline" className="gap-1.5 h-8 text-xs sm:flex hidden">
+            <Link href="/samples/new/bulk">
+              <Package className="h-3.5 w-3.5" />
+              Bulk Generate
+            </Link>
+          </Button>
+          <Button asChild size="sm" className="gap-1.5 h-8 text-xs sm:flex hidden">
+            <Link href="/samples/new">
+              <Plus className="h-3.5 w-3.5" />
+              Add Sample
+            </Link>
+          </Button>
+          <Button
+            asChild
+            size="icon"
+            variant="ghost"
+            className="size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors sm:hidden flex"
+            aria-label="Bulk generate"
+          >
+            <Link href="/samples/new/bulk">
+              <Package className="size-4" />
+            </Link>
+          </Button>
+          <Button
+            asChild
+            size="icon"
+            variant="ghost"
+            className="size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors sm:hidden flex"
+            aria-label="New sample"
+          >
+            <Link href="/samples/new">
+              <Plus className="size-4" />
+            </Link>
+          </Button>
+        </div>
       </div>
       <Card>
         <CardContent className="flex flex-col items-stretch px-6 py-10 sm:px-10">
@@ -365,12 +413,20 @@ export function SamplesEmptyState() {
             </div>
           </div>
 
-          <Button asChild className="mx-auto w-full sm:w-auto">
-            <Link href="/samples/new">
-              <Plus className="mr-2 h-4 w-4" />
-              Create first sample
-            </Link>
-          </Button>
+          <div className="mx-auto flex flex-col sm:flex-row items-center gap-3 w-full justify-center">
+            <Button asChild variant="outline" className="w-full sm:w-auto">
+              <Link href="/samples/new/bulk">
+                <Package className="mr-2 h-4 w-4" />
+                Bulk Generate Samples
+              </Link>
+            </Button>
+            <Button asChild className="w-full sm:w-auto">
+              <Link href="/samples/new">
+                <Plus className="mr-2 h-4 w-4" />
+                Create first sample
+              </Link>
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </>
