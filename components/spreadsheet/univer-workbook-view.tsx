@@ -21,41 +21,23 @@ import {
  */
 const UNIVER_COMMAND_TYPE_MUTATION = 2
 
-/** Dark-mode color palette for Univer: grays are inverted, white/black swapped. */
-function buildDarkUniverTheme(base: Record<string, unknown>): Record<string, unknown> {
-  return {
-    ...base,
-    white: "#1C1D22",   // cell / panel background
-    black: "#E4E6EF",   // primary text
-    gray: {
-      50:  "#2A2B30",
-      100: "#323440",
-      200: "#3C3F4D",
-      300: "#8B92A5",
-      400: "#9198AD",
-      500: "#A4AAB8",
-      600: "#C4C8D4",
-      700: "#D4D7E2",
-      800: "#E0E2EC",
-      900: "#EBEDF5",
-    },
-  }
-}
-
-/** React hook: true when the `dark` class is present on <html>. */
-function useIsDark(): boolean {
-  const [isDark, setIsDark] = useState(
-    () => typeof document !== "undefined" && document.documentElement.classList.contains("dark")
-  )
-  useEffect(() => {
-    const check = () => setIsDark(document.documentElement.classList.contains("dark"))
-    check()
-    const observer = new MutationObserver(check)
-    observer.observe(document.documentElement, { attributeFilter: ["class"] })
-    return () => observer.disconnect()
-  }, [])
-  return isDark
-}
+/**
+ * The spreadsheet grid stays light in both themes — deliberately.
+ *
+ * Univer was previously given an inverted palette in dark mode (cells at
+ * #1C1D22, text at #E4E6EF). In practice that was close to unreadable: the
+ * grid lines, the cell fills and the surrounding app chrome all collapsed into
+ * the same near-black, and any cell styling authored against a light background
+ * (which is what users actually author, and what imported .xlsx files carry)
+ * lost its contrast entirely.
+ *
+ * A light canvas inside a dark shell is the norm for document surfaces — the
+ * page in a word processor, the artboard in a design tool — and for a lab
+ * notebook it carries the right metaphor besides. It also fixes a latent bug:
+ * `isDark` was excluded from the mount effect's deps to avoid destroying
+ * unsaved edits on every theme toggle, so the grid's theme silently lagged the
+ * rest of the UI until the next remount anyway.
+ */
 
 function canonicalEncodedFromProp(enc: string, fileName?: string): string | null {
   try {
@@ -130,7 +112,6 @@ export function UniverWorkbookView({
   instanceKey = 0,
   onSelectionChange,
 }: UniverWorkbookViewProps) {
-  const isDark = useIsDark()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const boundaryRef = useRef<HTMLDivElement | null>(null)
   const [fallbackHtml, setFallbackHtml] = useState<string | null>(null)
@@ -239,7 +220,6 @@ export function UniverWorkbookView({
 
         mountHost = document.createElement("div")
         mountHost.className = "h-full w-full"
-        if (isDark) mountHost.setAttribute("data-univer-dark", "true")
         const host = containerRef.current
         if (!host) return
         host.replaceChildren(mountHost)
@@ -259,7 +239,8 @@ export function UniverWorkbookView({
           ribbonType: "classic",
         }
 
-        const theme = isDark ? buildDarkUniverTheme(defaultTheme as Record<string, unknown>) : defaultTheme
+        // Always the light palette — see the note at the top of this file.
+        const theme = defaultTheme
 
         // The `workspace` variant (data-analysis workbench + full-screen data
         // editor) gets the Excel-grade feature suite — sort, filter, find &
@@ -513,9 +494,6 @@ export function UniverWorkbookView({
       }
       disposed = true
     }
-    // `isDark` intentionally excluded — including it caused a full Univer
-    // destroy+recreate on every theme toggle, wiping unsaved in-memory edits.
-    // Dark-mode appearance updates apply on the next legitimate remount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instanceKey, variant, compact, readOnly, fileName, dataRevision, canAttemptMount])
 
