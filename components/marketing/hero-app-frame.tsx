@@ -17,6 +17,13 @@ import {
   TestTube,
   FileText,
   Quotes,
+  CaretLeft,
+  CaretDown,
+  Printer,
+  DownloadSimple,
+  ArrowClockwise,
+  ArrowCounterClockwise,
+  WarningCircle,
   Flag,
   Question,
   Moon,
@@ -445,70 +452,105 @@ export function HeroChartPanel({ className }: { className?: string }) {
 /* ── Lab note panel ─────────────────────────────────────────────────────── */
 
 /**
- * The lab-note editor, rendered as the word-processor surface it is: a ribbon
- * of formatting controls above a white page with real margins, rather than a
- * generic "text card". The page metaphor is the point — notes are written to be
- * printed, signed and filed, and the editor looks like it.
+ * The lab-note editor, replicated from the real screen rather than approximated.
  *
- * Decorative like the rest of the frame.
+ * The parts that make it recognisably Notes9 and not a generic text card are the
+ * ones people actually look at: the Home / Insert / Layout ribbon with its
+ * Calibri control and Citations menu, the horizontal ruler with terracotta
+ * margin stops, the white page floating on a warm gutter with its "Enter
+ * header…" slot, and — most distinctively — the pending-changes bar along the
+ * bottom carrying Review diff, History, Discard and Accept & Save. That draft →
+ * commit bar is unique to this product, so it does more identifying work than
+ * the document body does.
+ *
+ * Decorative: aria-hidden, pointer events off.
  */
 export function HeroNotePanel({ className }: { className?: string }) {
   return (
     <div
       aria-hidden
       className={cn(
-        "pointer-events-none select-none overflow-hidden rounded-xl border border-border/60 bg-card/90 shadow-[0_28px_70px_-32px_rgba(44,36,24,0.4)] backdrop-blur-sm",
+        "pointer-events-none select-none overflow-hidden rounded-xl border border-border/60 bg-card/95 shadow-[0_32px_80px_-34px_rgba(44,36,24,0.45)] backdrop-blur-sm",
         className
       )}
     >
-      {/* Ribbon tabs */}
-      <div className="flex items-center gap-3 border-b border-border/50 px-3 pt-2">
-        {["Home", "Insert", "Layout"].map((t, i) => (
-          <span
-            key={t}
-            className={cn(
-              "pb-1.5 text-[11.5px]",
-              i === 0
-                ? "border-b-2 border-[var(--n9-accent)] font-medium text-foreground"
-                : "text-muted-foreground"
-            )}
-          >
-            {t}
-          </span>
-        ))}
+      {/* Note title bar */}
+      <div className="flex items-center gap-2 border-b border-border/50 px-3.5 py-2.5">
+        <CaretLeft className="size-3.5 text-muted-foreground" />
+        <span className="flex-1 truncate text-[13.5px] font-medium">
+          Drug Discovery Initiative
+        </span>
+        <Plus className="size-3.5 text-muted-foreground/70" />
+        <Printer className="size-3.5 text-muted-foreground/70" />
+        <DownloadSimple className="size-3.5 text-muted-foreground/70" />
       </div>
 
-      {/* Formatting row */}
-      <div className="flex items-center gap-2 border-b border-border/50 px-3 py-1.5">
-        <span className="rounded border border-border/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">
-          Calibri
+      {/* Ribbon */}
+      <div className="flex items-center gap-1.5 border-b border-border/50 px-2.5 py-1.5">
+        <span className="rounded-md bg-background px-2 py-1 text-[10.5px] font-medium shadow-sm">
+          Home
         </span>
-        <span className="text-[11.5px] font-bold text-foreground">B</span>
-        <span className="text-[11.5px] italic text-muted-foreground">I</span>
-        <span className="text-[11.5px] text-muted-foreground underline">U</span>
-        <span className="ml-auto flex items-center gap-1 rounded border border-border/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">
-          <Quotes className="size-2.5" />
+        <span className="px-1.5 text-[10.5px] text-muted-foreground">Insert</span>
+        <span className="px-1.5 text-[10.5px] text-muted-foreground">Layout</span>
+        <span className="mx-1 h-3.5 w-px bg-border" />
+        <ArrowCounterClockwise className="size-3 text-muted-foreground/70" />
+        <ArrowClockwise className="size-3 text-muted-foreground/70" />
+        <span className="ml-1 flex items-center gap-1 text-[10.5px] text-muted-foreground">
+          Calibri
+          <CaretDown className="size-2.5" />
+        </span>
+        <span className="ml-1 text-[11px] font-bold">B</span>
+        <span className="text-[11px] italic text-muted-foreground">I</span>
+        <span className="text-[11px] text-muted-foreground underline">U</span>
+        <span className="ml-auto flex items-center gap-1 text-[10.5px] text-muted-foreground">
+          <Quotes className="size-2.5" weight="fill" />
           Citations
         </span>
       </div>
 
-      {/* The page */}
-      <div className="bg-muted/25 px-4 py-3">
-        <div className="rounded-sm bg-white px-6 py-5 shadow-sm dark:bg-[#f7f4ef]">
-          <p className="text-[13px] font-semibold leading-snug text-[#1b1b1b]">
-            Condition B (3:1 PEI:DNA) gave the highest transient yield
+      {/* Ruler with margin stops */}
+      <div className="relative flex h-4 items-center gap-6 border-b border-border/40 bg-muted/25 px-8">
+        <span className="absolute left-[18%] top-1/2 size-1.5 -translate-y-1/2 rounded-[1px] bg-[var(--n9-accent)]" />
+        <span className="absolute right-[16%] top-1/2 size-1.5 -translate-y-1/2 rounded-[1px] bg-[var(--n9-accent)]" />
+        {[1, 2, 3, 4, 5, 6].map((n) => (
+          <span key={n} className="font-mono text-[7px] text-muted-foreground/60">
+            {n}
+          </span>
+        ))}
+      </div>
+
+      {/* Page on its gutter */}
+      <div className="bg-muted/30 px-5 pb-2 pt-3">
+        <div className="rounded-[2px] bg-white px-6 pb-4 pt-3.5 shadow-[0_1px_6px_rgba(44,36,24,0.14)]">
+          <p className="text-[9px] text-[#b8b2a8]">Enter header…</p>
+          <p className="mt-3 text-center text-[13px] font-bold leading-snug text-[#141414]">
+            Latest Updates on Malaria Transmission Blocking Vaccines Pfs230
           </p>
-          <p className="mt-2.5 text-[10.5px] leading-[1.7] text-[#3a3a3a]">
-            Across the ratio screen, condition B produced the highest transient yield in
-            HEK293T. Higher ratios (4:1) increased cytotoxicity with no yield gain,
-            matching the ratio reported in the saved literature.
+          <p className="mt-3 text-[9.5px] text-[#1a56b8] underline">https://www.notes9.com</p>
+          <p className="mt-3 text-[11px] font-semibold text-[#141414]">
+            1. Recent Scientific Literature:
           </p>
-          <p className="mt-2 text-[10.5px] leading-[1.7] text-[#3a3a3a]">
-            Carrying 3:1 forward to the purification run. Flagged for the protocol
-            revision.
-            <span className="ml-0.5 inline-block h-[1.05em] w-px translate-y-[0.15em] bg-[var(--n9-accent)]" />
+          <p className="mt-1.5 text-[9.5px] leading-[1.75] text-[#2f2f2f]">
+            – A comprehensive review titled &ldquo;Transmission-blocking malaria vaccines:
+            past, present, and future&rdquo; was published in March 2023 in Cell Host
+            Microbe, discussing the current state and future prospects of
+            transmission-blocking vaccines, including Pfs23
           </p>
         </div>
+      </div>
+
+      {/* Draft → commit bar. The most distinctive strip on the screen. */}
+      <div className="flex items-center gap-2 border-t border-border/50 px-3.5 py-2">
+        <WarningCircle className="size-3 text-[#b98541]" />
+        <span className="text-[10px] text-muted-foreground">Pending changes</span>
+        <span className="ml-auto flex items-center gap-2.5 text-[10px] text-muted-foreground">
+          <span className="hidden xl:inline">Review diff</span>
+          <span className="hidden xl:inline">History</span>
+          <span>Discard</span>
+        </span>
+        <span className="rounded-md bg-[var(--n9-accent)] px-2.5 py-1 text-[10px] font-semibold text-white">
+          Accept &amp; Save
+        </span>
       </div>
     </div>
   )

@@ -40,14 +40,7 @@ export function HeroLiterature() {
         {/* Rendered, not screenshotted — see HeroAppFrame for why. */}
         <HeroAppFrame className="absolute inset-0 hidden h-full w-full sm:block" />
 
-        {/* The data workspace's chart, sitting over the literature page as a
-            second open surface — the two halves of the argument (what you read
-            and what you measured) visible at once. */}
-        <HeroChartPanel className="absolute right-[3%] top-[14%] hidden w-[23rem] lg:block xl:w-[26rem]" />
 
-        {/* The lab note, written as a page. Read on the left, measured top
-            right, written bottom left — the three surfaces of a working day. */}
-        <HeroNotePanel className="absolute bottom-[6%] left-[2%] hidden w-[21rem] lg:block xl:w-[23rem]" />
 
         {/* Legibility is handled locally rather than globally. A light overall
             veil keeps the capture from competing outright, and a much stronger
@@ -62,6 +55,12 @@ export function HeroLiterature() {
         <div className="n9-organic n9-organic-mask opacity-35 [animation:none]" />
         <div className="n9-grain-overlay" />
         <div className="n9-vignette" />
+
+        {/* Chart and note sit ABOVE the wash, not under it. Underneath, the same
+            veil that makes the headline legible was also draining these two —
+            and they are the surfaces meant to be read. */}
+        <HeroChartPanel className="absolute right-[2.5%] top-[11%] hidden w-[24rem] lg:block xl:w-[27rem]" />
+        <HeroNotePanel className="absolute -bottom-10 left-[2.5%] hidden w-[24rem] lg:block xl:w-[27rem]" />
       </div>
 
       {/* ── The one live control ─────────────────────────────────────────── */}
