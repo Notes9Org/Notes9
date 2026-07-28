@@ -35,6 +35,24 @@ const CAPTURE_THEME = (process.env.CAPTURE_THEME || "light").toLowerCase()
 const DEVICE_SCALE_FACTOR = Number(process.env.CAPTURE_SCALE || "2")
 const VIEWPORT = { width: 1920, height: 1080, deviceScaleFactor: DEVICE_SCALE_FACTOR }
 
+/**
+ * Optional comma-separated filter, matched as a substring against the output
+ * filename — e.g. CAPTURE_ONLY=data-analysis,research-map.
+ *
+ * Without this the script re-captures every route, which both takes minutes and
+ * overwrites screenshots whose underlying demo data may have moved on. Being
+ * able to refresh one image is the common case.
+ */
+const CAPTURE_ONLY = (process.env.CAPTURE_ONLY || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean)
+
+function shouldCapture(output: string): boolean {
+  if (CAPTURE_ONLY.length === 0) return true
+  return CAPTURE_ONLY.some((frag) => output.includes(frag))
+}
+
 async function applyCaptureTheme(page: Page) {
   if (CAPTURE_THEME !== "dark") return
   await page.evaluateOnNewDocument(() => {
@@ -123,6 +141,8 @@ async function capture(
   output: string,
   waitFor = "main, [role='main'], .container, body"
 ) {
+  if (!shouldCapture(output)) return
+
   const fullUrl = route.startsWith("http") ? route : `${BASE_URL}${route}`
   await page.goto(fullUrl, { waitUntil: "networkidle2", timeout: 30000 })
   await page.setViewport(VIEWPORT)
@@ -139,6 +159,12 @@ async function capture(
   // Specific delays for content to settle
   if (route === "/research-map") {
     console.log("Waiting 8s for research map to fully render...")
+    await new Promise((r) => setTimeout(r, 8000))
+  } else if (route.startsWith("/data-analysis")) {
+    // The Univer spreadsheet and the Plotly chart both mount asynchronously and
+    // then lay out again once the container is measured. Screenshotting early
+    // catches an empty canvas.
+    console.log("Waiting 8s for spreadsheet + chart to render...")
     await new Promise((r) => setTimeout(r, 8000))
   } else {
     await new Promise((r) => setTimeout(r, 800))
@@ -463,15 +489,18 @@ async function main() {
     }
 
     // Static routes
+    await capture(page, "/data-analysis", "data-analysis.png")
     await capture(page, "/projects", "projects.png")
     await capture(page, "/literature-reviews", "literature-list.png")
     await capture(page, "/lab-notes", "lab-memory.png")
 
-    await captureLiteratureSearchResults(page)
+    if (shouldCapture("literature-search.png")) await captureLiteratureSearchResults(page)
 
     // Experiment details
     let expPath: string | null = null
-    if (process.env.CAPTURE_EXPERIMENT_ID) {
+    if (!shouldCapture("experiment-details.png") && !shouldCapture("new-lab-note.png")) {
+      // skipped by CAPTURE_ONLY
+    } else if (process.env.CAPTURE_EXPERIMENT_ID) {
       expPath = `/experiments/${process.env.CAPTURE_EXPERIMENT_ID}`
       await capture(page, expPath, "experiment-details.png")
     } else {
@@ -485,7 +514,7 @@ async function main() {
 
     // Existing lab note view (from experiment details)
     if (expPath) {
-      await captureExistingLabNoteFromExperiment(page, expPath)
+      if (shouldCapture("new-lab-note.png")) await captureExistingLabNoteFromExperiment(page, expPath)
     }
 
     // Dashboard
@@ -502,7 +531,9 @@ async function main() {
 
     // Project report
     const projectId = process.env.CAPTURE_PROJECT_ID
-    if (projectId) {
+    if (!shouldCapture("project-report.png")) {
+      // skipped by CAPTURE_ONLY
+    } else if (projectId) {
       await capture(page, `/projects/${projectId}`, "project-report.png")
     } else {
       const projPath = await getFirstDetailLink(page, "/projects", "/projects")
@@ -514,8 +545,8 @@ async function main() {
     }
 
     // Interactive custom pages
-    await captureProtocolDetails(page)
-    await captureResearchMapLiterature(page)
+    if (shouldCapture("protocol-details.png")) await captureProtocolDetails(page)
+    if (shouldCapture("research-map-literature.png")) await captureResearchMapLiterature(page)
     await captureWritingEditor(page)
 
     console.log("Screenshot capture complete.")

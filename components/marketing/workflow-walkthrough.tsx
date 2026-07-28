@@ -51,8 +51,8 @@ const STEPS: WorkflowStepSpec[] = [
     title: "Get from raw numbers to a figure",
     description:
       "Drop in a spreadsheet and build the figure: t-tests and ANOVA with post-hoc correction, dose–response curves, plate maps — exported at publication DPI.",
-    screenshot: "project-report",
-    alt: "A Notes9 report showing generated charts alongside written analysis",
+    screenshot: "data-analysis",
+    alt: "The Notes9 data workspace: a spreadsheet of ELISA readings beside a fitted standard curve",
   },
   {
     label: "Publish",

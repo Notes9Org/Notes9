@@ -316,8 +316,8 @@ const CHAIN = [
     n: "04",
     title: "Analysis",
     body: "Drop in a spreadsheet and build the figure — t-tests and ANOVA with post-hoc correction, dose–response curves, plate maps — exported at publication DPI.",
-    shot: "project-report",
-    alt: "A Notes9 report with generated charts alongside written analysis",
+    shot: "data-analysis",
+    alt: "The Notes9 data workspace: a spreadsheet of ELISA readings beside a fitted standard curve",
   },
   {
     n: "05",
@@ -431,11 +431,16 @@ export function CatalystBand() {
       <div className="container mx-auto px-4 py-20 sm:px-6 sm:py-28 lg:px-8">
         <div className="grid gap-14 lg:grid-cols-[minmax(0,1fr)_minmax(0,30rem)] lg:items-center">
           <div>
-            <p className="n9-label !text-[#f5f0e8]/60">Meet Catalyst</p>
-            <h2 className="mt-6 max-w-xl font-serif text-[clamp(2rem,4.6vw,3.4rem)] leading-[1.06] tracking-[-0.02em]">
+            {/* Colours are set explicitly on every element in this band rather
+                than inherited from the section. A global heading rule pins
+                headings to `--foreground`, which is the light-theme charcoal —
+                on this near-black background that rendered the headline all but
+                invisible. */}
+            <p className="n9-label !text-[#f5f0e8]/70">Meet Catalyst</p>
+            <h2 className="mt-6 max-w-xl font-serif text-[clamp(2rem,4.6vw,3.4rem)] leading-[1.06] tracking-[-0.02em] !text-[#f5f0e8]">
               Not a search box. An assistant that has read your lab.
             </h2>
-            <p className="mt-6 max-w-md text-[16px] leading-7 text-[#f5f0e8]/65">
+            <p className="mt-6 max-w-md text-[16px] leading-7 text-[#f5f0e8]/75">
               Catalyst answers from your projects, notes and saved papers — and cites the
               record behind every claim, so you can open the source instead of trusting the
               summary.
