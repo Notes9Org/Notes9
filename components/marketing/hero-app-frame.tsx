@@ -16,6 +16,7 @@ import {
   Sparkle as Sparkles,
   TestTube,
   FileText,
+  Quotes,
   Flag,
   Question,
   Moon,
@@ -284,5 +285,231 @@ function PaperResult() {
         </div>
       </div>
     </>
+  )
+}
+
+/* ── Chart panel ────────────────────────────────────────────────────────── */
+
+/** The seeded ELISA standard curve — the same points the demo workbook holds. */
+const CURVE = [
+  { x: 0, y: 0.05 },
+  { x: 15.6, y: 0.28 },
+  { x: 31.25, y: 0.51 },
+  { x: 62.5, y: 0.92 },
+  { x: 125, y: 1.45 },
+  { x: 250, y: 1.98 },
+  { x: 500, y: 2.42 },
+  { x: 1000, y: 2.85 },
+]
+
+const PW = 520
+const PH = 300
+const PAD = { l: 52, r: 20, t: 34, b: 52 }
+
+/**
+ * The data workspace's chart card, rendered rather than captured.
+ *
+ * Plotly itself is far too heavy to pull onto a landing page — it is a
+ * multi-megabyte dependency that exists for the real /data-analysis workspace,
+ * not for a backdrop. Eight points, two axes and a legend are a path and some
+ * text, so this reproduces the panel's chrome and the plot's look (including
+ * Plotly's default blue) at no bundle cost.
+ *
+ * Decorative like the rest of the frame: aria-hidden, pointer events off.
+ */
+export function HeroChartPanel({ className }: { className?: string }) {
+  const sx = (x: number) => PAD.l + (x / 1000) * (PW - PAD.l - PAD.r)
+  const sy = (y: number) => PH - PAD.b - (y / 3) * (PH - PAD.t - PAD.b)
+
+  const pts = CURVE.map((d) => ({ ...d, cx: sx(d.x), cy: sy(d.y) }))
+  let path = `M ${pts[0].cx} ${pts[0].cy}`
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] ?? pts[i]
+    const p1 = pts[i]
+    const p2 = pts[i + 1]
+    const p3 = pts[i + 2] ?? p2
+    path += ` C ${p1.cx + (p2.cx - p0.cx) / 6} ${p1.cy + (p2.cy - p0.cy) / 6}, ${
+      p2.cx - (p3.cx - p1.cx) / 6
+    } ${p2.cy - (p3.cy - p1.cy) / 6}, ${p2.cx} ${p2.cy}`
+  }
+
+  return (
+    <div
+      aria-hidden
+      className={cn(
+        "pointer-events-none select-none rounded-xl border border-border/60 bg-card/85 shadow-[0_28px_70px_-32px_rgba(44,36,24,0.4)] backdrop-blur-sm",
+        className
+      )}
+    >
+      <div className="flex items-center justify-between border-b border-border/50 px-4 py-2.5">
+        <span className="flex items-center gap-2 text-[13.5px] font-medium">
+          <ChartLine className="size-4 text-muted-foreground" />
+          Drug Discovery Initiative
+        </span>
+        <span className="flex items-center gap-1.5 rounded-md border border-border/70 px-2.5 py-1 text-[11.5px] text-muted-foreground">
+          <UploadSimple className="size-3 rotate-180" />
+          Export
+        </span>
+      </div>
+
+      <div className="px-3 pb-3 pt-2">
+        <svg viewBox={`0 0 ${PW} ${PH}`} className="w-full">
+          <text
+            x={PW / 2}
+            y={18}
+            textAnchor="middle"
+            className="fill-foreground text-[15px]"
+          >
+            ELISA standard curve
+          </text>
+
+          {[0, 0.5, 1, 1.5, 2, 2.5, 3].map((v) => (
+            <g key={v}>
+              <line
+                x1={PAD.l}
+                x2={PW - PAD.r}
+                y1={sy(v)}
+                y2={sy(v)}
+                className="stroke-border"
+                strokeWidth={1}
+              />
+              <text
+                x={PAD.l - 8}
+                y={sy(v) + 3.5}
+                textAnchor="end"
+                className="fill-muted-foreground text-[10px]"
+              >
+                {v}
+              </text>
+            </g>
+          ))}
+
+          {[0, 200, 400, 600, 800, 1000].map((v) => (
+            <text
+              key={v}
+              x={sx(v)}
+              y={PH - PAD.b + 18}
+              textAnchor="middle"
+              className="fill-muted-foreground text-[10px]"
+            >
+              {v}
+            </text>
+          ))}
+
+          <text
+            x={(PW + PAD.l) / 2}
+            y={PH - 16}
+            textAnchor="middle"
+            className="fill-muted-foreground text-[11px]"
+          >
+            Concentration (pg/mL)
+          </text>
+          <text
+            x={16}
+            y={PH / 2}
+            textAnchor="middle"
+            transform={`rotate(-90 16 ${PH / 2})`}
+            className="fill-muted-foreground text-[11px]"
+          >
+            OD450
+          </text>
+
+          {/* Plotly's default trace blue, so the plot reads as the real one. */}
+          <path d={path} fill="none" stroke="#1f77b4" strokeWidth={2} strokeLinecap="round" />
+          {pts.map((p) => (
+            <circle key={p.x} cx={p.cx} cy={p.cy} r={3.2} fill="#1f77b4" />
+          ))}
+
+          <line
+            x1={PAD.l + 10}
+            x2={PAD.l + 34}
+            y1={PH - 34}
+            y2={PH - 34}
+            stroke="#1f77b4"
+            strokeWidth={2}
+          />
+          <circle cx={PAD.l + 22} cy={PH - 34} r={3.2} fill="#1f77b4" />
+          <text
+            x={PAD.l + 42}
+            y={PH - 30}
+            className="fill-muted-foreground text-[10px]"
+          >
+            OD450
+          </text>
+        </svg>
+      </div>
+    </div>
+  )
+}
+
+/* ── Lab note panel ─────────────────────────────────────────────────────── */
+
+/**
+ * The lab-note editor, rendered as the word-processor surface it is: a ribbon
+ * of formatting controls above a white page with real margins, rather than a
+ * generic "text card". The page metaphor is the point — notes are written to be
+ * printed, signed and filed, and the editor looks like it.
+ *
+ * Decorative like the rest of the frame.
+ */
+export function HeroNotePanel({ className }: { className?: string }) {
+  return (
+    <div
+      aria-hidden
+      className={cn(
+        "pointer-events-none select-none overflow-hidden rounded-xl border border-border/60 bg-card/90 shadow-[0_28px_70px_-32px_rgba(44,36,24,0.4)] backdrop-blur-sm",
+        className
+      )}
+    >
+      {/* Ribbon tabs */}
+      <div className="flex items-center gap-3 border-b border-border/50 px-3 pt-2">
+        {["Home", "Insert", "Layout"].map((t, i) => (
+          <span
+            key={t}
+            className={cn(
+              "pb-1.5 text-[11.5px]",
+              i === 0
+                ? "border-b-2 border-[var(--n9-accent)] font-medium text-foreground"
+                : "text-muted-foreground"
+            )}
+          >
+            {t}
+          </span>
+        ))}
+      </div>
+
+      {/* Formatting row */}
+      <div className="flex items-center gap-2 border-b border-border/50 px-3 py-1.5">
+        <span className="rounded border border-border/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+          Calibri
+        </span>
+        <span className="text-[11.5px] font-bold text-foreground">B</span>
+        <span className="text-[11.5px] italic text-muted-foreground">I</span>
+        <span className="text-[11.5px] text-muted-foreground underline">U</span>
+        <span className="ml-auto flex items-center gap-1 rounded border border-border/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+          <Quotes className="size-2.5" />
+          Citations
+        </span>
+      </div>
+
+      {/* The page */}
+      <div className="bg-muted/25 px-4 py-3">
+        <div className="rounded-sm bg-white px-6 py-5 shadow-sm dark:bg-[#f7f4ef]">
+          <p className="text-[13px] font-semibold leading-snug text-[#1b1b1b]">
+            Condition B (3:1 PEI:DNA) gave the highest transient yield
+          </p>
+          <p className="mt-2.5 text-[10.5px] leading-[1.7] text-[#3a3a3a]">
+            Across the ratio screen, condition B produced the highest transient yield in
+            HEK293T. Higher ratios (4:1) increased cytotoxicity with no yield gain,
+            matching the ratio reported in the saved literature.
+          </p>
+          <p className="mt-2 text-[10.5px] leading-[1.7] text-[#3a3a3a]">
+            Carrying 3:1 forward to the purification run. Flagged for the protocol
+            revision.
+            <span className="ml-0.5 inline-block h-[1.05em] w-px translate-y-[0.15em] bg-[var(--n9-accent)]" />
+          </p>
+        </div>
+      </div>
+    </div>
   )
 }

@@ -1,6 +1,10 @@
 "use client"
 
-import { HeroAppFrame } from "@/components/marketing/hero-app-frame"
+import {
+  HeroAppFrame,
+  HeroChartPanel,
+  HeroNotePanel,
+} from "@/components/marketing/hero-app-frame"
 import { HeroSearch } from "@/components/marketing/hero-search"
 
 /**
@@ -35,6 +39,15 @@ export function HeroLiterature() {
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
         {/* Rendered, not screenshotted — see HeroAppFrame for why. */}
         <HeroAppFrame className="absolute inset-0 hidden h-full w-full sm:block" />
+
+        {/* The data workspace's chart, sitting over the literature page as a
+            second open surface — the two halves of the argument (what you read
+            and what you measured) visible at once. */}
+        <HeroChartPanel className="absolute right-[3%] top-[14%] hidden w-[23rem] lg:block xl:w-[26rem]" />
+
+        {/* The lab note, written as a page. Read on the left, measured top
+            right, written bottom left — the three surfaces of a working day. */}
+        <HeroNotePanel className="absolute bottom-[6%] left-[2%] hidden w-[21rem] lg:block xl:w-[23rem]" />
 
         {/* Legibility is handled locally rather than globally. A light overall
             veil keeps the capture from competing outright, and a much stronger
