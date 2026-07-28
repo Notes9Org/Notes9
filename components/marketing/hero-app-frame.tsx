@@ -793,3 +793,115 @@ export function HeroCatalystPanel({ className }: { className?: string }) {
     </div>
   )
 }
+
+/* ── References panel ───────────────────────────────────────────────────── */
+
+/** Real papers, as the demo query returns them. */
+const REFERENCES = [
+  {
+    n: "1",
+    oa: true,
+    source: "British Journal of Cancer · 2016",
+    cites: "66 citations",
+    title: "Targeting cell death signalling in cancer: minimising ‘Collateral damage’",
+    authors: "Joanna L. Fox, Marion MacFarlane",
+  },
+  {
+    n: "2",
+    oa: true,
+    source: "Toxicologic Pathology · 2007",
+    cites: "8,900 citations",
+    title: "Apoptosis: a review of programmed cell death",
+    authors: "Susan Elmore",
+  },
+  {
+    n: "3",
+    oa: false,
+    source: "Cell · 2011",
+    cites: "60,000+ citations",
+    title: "Hallmarks of cancer: the next generation",
+    authors: "Douglas Hanahan, Robert A. Weinberg",
+  },
+]
+
+/**
+ * What a literature search returns: the AI overview, then the papers behind it.
+ *
+ * This is the artefact that belongs next to a search box. The Catalyst panel
+ * showed the assistant drafting a protocol, which is a fine capability but
+ * answers a question nobody asked at that point in the page. A visitor looking
+ * at a research-question input wants to know what comes back from typing in it —
+ * so it returns cited papers, with the journal, the year, the citation count
+ * and the open-access status they would actually judge a result by.
+ *
+ * Decorative: aria-hidden, pointer events off.
+ */
+export function HeroReferencesPanel({ className }: { className?: string }) {
+  return (
+    <div
+      aria-hidden
+      className={cn(
+        "pointer-events-none select-none overflow-hidden rounded-xl border border-border/60 bg-card/95 shadow-[0_30px_80px_-38px_rgba(44,36,24,0.34)] backdrop-blur-sm",
+        className
+      )}
+    >
+      <div className="flex items-center gap-2 border-b border-border/50 px-4 py-2.5">
+        <MagnifyingGlass className="size-4 text-muted-foreground" />
+        <span className="flex-1 truncate text-[13px] text-muted-foreground">
+          cancer apoptotic protein review
+        </span>
+        <span className="shrink-0 font-mono text-[10.5px] text-muted-foreground">10 papers</span>
+      </div>
+
+      <div className="space-y-2.5 px-4 py-3.5">
+        {/* Overview, with the citation markers that tie it to the list below */}
+        <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
+          <p className="flex items-center gap-1.5 font-mono text-[9.5px] uppercase tracking-[0.16em] text-[var(--n9-accent)]">
+            <Sparkles className="size-3" weight="fill" />
+            AI overview
+          </p>
+          <p className="mt-2 text-[11.5px] leading-[1.75] text-foreground/80">
+            Apoptosis is a fundamental programmed cell death mechanism whose dysregulation is
+            a hallmark of cancer, driving tumour development, progression and resistance to
+            therapy<Cite n="1" />
+            <Cite n="2" />.
+          </p>
+        </div>
+
+        <p className="pt-0.5 font-mono text-[9.5px] uppercase tracking-[0.16em] text-muted-foreground">
+          Directly relevant
+        </p>
+
+        {REFERENCES.map((r) => (
+          <div key={r.n} className="rounded-lg border border-border/60 p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="flex size-4 shrink-0 items-center justify-center rounded border border-border/70 font-mono text-[8.5px] text-muted-foreground">
+                {r.n}
+              </span>
+              {r.oa && (
+                <span className="rounded bg-[color-mix(in_oklab,#6c8a68_20%,transparent)] px-1.5 py-0.5 text-[9px] font-medium text-[#3f5a3c]">
+                  Open access
+                </span>
+              )}
+              <span className="text-[9.5px] text-muted-foreground">{r.source}</span>
+              <span className="text-[9.5px] text-muted-foreground">{r.cites}</span>
+            </div>
+            <p className="mt-1.5 text-[12.5px] font-semibold leading-snug text-[var(--n9-accent)]">
+              {r.title}
+            </p>
+            <p className="mt-1 text-[10.5px] text-muted-foreground">{r.authors}</p>
+            <div className="mt-2 flex items-center gap-2">
+              <span className="inline-flex items-center gap-1 rounded bg-[var(--n9-accent-light)] px-2 py-0.5 text-[9px] font-medium text-[var(--n9-accent)]">
+                <Sparkles className="size-2.5" weight="fill" />
+                AI summary
+              </span>
+              <span className="rounded border border-border/70 px-2 py-0.5 text-[9px] text-muted-foreground">
+                Abstract
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}

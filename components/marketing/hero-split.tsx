@@ -9,7 +9,7 @@ import {
 } from "@phosphor-icons/react/ssr"
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react"
 import { HeroSearch } from "@/components/marketing/hero-search"
-import { HeroCatalystPanel } from "@/components/marketing/hero-app-frame"
+import { HeroReferencesPanel } from "@/components/marketing/hero-app-frame"
 
 /**
  * Split hero: the argument on the left, the answer on the right.
@@ -51,24 +51,25 @@ export function HeroSplit() {
       </div>
 
       {/* The artefact is not in a panel and not in a column. It is a single
-          object lying across the section — oversized, overlapping the copy's
-          measure, and cropped by the right edge. Nothing frames it, so there is
-          no second surface for the eye to read as "the other half". */}
+          object lying across the section, pushed well past the right edge so
+          only its left portion is in frame — a window, not a slide. Nothing
+          frames it, so there is no second surface for the eye to read as "the
+          other half". */}
       <div
         aria-hidden
-        className="pointer-events-none absolute right-[-10%] top-1/2 hidden w-[54rem] -translate-y-1/2 lg:block xl:right-[-6%] xl:w-[60rem]"
+        className="pointer-events-none absolute right-[-16%] top-1/2 hidden w-[44rem] -translate-y-1/2 lg:block xl:right-[-11%] xl:w-[48rem]"
       >
         <div className="absolute -inset-10 -z-10 rounded-[48px] bg-[var(--n9-accent)]/[0.07] blur-3xl" />
-        <HeroCatalystPanel className="w-full" />
+        <HeroReferencesPanel className="w-full" />
       </div>
 
       <div className="container relative mx-auto flex min-h-[92svh] items-center px-4 py-20 sm:px-6 lg:px-8">
-        <div className="w-full max-w-lg">
+        <div className="w-full max-w-2xl">
           <p className="n9-label n9-rise" style={{ ["--n9-rise-delay" as string]: "60ms" }}>
             The connected research workspace
           </p>
 
-          <h1 className="mt-7 font-serif tracking-[-0.035em] text-[clamp(2.5rem,4.4vw,4rem)] leading-[1.0]">
+          <h1 className="mt-7 font-serif tracking-[-0.035em] text-[clamp(2.6rem,4.8vw,4.4rem)] leading-[1.0]">
             <span
               className="n9-rise block text-foreground"
               style={{ ["--n9-rise-delay" as string]: "150ms" }}
@@ -84,7 +85,7 @@ export function HeroSplit() {
           </h1>
 
           <p
-            className="n9-rise mt-6 max-w-sm text-[16px] leading-[1.75] text-foreground/70"
+            className="n9-rise mt-6 max-w-lg text-[17px] leading-[1.75] text-foreground/70"
             style={{ ["--n9-rise-delay" as string]: "360ms" }}
           >
             Every paper, protocol, result and note stays linked — so the assistant you ask
