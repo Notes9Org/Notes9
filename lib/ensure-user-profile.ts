@@ -5,7 +5,7 @@ import { after } from "next/server"
 import type { User } from "@supabase/supabase-js"
 import { createClient } from "@/lib/supabase/server"
 import { createServiceRoleClient } from "@/lib/supabase-service-role"
-import { seedDemoProject } from "@/lib/seed-demo-project"
+import { seedStarterContentOnce } from "@/lib/onboarding/seed-starter-content"
 
 type EnsureResult =
   | { ok: true; profile: { id: string; organization_id: string; first_name: string | null; last_name: string | null } }
@@ -16,36 +16,30 @@ type EnsureResult =
 const seededThisInstance = new Set<string>()
 
 /**
- * Seed the demo project for a new user exactly once, AFTER the response is sent
- * (so it never delays the first page — e.g. the auto-run literature search).
- * Reads the `demo_seeded_at` guard with the service-role client and tolerates
- * the column being absent (returns quietly), so this is safe to ship before the
- * scripts/099 migration is applied. Idempotent across concurrent requests: the
- * seed's project insert has a UNIQUE (org, name) constraint.
+ * Safety net for starter content, run AFTER the response is sent (so it never
+ * delays the first page — e.g. the auto-run literature search).
+ *
+ * The common path is `seedStarterContentAction`, fired the moment the welcome
+ * wizard completes, because the demo pack is chosen from the research field the
+ * wizard collects. This path exists for users who never finish the wizard:
+ * `seedStarterContentOnce` returns "waiting-for-answers" while the wizard is
+ * still in flight and only falls back to the generic pack after a grace period.
  */
 function scheduleDemoSeed(userId: string, organizationId: string): void {
   if (seededThisInstance.has(userId)) return
   try {
     after(async () => {
       try {
-        const admin = createServiceRoleClient()
-        const prof = await admin
-          .from("profiles")
-          .select("demo_seeded_at")
-          .eq("id", userId)
-          .maybeSingle()
-        // Column missing / read error → skip silently (migration not applied yet).
-        if (prof.error) return
-        if (prof.data?.demo_seeded_at) {
+        const outcome = await seedStarterContentOnce(
+          createServiceRoleClient(),
+          userId,
+          organizationId
+        )
+        // Only stop re-checking once the question is settled — a user still
+        // inside the wizard must be re-evaluated on their next page load.
+        if (outcome === "seeded" || outcome === "already-seeded") {
           seededThisInstance.add(userId)
-          return
         }
-        await seedDemoProject(admin, userId, organizationId)
-        await admin
-          .from("profiles")
-          .update({ demo_seeded_at: new Date().toISOString() })
-          .eq("id", userId)
-        seededThisInstance.add(userId)
       } catch (err) {
         console.error("[ensureUserProfile] demo seed skipped:", err)
       }
