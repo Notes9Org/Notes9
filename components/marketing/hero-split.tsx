@@ -9,7 +9,7 @@ import {
 } from "@phosphor-icons/react/ssr"
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react"
 import { HeroSearch } from "@/components/marketing/hero-search"
-import { HeroReferencesPanel } from "@/components/marketing/hero-app-frame"
+import { HeroGroundedAnswerPanel } from "@/components/marketing/hero-app-frame"
 
 /**
  * Split hero: the argument on the left, the answer on the right.
@@ -57,7 +57,7 @@ export function HeroSplit() {
           other half". */}
       <div
         aria-hidden
-        className="pointer-events-none absolute right-[-14%] top-1/2 hidden w-[46rem] -translate-y-1/2 [perspective:2400px] lg:block xl:right-[-9%] xl:w-[50rem]"
+        className="pointer-events-none absolute right-[-11%] top-1/2 hidden w-[40rem] -translate-y-1/2 [perspective:2400px] lg:block xl:right-[-7%] xl:w-[43rem]"
       >
         <div className="absolute -inset-12 -z-10 rounded-[56px] bg-[var(--n9-accent)]/[0.08] blur-3xl" />
         {/* Turned away from the reader rather than lying flat. A panel square to
@@ -66,7 +66,7 @@ export function HeroSplit() {
             without dominating. The z-rotation is deliberately tiny — enough to
             break the grid, not enough to look askew. */}
         <div className="origin-left [transform:rotateY(-15deg)_rotateX(4deg)_rotate(-1deg)] [transform-style:preserve-3d]">
-          <HeroReferencesPanel className="w-full shadow-[0_60px_120px_-45px_rgba(44,36,24,0.5)]" />
+          <HeroGroundedAnswerPanel className="w-full shadow-[0_60px_120px_-45px_rgba(44,36,24,0.5)]" />
         </div>
       </div>
 

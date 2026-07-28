@@ -36,6 +36,7 @@ import {
   UploadSimple,
 } from "@phosphor-icons/react/ssr"
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react"
+import { FlareIcon } from "@/components/ui/flare-icon"
 import { cn } from "@/lib/utils"
 
 /**
@@ -83,7 +84,7 @@ const NAV: { icon: PhosphorIcon; label: string; active?: boolean; child?: boolea
   { icon: TestTube, label: "Samples" },
   { icon: PencilSimpleLine, label: "Writing" },
   { icon: FileText, label: "Reports" },
-  { icon: Sparkles, label: "Catalyst" },
+  { icon: FlareIcon as unknown as PhosphorIcon, label: "Catalyst" },
   { icon: Graph, label: "Research map" },
 ]
 
@@ -156,7 +157,7 @@ function Main() {
           <Question className="size-4 text-muted-foreground/70" />
           <Moon className="size-4 text-muted-foreground/70" />
           <span className="flex size-7 items-center justify-center rounded-md border border-[var(--n9-accent)]/40 bg-[var(--n9-accent-light)]">
-            <Sparkles className="size-4 text-[var(--n9-accent)]" weight="fill" />
+            <FlareIcon className="size-4 text-[var(--n9-accent)]" weight="fill" />
           </span>
         </div>
       </div>
@@ -245,7 +246,7 @@ function AiOverview() {
           Show more
         </span>
         <span className="inline-flex items-center gap-1 rounded-md bg-[var(--n9-accent)] px-2.5 py-1 text-[11.5px] font-medium text-white">
-          <Sparkles className="size-3" weight="fill" />
+          <FlareIcon className="size-3" weight="fill" />
           Dive deeper with Catalyst
         </span>
       </div>
@@ -726,7 +727,7 @@ export function HeroCatalystPanel({ className }: { className?: string }) {
       )}
     >
       <div className="flex items-center gap-2 border-b border-border/50 px-3.5 py-2.5">
-        <Sparkles className="size-3.5 text-[var(--n9-accent)]" weight="fill" />
+        <FlareIcon className="size-3.5 text-[var(--n9-accent)]" weight="fill" />
         <span className="flex-1 text-[12.5px] font-medium">Catalyst</span>
         <span className="rounded-md bg-[color-mix(in_oklab,#6c8a68_18%,transparent)] px-2 py-0.5 text-[9.5px] font-medium text-[#3f5a3c]">
           New chat
@@ -737,7 +738,7 @@ export function HeroCatalystPanel({ className }: { className?: string }) {
         {/* Reasoning */}
         <div className="rounded-lg border border-border/60 bg-muted/25 px-2.5 py-2">
           <p className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
-            <Sparkles className="size-2.5" />
+            <FlareIcon className="size-2.5" />
             Reasoning…
             <CaretDown className="ml-auto size-2.5" />
           </p>
@@ -901,6 +902,110 @@ export function HeroReferencesPanel({ className }: { className?: string }) {
             </div>
           </div>
         ))}
+      </div>
+    </div>
+  )
+}
+
+/* ── Grounded answer panel ──────────────────────────────────────────────── */
+
+const WORKSPACE_SOURCES = [
+  { icon: NotePencil, kind: "Lab note", title: "Condition B (3:1) gave the highest transient yield", meta: "12 Mar" },
+  { icon: FlaskConical, kind: "Experiment", title: "Transfection screen — PEI:DNA ratios", meta: "8 conditions" },
+  { icon: ClipboardText, kind: "Protocol", title: "Transient transfection (HEK293T, PEI)", meta: "v1.2" },
+  { icon: ChartLine, kind: "Data", title: "Ratio screen — yield by condition", meta: "4PL · R² 0.9993" },
+]
+
+/**
+ * A grounded answer, with its sources split by where they came from.
+ *
+ * The split is the entire point. A panel of published papers demonstrates
+ * literature search, which plenty of tools do; what it does not show is the
+ * claim the headline actually makes — that the assistant answers from the lab's
+ * own work. So the sources are grouped: the user's own note, experiment,
+ * protocol and dataset first, then the paper that corroborates them.
+ *
+ * Reading order matters here too. Workspace records come before the citation
+ * because that is the argument's order — it answered from your records, and the
+ * literature agrees.
+ *
+ * Decorative: aria-hidden, pointer events off.
+ */
+export function HeroGroundedAnswerPanel({ className }: { className?: string }) {
+  return (
+    <div
+      aria-hidden
+      className={cn(
+        "pointer-events-none select-none overflow-hidden rounded-xl border border-border/60 bg-card/95 backdrop-blur-sm",
+        className
+      )}
+    >
+      <div className="flex items-center gap-2 border-b border-border/50 px-4 py-2.5">
+        <FlareIcon className="size-4 text-[var(--n9-accent)]" weight="fill" />
+        <span className="flex-1 truncate text-[13px] font-medium">Catalyst</span>
+        <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+          5 sources
+        </span>
+      </div>
+
+      <div className="px-4 py-3.5">
+        <p className="text-[12.5px] text-muted-foreground">
+          Why did we move to the 3:1 PEI:DNA ratio?
+        </p>
+
+        <p className="mt-2.5 text-[12.5px] leading-[1.8] text-foreground/85">
+          Condition B (3:1) gave the highest transient yield in the ratio screen
+          <Cite n="1" />. Higher ratios raised cytotoxicity without improving yield
+          <Cite n="2" />, matching the ratio reported in the saved literature
+          <Cite n="5" />.
+        </p>
+
+        {/* The lab's own records, first. */}
+        <p className="mt-4 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.16em] text-[var(--n9-accent)]">
+          <span className="size-1.5 rounded-[1px] bg-[var(--n9-accent)]" />
+          From your workspace
+        </p>
+        <div className="mt-2 space-y-1.5">
+          {WORKSPACE_SOURCES.map((s, i) => (
+            <div
+              key={s.title}
+              className="flex items-center gap-2.5 rounded-lg border border-border/60 px-2.5 py-1.5"
+            >
+              <span className="flex size-4 shrink-0 items-center justify-center rounded border border-border/70 font-mono text-[8px] text-muted-foreground">
+                {i + 1}
+              </span>
+              <s.icon className="size-3.5 shrink-0 text-[var(--n9-accent)]" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[11px] font-medium text-foreground/85">
+                  {s.title}
+                </span>
+                <span className="block truncate text-[9px] text-muted-foreground">
+                  {s.kind} · {s.meta}
+                </span>
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {/* Then the published work that corroborates them. */}
+        <p className="mt-4 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.16em] text-muted-foreground">
+          <span className="size-1.5 rounded-[1px] bg-muted-foreground/50" />
+          From the literature
+        </p>
+        <div className="mt-2 flex items-center gap-2.5 rounded-lg border border-border/60 px-2.5 py-1.5">
+          <span className="flex size-4 shrink-0 items-center justify-center rounded border border-border/70 font-mono text-[8px] text-muted-foreground">
+            5
+          </span>
+          <Books className="size-3.5 shrink-0 text-muted-foreground" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[11px] font-medium text-foreground/85">
+              High-density transfection of HEK293 cells
+            </span>
+            <span className="block truncate text-[9px] text-muted-foreground">
+              Backliwal et al. · Biotechnol Bioeng, 2008
+            </span>
+          </span>
+        </div>
       </div>
     </div>
   )

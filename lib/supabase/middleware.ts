@@ -70,7 +70,7 @@ export async function updateSession(request: NextRequest) {
   // Define public routes that don't require authentication
   // Exact-match list — a new marketing route must be added here or a logged-out
   // visitor is redirected to /auth/login.
-  const publicRoutes = ["/", "/about", "/pricing", "/docs", "/platform", "/how-it-works", "/preview", "/preview/hero-options", "/resources", "/terms", "/privacy", "/survey", "/auth/invite"]
+  const publicRoutes = ["/", "/about", "/pricing", "/docs", "/platform", "/how-it-works", "/resources", "/terms", "/privacy", "/survey", "/auth/invite"]
   const isPublicRoute = publicRoutes.some(route => request.nextUrl.pathname === route)
   const isAuthRoute = request.nextUrl.pathname.startsWith("/auth")
 
