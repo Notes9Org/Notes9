@@ -57,10 +57,17 @@ export function HeroSplit() {
           other half". */}
       <div
         aria-hidden
-        className="pointer-events-none absolute right-[-16%] top-1/2 hidden w-[44rem] -translate-y-1/2 lg:block xl:right-[-11%] xl:w-[48rem]"
+        className="pointer-events-none absolute right-[-14%] top-1/2 hidden w-[46rem] -translate-y-1/2 [perspective:2400px] lg:block xl:right-[-9%] xl:w-[50rem]"
       >
-        <div className="absolute -inset-10 -z-10 rounded-[48px] bg-[var(--n9-accent)]/[0.07] blur-3xl" />
-        <HeroReferencesPanel className="w-full" />
+        <div className="absolute -inset-12 -z-10 rounded-[56px] bg-[var(--n9-accent)]/[0.08] blur-3xl" />
+        {/* Turned away from the reader rather than lying flat. A panel square to
+            the viewport reads as a slide; the same panel on a slight axis reads
+            as an object in the room, and the foreshortening lets it be larger
+            without dominating. The z-rotation is deliberately tiny — enough to
+            break the grid, not enough to look askew. */}
+        <div className="origin-left [transform:rotateY(-15deg)_rotateX(4deg)_rotate(-1deg)] [transform-style:preserve-3d]">
+          <HeroReferencesPanel className="w-full shadow-[0_60px_120px_-45px_rgba(44,36,24,0.5)]" />
+        </div>
       </div>
 
       <div className="container relative mx-auto flex min-h-[92svh] items-center px-4 py-20 sm:px-6 lg:px-8">
