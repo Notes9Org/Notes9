@@ -329,10 +329,88 @@
   mask-image: radial-gradient(62% 55% at 50% 38%, #000 0%, transparent 78%);
 }
 
+/* ──────────────────────────────────────────────────────────────────────────
+   Editorial layer
+   ─────────────────────────────────────────────────────────────────────────
+   A second, quieter visual register for the homepage: organic depth-of-field
+   colour fields, monospace section labels, and hairline rules. The existing
+   aurora/dot-grid language stays for the product pages; this one is for
+   moments that should read as a research institute rather than a SaaS app.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* Organic colour field — layered wide radial gradients under a heavy blur, so
+   the edges are genuinely out of focus rather than a flat vector shape. Warm
+   terracotta and sage, the two ends of the brand palette. Purely decorative;
+   always render behind content with aria-hidden. */
+.marketing-theme .n9-organic {
+  position: absolute;
+  inset: -18%;
+  filter: blur(72px) saturate(122%);
+  opacity: 0.9;
+  background:
+    radial-gradient(38% 52% at 22% 30%, color-mix(in oklab, var(--n9-accent) 46%, transparent), transparent 68%),
+    radial-gradient(34% 44% at 76% 24%, color-mix(in oklab, #c9a227 34%, transparent), transparent 66%),
+    radial-gradient(46% 58% at 62% 74%, color-mix(in oklab, #7f8f74 40%, transparent), transparent 70%),
+    radial-gradient(30% 40% at 34% 82%, color-mix(in oklab, var(--n9-accent) 30%, transparent), transparent 64%);
+  will-change: transform;
+  animation: n9-organic-drift 34s ease-in-out infinite;
+}
+.dark .marketing-theme .n9-organic { opacity: 0.62; filter: blur(84px) saturate(108%); }
+
+@keyframes n9-organic-drift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1.02) rotate(0deg); }
+  50%      { transform: translate3d(-2.5%, 2%, 0) scale(1.1) rotate(4deg); }
+}
+
+/* Softens the field into the page so it never reads as a pasted-on rectangle. */
+.marketing-theme .n9-organic-mask {
+  -webkit-mask-image: radial-gradient(78% 74% at 50% 44%, #000 22%, transparent 82%);
+  mask-image: radial-gradient(78% 74% at 50% 44%, #000 22%, transparent 82%);
+}
+
+/* Monospace section label with a small accent tick — the "▪ PLATFORM OVERVIEW"
+   device. Uppercase and widely tracked so it reads as an index marker, not a
+   badge. */
+.marketing-theme .n9-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+.marketing-theme .n9-label::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
+  background: var(--n9-accent);
+}
+
+/* Hairline rule used to separate editorial blocks. Lighter than --border so it
+   reads as typographic structure rather than a container edge. */
+.marketing-theme .n9-hairline {
+  border: 0;
+  border-top: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
+}
+
+/* Oversized closing wordmark. Clamped so it always fills the measure without
+   overflowing on mobile. */
+.marketing-theme .n9-wordmark {
+  font-size: clamp(3.5rem, 17vw, 15rem);
+  line-height: 0.82;
+  letter-spacing: -0.035em;
+  font-weight: 600;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .marketing-theme .n9-rise { opacity: 1; animation: none; filter: none; }
   .marketing-theme .n9-gradient-text.n9-shimmer,
   .marketing-theme .n9-search-aura,
+  .marketing-theme .n9-organic,
   .marketing-theme .n9-aurora { animation: none; }
 }
 
