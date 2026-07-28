@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { getCurrentUser } from "@/lib/auth/current-user"
 import { Header } from "@/components/marketing/header"
 import { Footer } from "@/components/marketing/footer"
+import { ArrowUpRight } from "@phosphor-icons/react/ssr"
 import { ContactForm } from "@/components/marketing/contact-form"
 import { FloatingPageMenu } from "@/components/marketing/floating-page-menu"
 import { HeroSplit } from "@/components/marketing/hero-split"
@@ -14,6 +15,30 @@ import {
 } from "@/components/marketing/home-editorial"
 
 import "@/styles/marketing.css"
+
+/** What each kind of message is for. One inbox, four subject lines. */
+const ENQUIRIES = [
+  {
+    label: "Book a demo",
+    subject: "Notes9 demo",
+    hint: "A 15-minute walkthrough against your own workflow.",
+  },
+  {
+    label: "Pricing & plans",
+    subject: "Notes9 pricing",
+    hint: "Group sizes, institutional billing, what Enterprise covers.",
+  },
+  {
+    label: "Data & governance",
+    subject: "Notes9 data and governance",
+    hint: "Where your records live, and how access is controlled.",
+  },
+  {
+    label: "Press & partnerships",
+    subject: "Notes9 press or partnership",
+    hint: "Media enquiries and research collaborations.",
+  },
+]
 
 export default async function HomePage({
   searchParams,
@@ -110,7 +135,32 @@ export default async function HomePage({
 
                   <hr className="n9-hairline mt-10" />
 
-                  <dl className="mt-8 space-y-6">
+                  {/* Routed enquiries, after Fiasco: naming what each kind of
+                      message is for tells a visitor they will reach the right
+                      person, which one undifferentiated address does not. Each
+                      is a mailto with the subject pre-set — honest, since there
+                      is genuinely one inbox behind them rather than the invented
+                      names a fake routing table would need. */}
+                  <div className="mt-8 grid gap-x-8 gap-y-7 sm:grid-cols-2">
+                    {ENQUIRIES.map((e) => (
+                      <div key={e.label}>
+                        <a
+                          href={`mailto:admin@notes9.com?subject=${encodeURIComponent(e.subject)}`}
+                          className="group inline-flex items-center gap-1.5 text-[15px] font-medium text-foreground transition-colors hover:text-[var(--n9-accent)]"
+                        >
+                          {e.label}
+                          <ArrowUpRight className="size-3.5 text-muted-foreground transition-colors group-hover:text-[var(--n9-accent)]" />
+                        </a>
+                        <p className="mt-1 max-w-[15rem] text-[13px] leading-5 text-muted-foreground">
+                          {e.hint}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <hr className="n9-hairline mt-10" />
+
+                  <dl className="mt-7 grid gap-x-8 gap-y-6 sm:grid-cols-2">
                     <div>
                       <dt className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
                         Email
@@ -130,19 +180,6 @@ export default async function HomePage({
                       </dt>
                       <dd className="mt-1.5 text-[15px] text-foreground">
                         India, United States &amp; United Kingdom
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                        Prefer to talk
-                      </dt>
-                      <dd className="mt-1.5">
-                        <a
-                          href="mailto:admin@notes9.com?subject=Notes9%20demo"
-                          className="text-[15px] text-foreground underline-offset-4 transition-colors hover:text-[var(--n9-accent)] hover:underline"
-                        >
-                          Book a 15-minute demo
-                        </a>
                       </dd>
                     </div>
                   </dl>
