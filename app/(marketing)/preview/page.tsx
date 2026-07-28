@@ -1,10 +1,10 @@
 import type { Metadata } from "next"
+import { HeroConstellation } from "@/components/marketing/hero-constellation"
 import {
   CatalystBand,
   ChainSection,
   ClosingSection,
   FractureSection,
-  HeroEditorial,
   ProofBand,
 } from "@/components/marketing/home-editorial"
 
@@ -42,7 +42,7 @@ export const metadata: Metadata = {
 export default function HomePreviewPage() {
   return (
     <>
-      <HeroEditorial />
+      <HeroConstellation />
       <ProofBand />
       <FractureSection />
       <ChainSection />
