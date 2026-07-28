@@ -16,7 +16,15 @@ import {
 
 import "@/styles/marketing.css"
 
-/** What each kind of message is for. One inbox, four subject lines. */
+/**
+ * Only routes that correspond to something that exists.
+ *
+ * "Data & governance" and "Press & partnerships" were removed: the first implies
+ * a formal governance programme and the second a press function, and the brand
+ * guardrails are explicit about not implying capabilities or certifications we
+ * cannot back. What is left maps to real surfaces — the demo the header already
+ * offers, and the Free/Enterprise tiers on the pricing page.
+ */
 const ENQUIRIES = [
   {
     label: "Book a demo",
@@ -26,17 +34,7 @@ const ENQUIRIES = [
   {
     label: "Pricing & plans",
     subject: "Notes9 pricing",
-    hint: "Group sizes, institutional billing, what Enterprise covers.",
-  },
-  {
-    label: "Data & governance",
-    subject: "Notes9 data and governance",
-    hint: "Where your records live, and how access is controlled.",
-  },
-  {
-    label: "Press & partnerships",
-    subject: "Notes9 press or partnership",
-    hint: "Media enquiries and research collaborations.",
+    hint: "What is included in Free, and what Enterprise adds.",
   },
 ]
 
