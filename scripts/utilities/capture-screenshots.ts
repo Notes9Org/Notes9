@@ -160,6 +160,9 @@ async function capture(
   if (route === "/research-map") {
     console.log("Waiting 8s for research map to fully render...")
     await new Promise((r) => setTimeout(r, 8000))
+  } else if (route.startsWith("/catalyst")) {
+    console.log("Waiting 6s for Catalyst chat surface to settle...")
+    await new Promise((r) => setTimeout(r, 6000))
   } else if (route.startsWith("/data-analysis")) {
     // The Univer spreadsheet and the Plotly chart both mount asynchronously and
     // then lay out again once the container is measured. Screenshotting early
@@ -174,6 +177,35 @@ async function capture(
   const filePath = path.join(OUTPUT_DIR, output)
   await page.screenshot({ path: filePath, type: "png" })
   console.log(`Captured ${output} from ${route}`)
+}
+
+/**
+ * Catalyst's default route is an empty composer with a greeting, which shows
+ * nothing of what the assistant does. Open the most recent conversation first so
+ * the capture contains a real exchange — reasoning, answer and citations.
+ */
+async function captureCatalystConversation(page: Page): Promise<void> {
+  await page.goto(`${BASE_URL}/catalyst`, { waitUntil: "networkidle2", timeout: 30000 })
+  await page.setViewport(VIEWPORT)
+  await new Promise((r) => setTimeout(r, 3000))
+
+  const opened = await page.evaluate(() => {
+    // Chat rows in the history rail are links to /catalyst/<id>.
+    const row = document.querySelector<HTMLElement>('a[href^="/catalyst/"]')
+    if (!row) return false
+    row.click()
+    return true
+  })
+  if (!opened) {
+    console.warn("No existing Catalyst conversation found; keeping the empty-state capture.")
+    return
+  }
+
+  await new Promise((r) => setTimeout(r, 6000))
+  await page.addStyleTag({ content: 'nextjs-portal, #nextjs-build-indicator, [data-nextjs-toast] { display: none !important; }' })
+  await sanitizeForDemo(page)
+  await page.screenshot({ path: path.join(OUTPUT_DIR, "catalyst.png"), type: "png" })
+  console.log("Captured catalyst.png from an existing conversation")
 }
 
 async function captureExistingLabNoteFromExperiment(page: Page, experimentPath: string): Promise<void> {
@@ -490,6 +522,7 @@ async function main() {
 
     // Static routes
     await capture(page, "/data-analysis", "data-analysis.png")
+    if (shouldCapture("catalyst.png")) await captureCatalystConversation(page)
     await capture(page, "/projects", "projects.png")
     await capture(page, "/literature-reviews", "literature-list.png")
     await capture(page, "/lab-notes", "lab-memory.png")

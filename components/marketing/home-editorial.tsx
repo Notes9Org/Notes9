@@ -5,6 +5,7 @@ import Link from "next/link"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { ArrowRight, ArrowDown, Plus, Check, X } from "@phosphor-icons/react/ssr"
 import { HeroSearch } from "@/components/marketing/hero-search"
+import { HeroChartDemo } from "@/components/marketing/hero-chart-demo"
 import { BrowserFrame } from "@/components/marketing/browser-frame"
 import { cn } from "@/lib/utils"
 
@@ -38,39 +39,46 @@ export function HeroEditorial() {
           The connected research workspace
         </p>
 
-        <h1 className="mt-7 max-w-5xl font-serif tracking-[-0.03em] text-[clamp(2.6rem,7.4vw,6.2rem)] leading-[0.95]">
-          <span
-            className="n9-rise block text-foreground"
-            style={{ ["--n9-rise-delay" as string]: "140ms" }}
-          >
-            AI that answers from
-          </span>
-          <span
-            className="n9-rise block text-muted-foreground/55"
-            style={{ ["--n9-rise-delay" as string]: "240ms" }}
-          >
-            your lab&apos;s actual work.
-          </span>
-        </h1>
+        {/* Copy left, live product right. Every hero worth copying — Hex,
+            Framer, Dovetail, Chronicle — puts the product in the hero at size.
+            An all-typography hero reads as a poster, which is what made this
+            one feel dated no matter how good the type was. */}
+        <div className="mt-7 grid gap-12 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:items-center lg:gap-16">
+          <div>
+            <h1 className="font-serif tracking-[-0.03em] text-[clamp(2.4rem,5.4vw,4.6rem)] leading-[0.98]">
+              <span
+                className="n9-rise block text-foreground"
+                style={{ ["--n9-rise-delay" as string]: "140ms" }}
+              >
+                AI that answers from
+              </span>
+              <span
+                className="n9-rise block text-muted-foreground/55"
+                style={{ ["--n9-rise-delay" as string]: "240ms" }}
+              >
+                your lab&apos;s actual work.
+              </span>
+            </h1>
 
-        <div className="mt-10 grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:items-end">
-          <div
-            className="n9-rise max-w-xl"
-            style={{ ["--n9-rise-delay" as string]: "340ms" }}
-          >
-            <HeroSearch />
-          </div>
-
-          <div
-            className="n9-rise lg:pb-2"
-            style={{ ["--n9-rise-delay" as string]: "420ms" }}
-          >
-            <hr className="n9-hairline mb-5" />
-            <p className="max-w-sm text-[15px] leading-6 text-muted-foreground">
+            <p
+              className="n9-rise mt-6 max-w-md text-[16px] leading-7 text-muted-foreground"
+              style={{ ["--n9-rise-delay" as string]: "320ms" }}
+            >
               Notes9 keeps your literature, protocols, experiments, data and drafts in one
               record — so the AI you ask has already read it.
             </p>
-            <div className="mt-6 flex flex-wrap items-center gap-3">
+
+            <div
+              className="n9-rise mt-8 max-w-lg"
+              style={{ ["--n9-rise-delay" as string]: "380ms" }}
+            >
+              <HeroSearch />
+            </div>
+
+            <div
+              className="n9-rise mt-7 flex flex-wrap items-center gap-3"
+              style={{ ["--n9-rise-delay" as string]: "440ms" }}
+            >
               <Link
                 href="/auth/sign-up"
                 className="n9-press inline-flex h-12 items-center gap-2 rounded-full bg-[var(--n9-accent)] px-7 text-[15px] font-semibold text-white shadow-[0_14px_44px_-12px_var(--n9-accent-glow)] transition-colors hover:bg-[var(--n9-accent-hover)]"
@@ -86,9 +94,19 @@ export function HeroEditorial() {
               </Link>
             </div>
           </div>
+
+          <div
+            className="n9-rise"
+            style={{ ["--n9-rise-delay" as string]: "500ms" }}
+          >
+            <HeroChartDemo />
+            <p className="mt-3 text-center font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70">
+              Live — switch the chart type
+            </p>
+          </div>
         </div>
 
-        <div className="mt-20 flex items-center gap-3 text-muted-foreground">
+        <div className="mt-16 flex items-center gap-3 text-muted-foreground">
           <span className="flex size-9 items-center justify-center rounded-full border border-border">
             <ArrowDown className="size-4" aria-hidden />
           </span>
