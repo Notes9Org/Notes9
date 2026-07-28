@@ -527,6 +527,11 @@ ER  - `;
                     ? activeLitHighlight.pageNumber ?? null
                     : null
                 }
+                highlightNonce={
+                  activeLitHighlight && highlightSurface === "pdf"
+                    ? activeLitHighlight.nonce ?? null
+                    : null
+                }
                 headerActions={
                   <UploadLiteraturePdfDialog
                     literatureReviews={[

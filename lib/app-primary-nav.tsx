@@ -1,6 +1,7 @@
 import type { ComponentType } from "react"
 import {
   BookOpen,
+  ChartLine,
   Database,
   FileText,
   Flask as FlaskConical,
@@ -61,6 +62,8 @@ export const APP_PRIMARY_NAV: NavItem[] = [
       { name: "Data", href: "/data", icon: Database },
     ],
   },
+  // Analysis reads experiment data, so it sits right after Experiments.
+  { name: "Analysis", href: "/analysis", icon: ChartLine },
   { name: "Samples", href: "/samples", icon: TestTube },
   { name: "Writing", href: "/papers", icon: PenNib },
   { name: "Reports", href: "/reports", icon: FileText },

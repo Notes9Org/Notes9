@@ -62,7 +62,7 @@ export type ProjectScope = {
 const ProjectScopeContext = createContext<ProjectScope | null>(null)
 
 const ENTITY_PATH_RE =
-  /^\/(projects|experiments|lab-notes|protocols|samples|data|reports|equipment|papers|literature-reviews)\/([^/?#]+)/
+  /^\/(projects|experiments|lab-notes|protocols|samples|data|analysis|reports|equipment|papers|literature-reviews)\/([^/?#]+)/
 
 /**
  * Reads `?project=<id>` and `?experiment=<id>` from the URL and resolves names

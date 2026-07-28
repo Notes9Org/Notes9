@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { SearchPaper } from "@/types/paper-search"
@@ -9,7 +9,11 @@ import { FlareIcon } from "@/components/ui/flare-icon"
 import { LiteraturePdfPanel } from "./literature-pdf-panel"
 import { UploadLiteraturePdfDialog } from "./upload-literature-pdf-dialog"
 import { useHighlightNavigation } from "@/hooks/use-highlight-navigation"
-import { normalizeAgentSourceType } from "@/lib/document-highlight"
+import {
+  DOCUMENT_HIGHLIGHT_EVENT,
+  normalizeAgentSourceType,
+  type HighlightTarget,
+} from "@/lib/document-highlight"
 import { decodeHtmlEntities } from "@/lib/literature-abstract-display"
 import { attachPaperToCatalyst } from "@/lib/catalyst-launch"
 import { MotionReveal } from "@/components/literature-reviews/motion"
@@ -117,12 +121,34 @@ export function StagedPaperView({
   // Citation deep-link: resolve the ?highlight= param to this paper so the PDF
   // reader highlights the exact cited span (same mechanism as the detail page).
   const { highlightTarget } = useHighlightNavigation()
-  const activeHighlight =
+  const urlHighlight =
     highlightTarget &&
     normalizeAgentSourceType(highlightTarget.sourceType) === "literature_review" &&
     highlightTarget.sourceId === String(lit.id)
       ? highlightTarget
       : null
+
+  // Same-tree citation click (tab already open, no reroute — see literature-tabs.tsx's
+  // DOCUMENT_HIGHLIGHT_EVENT listener, which preventDefault()s the reroute for this
+  // case): mirrors the editor views' pattern (e.g. report-detail-view.tsx) — a fresh
+  // target object lands on every dispatch, so this always overrides the (possibly
+  // stale) URL-derived highlight above with the latest click.
+  const [inlineHighlight, setInlineHighlight] = useState<HighlightTarget | null>(null)
+  useEffect(() => {
+    const onHighlight = (event: Event) => {
+      const target = (event as CustomEvent<HighlightTarget>).detail
+      if (normalizeAgentSourceType(target.sourceType) !== "literature_review") return
+      if (target.sourceId !== String(lit.id)) return
+      setInlineHighlight(target)
+    }
+    window.addEventListener(DOCUMENT_HIGHLIGHT_EVENT, onHighlight as EventListener)
+    return () => window.removeEventListener(DOCUMENT_HIGHLIGHT_EVENT, onHighlight as EventListener)
+  }, [lit.id])
+  const activeHighlight =
+    inlineHighlight &&
+    (urlHighlight == null || (inlineHighlight.nonce ?? 0) >= (urlHighlight.nonce ?? 0))
+      ? inlineHighlight
+      : urlHighlight
 
   const isClosedSource =
     !lit.pdf_storage_path &&
@@ -241,6 +267,7 @@ export function StagedPaperView({
           openInNewTabFallbackUrl={`/api/literature/${lit.id}/viewer-pdf`}
           highlightExcerpt={activeHighlight?.excerpt ?? null}
           highlightPageNumber={activeHighlight?.pageNumber ?? null}
+          highlightNonce={activeHighlight?.nonce ?? null}
           headerActions={
             <UploadLiteraturePdfDialog
               literatureReviews={[

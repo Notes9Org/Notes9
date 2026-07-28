@@ -120,12 +120,15 @@ export function compareAgentStreamUrl(): string {
   return base ? `${base}/stream` : ""
 }
 
-/** POST JSON to a catalyst path with the user's Supabase access token. */
+/**
+ * Send JSON to a catalyst path with the user's Supabase access token.
+ * POST by default; pass `method: "GET"` (and `undefined` for `body`) to read.
+ */
 export async function callCatalyst<TBody, TResp>(
   path: string,
   body: TBody,
   accessToken: string,
-  options?: { timeoutMs?: number; signal?: AbortSignal }
+  options?: { timeoutMs?: number; signal?: AbortSignal; method?: "GET" | "POST" }
 ): Promise<TResp> {
   const url = `${catalystBaseUrl()}${path.startsWith("/") ? path : `/${path}`}`
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS
@@ -140,13 +143,14 @@ export async function callCatalyst<TBody, TResp>(
     }
     let res: Response
     try {
+      const method = options?.method ?? "POST"
       res = await fetch(url, {
-        method: "POST",
+        method,
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify(body),
+        body: method === "GET" ? undefined : JSON.stringify(body),
         signal: controller.signal,
       })
     } finally {

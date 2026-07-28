@@ -10,6 +10,8 @@ import {
   type LiteratureHistoryEntry,
 } from "@/components/literature-reviews/search-tab"
 import { useChatSessions } from "@/hooks/use-chat-sessions"
+import { useHighlightNavigation } from "@/hooks/use-highlight-navigation"
+import { DOCUMENT_HIGHLIGHT_EVENT, normalizeAgentSourceType, type HighlightTarget } from "@/lib/document-highlight"
 import * as literatureSearchEngine from "@/lib/literature-search-engine"
 import { RepoTab } from "@/components/literature-reviews/repo-tab"
 import { PaperSearchSortMode, SearchPaper } from "@/types/paper-search"
@@ -649,15 +651,53 @@ export function LiteratureTabs({
 
   // Catalyst citation entry: navigation lands on
   // /literature-reviews?openPaper=<id>; open that paper's read-mode tab once its
-  // row is loaded. Runs once per id (guarded) so re-renders don't re-trigger.
+  // row is loaded. `openedParamRef` guards the one-time tab OPEN so re-renders
+  // don't re-trigger it, but that guard must not also gate re-activation: a
+  // second citation into an ALREADY-open paper (new highlight nonce, same
+  // openPaperId) still needs to switch back to that tab, so the highlight-nonce
+  // check below runs independently of "already opened".
+  const { highlightTarget } = useHighlightNavigation()
   const openedParamRef = useRef<string | null>(null)
+  const lastHighlightNonceRef = useRef<number | null>(null)
   useEffect(() => {
-    if (!openPaperId || openedParamRef.current === openPaperId) return
+    if (!openPaperId) return
     const lit = stagedByIdMerged.get(openPaperId) ?? repoById.get(openPaperId)
     if (!lit) return
+    const isNewOpen = openedParamRef.current !== openPaperId
+    const isNewHighlight =
+      !!highlightTarget &&
+      highlightTarget.sourceId === openPaperId &&
+      highlightTarget.nonce != null &&
+      lastHighlightNonceRef.current !== highlightTarget.nonce
+    if (!isNewOpen && !isNewHighlight) return
     openedParamRef.current = openPaperId
+    if (highlightTarget?.nonce != null) lastHighlightNonceRef.current = highlightTarget.nonce
     openPaperTab(openPaperId, lit.title)
-  }, [openPaperId, openPaperTab, stagedByIdMerged, repoById])
+  }, [openPaperId, openPaperTab, stagedByIdMerged, repoById, highlightTarget])
+
+  // Same-tree citation click: a citation into a paper whose tab is ALREADY open
+  // (kept-mounted) doesn't need the full `?openPaper=&highlight=` reroute — just
+  // re-activate that tab. `event.preventDefault()` tells `dispatchDocumentHighlight`
+  // (in use-source-navigation.ts) to skip the router.push entirely; the mounted
+  // `StagedPaperView` picks up the same event (with its fresh nonce) to re-fire
+  // the PDF highlight. A paper that isn't open yet still falls through to the
+  // normal URL reroute below, which opens + highlights it correctly.
+  useEffect(() => {
+    const onHighlight = (event: Event) => {
+      const target = (event as CustomEvent<HighlightTarget>).detail
+      if (normalizeAgentSourceType(target.sourceType) !== "literature_review") return
+      const id = target.sourceId
+      const alreadyOpen =
+        openedStagedIdsRef.current.includes(id) || pendingOpenTabIdsRef.current.includes(id)
+      if (!alreadyOpen) return
+      const lit = stagedByIdMerged.get(id) ?? repoById.get(id)
+      if (!lit) return
+      event.preventDefault()
+      openPaperTab(id, lit.title)
+    }
+    window.addEventListener(DOCUMENT_HIGHLIGHT_EVENT, onHighlight as EventListener)
+    return () => window.removeEventListener(DOCUMENT_HIGHLIGHT_EVENT, onHighlight as EventListener)
+  }, [openPaperTab, stagedByIdMerged, repoById])
 
   const resolveStagedLiteratureId = useCallback(
     (paper: SearchPaper): string | null => {

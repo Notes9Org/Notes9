@@ -70,3 +70,5 @@ scripts/ruvector.db
 agentdb.rvf
 agentdb.rvf.lock
 .gstack/
+CLAUDE.local.md
+supabase/.temp/
