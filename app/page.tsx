@@ -92,15 +92,63 @@ export default async function HomePage({
           <ClosingSection />
 
           <section className="border-t border-border/40">
-            <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8" id="contact">
-              <div className="mx-auto max-w-2xl">
-                <p className="n9-label">Get in touch</p>
-                <h2 className="mt-6 font-serif text-[clamp(1.9rem,4vw,2.9rem)] leading-[1.1] tracking-[-0.02em] text-foreground">
-                  Talk to us about your lab.
-                </h2>
-                <div className="mt-8">
-                  <ContactForm />
+            <div className="container mx-auto px-4 py-20 sm:px-6 sm:py-24 lg:px-8" id="contact">
+              {/* Two columns rather than a stacked block. ContactForm brings its
+                  own card and heading, so a second heading above it read as a
+                  duplicate; the left column now carries the editorial framing
+                  and the direct details, and the form keeps its own surface. */}
+              <div className="grid gap-12 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)] lg:gap-20">
+                <div>
+                  <p className="n9-label">Get in touch</p>
+                  <h2 className="mt-6 max-w-sm font-serif text-[clamp(1.9rem,4vw,2.9rem)] leading-[1.08] tracking-[-0.02em] text-foreground">
+                    Talk to us about your lab.
+                  </h2>
+                  <p className="mt-5 max-w-sm text-[16px] leading-7 text-muted-foreground">
+                    Tell us what you are working on and how your group records it today.
+                    We will show you how Notes9 would fit around it.
+                  </p>
+
+                  <hr className="n9-hairline mt-10" />
+
+                  <dl className="mt-8 space-y-6">
+                    <div>
+                      <dt className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                        Email
+                      </dt>
+                      <dd className="mt-1.5">
+                        <a
+                          href="mailto:admin@notes9.com"
+                          className="text-[15px] text-foreground underline-offset-4 transition-colors hover:text-[var(--n9-accent)] hover:underline"
+                        >
+                          admin@notes9.com
+                        </a>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                        Team
+                      </dt>
+                      <dd className="mt-1.5 text-[15px] text-foreground">
+                        India, United States &amp; United Kingdom
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                        Prefer to talk
+                      </dt>
+                      <dd className="mt-1.5">
+                        <a
+                          href="mailto:admin@notes9.com?subject=Notes9%20demo"
+                          className="text-[15px] text-foreground underline-offset-4 transition-colors hover:text-[var(--n9-accent)] hover:underline"
+                        >
+                          Book a 15-minute demo
+                        </a>
+                      </dd>
+                    </div>
+                  </dl>
                 </div>
+
+                <ContactForm />
               </div>
             </div>
           </section>
