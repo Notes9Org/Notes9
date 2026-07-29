@@ -16,6 +16,7 @@ import {
   HeroNotePanel,
   HeroProtocolPanel,
   HeroReferencesPanel,
+  HeroSidebarPanel,
 } from "@/components/marketing/hero-app-frame"
 
 /**
@@ -47,9 +48,9 @@ import {
  * difference between a smooth carousel and a stuttering one.
  */
 const DECK = [
-  { Panel: HeroChartPanel, key: "data" },
   { Panel: HeroNotePanel, key: "note" },
   { Panel: HeroProtocolPanel, key: "protocol" },
+  { Panel: HeroChartPanel, key: "data" },
   { Panel: HeroReferencesPanel, key: "literature" },
 ]
 
@@ -88,17 +89,36 @@ export function HeroSplit() {
           screen it lives on.
 
           Motion lives in styles/marketing.css (.n9-deck); each card only
-          declares its position in the cycle. Every panel stays aria-hidden —
+          declares its position in the cycle. Every panel stays aria-hidden:
           this is decoration, and the answer it illustrates is written out in
           the heading beside it. */}
       <div
         aria-hidden
-        className="pointer-events-auto absolute right-[1%] top-1/2 hidden h-[34rem] w-[47rem] origin-right -translate-y-1/2 scale-[0.78] isolate lg:block xl:scale-[0.88] 2xl:right-[6%] 2xl:scale-100"
+        className="n9-hero-cast pointer-events-auto absolute left-[46%] top-1/2 hidden h-[40rem] w-[64rem] -translate-y-1/2 isolate xl:block"
       >
-        <div className="pointer-events-none absolute left-[38%] top-1/2 -z-10 h-[27rem] w-[27rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--n9-accent)]/[0.13] blur-3xl" />
+        <div className="pointer-events-none absolute left-[16rem] top-1/2 -z-10 h-[28rem] w-[28rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--n9-accent)]/[0.13] blur-3xl" />
 
-        {/* The records, cycling. */}
-        <div className="n9-deck absolute left-0 top-1/2 hidden h-[21.5rem] w-[19rem] -translate-y-1/2 xl:block">
+        {/* The workspace: sidebar and answer as one window, tilted a couple of
+            degrees so it reads as an object lying on the page rather than a
+            screenshot pasted onto it. The sidebar earns its place by showing
+            the full span of what Notes9 holds, and by naming the project and
+            experiment the answer beside it is reasoning over. */}
+        {/* Square to the reader and leaning back into the page rather than
+            turned to either side: no in-plane rotation, a small backward lean
+            and a push into depth, so the cards in front of it have somewhere
+            to sit. drop-shadow rather than box-shadow because the sidebar and
+            the answer are separate boxes, and only a filter casts one shadow
+            for the pair instead of a seam down the middle. */}
+        <div className="absolute left-0 top-1/2 z-0 flex h-[35rem] w-[37rem] items-stretch drop-shadow-[0_60px_90px_rgba(44,36,24,0.28)] [transform:translateY(-50%)_perspective(2600px)_translateZ(-70px)_rotateX(2.5deg)] [transform-origin:50%_50%]">
+          <HeroSidebarPanel className="w-[11rem] shrink-0 rounded-r-none border-r-0" />
+          <HeroGroundedAnswerPanel className="min-w-0 flex-1 rounded-l-none bg-card" />
+        </div>
+
+        {/* The records it cites, circulating on top of the answer's right edge
+            and running off the frame. They sit low enough to leave the query
+            and the answer itself completely clear; what they cross is the
+            trailing end of the source rows. */}
+        <div className="n9-deck absolute left-[34rem] top-[57%] z-20 hidden h-[22rem] w-[21rem] -translate-y-1/2 min-[1440px]:block">
           {DECK.map(({ Panel, key }, i) => (
             <div
               key={key}
@@ -106,16 +126,10 @@ export function HeroSplit() {
               style={{ "--n9-deck-i": i } as CSSProperties}
             >
               <div className="n9-deck-orbit">
-                <Panel className="n9-deck-face pointer-events-auto max-h-full w-full bg-card backdrop-blur-none shadow-[0_30px_70px_-36px_rgba(44,36,24,0.5)]" />
+                <Panel className="n9-deck-face pointer-events-auto h-full w-full bg-card backdrop-blur-none shadow-[0_34px_80px_-34px_rgba(44,36,24,0.55)]" />
               </div>
             </div>
           ))}
-        </div>
-
-        {/* The answer. Square, opaque, unmoving — the one thing on this side of
-            the hero that is meant to be read rather than recognised. */}
-        <div className="absolute right-0 top-1/2 z-40 w-[21rem] -translate-y-1/2">
-          <HeroGroundedAnswerPanel className="w-full bg-card shadow-[0_70px_140px_-40px_rgba(44,36,24,0.55)]" />
         </div>
       </div>
 
@@ -148,7 +162,7 @@ export function HeroSplit() {
             className="n9-rise mt-6 max-w-lg text-[17px] leading-[1.75] text-foreground/70 sm:text-[18px]"
             style={{ ["--n9-rise-delay" as string]: "360ms" }}
           >
-            Every paper, protocol, result and note stays linked — so the assistant you ask
+            Every paper, protocol, result and note stays linked, so the assistant you ask
             has already read all of it, and cites what it used.
           </p>
 

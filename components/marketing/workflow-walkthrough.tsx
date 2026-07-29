@@ -26,7 +26,7 @@ const STEPS: WorkflowStepSpec[] = [
     label: "Ask",
     title: "Start from the literature",
     description:
-      "Ask a research question in plain language. Notes9 searches PubMed, Europe PMC and OpenAlex, summarises what it finds, and saves the papers that matter into your library — with the PDFs attached.",
+      "Ask a research question in plain language. Notes9 searches PubMed, Europe PMC and OpenAlex, summarises what it finds, and saves the papers that matter into your library, with the PDFs attached.",
     screenshot: "literature-search",
     alt: "Notes9 literature search showing an AI overview above cited results",
   },
@@ -50,7 +50,7 @@ const STEPS: WorkflowStepSpec[] = [
     label: "Analyse",
     title: "Get from raw numbers to a figure",
     description:
-      "Drop in a spreadsheet and build the figure: t-tests and ANOVA with post-hoc correction, dose–response curves, plate maps — exported at publication DPI.",
+      "Drop in a spreadsheet and build the figure: t-tests and ANOVA with post-hoc correction, dose–response curves, plate maps, exported at publication DPI.",
     screenshot: "data-analysis",
     alt: "The Notes9 data workspace: a spreadsheet of ELISA readings beside a fitted standard curve",
   },

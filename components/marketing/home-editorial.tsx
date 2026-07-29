@@ -63,7 +63,7 @@ export function ProofBand() {
         </div>
 
         <p className="mt-14 max-w-2xl font-serif text-[clamp(1.5rem,3.2vw,2.2rem)] leading-[1.25] tracking-tight text-foreground">
-          The gap isn&apos;t capability. It&apos;s context — general models have never seen
+          The gap isn&apos;t capability. It&apos;s context. General models have never seen
           your data, so nothing they say can be checked.
         </p>
       </div>
@@ -233,7 +233,7 @@ const CHAIN = [
   {
     n: "04",
     title: "Analysis",
-    body: "Drop in a spreadsheet and build the figure — t-tests and ANOVA with post-hoc correction, dose–response curves, plate maps — exported at publication DPI.",
+    body: "Drop in a spreadsheet and build the figure: t-tests and ANOVA with post-hoc correction, dose–response curves, plate maps, exported at publication DPI.",
     shot: "data-analysis",
     alt: "The Notes9 data workspace: a spreadsheet of ELISA readings beside a fitted standard curve",
   },
@@ -261,7 +261,7 @@ export function ChainSection() {
             </h2>
           </div>
           <p className="max-w-xs text-[15px] leading-6 text-muted-foreground">
-            That chain is what makes an answer checkable — and what an ELN throws away.
+            That chain is what makes an answer checkable, and what an ELN throws away.
           </p>
         </div>
 
@@ -359,7 +359,7 @@ export function CatalystBand() {
               Not a search box. An assistant that has read your lab.
             </h2>
             <p className="mt-6 max-w-md text-[16px] leading-7 text-[#f5f0e8]/75">
-              Catalyst answers from your projects, notes and saved papers — and cites the
+              Catalyst answers from your projects, notes and saved papers, and cites the
               record behind every claim, so you can open the source instead of trusting the
               summary.
             </p>

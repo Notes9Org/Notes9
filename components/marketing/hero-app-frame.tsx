@@ -3,6 +3,7 @@
 import {
   Books,
   ChartLine,
+  House,
   ClipboardText,
   Command,
   FolderSimple,
@@ -237,8 +238,8 @@ function AiOverview() {
         Apoptosis is a fundamental programmed cell death mechanism whose dysregulation is a
         hallmark of cancer, driving tumour development, progression, and resistance to
         therapy<Cite n="1" />
-        <Cite n="2" />. The two major apoptotic pathways—intrinsic (mitochondrial) and
-        extrinsic (death receptor-mediated)—are regulated by a complex network of
+        <Cite n="2" />. The two major apoptotic pathways, intrinsic (mitochondrial) and
+        extrinsic (death receptor-mediated), are regulated by a complex network of
         pro-apoptotic proteins such as Bid, Bim, Puma, Noxa and anti-apoptotic proteins
         (e.g. BCL-2, BCL-XL, MCL-1), with caspases serving as key executioners<Cite n="3" />.
       </p>
@@ -363,7 +364,7 @@ export function HeroChartPanel({ className, style }: {
       <div className="flex items-center justify-between border-b border-border/50 px-4 py-2.5">
         <span className="flex items-center gap-2 text-[13.5px] font-medium">
           <ChartLine className="size-4 text-muted-foreground" />
-          Ratio screen — yield by condition
+          Ratio screen: yield by condition
         </span>
         <span className="flex items-center gap-1.5 rounded-md border border-border/70 px-2.5 py-1 text-[11.5px] text-muted-foreground">
           <UploadSimple className="size-3 rotate-180" />
@@ -379,7 +380,7 @@ export function HeroChartPanel({ className, style }: {
             textAnchor="middle"
             className="fill-foreground text-[15px]"
           >
-            PEI:DNA ratio — transient yield
+            PEI:DNA ratio vs transient yield
           </text>
 
           {[0, 0.5, 1, 1.5, 2, 2.5, 3].map((v) => (
@@ -494,7 +495,7 @@ export function HeroNotePanel({ className, style }: {
       <div className="flex items-center gap-2 border-b border-border/50 px-3.5 py-2.5">
         <CaretLeft className="size-3.5 text-muted-foreground" />
         <span className="flex-1 truncate text-[13.5px] font-medium">
-          Transfection screen — PEI:DNA ratios
+          PEI:DNA ratio screen
         </span>
         <Plus className="size-3.5 text-muted-foreground/70" />
         <Printer className="size-3.5 text-muted-foreground/70" />
@@ -579,7 +580,7 @@ const MAP_NODES = [
   { kind: "Experiment", title: "Protocol: Cell Culture Setup", c: "#2563eb", x: 42, y: 12, w: 36 },
   { kind: "Compound Screening", title: "Results Summary", c: "#dc2626", x: 82, y: 12, w: 32 },
   { kind: "Protein Structure Study", title: "Integrating deep learning with physics-based modeling", c: "#0d9488", x: 42, y: 40, w: 36 },
-  { kind: "Gene Expression Analysis", title: "Observation Log — Day 1", c: "#ca8a04", x: 42, y: 68, w: 36 },
+  { kind: "Gene Expression Analysis", title: "Observation Log, Day 1", c: "#ca8a04", x: 42, y: 68, w: 36 },
   { kind: "Protein Structure Study", title: "CBM-AB: graph-based antibody antigen binding", c: "#0d9488", x: 82, y: 44, w: 32 },
 ]
 
@@ -701,8 +702,8 @@ export function HeroResearchMapPanel({ className }: { className?: string }) {
 
 const TOOL_CALLS = [
   { text: "Read 6 excerpts from your protocols", meta: "1 source · 2.2s" },
-  { text: "Found 1 protocol: Competitive ELISA — anti-mAb", meta: "1 source · 27.4s" },
-  { text: "Loaded: “Competitive ELISA — anti-mAb”", meta: "1 source · 0.1s" },
+  { text: "Found 1 protocol: Competitive ELISA (anti-mAb)", meta: "1 source · 27.4s" },
+  { text: "Loaded: “Competitive ELISA (anti-mAb)”", meta: "1 source · 0.1s" },
 ]
 
 const DESIGN_STEPS = [
@@ -922,9 +923,9 @@ export function HeroReferencesPanel({ className, style }: {
 
 const WORKSPACE_SOURCES = [
   { icon: NotePencil, kind: "Lab note", title: "Condition B (3:1) gave the highest transient yield", meta: "12 Mar" },
-  { icon: FlaskConical, kind: "Experiment", title: "Transfection screen — PEI:DNA ratios", meta: "8 conditions" },
+  { icon: FlaskConical, kind: "Experiment", title: "PEI:DNA ratio screen", meta: "8 conditions" },
   { icon: ClipboardText, kind: "Protocol", title: "Transient transfection (HEK293T, PEI)", meta: "v1.2" },
-  { icon: ChartLine, kind: "Data", title: "Ratio screen — yield by condition", meta: "4PL · R² 0.9993" },
+  { icon: ChartLine, kind: "Data", title: "Ratio screen: yield by condition", meta: "4PL · R² 0.9993" },
 ]
 
 /**
@@ -942,6 +943,16 @@ const WORKSPACE_SOURCES = [
  *
  * Decorative: aria-hidden, pointer events off.
  */
+/**
+ * Which deck card each citation corresponds to, by position in WORKSPACE_SOURCES.
+ * The experiment record has no screen in the deck, so it never lights up; the
+ * literature citation is deck card 3. This is what lets the highlight in the
+ * answer stay in step with the carousel beside it without any JS — both run the
+ * same 18s period off the same offsets, so they cannot drift apart.
+ */
+const WORKSPACE_DECK_INDEX: (number | null)[] = [0, null, 1, 2]
+const LITERATURE_DECK_INDEX = 3
+
 export function HeroGroundedAnswerPanel({ className, style }: {
   className?: string
   style?: CSSProperties
@@ -960,6 +971,20 @@ export function HeroGroundedAnswerPanel({ className, style }: {
         <span className="flex-1 truncate text-[13px] font-medium">Catalyst</span>
         <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
           5 sources
+        </span>
+      </div>
+
+      {/* The scope the question was asked in. Without it the answer could be
+          coming from anywhere; naming the project is what makes it the lab's
+          own work rather than a general model's. */}
+      <div className="flex items-center gap-1.5 border-b border-border/40 bg-muted/25 px-4 py-1.5">
+        <FolderSimple className="size-3 shrink-0 text-[var(--n9-accent)]" />
+        <span className="truncate font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">
+          HEK293T expression
+        </span>
+        <span className="shrink-0 text-muted-foreground/50">/</span>
+        <span className="truncate font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">
+          PEI:DNA ratio screen
         </span>
       </div>
 
@@ -984,7 +1009,11 @@ export function HeroGroundedAnswerPanel({ className, style }: {
           {WORKSPACE_SOURCES.map((s, i) => (
             <div
               key={s.title}
-              className="flex items-center gap-2.5 rounded-lg border border-border/60 px-2.5 py-1.5"
+              className={cn(
+                "relative flex items-center gap-2.5 rounded-lg border border-border/60 px-2.5 py-1.5",
+                WORKSPACE_DECK_INDEX[i] !== null && "n9-cite-row"
+              )}
+              style={{ "--n9-cite-i": WORKSPACE_DECK_INDEX[i] ?? 0 } as CSSProperties}
             >
               <span className="flex size-4 shrink-0 items-center justify-center rounded border border-border/70 font-mono text-[8px] text-muted-foreground">
                 {i + 1}
@@ -1007,7 +1036,10 @@ export function HeroGroundedAnswerPanel({ className, style }: {
           <span className="size-1.5 rounded-[1px] bg-muted-foreground/50" />
           From the literature
         </p>
-        <div className="mt-2 flex items-center gap-2.5 rounded-lg border border-border/60 px-2.5 py-1.5">
+        <div
+          className="n9-cite-row relative mt-2 flex items-center gap-2.5 rounded-lg border border-border/60 px-2.5 py-1.5"
+          style={{ "--n9-cite-i": LITERATURE_DECK_INDEX } as CSSProperties}
+        >
           <span className="flex size-4 shrink-0 items-center justify-center rounded border border-border/70 font-mono text-[8px] text-muted-foreground">
             5
           </span>
@@ -1026,12 +1058,99 @@ export function HeroGroundedAnswerPanel({ className, style }: {
   )
 }
 
+
+/* ── Sidebar panel ──────────────────────────────────────────────────────── */
+
+/**
+ * The Notes9 sidebar, replicated. It does two jobs in the hero that the answer
+ * beside it cannot do on its own: it shows the full span of what the workspace
+ * holds, so the answer reads as one capability out of many rather than the
+ * whole product, and its pinned project and experiment name the exact records
+ * the answer is reasoning over.
+ *
+ * Catalyst is the active row for the same reason.
+ *
+ * Decorative: aria-hidden, pointer events off.
+ */
+const SIDEBAR_NAV = [
+  { icon: House, label: "Dashboard" },
+  { icon: FolderSimple, label: "Projects" },
+  { icon: FlaskConical, label: "Experiments" },
+  { icon: NotePencil, label: "Lab Notes" },
+  { icon: ChartLine, label: "Data" },
+  { icon: Books, label: "Literature" },
+  { icon: Graph, label: "Research map" },
+  { icon: ClipboardText, label: "Protocols" },
+  { icon: TestTube, label: "Samples" },
+  { icon: PencilSimpleLine, label: "Writing" },
+]
+
+export function HeroSidebarPanel({ className, style }: {
+  className?: string
+  style?: CSSProperties
+}) {
+  return (
+    <div
+      aria-hidden
+      className={cn(
+        "pointer-events-none flex select-none flex-col overflow-hidden rounded-xl border border-border/60 bg-muted/35",
+        className
+      )}
+      style={style}
+    >
+      <div className="flex items-center gap-1.5 px-3 py-2.5">
+        <span className="flex-1 font-serif text-[13px] tracking-[-0.01em]">Notes9</span>
+        <Command className="size-3 text-muted-foreground/70" />
+      </div>
+
+      <div className="px-2.5">
+        <div className="flex items-center gap-1.5 rounded-md border border-border/60 bg-card/70 px-2 py-1">
+          <MagnifyingGlass className="size-3 shrink-0 text-muted-foreground/70" />
+          <span className="text-[10px] text-muted-foreground/70">Search</span>
+        </div>
+        <div className="mt-1.5 flex items-center justify-center gap-1 rounded-md bg-[#3f6b4a] px-2 py-1 text-white">
+          <Plus className="size-3 shrink-0" weight="bold" />
+          <span className="text-[10px] font-medium">New</span>
+        </div>
+      </div>
+
+      {/* The records the answer is standing in. */}
+      <p className="mt-3 px-3 font-mono text-[8px] uppercase tracking-[0.16em] text-muted-foreground/70">
+        Pinned
+      </p>
+      <div className="mt-1 space-y-0.5 px-2.5">
+        <div className="flex items-center gap-1.5 rounded-md px-1.5 py-1">
+          <FolderSimple className="size-3 shrink-0 text-[var(--n9-accent)]" />
+          <span className="truncate text-[10px] text-foreground/80">HEK293T expression</span>
+        </div>
+        <div className="flex items-center gap-1.5 rounded-md px-1.5 py-1">
+          <FlaskConical className="size-3 shrink-0 text-[var(--n9-accent)]" />
+          <span className="truncate text-[10px] text-foreground/80">PEI:DNA ratio screen</span>
+        </div>
+      </div>
+
+      <div className="mt-2.5 space-y-0.5 px-2.5 pb-3">
+        {SIDEBAR_NAV.map(({ icon: Icon, label }) => (
+          <div key={label} className="flex items-center gap-1.5 rounded-md px-1.5 py-[5px]">
+            <Icon className="size-3 shrink-0 text-muted-foreground/80" />
+            <span className="truncate text-[10px] text-foreground/70">{label}</span>
+          </div>
+        ))}
+        <div className="flex items-center gap-1.5 rounded-md bg-[var(--n9-accent)]/10 px-1.5 py-[5px]">
+          <FlareIcon className="size-3 shrink-0 text-[var(--n9-accent)]" weight="fill" />
+          <span className="truncate text-[10px] font-medium text-foreground/85">Catalyst</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ── Protocols panel ────────────────────────────────────────────────────── */
 
 const PROTOCOL_ROWS = [
   { name: "Transient transfection (HEK293T, PEI)", v: "v1.2", date: "2026-02-20" },
-  { name: "Competitive ELISA — anti-mAb", v: "v2.0", date: "2026-02-14" },
-  { name: "IMAC purification — His-tag elution", v: "v1.0", date: "2026-01-31" },
+  { name: "Competitive ELISA (anti-mAb)", v: "v2.0", date: "2026-02-14" },
+  { name: "IMAC purification (His-tag elution)", v: "v1.0", date: "2026-01-31" },
 ]
 
 /**

@@ -11,7 +11,7 @@ import {
 export const metadata: Metadata = {
   title: "How Notes9 works | From question to published paper",
   description:
-    "Walk through a full research cycle in Notes9 — literature search, protocol, experiment, analysis and manuscript — and see how each step stays connected to the last.",
+    "Walk through a full research cycle in Notes9: literature search, protocol, experiment, analysis and manuscript, and see how each step stays connected to the last.",
 }
 
 /**
@@ -64,7 +64,7 @@ export default function HowItWorksPage() {
           <SectionHeader
             badge="Why it compounds"
             title="The connections are the product"
-            description="Each step above writes a link, not just a record. After a few months those links are a map of how your lab actually reached its conclusions — and it is what Catalyst reads when you ask it a question."
+            description="Each step above writes a link, not just a record. After a few months those links are a map of how your lab actually reached its conclusions, and it is what Catalyst reads when you ask it a question."
             align="center"
           />
 
