@@ -84,7 +84,7 @@ export function HeroSplit() {
               AI that answers from
             </span>
             <span
-              className="n9-rise block text-muted-foreground"
+              className="n9-rise block text-[var(--n9-accent)]"
               style={{ ["--n9-rise-delay" as string]: "260ms" }}
             >
               your lab&apos;s actual work.
