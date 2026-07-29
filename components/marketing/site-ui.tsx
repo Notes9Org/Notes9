@@ -51,7 +51,7 @@ export function PageHero({
           <h1 className="font-serif text-4xl tracking-tight text-foreground sm:text-5xl lg:text-[3.5rem] lg:leading-[1.08]">
             {title}
           </h1>
-          <p className="mt-6 max-w-xl text-[18px] leading-7 text-muted-foreground sm:text-[20px]">
+          <p className="mt-6 max-w-xl text-[17px] leading-[1.75] text-foreground/70 sm:text-[18px]">
             {description}
           </p>
           {actions.length > 0 ? (
@@ -132,7 +132,7 @@ export function SectionHeader({
         {titleNode}
       </h2>
       {description ? (
-        <p className="mt-5 text-[20px] leading-8 text-muted-foreground sm:text-[22px] sm:leading-9">
+        <p className="mt-5 text-[17px] leading-[1.75] text-foreground/70 sm:text-[18px]">
           {description}
         </p>
       ) : null}

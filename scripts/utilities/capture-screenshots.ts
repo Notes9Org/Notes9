@@ -35,6 +35,24 @@ const CAPTURE_THEME = (process.env.CAPTURE_THEME || "light").toLowerCase()
 const DEVICE_SCALE_FACTOR = Number(process.env.CAPTURE_SCALE || "2")
 const VIEWPORT = { width: 1920, height: 1080, deviceScaleFactor: DEVICE_SCALE_FACTOR }
 
+/**
+ * Optional comma-separated filter, matched as a substring against the output
+ * filename — e.g. CAPTURE_ONLY=data-analysis,research-map.
+ *
+ * Without this the script re-captures every route, which both takes minutes and
+ * overwrites screenshots whose underlying demo data may have moved on. Being
+ * able to refresh one image is the common case.
+ */
+const CAPTURE_ONLY = (process.env.CAPTURE_ONLY || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean)
+
+function shouldCapture(output: string): boolean {
+  if (CAPTURE_ONLY.length === 0) return true
+  return CAPTURE_ONLY.some((frag) => output.includes(frag))
+}
+
 async function applyCaptureTheme(page: Page) {
   if (CAPTURE_THEME !== "dark") return
   await page.evaluateOnNewDocument(() => {
@@ -123,6 +141,8 @@ async function capture(
   output: string,
   waitFor = "main, [role='main'], .container, body"
 ) {
+  if (!shouldCapture(output)) return
+
   const fullUrl = route.startsWith("http") ? route : `${BASE_URL}${route}`
   await page.goto(fullUrl, { waitUntil: "networkidle2", timeout: 30000 })
   await page.setViewport(VIEWPORT)
@@ -140,6 +160,15 @@ async function capture(
   if (route === "/research-map") {
     console.log("Waiting 8s for research map to fully render...")
     await new Promise((r) => setTimeout(r, 8000))
+  } else if (route.startsWith("/catalyst")) {
+    console.log("Waiting 6s for Catalyst chat surface to settle...")
+    await new Promise((r) => setTimeout(r, 6000))
+  } else if (route.startsWith("/data-analysis")) {
+    // The Univer spreadsheet and the Plotly chart both mount asynchronously and
+    // then lay out again once the container is measured. Screenshotting early
+    // catches an empty canvas.
+    console.log("Waiting 8s for spreadsheet + chart to render...")
+    await new Promise((r) => setTimeout(r, 8000))
   } else {
     await new Promise((r) => setTimeout(r, 800))
   }
@@ -148,6 +177,35 @@ async function capture(
   const filePath = path.join(OUTPUT_DIR, output)
   await page.screenshot({ path: filePath, type: "png" })
   console.log(`Captured ${output} from ${route}`)
+}
+
+/**
+ * Catalyst's default route is an empty composer with a greeting, which shows
+ * nothing of what the assistant does. Open the most recent conversation first so
+ * the capture contains a real exchange — reasoning, answer and citations.
+ */
+async function captureCatalystConversation(page: Page): Promise<void> {
+  await page.goto(`${BASE_URL}/catalyst`, { waitUntil: "networkidle2", timeout: 30000 })
+  await page.setViewport(VIEWPORT)
+  await new Promise((r) => setTimeout(r, 3000))
+
+  const opened = await page.evaluate(() => {
+    // Chat rows in the history rail are links to /catalyst/<id>.
+    const row = document.querySelector<HTMLElement>('a[href^="/catalyst/"]')
+    if (!row) return false
+    row.click()
+    return true
+  })
+  if (!opened) {
+    console.warn("No existing Catalyst conversation found; keeping the empty-state capture.")
+    return
+  }
+
+  await new Promise((r) => setTimeout(r, 6000))
+  await page.addStyleTag({ content: 'nextjs-portal, #nextjs-build-indicator, [data-nextjs-toast] { display: none !important; }' })
+  await sanitizeForDemo(page)
+  await page.screenshot({ path: path.join(OUTPUT_DIR, "catalyst.png"), type: "png" })
+  console.log("Captured catalyst.png from an existing conversation")
 }
 
 async function captureExistingLabNoteFromExperiment(page: Page, experimentPath: string): Promise<void> {
@@ -463,15 +521,19 @@ async function main() {
     }
 
     // Static routes
+    await capture(page, "/data-analysis", "data-analysis.png")
+    if (shouldCapture("catalyst.png")) await captureCatalystConversation(page)
     await capture(page, "/projects", "projects.png")
     await capture(page, "/literature-reviews", "literature-list.png")
     await capture(page, "/lab-notes", "lab-memory.png")
 
-    await captureLiteratureSearchResults(page)
+    if (shouldCapture("literature-search.png")) await captureLiteratureSearchResults(page)
 
     // Experiment details
     let expPath: string | null = null
-    if (process.env.CAPTURE_EXPERIMENT_ID) {
+    if (!shouldCapture("experiment-details.png") && !shouldCapture("new-lab-note.png")) {
+      // skipped by CAPTURE_ONLY
+    } else if (process.env.CAPTURE_EXPERIMENT_ID) {
       expPath = `/experiments/${process.env.CAPTURE_EXPERIMENT_ID}`
       await capture(page, expPath, "experiment-details.png")
     } else {
@@ -485,7 +547,7 @@ async function main() {
 
     // Existing lab note view (from experiment details)
     if (expPath) {
-      await captureExistingLabNoteFromExperiment(page, expPath)
+      if (shouldCapture("new-lab-note.png")) await captureExistingLabNoteFromExperiment(page, expPath)
     }
 
     // Dashboard
@@ -502,7 +564,9 @@ async function main() {
 
     // Project report
     const projectId = process.env.CAPTURE_PROJECT_ID
-    if (projectId) {
+    if (!shouldCapture("project-report.png")) {
+      // skipped by CAPTURE_ONLY
+    } else if (projectId) {
       await capture(page, `/projects/${projectId}`, "project-report.png")
     } else {
       const projPath = await getFirstDetailLink(page, "/projects", "/projects")
@@ -514,8 +578,8 @@ async function main() {
     }
 
     // Interactive custom pages
-    await captureProtocolDetails(page)
-    await captureResearchMapLiterature(page)
+    if (shouldCapture("protocol-details.png")) await captureProtocolDetails(page)
+    if (shouldCapture("research-map-literature.png")) await captureResearchMapLiterature(page)
     await captureWritingEditor(page)
 
     console.log("Screenshot capture complete.")

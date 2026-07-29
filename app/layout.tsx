@@ -98,10 +98,18 @@ export default function RootLayout({
           //   display/serif       → Source Serif 4 (scientific-publishing serif)
           //   mono                → IBM Plex Mono (sequences, IDs, measurements)
           // Legacy var names are kept to avoid churn; their resolved faces changed.
-          "--font-ibm-sans": "var(--font-ibm-sans, 'Merriweather Sans', system-ui, sans-serif)",
-          "--font-ibm-serif": "var(--font-ibm-serif, 'Source Serif 4', Georgia, serif)",
-          "--font-familjen": "var(--font-familjen, 'Merriweather Sans', system-ui, sans-serif)",
-          "--font-jetbrains-mono": "var(--font-jetbrains-mono, 'IBM Plex Mono', monospace)",
+          //
+          // These must NOT be written as `var(--font-x, fallback)` referencing
+          // their own name. A custom property whose value references itself is
+          // invalid at computed-value time, so the property resolves to nothing —
+          // and every `font-family: var(--font-ibm-serif), ...` built on it is
+          // then dropped entirely, silently falling the whole site back to the
+          // browser's system stacks. That bug made every `font-serif` headline on
+          // the marketing site render sans.
+          "--font-ibm-sans": "'Merriweather Sans', system-ui, sans-serif",
+          "--font-ibm-serif": "'Source Serif 4', Georgia, ui-serif, serif",
+          "--font-familjen": "'Merriweather Sans', system-ui, sans-serif",
+          "--font-jetbrains-mono": "'IBM Plex Mono', ui-monospace, monospace",
         } as React.CSSProperties}
       >
         <ThemeProvider

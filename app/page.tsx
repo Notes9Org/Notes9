@@ -2,21 +2,16 @@ import { redirect } from 'next/navigation'
 import { getCurrentUser } from "@/lib/auth/current-user"
 import { Header } from "@/components/marketing/header"
 import { Footer } from "@/components/marketing/footer"
-import { AcademicHero } from "@/components/marketing/academic-hero"
 import { ContactForm } from "@/components/marketing/contact-form"
 import { FloatingPageMenu } from "@/components/marketing/floating-page-menu"
-import { StackSection } from "@/components/marketing/stack-section"
-import { ShowcaseSection } from "@/components/marketing/showcase-section"
-import { CatalystWorkbench } from "@/components/marketing/catalyst-workbench"
-import { Check } from "@phosphor-icons/react/ssr"
+import { HeroSplit } from "@/components/marketing/hero-split"
 import {
-  DifferentiationSection,
-  FinalCtaSection,
-  IcpBenefitsSection,
-  PainSection,
-  PricingTeaserSection,
-  SolutionSection,
-} from "@/components/marketing/home-sections"
+  CatalystBand,
+  ChainSection,
+  ClosingSection,
+  FractureSection,
+  ProofBand,
+} from "@/components/marketing/home-editorial"
 
 import "@/styles/marketing.css"
 
@@ -80,80 +75,59 @@ export default async function HomePage({
         <Header />
         <FloatingPageMenu />
         <main className="flex-1 pt-16">
-          <AcademicHero />
-          {/* Modern stacked layout: full-screen sticky pages that lock over
-              the pinned hero and each other as you scroll. */}
-          <StackSection index={0}><PainSection /></StackSection>
-          <StackSection index={1}>
-            <ShowcaseSection
-              eyebrow="Connected workflow"
-              title="Everything in your lab, connected"
-              description="Projects, literature, protocols, experiments, samples and results are all linked — so the reasoning behind any result is one click away."
-              points={[
-                "Projects ↔ literature ↔ experiments ↔ results, linked by default",
-                "Trace any figure back to its protocol and raw data",
-                "See your whole research map at a glance",
-              ]}
-              image="research-map"
-              imageAlt="Notes9 research map showing linked projects, experiments and literature"
-            />
-          </StackSection>
-          <StackSection index={2} variant="highlight">
-            <div className="container mx-auto px-4 py-6 sm:px-6 lg:px-8">
-              <div className="grid items-center gap-8 lg:grid-cols-2 lg:gap-14">
-                <div className="min-w-0">
-                  <span className="inline-flex items-center gap-2 rounded-full border border-[var(--n9-accent)]/30 bg-[var(--n9-accent)]/[0.12] px-3 py-1 text-[12.5px] font-semibold uppercase tracking-[0.12em] text-[var(--n9-accent)]">
-                    Meet Catalyst
-                  </span>
-                  <h2 className="mt-4 font-serif text-[2rem] font-bold leading-[1.12] tracking-tight text-foreground sm:text-[2.6rem] sm:leading-[1.08]">
-                    Not a search box. An AI that does the&nbsp;work.
+          {/* Replaces the AcademicHero + eight scroll-locked StackSections.
+              The stacked layout pinned a hero and slid full-screen panels over
+              it, which meant eight viewport-height scroll events before a
+              visitor reached pricing. This composition is a normal document:
+              sections follow one another, and the page is roughly half as tall.
+
+              The previous version is not deleted — every section component it
+              used still exists in components/marketing/home-sections.tsx, so
+              reverting is an import change rather than a rebuild. */}
+          <HeroSplit />
+          <ProofBand />
+          <FractureSection />
+          <ChainSection />
+          <CatalystBand />
+          <ClosingSection />
+
+          <section className="border-t border-border/40">
+            <div className="container mx-auto px-4 py-20 sm:px-6 sm:py-24 lg:px-8" id="contact">
+              {/* Two columns rather than a stacked block. ContactForm brings its
+                  own card and heading, so a second heading above it read as a
+                  duplicate; the left column now carries the editorial framing
+                  and the direct details, and the form keeps its own surface. */}
+              <div className="grid gap-12 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)] lg:gap-20">
+                <div>
+                  <p className="n9-label">Get in touch</p>
+                  <h2 className="mt-6 max-w-sm font-serif text-[clamp(1.9rem,4vw,2.9rem)] leading-[1.08] tracking-[-0.02em] text-foreground">
+                    Talk to us about your lab.
                   </h2>
-                  <p className="mt-4 max-w-xl text-[17px] leading-relaxed text-muted-foreground sm:text-[19px]">
-                    Catalyst works across your whole project — grounded in your notes, experiments
-                    and papers, and it cites every claim. Try each task &rarr;
+                  <p className="mt-5 max-w-sm text-[16px] leading-7 text-muted-foreground">
+                    Tell us what you are working on and how your group records it today.
+                    We will show you how Notes9 would fit around it.
                   </p>
-                  <ul className="mt-6 space-y-3">
-                    {[
-                      "Answer project questions · design protocols · plan experiments",
-                      "Generate graphs, edit spreadsheets, outline projects",
-                      "Every answer cited — no context pasting, no hallucinations",
-                    ].map((point) => (
-                      <li key={point} className="flex items-start gap-3 text-[15px] text-foreground/90 sm:text-base">
-                        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--n9-accent)]/12 text-[var(--n9-accent)]">
-                          <Check className="h-3.5 w-3.5" weight="bold" />
-                        </span>
-                        {point}
-                      </li>
-                    ))}
-                  </ul>
+
+                  <hr className="n9-hairline mt-10" />
+
+
+                  <div className="mt-8">
+                    <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                      Email
+                    </p>
+                    <a
+                      href="mailto:admin@notes9.com"
+                      className="mt-2 inline-block text-[17px] text-foreground underline-offset-4 transition-colors hover:text-[var(--n9-accent)] hover:underline"
+                    >
+                      admin@notes9.com
+                    </a>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <CatalystWorkbench />
-                </div>
+
+                <ContactForm />
               </div>
             </div>
-          </StackSection>
-          <StackSection index={3}><IcpBenefitsSection /></StackSection>
-          <StackSection index={4}><DifferentiationSection /></StackSection>
-          <StackSection index={5}><PricingTeaserSection /></StackSection>
-          <StackSection index={6}>
-            <section id="contact">
-              <div className="container mx-auto px-4 py-20 sm:px-6 lg:px-8">
-                <div className="n9-readable mx-auto max-w-2xl text-center">
-                  <h2 className="font-serif text-3xl tracking-tight text-foreground sm:text-4xl">
-                    Get in touch
-                  </h2>
-                  <p className="mt-4 text-[20px] leading-7 text-muted-foreground">
-                    Tell us about your lab and where friction shows up today.
-                  </p>
-                </div>
-                <div className="mx-auto mt-10 max-w-2xl">
-                  <ContactForm />
-                </div>
-              </div>
-            </section>
-          </StackSection>
-          <StackSection index={7}><FinalCtaSection /></StackSection>
+          </section>
         </main>
         <Footer />
       </div>

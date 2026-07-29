@@ -89,11 +89,9 @@ export function HeroSearch() {
   return (
     <div className="mx-auto w-full max-w-2xl">
       <form onSubmit={onSubmit} className="group relative">
-        {/* rotating conic aura */}
-        <div className="n9-search-aura" aria-hidden />
         {/* focus glow */}
-        <div className="pointer-events-none absolute -inset-1 rounded-[26px] bg-[var(--n9-accent)]/[0.12] opacity-0 blur-xl transition-opacity duration-500 group-focus-within:opacity-100" />
-        <div className="relative flex items-center gap-2 rounded-[22px] border border-border/60 bg-card/90 py-2 pl-4 pr-2 shadow-[0_18px_50px_-24px_var(--n9-accent-glow)] backdrop-blur-md transition-colors duration-200 focus-within:border-[var(--n9-accent)]/50">
+        <div className="pointer-events-none absolute -inset-1 rounded-full bg-[var(--n9-accent)]/[0.12] opacity-0 blur-xl transition-opacity duration-500 group-focus-within:opacity-100" />
+        <div className="relative flex items-center gap-2 rounded-full border border-border/60 bg-card/90 py-1.5 pl-5 pr-1.5 shadow-[0_14px_40px_-22px_var(--n9-accent-glow)] backdrop-blur-md transition-colors duration-200 focus-within:border-[var(--n9-accent)]/50">
           <MagnifyingGlass className="h-5 w-5 shrink-0 text-muted-foreground/70" weight="bold" />
           <div className="relative flex-1">
             <input
@@ -104,13 +102,13 @@ export function HeroSearch() {
               onFocus={() => setFocused(true)}
               onBlur={() => setFocused(false)}
               aria-label="Ask a research question"
-              className="h-11 w-full border-0 bg-transparent text-[15px] text-foreground outline-none sm:text-base"
+              className="h-10 w-full border-0 bg-transparent text-[15px] text-foreground outline-none"
             />
             {/* Animated typewriter shown while the field is empty & unfocused. */}
             {active && (
               <div
                 aria-hidden
-                className="pointer-events-none absolute inset-0 flex items-center truncate text-[15px] text-muted-foreground/60 sm:text-base"
+                className="pointer-events-none absolute inset-0 flex items-center truncate text-[15px] text-muted-foreground/60"
               >
                 <span className="truncate">{typed || "Ask a research question…"}</span>
                 <span className="ml-0.5 inline-block h-[1.1em] w-px animate-pulse bg-[var(--n9-accent)]/70" />
@@ -121,9 +119,8 @@ export function HeroSearch() {
             type="submit"
             disabled={submitting || !query.trim()}
             aria-label="Search live literature"
-            className="group/btn flex h-11 shrink-0 items-center gap-1.5 rounded-[16px] bg-[linear-gradient(115deg,var(--n9-accent),color-mix(in_oklab,var(--n9-accent)_58%,#d9a24a))] px-4 text-[15px] font-semibold text-white shadow-[0_10px_28px_-10px_var(--n9-accent-glow)] transition-all duration-200 hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-45 sm:px-5"
+            className="group/btn flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--n9-accent)] text-white shadow-[0_8px_22px_-10px_var(--n9-accent-glow)] transition-all duration-200 hover:bg-[var(--n9-accent-hover)] disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <span className="hidden sm:inline">Search</span>
             <ArrowRight
               className="h-4 w-4 transition-transform duration-200 group-hover/btn:translate-x-0.5"
               weight="bold"
@@ -133,7 +130,7 @@ export function HeroSearch() {
       </form>
 
       <p className="mt-3 text-center text-[13px] text-muted-foreground/80">
-        Ask a real research question and see it answered from live literature — cited, in seconds.
+        Answered from live literature, with citations, in seconds.
       </p>
     </div>
   )

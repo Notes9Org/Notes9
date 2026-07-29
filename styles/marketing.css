@@ -329,10 +329,127 @@
   mask-image: radial-gradient(62% 55% at 50% 38%, #000 0%, transparent 78%);
 }
 
+/* ──────────────────────────────────────────────────────────────────────────
+   Editorial layer
+   ─────────────────────────────────────────────────────────────────────────
+   A second, quieter visual register for the homepage: organic depth-of-field
+   colour fields, monospace section labels, and hairline rules. The existing
+   aurora/dot-grid language stays for the product pages; this one is for
+   moments that should read as a research institute rather than a SaaS app.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* Organic colour field — layered wide radial gradients under a heavy blur, so
+   the edges are genuinely out of focus rather than a flat vector shape. Warm
+   terracotta and sage, the two ends of the brand palette. Purely decorative;
+   always render behind content with aria-hidden. */
+.marketing-theme .n9-organic {
+  position: absolute;
+  inset: -18%;
+  filter: blur(72px) saturate(122%);
+  opacity: 0.9;
+  background:
+    /* Directional key light from the top — a single implied light source reads
+       as photographed depth, where evenly-scattered blobs read as CSS. */
+    radial-gradient(58% 38% at 50% -6%, color-mix(in oklab, #f6e4cf 62%, transparent), transparent 72%),
+    radial-gradient(38% 52% at 22% 30%, color-mix(in oklab, var(--n9-accent) 46%, transparent), transparent 68%),
+    radial-gradient(34% 44% at 76% 24%, color-mix(in oklab, #c9a227 34%, transparent), transparent 66%),
+    /* Cool sage counterpoint keeps the field from collapsing into warm mush. */
+    radial-gradient(46% 58% at 62% 74%, color-mix(in oklab, #7f8f74 40%, transparent), transparent 70%),
+    radial-gradient(30% 40% at 34% 82%, color-mix(in oklab, var(--n9-accent) 30%, transparent), transparent 64%);
+  will-change: transform;
+  animation: n9-organic-drift 34s ease-in-out infinite;
+}
+.dark .marketing-theme .n9-organic { opacity: 0.62; filter: blur(84px) saturate(108%); }
+
+/* Film grain over the colour field. This is the single highest-leverage polish
+   step: an unbroken CSS gradient always reads as vector, and a little noise is
+   what makes it read as a photograph. Reuses the fractal-noise SVG already
+   defined for the glass surfaces. */
+.marketing-theme .n9-grain-overlay {
+  position: absolute;
+  inset: 0;
+  background-image: var(--glass-grain-img);
+  background-repeat: repeat;
+  opacity: 0.16;
+  mix-blend-mode: soft-light;
+}
+.dark .marketing-theme .n9-grain-overlay { opacity: 0.22; }
+
+/* Fine technical grid — a faint drafting-paper substrate under the colour.
+   Much tighter than the existing dot-grid, so it reads as precision rather than
+   as decoration. */
+.marketing-theme .n9-grid-fine {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, color-mix(in oklab, var(--foreground) 5%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--foreground) 5%, transparent) 1px, transparent 1px);
+  background-size: 56px 56px;
+  -webkit-mask-image: radial-gradient(64% 58% at 50% 34%, #000 0%, transparent 76%);
+  mask-image: radial-gradient(64% 58% at 50% 34%, #000 0%, transparent 76%);
+}
+
+/* Edge falloff, so the hero settles into the page instead of ending on a seam. */
+.marketing-theme .n9-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 88% at 50% 12%, transparent 46%, var(--background) 92%);
+}
+
+@keyframes n9-organic-drift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1.02) rotate(0deg); }
+  50%      { transform: translate3d(-2.5%, 2%, 0) scale(1.1) rotate(4deg); }
+}
+
+/* Softens the field into the page so it never reads as a pasted-on rectangle. */
+.marketing-theme .n9-organic-mask {
+  -webkit-mask-image: radial-gradient(78% 74% at 50% 44%, #000 22%, transparent 82%);
+  mask-image: radial-gradient(78% 74% at 50% 44%, #000 22%, transparent 82%);
+}
+
+/* Monospace section label with a small accent tick — the "▪ PLATFORM OVERVIEW"
+   device. Uppercase and widely tracked so it reads as an index marker, not a
+   badge. */
+.marketing-theme .n9-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+.marketing-theme .n9-label::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
+  background: var(--n9-accent);
+}
+
+/* Hairline rule used to separate editorial blocks. Lighter than --border so it
+   reads as typographic structure rather than a container edge. */
+.marketing-theme .n9-hairline {
+  border: 0;
+  border-top: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
+}
+
+/* Oversized closing wordmark. Clamped so it always fills the measure without
+   overflowing on mobile. */
+.marketing-theme .n9-wordmark {
+  font-size: clamp(3.5rem, 17vw, 15rem);
+  line-height: 0.82;
+  letter-spacing: -0.035em;
+  font-weight: 600;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .marketing-theme .n9-rise { opacity: 1; animation: none; filter: none; }
   .marketing-theme .n9-gradient-text.n9-shimmer,
   .marketing-theme .n9-search-aura,
+  .marketing-theme .n9-organic,
   .marketing-theme .n9-aurora { animation: none; }
 }
 
@@ -470,5 +587,130 @@
 @media (max-width: 767px) {
   .marketing-theme {
     overflow-x: hidden;
+  }
+}
+
+/* ── Hero deck ─────────────────────────────────────────────────────────────
+   The right half of the hero is one claim made twice: an answer, held still
+   and legible, and beside it the records that answer is built from, cycling
+   so each takes its turn in front. Nothing has to be hovered for the point to
+   land — the deck circulates on its own.
+
+   Three nested elements per card, because three different things move and
+   collapsing them fights:
+
+     .n9-deck-card   the slot. Never moves. Owns the hover target and the
+                     raised z-index, so picking a card cannot move it out from
+                     under the cursor and start a flicker loop.
+     .n9-deck-orbit  the circulation. Owns the keyframes.
+     .n9-deck-face   the pick. Scales about its own centre, so any point
+                     inside the card stays inside it.
+
+   The slot carries no z-index of its own, so the orbit's stacking order reads
+   against the whole deck; on hover the slot takes z-index 50, which makes it a
+   stacking context and lifts the card above every other regardless of where
+   the animation had it.                                                      */
+.n9-deck-card {
+  position: absolute;
+  inset: 0;
+}
+
+.n9-deck-card:hover {
+  z-index: 50;
+}
+
+.n9-deck-orbit {
+  position: absolute;
+  inset: 0;
+  /* Cards keep their natural height and hang from a common top edge.
+     Stretching them all to the slot leaves the shorter screens — the protocol
+     list — with a blank lower half, which reads as a broken panel rather than
+     a card; centring them instead makes the headers disagree, so a card coming
+     forward looks like a second window opening rather than a card being
+     turned. Aligned at the top, the headers stack and the ragged bottom edges
+     become the depth cue. */
+  display: flex;
+  align-items: flex-start;
+  transform-origin: 50% 50%;
+  animation: n9-deck-cycle 18s linear calc(var(--n9-deck-i, 0) * -4.5s) infinite;
+  will-change: transform, opacity;
+}
+
+/* Stop the carousel while it is being read. */
+.n9-deck:hover .n9-deck-orbit {
+  animation-play-state: paused;
+}
+
+.n9-deck-face {
+  transform-origin: 50% 50%;
+  transition: transform 380ms var(--n9-ease, cubic-bezier(0.22, 1, 0.36, 1));
+  will-change: transform;
+}
+
+.n9-deck-card:hover .n9-deck-face {
+  transform: translateY(-0.75rem) scale(1.06);
+}
+
+/* Four positions, front to back. The stack recedes away from the answer, so
+   the card in front is the one nearest it. Leaving the front is a lift and a
+   dissolve rather than a slide, which avoids the card crossing the answer on
+   its way round. */
+@keyframes n9-deck-cycle {
+  0%,
+  18% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+    opacity: 1;
+    z-index: 40;
+  }
+  21.5% {
+    transform: translate(0, -4%) scale(1.06) rotate(0deg);
+    opacity: 0;
+    z-index: 40;
+  }
+  23% {
+    transform: translate(-16%, 13%) scale(0.86) rotate(-8deg);
+    opacity: 0;
+    z-index: 10;
+  }
+  25%,
+  43% {
+    transform: translate(-16%, 13%) scale(0.86) rotate(-8deg);
+    opacity: 0.46;
+    z-index: 10;
+  }
+  50%,
+  68% {
+    transform: translate(-10.5%, 8.5%) scale(0.91) rotate(-5.3deg);
+    opacity: 0.64;
+    z-index: 20;
+  }
+  75%,
+  93% {
+    transform: translate(-5.2%, 4.2%) scale(0.955) rotate(-2.6deg);
+    opacity: 0.84;
+    z-index: 30;
+  }
+  100% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+    opacity: 1;
+    z-index: 30;
+  }
+}
+
+/* Reduced motion gets the same stack, just held still: index 0 in front. */
+@media (prefers-reduced-motion: reduce) {
+  .n9-deck-orbit {
+    animation: none;
+    transform:
+      translate(calc(var(--n9-deck-i, 0) * -5.3%), calc(var(--n9-deck-i, 0) * 4.3%))
+      scale(calc(1 - var(--n9-deck-i, 0) * 0.047))
+      rotate(calc(var(--n9-deck-i, 0) * -2.7deg));
+    opacity: calc(1 - var(--n9-deck-i, 0) * 0.18);
+    z-index: calc(40 - var(--n9-deck-i, 0) * 10);
+  }
+
+  .n9-deck-face,
+  .n9-deck-card:hover .n9-deck-face {
+    transition: none;
   }
 }
