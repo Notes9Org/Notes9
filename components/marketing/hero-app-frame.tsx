@@ -358,7 +358,7 @@ export function HeroChartPanel({ className }: { className?: string }) {
       <div className="flex items-center justify-between border-b border-border/50 px-4 py-2.5">
         <span className="flex items-center gap-2 text-[13.5px] font-medium">
           <ChartLine className="size-4 text-muted-foreground" />
-          Drug Discovery Initiative
+          Ratio screen — yield by condition
         </span>
         <span className="flex items-center gap-1.5 rounded-md border border-border/70 px-2.5 py-1 text-[11.5px] text-muted-foreground">
           <UploadSimple className="size-3 rotate-180" />
@@ -374,7 +374,7 @@ export function HeroChartPanel({ className }: { className?: string }) {
             textAnchor="middle"
             className="fill-foreground text-[15px]"
           >
-            ELISA standard curve
+            PEI:DNA ratio — transient yield
           </text>
 
           {[0, 0.5, 1, 1.5, 2, 2.5, 3].map((v) => (
@@ -416,7 +416,7 @@ export function HeroChartPanel({ className }: { className?: string }) {
             textAnchor="middle"
             className="fill-muted-foreground text-[11px]"
           >
-            Concentration (pg/mL)
+            PEI:DNA ratio (w/w)
           </text>
           <text
             x={16}
@@ -425,7 +425,7 @@ export function HeroChartPanel({ className }: { className?: string }) {
             transform={`rotate(-90 16 ${PH / 2})`}
             className="fill-muted-foreground text-[11px]"
           >
-            OD450
+            Yield
           </text>
 
           {/* Plotly's default trace blue, so the plot reads as the real one. */}
@@ -485,7 +485,7 @@ export function HeroNotePanel({ className }: { className?: string }) {
       <div className="flex items-center gap-2 border-b border-border/50 px-3.5 py-2.5">
         <CaretLeft className="size-3.5 text-muted-foreground" />
         <span className="flex-1 truncate text-[13.5px] font-medium">
-          Drug Discovery Initiative
+          Transfection screen — PEI:DNA ratios
         </span>
         <Plus className="size-3.5 text-muted-foreground/70" />
         <Printer className="size-3.5 text-muted-foreground/70" />
@@ -531,17 +531,16 @@ export function HeroNotePanel({ className }: { className?: string }) {
         <div className="rounded-[2px] bg-white px-6 pb-4 pt-3.5 shadow-[0_1px_6px_rgba(44,36,24,0.14)]">
           <p className="text-[9px] text-[#b8b2a8]">Enter header…</p>
           <p className="mt-3 text-center text-[13px] font-bold leading-snug text-[#141414]">
-            Latest Updates on Malaria Transmission Blocking Vaccines Pfs230
+            Condition B (3:1) gave the highest transient yield
           </p>
           <p className="mt-3 text-[9.5px] text-[#1a56b8] underline">https://www.notes9.com</p>
           <p className="mt-3 text-[11px] font-semibold text-[#141414]">
-            1. Recent Scientific Literature:
+            1. Result
           </p>
           <p className="mt-1.5 text-[9.5px] leading-[1.75] text-[#2f2f2f]">
-            – A comprehensive review titled &ldquo;Transmission-blocking malaria vaccines:
-            past, present, and future&rdquo; was published in March 2023 in Cell Host
-            Microbe, discussing the current state and future prospects of
-            transmission-blocking vaccines, including Pfs23
+            Across the ratio screen, condition B (3:1 PEI:DNA) produced the highest
+            transient yield in HEK293T. Higher ratios (4:1) increased cytotoxicity with no
+            yield gain, matching the ratio reported in the saved literature.
           </p>
         </div>
       </div>
@@ -849,7 +848,7 @@ export function HeroReferencesPanel({ className }: { className?: string }) {
       <div className="flex items-center gap-2 border-b border-border/50 px-4 py-2.5">
         <MagnifyingGlass className="size-4 text-muted-foreground" />
         <span className="flex-1 truncate text-[13px] text-muted-foreground">
-          cancer apoptotic protein review
+          PEI:DNA ratio transient transfection yield
         </span>
         <span className="shrink-0 font-mono text-[10.5px] text-muted-foreground">10 papers</span>
       </div>
@@ -862,10 +861,9 @@ export function HeroReferencesPanel({ className }: { className?: string }) {
             AI overview
           </p>
           <p className="mt-2 text-[11.5px] leading-[1.75] text-foreground/80">
-            Apoptosis is a fundamental programmed cell death mechanism whose dysregulation is
-            a hallmark of cancer, driving tumour development, progression and resistance to
-            therapy<Cite n="1" />
-            <Cite n="2" />.
+            PEI-mediated transient transfection yield peaks at a 3:1 PEI:DNA ratio in
+            suspension HEK293; higher ratios raise cytotoxicity without improving
+            titre<Cite n="1" />.
           </p>
         </div>
 

@@ -61,26 +61,37 @@ export function HeroSplit() {
           only its left portion is in frame — a window, not a slide. Nothing
           frames it, so there is no second surface for the eye to read as "the
           other half". */}
-      {/* A collage of the surfaces one answer touches. Each is tilted on its
-          own axis and carries its own shadow, so they read as separate sheets
-          laid over each other rather than one flat composite. The answer sits
-          in front at full strength; the four it draws on sit behind it, each
-          turned far enough back to show only the part a researcher would
-          recognise — the fitted curve, the cited papers, the versioned SOP
-          list, the document page. Pulled left and scaled down from the earlier
-          single panel so the whole stack sits inside the frame. */}
+      {/* A deck that fans open.
+          At rest the five surfaces sit tightly stacked behind the answer, the
+          way a hand of cards squares up. Hovering the group spreads them to
+          their poster positions — hero centre, the four supporting screens
+          fanned symmetrically around it, each turned INWARD so the arrangement
+          converges on the middle.
+
+          Facing direction is the load-bearing detail: everything previously
+          turned the same way, so the group read as a stack that had slipped.
+          Mirroring the Y-rotation across the centre line is what makes it a
+          composition rather than a pile.
+
+          The container takes pointer events so the hover can fire, but every
+          panel inside stays aria-hidden — this is decoration that responds to
+          the cursor, not content, and it sits clear of the search field. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute right-[-4%] top-1/2 hidden h-[44rem] w-[40rem] -translate-y-1/2 [perspective:2600px] lg:block xl:right-[-1%] xl:w-[44rem]"
+        className="group absolute right-[-6%] top-1/2 hidden h-[46rem] w-[46rem] -translate-y-1/2 [perspective:2800px] lg:block xl:right-[-2%] xl:w-[50rem]"
       >
-        <div className="absolute -inset-10 -z-10 rounded-[56px] bg-[var(--n9-accent)]/[0.08] blur-3xl" />
+        <div className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-[26rem] w-[26rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--n9-accent)]/[0.13] blur-3xl transition-all duration-700 group-hover:h-[30rem] group-hover:w-[30rem]" />
 
-        <HeroReferencesPanel className="absolute left-0 top-[1%] w-[17rem] origin-center [transform:rotateY(-16deg)_rotateX(5deg)_rotate(-3deg)_scale(0.86)] opacity-65 shadow-[0_26px_60px_-34px_rgba(44,36,24,0.45)]" />
-        <HeroChartPanel className="absolute right-0 top-[4%] w-[18rem] origin-center [transform:rotateY(-13deg)_rotateX(4deg)_rotate(2deg)_scale(0.86)] opacity-70 shadow-[0_26px_60px_-34px_rgba(44,36,24,0.45)]" />
-        <HeroProtocolPanel className="absolute bottom-[3%] left-0 w-[17rem] origin-center [transform:rotateY(-15deg)_rotateX(4deg)_rotate(2deg)_scale(0.86)] opacity-65 shadow-[0_26px_60px_-34px_rgba(44,36,24,0.45)]" />
-        <HeroNotePanel className="absolute bottom-[1%] right-0 w-[17rem] origin-center [transform:rotateY(-12deg)_rotateX(5deg)_rotate(-2deg)_scale(0.86)] opacity-65 shadow-[0_26px_60px_-34px_rgba(44,36,24,0.45)]" />
+        {/* Outer pair — furthest back, most turned, faintest. */}
+        <HeroProtocolPanel className="pointer-events-none absolute bottom-[4%] left-0 z-0 w-[16rem] origin-center opacity-[0.5] shadow-[0_24px_60px_-34px_rgba(44,36,24,0.45)] transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] [transform:translate(34%,-22%)_rotateY(22deg)_rotateX(5deg)_rotate(-3deg)_scale(0.72)] group-hover:opacity-[0.62] group-hover:[transform:translate(0,0)_rotateY(22deg)_rotateX(5deg)_rotate(-6deg)_scale(0.78)]" />
+        <HeroNotePanel className="pointer-events-none absolute bottom-[4%] right-0 z-0 w-[16rem] origin-center opacity-[0.5] shadow-[0_24px_60px_-34px_rgba(44,36,24,0.45)] transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] [transform:translate(-34%,-22%)_rotateY(-22deg)_rotateX(5deg)_rotate(3deg)_scale(0.72)] group-hover:opacity-[0.62] group-hover:[transform:translate(0,0)_rotateY(-22deg)_rotateX(5deg)_rotate(6deg)_scale(0.78)]" />
 
-        <HeroGroundedAnswerPanel className="absolute left-1/2 top-1/2 z-10 w-[21rem] origin-center [transform:translate(-50%,-50%)_rotateY(-14deg)_rotateX(3deg)_rotate(-1deg)_scale(0.97)] shadow-[0_60px_120px_-40px_rgba(44,36,24,0.55)]" />
+        {/* Inner pair — closer, less turned, stronger. */}
+        <HeroReferencesPanel className="pointer-events-none absolute left-[1%] top-[10%] z-10 w-[17rem] origin-center opacity-70 shadow-[0_30px_70px_-36px_rgba(44,36,24,0.5)] transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] [transform:translate(30%,16%)_rotateY(15deg)_rotateX(4deg)_rotate(-1deg)_scale(0.8)] group-hover:opacity-[0.85] group-hover:[transform:translate(0,0)_rotateY(15deg)_rotateX(4deg)_rotate(-3deg)_scale(0.86)]" />
+        <HeroChartPanel className="pointer-events-none absolute right-[1%] top-[10%] z-10 w-[17rem] origin-center opacity-70 shadow-[0_30px_70px_-36px_rgba(44,36,24,0.5)] transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] [transform:translate(-30%,16%)_rotateY(-15deg)_rotateX(4deg)_rotate(1deg)_scale(0.8)] group-hover:opacity-[0.85] group-hover:[transform:translate(0,0)_rotateY(-15deg)_rotateX(4deg)_rotate(3deg)_scale(0.86)]" />
+
+        {/* The hero. Largest, squarest to the viewer, heaviest shadow. */}
+        <HeroGroundedAnswerPanel className="pointer-events-none absolute left-1/2 top-1/2 z-20 w-[22rem] origin-center shadow-[0_70px_140px_-40px_rgba(44,36,24,0.6)] transition-transform duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] [transform:translate(-50%,-50%)_rotateY(-5deg)_rotateX(2deg)] group-hover:[transform:translate(-50%,-50%)_rotateY(-5deg)_rotateX(2deg)_scale(1.03)]" />
       </div>
 
       <div className="container relative mx-auto flex min-h-[92svh] items-center px-4 py-20 sm:px-6 lg:px-8">
