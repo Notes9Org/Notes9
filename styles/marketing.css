@@ -592,137 +592,58 @@
 
 /* ── Hero deck ─────────────────────────────────────────────────────────────
    The right half of the hero is one claim made twice: an answer, held still
-   and legible, and beside it the records that answer is built from, cycling
-   so each takes its turn in front. Nothing has to be hovered for the point to
-   land, and the citation the front card belongs to lights up inside the answer
-   as it arrives, so the two halves are visibly the same four records.
+   and legible, and across its corner the records that answer is built from,
+   circulating so each takes its turn in front. Nothing has to be hovered for
+   the point to land. The citation the front card belongs to is marked inside
+   the answer, and clicking any citation deals its card to the front.
 
-   That sync needs no JS. Both animations run the same 20s period off the same
-   5s-per-card offsets, so they cannot drift.
+   Position is a single number, --n9-deck-pos, 0 for the front through 3 for
+   the back, set from React. Every card reads its transform, its opacity and
+   its stacking order off that one value, and a transition covers the change.
+   The mark on the citation is driven by the same state, so the two cannot
+   drift: there is only one source of truth rather than two animations trusted
+   to stay in phase.
 
-   Three nested elements per card, because three different things move and
-   collapsing them fights:
+   z-index deliberately does not transition. A card leaving the front drops
+   behind the stack the instant it starts moving and slides down into the back
+   still visible, which reads as a hand pushing the top card underneath.       */
+/* The deck lies over the answer's corner, so it must be transparent to the
+   pointer or it would swallow clicks meant for the citations underneath. */
+.n9-deck {
+  pointer-events: none;
+}
 
-     .n9-deck-card   the slot. Never moves. Owns the hover target and the
-                     raised z-index, so picking a card cannot move it out from
-                     under the cursor and start a flicker loop.
-     .n9-deck-orbit  the circulation. Owns the keyframes.
-     .n9-deck-face   the pick. Scales about its own centre, so any point
-                     inside the card stays inside it.                         */
 .n9-deck-card {
   position: absolute;
   inset: 0;
 }
 
-.n9-deck-card:hover {
-  z-index: 50;
-}
-
 .n9-deck-orbit {
   position: absolute;
   inset: 0;
-  /* Every card is the same size. Ragged heights made a card coming forward
-     look like a second window opening rather than a card being turned; a deck
-     only reads as a deck if the cards match. Shorter screens keep their own
-     trailing whitespace, which is what they look like in the product anyway. */
   display: flex;
   align-items: stretch;
   transform-origin: 50% 50%;
-  animation: n9-deck-cycle 20s linear calc(var(--n9-deck-i, 0) * -5s) infinite;
-  /* Held on its own compositor layer for the whole cycle, not just while a
-     transform is mid-flight, so no card is ever promoted or demoted part-way
-     through its travel. */
+  transform:
+    translate3d(calc(var(--n9-deck-pos, 0) * 5.3%), calc(var(--n9-deck-pos, 0) * 4.3%), 0)
+    scale(calc(1 - var(--n9-deck-pos, 0) * 0.047))
+    rotate(calc(var(--n9-deck-pos, 0) * 2.7deg));
+  opacity: calc(1 - var(--n9-deck-pos, 0) * 0.18);
+  z-index: calc(40 - var(--n9-deck-pos, 0) * 10);
+  transition:
+    transform 720ms cubic-bezier(0.34, 1.16, 0.64, 1),
+    opacity 620ms var(--n9-ease, cubic-bezier(0.22, 1, 0.36, 1));
   will-change: transform, opacity;
   backface-visibility: hidden;
 }
 
-/* Stop the carousel, and the highlight that tracks it, while being read. */
-.n9-deck:hover .n9-deck-orbit,
-.n9-hero-cast:has(.n9-deck:hover) .n9-cite-row::after,
-.n9-hero-cast:has(.n9-deck:hover) .n9-cite-row::before {
-  animation-play-state: paused;
-}
+/* The citation the front card belongs to: an accent bar down the left edge and
+   a wash across the row. Both are overlays rather than changes to the row's own
+   border and background, so the row keeps its real styling and only cheap
+   properties move.
 
-.n9-deck-face {
-  transform-origin: 50% 50%;
-  transition: transform 380ms var(--n9-ease, cubic-bezier(0.22, 1, 0.36, 1));
-  will-change: transform;
-}
-
-.n9-deck-card:hover .n9-deck-face {
-  transform: translateY(-0.75rem) scale(1.06);
-}
-
-/* Four positions, front to back, receding to the right so the card in
-   front is the one furthest from the edge of the frame.
-
-   Leaving the front is a tuck, not a dissolve: the card slides down into the
-   back position still visible, which reads as a hand pushing the top card
-   underneath. Fading it out at the front and back in at the rear, which is
-   what this did first, reads as two separate cards rather than one going
-   round.
-
-   The timing is what keeps that readable. The departing card gets a head start
-   at full stacking order and only drops behind once it has visibly shrunk and
-   moved, so the handover is a card sliding under rather than one blinking out
-   of the stack; and it is already a third of the way back before the next card
-   finishes arriving, so the two never contend for the front.                 */
-@keyframes n9-deck-cycle {
-  0%,
-  15% {
-    transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
-    opacity: 1;
-    z-index: 40;
-    animation-timing-function: cubic-bezier(0.5, 0, 0.32, 1);
-  }
-  19% {
-    transform: translate3d(3%, 2.4%, 0) scale(0.975) rotate(1.5deg);
-    opacity: 0.9;
-    z-index: 40;
-    animation-timing-function: cubic-bezier(0.35, 0, 0.25, 1);
-  }
-  20% {
-    z-index: 4;
-  }
-  30%,
-  45% {
-    transform: translate3d(16%, 13%, 0) scale(0.86) rotate(8deg);
-    opacity: 0.46;
-    z-index: 10;
-    animation-timing-function: var(--n9-ease, cubic-bezier(0.22, 1, 0.36, 1));
-  }
-  50%,
-  70% {
-    transform: translate3d(10.5%, 8.5%, 0) scale(0.91) rotate(5.3deg);
-    opacity: 0.64;
-    z-index: 20;
-    animation-timing-function: var(--n9-ease, cubic-bezier(0.22, 1, 0.36, 1));
-  }
-  75%,
-  95% {
-    transform: translate3d(5.2%, 4.2%, 0) scale(0.955) rotate(2.6deg);
-    opacity: 0.84;
-    z-index: 30;
-    /* A little past one and back. Arriving at the front is the one moment in
-       the cycle the eye is on, and a card that stops dead reads mechanical. */
-    animation-timing-function: cubic-bezier(0.34, 1.28, 0.64, 1);
-  }
-  100% {
-    transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
-    opacity: 1;
-    z-index: 30;
-  }
-}
-
-/* The citation the front card belongs to, marked inside the answer: an accent
-   bar down the left edge and a wash across the row. Both are drawn as overlays
-   rather than by animating the row's own border and background, so the row
-   keeps its real styling and only cheap properties are animated.
-
-   The two rows crossfade rather than switching. The outgoing citation starts
-   fading at the moment its card begins to leave, and the incoming one starts
-   before its card has finished arriving, so there is a beat where both are
-   part-lit and the mark appears to travel down the list instead of blinking
+   The rows crossfade, because both transitions run at once off the same state
+   change, so the mark appears to travel down the source list rather than blink
    from one row to the next. */
 .n9-cite-row::after {
   content: "";
@@ -733,7 +654,7 @@
   box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--n9-accent) 42%, transparent);
   opacity: 0;
   pointer-events: none;
-  animation: n9-cite-mark 20s linear calc(var(--n9-cite-i, 0) * -5s) infinite;
+  transition: opacity 520ms var(--n9-ease, cubic-bezier(0.22, 1, 0.36, 1));
 }
 
 .n9-cite-row::before {
@@ -748,66 +669,26 @@
   background: var(--n9-accent);
   transform: translateY(-50%) scaleY(0);
   pointer-events: none;
-  animation: n9-cite-bar 20s linear calc(var(--n9-cite-i, 0) * -5s) infinite;
+  transition: transform 520ms cubic-bezier(0.34, 1.28, 0.64, 1);
 }
 
-@keyframes n9-cite-mark {
-  0%,
-  15% {
-    opacity: 1;
-    animation-timing-function: cubic-bezier(0.4, 0, 0.7, 1);
-  }
-  22%,
-  94% {
-    opacity: 0;
-    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
-  }
-  100% {
-    opacity: 1;
-  }
+.n9-cite-row.is-active::after {
+  opacity: 1;
 }
 
-@keyframes n9-cite-bar {
-  0%,
-  15% {
-    transform: translateY(-50%) scaleY(1);
-    animation-timing-function: cubic-bezier(0.4, 0, 0.7, 1);
-  }
-  22%,
-  94% {
-    transform: translateY(-50%) scaleY(0);
-    animation-timing-function: cubic-bezier(0.34, 1.28, 0.64, 1);
-  }
-  100% {
-    transform: translateY(-50%) scaleY(1);
-  }
+.n9-cite-row.is-active::before {
+  transform: translateY(-50%) scaleY(1);
 }
 
-/* Reduced motion holds the same arrangement still: card 0 in front, and the
-   citation it belongs to marked. */
+/* Clicking is the interaction; hovering only says the row is clickable. */
+.n9-cite-row:hover::after {
+  opacity: 0.55;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .n9-deck-orbit {
-    animation: none;
-    transform:
-      translate(calc(var(--n9-deck-i, 0) * 5.3%), calc(var(--n9-deck-i, 0) * 4.3%))
-      scale(calc(1 - var(--n9-deck-i, 0) * 0.047))
-      rotate(calc(var(--n9-deck-i, 0) * 2.7deg));
-    opacity: calc(1 - var(--n9-deck-i, 0) * 0.18);
-    z-index: calc(40 - var(--n9-deck-i, 0) * 10);
-  }
-
-  .n9-cite-row::after {
-    animation: none;
-    opacity: calc(1 - clamp(0, var(--n9-cite-i, 0), 1));
-  }
-
+  .n9-deck-orbit,
+  .n9-cite-row::after,
   .n9-cite-row::before {
-    animation: none;
-    transform: translateY(-50%) scaleY(calc(1 - clamp(0, var(--n9-cite-i, 0), 1)));
-  }
-
-  .n9-deck-face,
-  .n9-deck-card:hover .n9-deck-face {
     transition: none;
   }
 }

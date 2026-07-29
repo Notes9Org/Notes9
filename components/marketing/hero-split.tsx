@@ -7,6 +7,7 @@ import {
   ChartLine,
   PencilSimpleLine,
 } from "@phosphor-icons/react/ssr"
+import { useEffect, useState } from "react"
 import type { CSSProperties } from "react"
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react"
 import { HeroSearch } from "@/components/marketing/hero-search"
@@ -38,10 +39,8 @@ import {
  */
 
 /**
- * The deck, front to back. Order is the order of the answer's own citations,
- * so the screen in front when the page loads is the one the first citation
- * points at. Each card is cropped by its slot, which reads as a screen
- * continuing past the edge of the card rather than a panel that ran short.
+ * The deck, in citation order, so the mark travels down the answer's source
+ * list as the cards come round.
  *
  * backdrop-blur is dropped on all of them: the deck sits on a flat gradient so
  * it buys nothing, and four blurred surfaces animating at once is the
@@ -54,6 +53,51 @@ const DECK = [
   { Panel: HeroReferencesPanel, key: "literature" },
 ]
 
+/** Seconds each card holds the front before the deck advances on its own. */
+const DECK_DWELL_MS = 5000
+
+/**
+ * Which card is in front.
+ *
+ * This used to be a pure CSS keyframe loop, which could not be steered. Making
+ * it state costs a timer and buys two things: clicking a citation can deal that
+ * card to the front, and the mark on the citation is the same value that
+ * positions the deck rather than a second animation trusted to stay in phase
+ * with the first. They cannot drift because there is only one of them now.
+ *
+ * A click restarts the dwell, so a card you asked for gets a full turn before
+ * the deck moves on.
+ */
+function useDeckRotation(length: number) {
+  const [front, setFront] = useState(0)
+  const [paused, setPaused] = useState(false)
+  // Bumped on every selection. It is in the interval's deps purely so that
+  // picking a card tears down the running timer and starts a fresh one, rather
+  // than inheriting whatever was left of the previous card's turn.
+  const [restart, setRestart] = useState(0)
+
+  useEffect(() => {
+    if (paused) return
+    const id = window.setInterval(() => setFront((f) => (f + 1) % length), DECK_DWELL_MS)
+    return () => window.clearInterval(id)
+  }, [length, paused, restart])
+
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)")
+    const apply = () => setPaused(mq.matches)
+    apply()
+    mq.addEventListener("change", apply)
+    return () => mq.removeEventListener("change", apply)
+  }, [])
+
+  const select = (i: number) => {
+    setRestart((n) => n + 1)
+    setFront(i)
+  }
+
+  return { front, select }
+}
+
 const SCOPE: { label: string; icon: PhosphorIcon }[] = [
   { label: "Literature", icon: Books },
   { label: "Protocols", icon: ClipboardText },
@@ -63,6 +107,8 @@ const SCOPE: { label: string; icon: PhosphorIcon }[] = [
 ]
 
 export function HeroSplit() {
+  const { front, select } = useDeckRotation(DECK.length)
+
   return (
     <section className="relative isolate min-h-[92svh] overflow-hidden">
       {/* One continuous field across the whole section. The sign-up screen is
@@ -111,22 +157,29 @@ export function HeroSplit() {
             for the pair instead of a seam down the middle. */}
         <div className="absolute left-0 top-1/2 z-0 flex h-[35rem] w-[37rem] items-stretch drop-shadow-[0_60px_90px_rgba(44,36,24,0.28)] [transform:translateY(-50%)_perspective(2600px)_translateZ(-70px)_rotateX(2.5deg)] [transform-origin:50%_50%]">
           <HeroSidebarPanel className="w-[12.5rem] shrink-0 rounded-r-none border-r-0" />
-          <HeroGroundedAnswerPanel className="min-w-0 flex-1 rounded-l-none bg-card" />
+          <HeroGroundedAnswerPanel
+            className="min-w-0 flex-1 rounded-l-none bg-card"
+            activeSource={front}
+            onSelectSource={select}
+          />
         </div>
 
         {/* The records it cites, circulating across the answer's bottom-right
             corner. The overlap is deliberately small: enough that the cards
             read as lying on the workspace rather than parked beside it, not
-            enough to cut into the answer, which stays readable end to end. */}
+            enough to cut into the answer, which stays readable end to end.
+
+            Position is a number, 0 for the front through 3 for the back, and
+            every card reads its own transform off it. Clicking a citation
+            changes which card holds 0; the transition does the rest. */}
         <div className="n9-deck absolute bottom-[3rem] left-[34.5rem] z-20 hidden h-[20rem] w-[18rem] min-[1440px]:block">
           {DECK.map(({ Panel, key }, i) => (
-            <div
-              key={key}
-              className="n9-deck-card"
-              style={{ "--n9-deck-i": i } as CSSProperties}
-            >
-              <div className="n9-deck-orbit">
-                <Panel className="n9-deck-face pointer-events-auto h-full w-full bg-card backdrop-blur-none shadow-[0_34px_80px_-34px_rgba(44,36,24,0.55)]" />
+            <div key={key} className="n9-deck-card">
+              <div
+                className="n9-deck-orbit"
+                style={{ "--n9-deck-pos": (i - front + DECK.length) % DECK.length } as CSSProperties}
+              >
+                <Panel className="pointer-events-none h-full w-full bg-card backdrop-blur-none shadow-[0_34px_80px_-34px_rgba(44,36,24,0.55)]" />
               </div>
             </div>
           ))}

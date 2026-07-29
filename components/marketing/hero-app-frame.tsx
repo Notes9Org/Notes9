@@ -39,7 +39,7 @@ import {
   Moon,
   UploadSimple,
 } from "@phosphor-icons/react/ssr"
-import type { CSSProperties } from "react"
+import type { CSSProperties, ReactNode } from "react"
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react"
 import { FlareIcon } from "@/components/ui/flare-icon"
 import { cn } from "@/lib/utils"
@@ -956,10 +956,48 @@ const WORKSPACE_SOURCES = [
 const WORKSPACE_DECK_INDEX: (number | null)[] = [0, null, 1, 2]
 const LITERATURE_DECK_INDEX = 3
 
-export function HeroGroundedAnswerPanel({ className, style }: {
+export function HeroGroundedAnswerPanel({
+  className,
+  style,
+  activeSource = null,
+  onSelectSource,
+}: {
   className?: string
   style?: CSSProperties
+  /** Deck index currently in front, or null. Marks the matching citation. */
+  activeSource?: number | null
+  /** Clicking a citation deals its card to the front of the deck. */
+  onSelectSource?: (deckIndex: number) => void
 }) {
+  /**
+   * A citation is a button when it has a card to show and a plain row when it
+   * does not. tabIndex -1 keeps it out of the tab order: the whole composition
+   * is aria-hidden decoration, and a focusable descendant of aria-hidden is an
+   * ARIA violation. Nothing here is reachable any other way, and nothing here
+   * is information the page does not also state in words.
+   */
+  const row = (deckIndex: number | null, key: string, children: ReactNode) => {
+    const cls = cn(
+      "relative flex w-full items-center gap-2.5 rounded-lg border border-border/60 px-2.5 py-1.5 text-left",
+      deckIndex !== null && "n9-cite-row cursor-pointer",
+      deckIndex !== null && activeSource === deckIndex && "is-active"
+    )
+    if (deckIndex === null) {
+      return <div key={key} className={cls}>{children}</div>
+    }
+    return (
+      <button
+        key={key}
+        type="button"
+        tabIndex={-1}
+        className={cls}
+        onClick={() => onSelectSource?.(deckIndex)}
+      >
+        {children}
+      </button>
+    )
+  }
+
   return (
     <div
       aria-hidden
@@ -1009,29 +1047,26 @@ export function HeroGroundedAnswerPanel({ className, style }: {
           From your workspace
         </p>
         <div className="mt-2 space-y-1.5">
-          {WORKSPACE_SOURCES.map((s, i) => (
-            <div
-              key={s.title}
-              className={cn(
-                "relative flex items-center gap-2.5 rounded-lg border border-border/60 px-2.5 py-1.5",
-                WORKSPACE_DECK_INDEX[i] !== null && "n9-cite-row"
-              )}
-              style={{ "--n9-cite-i": WORKSPACE_DECK_INDEX[i] ?? 0 } as CSSProperties}
-            >
-              <span className="flex size-4 shrink-0 items-center justify-center rounded border border-border/70 font-mono text-[8px] text-muted-foreground">
-                {i + 1}
-              </span>
-              <s.icon className="size-3.5 shrink-0 text-[var(--n9-accent)]" />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[11px] font-medium text-foreground/85">
-                  {s.title}
+          {WORKSPACE_SOURCES.map((s, i) =>
+            row(
+              WORKSPACE_DECK_INDEX[i],
+              s.title,
+              <>
+                <span className="flex size-4 shrink-0 items-center justify-center rounded border border-border/70 font-mono text-[8px] text-muted-foreground">
+                  {i + 1}
                 </span>
-                <span className="block truncate text-[9px] text-muted-foreground">
-                  {s.kind} · {s.meta}
+                <s.icon className="size-3.5 shrink-0 text-[var(--n9-accent)]" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[11px] font-medium text-foreground/85">
+                    {s.title}
+                  </span>
+                  <span className="block truncate text-[9px] text-muted-foreground">
+                    {s.kind} · {s.meta}
+                  </span>
                 </span>
-              </span>
-            </div>
-          ))}
+              </>
+            )
+          )}
         </div>
 
         {/* Then the published work that corroborates them. */}
@@ -1039,22 +1074,25 @@ export function HeroGroundedAnswerPanel({ className, style }: {
           <span className="size-1.5 rounded-[1px] bg-muted-foreground/50" />
           From the literature
         </p>
-        <div
-          className="n9-cite-row relative mt-2 flex items-center gap-2.5 rounded-lg border border-border/60 px-2.5 py-1.5"
-          style={{ "--n9-cite-i": LITERATURE_DECK_INDEX } as CSSProperties}
-        >
-          <span className="flex size-4 shrink-0 items-center justify-center rounded border border-border/70 font-mono text-[8px] text-muted-foreground">
-            5
-          </span>
-          <Books className="size-3.5 shrink-0 text-muted-foreground" />
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-[11px] font-medium text-foreground/85">
-              High-density transfection of HEK293 cells
-            </span>
-            <span className="block truncate text-[9px] text-muted-foreground">
-              Backliwal et al. · Biotechnol Bioeng, 2008
-            </span>
-          </span>
+        <div className="mt-2">
+          {row(
+            LITERATURE_DECK_INDEX,
+            "literature",
+            <>
+              <span className="flex size-4 shrink-0 items-center justify-center rounded border border-border/70 font-mono text-[8px] text-muted-foreground">
+                5
+              </span>
+              <Books className="size-3.5 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[11px] font-medium text-foreground/85">
+                  High-density transfection of HEK293 cells
+                </span>
+                <span className="block truncate text-[9px] text-muted-foreground">
+                  Backliwal et al. · Biotechnol Bioeng, 2008
+                </span>
+              </span>
+            </>
+          )}
         </div>
       </div>
     </div>
