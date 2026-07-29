@@ -92,7 +92,7 @@ export function HeroSplit() {
           </h1>
 
           <p
-            className="n9-rise mt-6 max-w-lg text-[17px] leading-[1.75] text-foreground/70"
+            className="n9-rise mt-6 max-w-lg text-[17px] leading-[1.75] text-foreground/70 sm:text-[18px]"
             style={{ ["--n9-rise-delay" as string]: "360ms" }}
           >
             Every paper, protocol, result and note stays linked — so the assistant you ask
