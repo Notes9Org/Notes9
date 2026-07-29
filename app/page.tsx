@@ -2,7 +2,6 @@ import { redirect } from 'next/navigation'
 import { getCurrentUser } from "@/lib/auth/current-user"
 import { Header } from "@/components/marketing/header"
 import { Footer } from "@/components/marketing/footer"
-import { ArrowUpRight } from "@phosphor-icons/react/ssr"
 import { ContactForm } from "@/components/marketing/contact-form"
 import { FloatingPageMenu } from "@/components/marketing/floating-page-menu"
 import { HeroSplit } from "@/components/marketing/hero-split"
@@ -15,24 +14,6 @@ import {
 } from "@/components/marketing/home-editorial"
 
 import "@/styles/marketing.css"
-
-/**
- * One route, because one is what we can stand behind.
- *
- * The grid started as four enquiry types borrowed from Fiasco. "Data &
- * governance" and "Press & partnerships" implied a governance programme and a
- * press function that do not exist; pricing followed, since the pricing page
- * already answers that question better than an email thread would.
- *
- * What remains is the demo the site header already offers.
- */
-const ENQUIRIES = [
-  {
-    label: "Book a demo",
-    subject: "Notes9 demo",
-    hint: "A 15-minute walkthrough against your own workflow.",
-  },
-]
 
 export default async function HomePage({
   searchParams,
@@ -129,54 +110,18 @@ export default async function HomePage({
 
                   <hr className="n9-hairline mt-10" />
 
-                  {/* Routed enquiries, after Fiasco: naming what each kind of
-                      message is for tells a visitor they will reach the right
-                      person, which one undifferentiated address does not. Each
-                      is a mailto with the subject pre-set — honest, since there
-                      is genuinely one inbox behind them rather than the invented
-                      names a fake routing table would need. */}
+
                   <div className="mt-8">
-                    {ENQUIRIES.map((e) => (
-                      <div key={e.label}>
-                        <a
-                          href={`mailto:admin@notes9.com?subject=${encodeURIComponent(e.subject)}`}
-                          className="group inline-flex items-center gap-1.5 text-[15px] font-medium text-foreground transition-colors hover:text-[var(--n9-accent)]"
-                        >
-                          {e.label}
-                          <ArrowUpRight className="size-3.5 text-muted-foreground transition-colors group-hover:text-[var(--n9-accent)]" />
-                        </a>
-                        <p className="mt-1 max-w-[15rem] text-[13px] leading-5 text-muted-foreground">
-                          {e.hint}
-                        </p>
-                      </div>
-                    ))}
+                    <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                      Email
+                    </p>
+                    <a
+                      href="mailto:admin@notes9.com"
+                      className="mt-2 inline-block text-[17px] text-foreground underline-offset-4 transition-colors hover:text-[var(--n9-accent)] hover:underline"
+                    >
+                      admin@notes9.com
+                    </a>
                   </div>
-
-                  <hr className="n9-hairline mt-10" />
-
-                  <dl className="mt-7 grid gap-x-8 gap-y-6 sm:grid-cols-2">
-                    <div>
-                      <dt className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                        Email
-                      </dt>
-                      <dd className="mt-1.5">
-                        <a
-                          href="mailto:admin@notes9.com"
-                          className="text-[15px] text-foreground underline-offset-4 transition-colors hover:text-[var(--n9-accent)] hover:underline"
-                        >
-                          admin@notes9.com
-                        </a>
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                        Team
-                      </dt>
-                      <dd className="mt-1.5 text-[15px] text-foreground">
-                        India, United States &amp; United Kingdom
-                      </dd>
-                    </div>
-                  </dl>
                 </div>
 
                 <ContactForm />
