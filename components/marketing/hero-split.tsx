@@ -94,9 +94,9 @@ export function HeroSplit() {
           the heading beside it. */}
       <div
         aria-hidden
-        className="n9-hero-cast pointer-events-auto absolute left-[49%] top-1/2 hidden h-[40rem] w-[50rem] -translate-y-1/2 isolate xl:block"
+        className="n9-hero-cast pointer-events-auto absolute left-[49%] top-1/2 hidden h-[40rem] w-[54rem] -translate-y-1/2 isolate xl:block"
       >
-        <div className="pointer-events-none absolute left-[15rem] top-1/2 -z-10 h-[28rem] w-[28rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--n9-accent)]/[0.13] blur-3xl" />
+        <div className="pointer-events-none absolute left-[17rem] top-1/2 -z-10 h-[28rem] w-[28rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--n9-accent)]/[0.13] blur-3xl" />
 
         {/* The workspace: sidebar and answer as one window, tilted a couple of
             degrees so it reads as an object lying on the page rather than a
@@ -109,8 +109,8 @@ export function HeroSplit() {
             to sit. drop-shadow rather than box-shadow because the sidebar and
             the answer are separate boxes, and only a filter casts one shadow
             for the pair instead of a seam down the middle. */}
-        <div className="absolute left-0 top-1/2 z-0 flex h-[35rem] w-[31rem] items-stretch drop-shadow-[0_60px_90px_rgba(44,36,24,0.28)] [transform:translateY(-50%)_perspective(2600px)_translateZ(-70px)_rotateX(2.5deg)] [transform-origin:50%_50%]">
-          <HeroSidebarPanel className="w-[10.5rem] shrink-0 rounded-r-none border-r-0" />
+        <div className="absolute left-0 top-1/2 z-0 flex h-[35rem] w-[37rem] items-stretch drop-shadow-[0_60px_90px_rgba(44,36,24,0.28)] [transform:translateY(-50%)_perspective(2600px)_translateZ(-70px)_rotateX(2.5deg)] [transform-origin:50%_50%]">
+          <HeroSidebarPanel className="w-[12.5rem] shrink-0 rounded-r-none border-r-0" />
           <HeroGroundedAnswerPanel className="min-w-0 flex-1 rounded-l-none bg-card" />
         </div>
 
@@ -118,7 +118,7 @@ export function HeroSplit() {
             corner. The overlap is deliberately small: enough that the cards
             read as lying on the workspace rather than parked beside it, not
             enough to cut into the answer, which stays readable end to end. */}
-        <div className="n9-deck absolute bottom-[3rem] left-[28rem] z-20 hidden h-[20rem] w-[18rem] min-[1440px]:block">
+        <div className="n9-deck absolute bottom-[3rem] left-[34.5rem] z-20 hidden h-[20rem] w-[18rem] min-[1440px]:block">
           {DECK.map(({ Panel, key }, i) => (
             <div
               key={key}
