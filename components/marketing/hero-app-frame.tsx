@@ -20,6 +20,9 @@ import {
   Quotes,
   CaretLeft,
   CaretDown,
+  CaretUpDown,
+  Database,
+  Link as LinkIcon,
   Printer,
   DownloadSimple,
   ArrowClockwise,
@@ -1062,28 +1065,62 @@ export function HeroGroundedAnswerPanel({ className, style }: {
 /* ── Sidebar panel ──────────────────────────────────────────────────────── */
 
 /**
- * The Notes9 sidebar, replicated. It does two jobs in the hero that the answer
- * beside it cannot do on its own: it shows the full span of what the workspace
- * holds, so the answer reads as one capability out of many rather than the
- * whole product, and its pinned project and experiment name the exact records
- * the answer is reasoning over.
+ * The Notes9 sidebar, replicated from the product.
  *
+ * The detail that matters is that Projects and Experiments are not generic
+ * rows: the sidebar shows the project and the experiment you are standing in,
+ * by name, in place of those labels, with the experiment expanded to its Lab
+ * notes and Data. That is the whole context model in one glance, and it is why
+ * the answer beside it can cite the lab's own records.
+ *
+ * It earns its place in the hero twice over: it shows the full span of what the
+ * workspace holds, so the answer reads as one capability out of many rather
+ * than the product entire, and it names the exact records being reasoned over.
  * Catalyst is the active row for the same reason.
  *
  * Decorative: aria-hidden, pointer events off.
  */
-const SIDEBAR_NAV = [
-  { icon: House, label: "Dashboard" },
-  { icon: FolderSimple, label: "Projects" },
-  { icon: FlaskConical, label: "Experiments" },
-  { icon: NotePencil, label: "Lab Notes" },
-  { icon: ChartLine, label: "Data" },
-  { icon: Books, label: "Literature" },
-  { icon: Graph, label: "Research map" },
-  { icon: ClipboardText, label: "Protocols" },
-  { icon: TestTube, label: "Samples" },
-  { icon: PencilSimpleLine, label: "Writing" },
-]
+function SidebarRow({
+  icon: Icon,
+  label,
+  active,
+  switcher,
+  nested,
+  strong,
+}: {
+  icon: PhosphorIcon
+  label: string
+  active?: boolean
+  switcher?: boolean
+  nested?: boolean
+  strong?: boolean
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-2 rounded-md px-2 py-[5px]",
+        nested && "ml-3",
+        active && "bg-[var(--n9-accent)]/[0.07]"
+      )}
+    >
+      <Icon
+        className={cn(
+          "size-3.5 shrink-0",
+          active || strong ? "text-[var(--n9-accent)]" : "text-muted-foreground/80"
+        )}
+      />
+      <span
+        className={cn(
+          "min-w-0 flex-1 truncate text-[10.5px]",
+          active || strong ? "font-medium text-foreground/90" : "text-foreground/75"
+        )}
+      >
+        {label}
+      </span>
+      {switcher && <CaretUpDown className="size-3 shrink-0 text-muted-foreground/50" />}
+    </div>
+  )
+}
 
 export function HeroSidebarPanel({ className, style }: {
   className?: string
@@ -1093,53 +1130,51 @@ export function HeroSidebarPanel({ className, style }: {
     <div
       aria-hidden
       className={cn(
-        "pointer-events-none flex select-none flex-col overflow-hidden rounded-xl border border-border/60 bg-muted/35",
+        "pointer-events-none flex select-none flex-col overflow-hidden rounded-xl border border-border/60 bg-muted/30 px-2.5 py-3",
         className
       )}
       style={style}
     >
-      <div className="flex items-center gap-1.5 px-3 py-2.5">
-        <span className="flex-1 font-serif text-[13px] tracking-[-0.01em]">Notes9</span>
-        <Command className="size-3 text-muted-foreground/70" />
+      <div className="flex items-start gap-1.5 px-1.5">
+        <span className="flex-1">
+          <span className="block font-serif text-[15px] leading-none tracking-[-0.01em]">
+            Notes9
+          </span>
+          <span className="mt-1 block font-mono text-[7px] uppercase tracking-[0.22em] text-muted-foreground">
+            Research Lab
+          </span>
+        </span>
+        <Command className="size-3 shrink-0 text-muted-foreground/60" />
       </div>
 
-      <div className="px-2.5">
-        <div className="flex items-center gap-1.5 rounded-md border border-border/60 bg-card/70 px-2 py-1">
-          <MagnifyingGlass className="size-3 shrink-0 text-muted-foreground/70" />
-          <span className="text-[10px] text-muted-foreground/70">Search</span>
-        </div>
-        <div className="mt-1.5 flex items-center justify-center gap-1 rounded-md bg-[#3f6b4a] px-2 py-1 text-white">
-          <Plus className="size-3 shrink-0" weight="bold" />
-          <span className="text-[10px] font-medium">New</span>
-        </div>
+      <div className="mt-3 flex items-center gap-1.5 rounded-lg border border-border/60 bg-card/70 px-2 py-1.5">
+        <MagnifyingGlass className="size-3 shrink-0 text-muted-foreground/70" />
+        <span className="flex-1 text-[10px] text-muted-foreground/70">Search</span>
+        <span className="shrink-0 rounded border border-border/60 px-1 font-mono text-[7px] text-muted-foreground/70">
+          ⌘K
+        </span>
       </div>
 
-      {/* The records the answer is standing in. */}
-      <p className="mt-3 px-3 font-mono text-[8px] uppercase tracking-[0.16em] text-muted-foreground/70">
-        Pinned
-      </p>
-      <div className="mt-1 space-y-0.5 px-2.5">
-        <div className="flex items-center gap-1.5 rounded-md px-1.5 py-1">
-          <FolderSimple className="size-3 shrink-0 text-[var(--n9-accent)]" />
-          <span className="truncate text-[10px] text-foreground/80">HEK293T expression</span>
-        </div>
-        <div className="flex items-center gap-1.5 rounded-md px-1.5 py-1">
-          <FlaskConical className="size-3 shrink-0 text-[var(--n9-accent)]" />
-          <span className="truncate text-[10px] text-foreground/80">PEI:DNA ratio screen</span>
-        </div>
+      <div className="mt-2 flex items-center justify-center gap-1.5 rounded-lg bg-[#3f6b4a]/[0.14] px-2 py-1.5 text-[#3f6b4a] dark:text-[#93bf9f]">
+        <Plus className="size-3 shrink-0" weight="bold" />
+        <span className="text-[10.5px] font-medium">New</span>
       </div>
 
-      <div className="mt-2.5 space-y-0.5 px-2.5 pb-3">
-        {SIDEBAR_NAV.map(({ icon: Icon, label }) => (
-          <div key={label} className="flex items-center gap-1.5 rounded-md px-1.5 py-[5px]">
-            <Icon className="size-3 shrink-0 text-muted-foreground/80" />
-            <span className="truncate text-[10px] text-foreground/70">{label}</span>
-          </div>
-        ))}
-        <div className="flex items-center gap-1.5 rounded-md bg-[var(--n9-accent)]/10 px-1.5 py-[5px]">
-          <FlareIcon className="size-3 shrink-0 text-[var(--n9-accent)]" weight="fill" />
-          <span className="truncate text-[10px] font-medium text-foreground/85">Catalyst</span>
-        </div>
+      {/* One bordered group, exactly as the product draws it. The project and
+          the experiment stand in for the Projects and Experiments labels. */}
+      <div className="mt-3 space-y-0.5 rounded-xl border border-border/70 bg-card/45 p-1.5">
+        <SidebarRow icon={House} label="Dashboard" />
+        <SidebarRow icon={FolderSimple} label="HEK293T expression" strong switcher />
+        <SidebarRow icon={Books} label="Literature" />
+        <SidebarRow icon={ClipboardText} label="Protocols" />
+        <SidebarRow icon={FlaskConical} label="PEI:DNA ratio screen" strong active />
+        <SidebarRow icon={NotePencil} label="Lab notes" nested switcher />
+        <SidebarRow icon={Database} label="Data" nested />
+        <SidebarRow icon={LinkIcon} label="Samples" />
+        <SidebarRow icon={PencilSimpleLine} label="Writing" />
+        <SidebarRow icon={FileText} label="Reports" />
+        <SidebarRow icon={Sparkles} label="Catalyst" />
+        <SidebarRow icon={Graph} label="Research map" />
       </div>
     </div>
   )
