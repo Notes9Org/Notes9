@@ -7,6 +7,7 @@ import {
   ChartLine,
   PencilSimpleLine,
 } from "@phosphor-icons/react/ssr"
+import type { CSSProperties } from "react"
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react"
 import { HeroSearch } from "@/components/marketing/hero-search"
 import {
@@ -35,6 +36,23 @@ import {
  * still loading; one crisp panel reads as the product.
  */
 
+/**
+ * The deck, front to back. Order is the order of the answer's own citations,
+ * so the screen in front when the page loads is the one the first citation
+ * points at. Each card is cropped by its slot, which reads as a screen
+ * continuing past the edge of the card rather than a panel that ran short.
+ *
+ * backdrop-blur is dropped on all of them: the deck sits on a flat gradient so
+ * it buys nothing, and four blurred surfaces animating at once is the
+ * difference between a smooth carousel and a stuttering one.
+ */
+const DECK = [
+  { Panel: HeroChartPanel, key: "data" },
+  { Panel: HeroNotePanel, key: "note" },
+  { Panel: HeroProtocolPanel, key: "protocol" },
+  { Panel: HeroReferencesPanel, key: "literature" },
+]
+
 const SCOPE: { label: string; icon: PhosphorIcon }[] = [
   { label: "Literature", icon: Books },
   { label: "Protocols", icon: ClipboardText },
@@ -56,46 +74,57 @@ export function HeroSplit() {
         <div className="n9-grain-overlay" />
       </div>
 
-      {/* The artefact is not in a panel and not in a column. It is a single
-          object lying across the section, pushed well past the right edge so
-          only its left portion is in frame — a window, not a slide. Nothing
-          frames it, so there is no second surface for the eye to read as "the
-          other half". */}
-      {/* A deck that fans open.
-          At rest the five surfaces sit tightly stacked behind the answer, the
-          way a hand of cards squares up. Hovering the group spreads them to
-          their poster positions — hero centre, the four supporting screens
-          fanned symmetrically around it, each turned INWARD so the arrangement
-          converges on the middle.
+      {/* One claim, made twice.
 
-          Facing direction is the load-bearing detail: everything previously
-          turned the same way, so the group read as a stack that had slipped.
-          Mirroring the Y-rotation across the centre line is what makes it a
-          composition rather than a pile.
+          On the right, the answer — held still and fully legible, because the
+          whole argument of the page is that it cites real work. On the left,
+          the records it cites, circulating so each takes its turn in front. No
+          hover is needed for the point to land; hovering only pauses the
+          carousel and brings the card under the cursor forward to be read.
 
-          The container takes pointer events so the hover can fire, but every
-          panel inside stays aria-hidden — this is decoration that responds to
-          the cursor, not content, and it sits clear of the search field. */}
+          The pairing is what carries the meaning: the titles in the deck are
+          the titles in the answer's source list, so the two halves are visibly
+          the same four records seen twice — once as a citation, once as the
+          screen it lives on.
+
+          Motion lives in styles/marketing.css (.n9-deck); each card only
+          declares its position in the cycle. Every panel stays aria-hidden —
+          this is decoration, and the answer it illustrates is written out in
+          the heading beside it. */}
       <div
         aria-hidden
-        className="group absolute right-[-6%] top-1/2 hidden h-[46rem] w-[46rem] -translate-y-1/2 [perspective:2800px] lg:block xl:right-[-2%] xl:w-[50rem]"
+        className="pointer-events-auto absolute right-[1%] top-1/2 hidden h-[34rem] w-[47rem] origin-right -translate-y-1/2 scale-[0.78] isolate lg:block xl:scale-[0.88] 2xl:right-[6%] 2xl:scale-100"
       >
-        <div className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-[26rem] w-[26rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--n9-accent)]/[0.13] blur-3xl transition-all duration-700 group-hover:h-[30rem] group-hover:w-[30rem]" />
+        <div className="pointer-events-none absolute left-[38%] top-1/2 -z-10 h-[27rem] w-[27rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--n9-accent)]/[0.13] blur-3xl" />
 
-        {/* Outer pair — furthest back, most turned, faintest. */}
-        <HeroProtocolPanel className="pointer-events-none absolute bottom-[4%] left-0 z-0 w-[16rem] origin-center opacity-[0.5] shadow-[0_24px_60px_-34px_rgba(44,36,24,0.45)] transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] [transform:translate(34%,-22%)_rotateY(22deg)_rotateX(5deg)_rotate(-3deg)_scale(0.72)] group-hover:opacity-[0.62] group-hover:[transform:translate(0,0)_rotateY(22deg)_rotateX(5deg)_rotate(-6deg)_scale(0.78)]" />
-        <HeroNotePanel className="pointer-events-none absolute bottom-[4%] right-0 z-0 w-[16rem] origin-center opacity-[0.5] shadow-[0_24px_60px_-34px_rgba(44,36,24,0.45)] transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] [transform:translate(-34%,-22%)_rotateY(-22deg)_rotateX(5deg)_rotate(3deg)_scale(0.72)] group-hover:opacity-[0.62] group-hover:[transform:translate(0,0)_rotateY(-22deg)_rotateX(5deg)_rotate(6deg)_scale(0.78)]" />
+        {/* The records, cycling. */}
+        <div className="n9-deck absolute left-0 top-1/2 hidden h-[21.5rem] w-[19rem] -translate-y-1/2 xl:block">
+          {DECK.map(({ Panel, key }, i) => (
+            <div
+              key={key}
+              className="n9-deck-card"
+              style={{ "--n9-deck-i": i } as CSSProperties}
+            >
+              <div className="n9-deck-orbit">
+                <Panel className="n9-deck-face pointer-events-auto max-h-full w-full bg-card backdrop-blur-none shadow-[0_30px_70px_-36px_rgba(44,36,24,0.5)]" />
+              </div>
+            </div>
+          ))}
+        </div>
 
-        {/* Inner pair — closer, less turned, stronger. */}
-        <HeroReferencesPanel className="pointer-events-none absolute left-[1%] top-[10%] z-10 w-[17rem] origin-center opacity-70 shadow-[0_30px_70px_-36px_rgba(44,36,24,0.5)] transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] [transform:translate(30%,16%)_rotateY(15deg)_rotateX(4deg)_rotate(-1deg)_scale(0.8)] group-hover:opacity-[0.85] group-hover:[transform:translate(0,0)_rotateY(15deg)_rotateX(4deg)_rotate(-3deg)_scale(0.86)]" />
-        <HeroChartPanel className="pointer-events-none absolute right-[1%] top-[10%] z-10 w-[17rem] origin-center opacity-70 shadow-[0_30px_70px_-36px_rgba(44,36,24,0.5)] transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] [transform:translate(-30%,16%)_rotateY(-15deg)_rotateX(4deg)_rotate(1deg)_scale(0.8)] group-hover:opacity-[0.85] group-hover:[transform:translate(0,0)_rotateY(-15deg)_rotateX(4deg)_rotate(3deg)_scale(0.86)]" />
-
-        {/* The hero. Largest, squarest to the viewer, heaviest shadow. */}
-        <HeroGroundedAnswerPanel className="pointer-events-none absolute left-1/2 top-1/2 z-20 w-[22rem] origin-center shadow-[0_70px_140px_-40px_rgba(44,36,24,0.6)] transition-transform duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] [transform:translate(-50%,-50%)_rotateY(-5deg)_rotateX(2deg)] group-hover:[transform:translate(-50%,-50%)_rotateY(-5deg)_rotateX(2deg)_scale(1.03)]" />
+        {/* The answer. Square, opaque, unmoving — the one thing on this side of
+            the hero that is meant to be read rather than recognised. */}
+        <div className="absolute right-0 top-1/2 z-40 w-[21rem] -translate-y-1/2">
+          <HeroGroundedAnswerPanel className="w-full bg-card shadow-[0_70px_140px_-40px_rgba(44,36,24,0.55)]" />
+        </div>
       </div>
 
-      <div className="container relative mx-auto flex min-h-[92svh] items-center px-4 py-20 sm:px-6 lg:px-8">
-        <div className="w-full max-w-2xl">
+      {/* The content layer paints above the deck, so it would otherwise swallow
+          every hover meant for the cards — an empty column still hit-tests.
+          Making the wrapper transparent to the pointer and restoring it on the
+          text column itself is what lets the deck be hovered at all. */}
+      <div className="container pointer-events-none relative mx-auto flex min-h-[92svh] items-center px-4 py-20 sm:px-6 lg:px-8">
+        <div className="pointer-events-auto w-full max-w-2xl">
           <p className="n9-label n9-rise" style={{ ["--n9-rise-delay" as string]: "60ms" }}>
             The connected research workspace
           </p>

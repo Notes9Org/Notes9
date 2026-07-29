@@ -35,6 +35,7 @@ import {
   Moon,
   UploadSimple,
 } from "@phosphor-icons/react/ssr"
+import type { CSSProperties } from "react"
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react"
 import { FlareIcon } from "@/components/ui/flare-icon"
 import { cn } from "@/lib/utils"
@@ -331,7 +332,10 @@ const PAD = { l: 52, r: 20, t: 34, b: 52 }
  *
  * Decorative like the rest of the frame: aria-hidden, pointer events off.
  */
-export function HeroChartPanel({ className }: { className?: string }) {
+export function HeroChartPanel({ className, style }: {
+  className?: string
+  style?: CSSProperties
+}) {
   const sx = (x: number) => PAD.l + (x / 1000) * (PW - PAD.l - PAD.r)
   const sy = (y: number) => PH - PAD.b - (y / 3) * (PH - PAD.t - PAD.b)
 
@@ -354,6 +358,7 @@ export function HeroChartPanel({ className }: { className?: string }) {
         "pointer-events-none select-none rounded-xl border border-border/60 bg-card/85 shadow-[0_20px_54px_-32px_rgba(44,36,24,0.28)] backdrop-blur-sm",
         className
       )}
+      style={style}
     >
       <div className="flex items-center justify-between border-b border-border/50 px-4 py-2.5">
         <span className="flex items-center gap-2 text-[13.5px] font-medium">
@@ -472,7 +477,10 @@ export function HeroChartPanel({ className }: { className?: string }) {
  *
  * Decorative: aria-hidden, pointer events off.
  */
-export function HeroNotePanel({ className }: { className?: string }) {
+export function HeroNotePanel({ className, style }: {
+  className?: string
+  style?: CSSProperties
+}) {
   return (
     <div
       aria-hidden
@@ -480,6 +488,7 @@ export function HeroNotePanel({ className }: { className?: string }) {
         "pointer-events-none select-none overflow-hidden rounded-xl border border-border/60 bg-card/95 shadow-[0_22px_60px_-34px_rgba(44,36,24,0.3)] backdrop-blur-sm",
         className
       )}
+      style={style}
     >
       {/* Note title bar */}
       <div className="flex items-center gap-2 border-b border-border/50 px-3.5 py-2.5">
@@ -836,7 +845,10 @@ const REFERENCES = [
  *
  * Decorative: aria-hidden, pointer events off.
  */
-export function HeroReferencesPanel({ className }: { className?: string }) {
+export function HeroReferencesPanel({ className, style }: {
+  className?: string
+  style?: CSSProperties
+}) {
   return (
     <div
       aria-hidden
@@ -844,6 +856,7 @@ export function HeroReferencesPanel({ className }: { className?: string }) {
         "pointer-events-none select-none overflow-hidden rounded-xl border border-border/60 bg-card/95 shadow-[0_30px_80px_-38px_rgba(44,36,24,0.34)] backdrop-blur-sm",
         className
       )}
+      style={style}
     >
       <div className="flex items-center gap-2 border-b border-border/50 px-4 py-2.5">
         <MagnifyingGlass className="size-4 text-muted-foreground" />
@@ -929,7 +942,10 @@ const WORKSPACE_SOURCES = [
  *
  * Decorative: aria-hidden, pointer events off.
  */
-export function HeroGroundedAnswerPanel({ className }: { className?: string }) {
+export function HeroGroundedAnswerPanel({ className, style }: {
+  className?: string
+  style?: CSSProperties
+}) {
   return (
     <div
       aria-hidden
@@ -937,6 +953,7 @@ export function HeroGroundedAnswerPanel({ className }: { className?: string }) {
         "pointer-events-none select-none overflow-hidden rounded-xl border border-border/60 bg-card/95 backdrop-blur-sm",
         className
       )}
+      style={style}
     >
       <div className="flex items-center gap-2 border-b border-border/50 px-4 py-2.5">
         <FlareIcon className="size-4 text-[var(--n9-accent)]" weight="fill" />
@@ -1022,7 +1039,10 @@ const PROTOCOL_ROWS = [
  * it. Versioning is the thing to show here: a protocol without a version is a
  * document, and a protocol with one is a record you can point a result back at.
  */
-export function HeroProtocolPanel({ className }: { className?: string }) {
+export function HeroProtocolPanel({ className, style }: {
+  className?: string
+  style?: CSSProperties
+}) {
   return (
     <div
       aria-hidden
@@ -1030,6 +1050,7 @@ export function HeroProtocolPanel({ className }: { className?: string }) {
         "pointer-events-none select-none overflow-hidden rounded-xl border border-border/60 bg-card/95 backdrop-blur-sm",
         className
       )}
+      style={style}
     >
       <div className="flex items-center gap-2 border-b border-border/50 px-4 py-2.5">
         <ClipboardText className="size-4 text-muted-foreground" />
