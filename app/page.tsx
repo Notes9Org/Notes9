@@ -17,24 +17,20 @@ import {
 import "@/styles/marketing.css"
 
 /**
- * Only routes that correspond to something that exists.
+ * One route, because one is what we can stand behind.
  *
- * "Data & governance" and "Press & partnerships" were removed: the first implies
- * a formal governance programme and the second a press function, and the brand
- * guardrails are explicit about not implying capabilities or certifications we
- * cannot back. What is left maps to real surfaces — the demo the header already
- * offers, and the Free/Enterprise tiers on the pricing page.
+ * The grid started as four enquiry types borrowed from Fiasco. "Data &
+ * governance" and "Press & partnerships" implied a governance programme and a
+ * press function that do not exist; pricing followed, since the pricing page
+ * already answers that question better than an email thread would.
+ *
+ * What remains is the demo the site header already offers.
  */
 const ENQUIRIES = [
   {
     label: "Book a demo",
     subject: "Notes9 demo",
     hint: "A 15-minute walkthrough against your own workflow.",
-  },
-  {
-    label: "Pricing & plans",
-    subject: "Notes9 pricing",
-    hint: "What is included in Free, and what Enterprise adds.",
   },
 ]
 
@@ -139,7 +135,7 @@ export default async function HomePage({
                       is a mailto with the subject pre-set — honest, since there
                       is genuinely one inbox behind them rather than the invented
                       names a fake routing table would need. */}
-                  <div className="mt-8 grid gap-x-8 gap-y-7 sm:grid-cols-2">
+                  <div className="mt-8">
                     {ENQUIRIES.map((e) => (
                       <div key={e.label}>
                         <a
