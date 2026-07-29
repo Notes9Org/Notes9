@@ -1010,3 +1010,61 @@ export function HeroGroundedAnswerPanel({ className }: { className?: string }) {
     </div>
   )
 }
+
+/* ── Protocols panel ────────────────────────────────────────────────────── */
+
+const PROTOCOL_ROWS = [
+  { name: "Transient transfection (HEK293T, PEI)", v: "v1.2", date: "2026-02-20" },
+  { name: "Competitive ELISA — anti-mAb", v: "v2.0", date: "2026-02-14" },
+  { name: "IMAC purification — His-tag elution", v: "v1.0", date: "2026-01-31" },
+]
+
+/**
+ * The SOP library — the surface a protocol lives in once Catalyst has drafted
+ * it. Versioning is the thing to show here: a protocol without a version is a
+ * document, and a protocol with one is a record you can point a result back at.
+ */
+export function HeroProtocolPanel({ className }: { className?: string }) {
+  return (
+    <div
+      aria-hidden
+      className={cn(
+        "pointer-events-none select-none overflow-hidden rounded-xl border border-border/60 bg-card/95 backdrop-blur-sm",
+        className
+      )}
+    >
+      <div className="flex items-center gap-2 border-b border-border/50 px-4 py-2.5">
+        <ClipboardText className="size-4 text-muted-foreground" />
+        <span className="flex-1 truncate text-[12.5px] font-medium">
+          Standard Operating Procedures
+        </span>
+        <span className="rounded-md bg-[var(--n9-accent)] px-2 py-0.5 text-[10px] font-semibold text-white">
+          New protocol
+        </span>
+      </div>
+      <div className="px-4 py-2.5">
+        <div className="flex items-center gap-3 border-b border-border/50 pb-1.5">
+          <span className="flex-1 font-mono text-[8.5px] uppercase tracking-[0.14em] text-muted-foreground">
+            Protocol
+          </span>
+          <span className="w-10 font-mono text-[8.5px] uppercase tracking-[0.14em] text-muted-foreground">
+            Version
+          </span>
+          <span className="w-16 font-mono text-[8.5px] uppercase tracking-[0.14em] text-muted-foreground">
+            Created
+          </span>
+        </div>
+        {PROTOCOL_ROWS.map((r) => (
+          <div key={r.name} className="flex items-center gap-3 border-b border-border/40 py-2 last:border-0">
+            <FileText className="size-3 shrink-0 text-[var(--n9-accent)]" />
+            <span className="min-w-0 flex-1 truncate text-[10.5px] text-foreground/85">
+              {r.name}
+            </span>
+            <span className="w-10 font-mono text-[9.5px] text-[var(--n9-accent)]">{r.v}</span>
+            <span className="w-16 font-mono text-[9.5px] text-muted-foreground">{r.date}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}

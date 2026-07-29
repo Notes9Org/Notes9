@@ -9,7 +9,13 @@ import {
 } from "@phosphor-icons/react/ssr"
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react"
 import { HeroSearch } from "@/components/marketing/hero-search"
-import { HeroGroundedAnswerPanel } from "@/components/marketing/hero-app-frame"
+import {
+  HeroChartPanel,
+  HeroGroundedAnswerPanel,
+  HeroNotePanel,
+  HeroProtocolPanel,
+  HeroReferencesPanel,
+} from "@/components/marketing/hero-app-frame"
 
 /**
  * Split hero: the argument on the left, the answer on the right.
@@ -55,19 +61,26 @@ export function HeroSplit() {
           only its left portion is in frame — a window, not a slide. Nothing
           frames it, so there is no second surface for the eye to read as "the
           other half". */}
+      {/* A collage of the surfaces one answer touches. Each is tilted on its
+          own axis and carries its own shadow, so they read as separate sheets
+          laid over each other rather than one flat composite. The answer sits
+          in front at full strength; the four it draws on sit behind it, each
+          turned far enough back to show only the part a researcher would
+          recognise — the fitted curve, the cited papers, the versioned SOP
+          list, the document page. Pulled left and scaled down from the earlier
+          single panel so the whole stack sits inside the frame. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute right-[-11%] top-1/2 hidden w-[40rem] -translate-y-1/2 [perspective:2400px] lg:block xl:right-[-7%] xl:w-[43rem]"
+        className="pointer-events-none absolute right-[-4%] top-1/2 hidden h-[44rem] w-[40rem] -translate-y-1/2 [perspective:2600px] lg:block xl:right-[-1%] xl:w-[44rem]"
       >
-        <div className="absolute -inset-12 -z-10 rounded-[56px] bg-[var(--n9-accent)]/[0.08] blur-3xl" />
-        {/* Turned away from the reader rather than lying flat. A panel square to
-            the viewport reads as a slide; the same panel on a slight axis reads
-            as an object in the room, and the foreshortening lets it be larger
-            without dominating. The z-rotation is deliberately tiny — enough to
-            break the grid, not enough to look askew. */}
-        <div className="origin-left [transform:rotateY(-15deg)_rotateX(4deg)_rotate(-1deg)] [transform-style:preserve-3d]">
-          <HeroGroundedAnswerPanel className="w-full shadow-[0_60px_120px_-45px_rgba(44,36,24,0.5)]" />
-        </div>
+        <div className="absolute -inset-10 -z-10 rounded-[56px] bg-[var(--n9-accent)]/[0.08] blur-3xl" />
+
+        <HeroReferencesPanel className="absolute left-0 top-[1%] w-[17rem] origin-center [transform:rotateY(-16deg)_rotateX(5deg)_rotate(-3deg)_scale(0.86)] opacity-65 shadow-[0_26px_60px_-34px_rgba(44,36,24,0.45)]" />
+        <HeroChartPanel className="absolute right-0 top-[4%] w-[18rem] origin-center [transform:rotateY(-13deg)_rotateX(4deg)_rotate(2deg)_scale(0.86)] opacity-70 shadow-[0_26px_60px_-34px_rgba(44,36,24,0.45)]" />
+        <HeroProtocolPanel className="absolute bottom-[3%] left-0 w-[17rem] origin-center [transform:rotateY(-15deg)_rotateX(4deg)_rotate(2deg)_scale(0.86)] opacity-65 shadow-[0_26px_60px_-34px_rgba(44,36,24,0.45)]" />
+        <HeroNotePanel className="absolute bottom-[1%] right-0 w-[17rem] origin-center [transform:rotateY(-12deg)_rotateX(5deg)_rotate(-2deg)_scale(0.86)] opacity-65 shadow-[0_26px_60px_-34px_rgba(44,36,24,0.45)]" />
+
+        <HeroGroundedAnswerPanel className="absolute left-1/2 top-1/2 z-10 w-[21rem] origin-center [transform:translate(-50%,-50%)_rotateY(-14deg)_rotateX(3deg)_rotate(-1deg)_scale(0.97)] shadow-[0_60px_120px_-40px_rgba(44,36,24,0.55)]" />
       </div>
 
       <div className="container relative mx-auto flex min-h-[92svh] items-center px-4 py-20 sm:px-6 lg:px-8">
