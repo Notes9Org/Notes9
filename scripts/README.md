@@ -129,6 +129,10 @@ Definitive index of the SQL migration folder. As of **2026-07-18 the live databa
 | 103 | `103_recently_touched.sql` | Recency half of the focus signal: last-write-wins (user, entity) register | `recently_touched` + owner RLS (FORCE) |
 | 104 | `104_claim_consolidations_per_user.sql` | At most one consolidation claim per user per batch (near-duplicate facts guard) | replaced `claim_due_consolidations()` |
 | 105 | `105_experiment_summary_org_fallback.sql` | Fix 102 backfill: org fallback via creator's profile + re-enqueue failed jobs | patched `experiment_summary_payload()` |
+| 106 | `106_analyses.sql` | Saved analyses for the Analysis workspace | `analyses` + owner RLS |
+| 107 | `107_profile_demo_seeded.sql` | Marks whether field-matched starter content was seeded for the user | `profiles.demo_seeded_at` |
+| 108 | `108_data_analysis_templates.sql` | Org/user-scoped analysis templates (BCA/Bradford etc.) | `data_analysis_templates` + owner/org RLS + `updated_at` trigger |
+| 109 | `109_onboarding_checklist.sql` | Persistent first-run checklist state on the profile | `profiles` onboarding-checklist columns |
 
 ## Subsystem guides
 

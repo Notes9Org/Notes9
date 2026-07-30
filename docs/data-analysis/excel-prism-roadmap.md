@@ -333,4 +333,4 @@ Track progress here; check items as phases land.
 | Standard curve UI | `components/data-analysis/standard-curve-panel.tsx` |
 | Plate model | `components/data-analysis/plate-view.tsx`, `lib/data-analysis/plate.ts` |
 | Chart export | `lib/data-analysis/chart-export.ts`, `components/data-analysis/export-menu.tsx` |
-| Schema | `scripts/044_experiment_data_workbook_links_chat_metadata.sql`, `scripts/103_data_analysis_templates.sql` |
+| Schema | `scripts/044_experiment_data_workbook_links_chat_metadata.sql`, `scripts/108_data_analysis_templates.sql` |

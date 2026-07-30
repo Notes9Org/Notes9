@@ -1,4 +1,4 @@
--- scripts/103_data_analysis_templates.sql
+-- scripts/108_data_analysis_templates.sql
 -- Saved Data-Analysis templates, stored in-platform so a researcher's own
 -- analysis setups (chart + plate config) persist across sessions and devices
 -- and can be reused on new data. Owner-only, mirroring chat_folders (092).
