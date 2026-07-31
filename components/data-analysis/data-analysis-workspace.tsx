@@ -673,7 +673,7 @@ export function DataAnalysisWorkspace({
   const chartImageRef = useRef<(() => Promise<string | null>) | null>(null)
   const chartBoxRef = useRef<HTMLDivElement | null>(null)
   const [saveChartOpen, setSaveChartOpen] = useState(false)
-  const runExport = useCallback(async (opts: { format: ExportFormat; dpi: number; filename: string }) => {
+  const runExport = useCallback(async (opts: Parameters<ChartExportFn>[0]) => {
     if (chartExportRef.current) await chartExportRef.current(opts)
   }, [])
   const getChartSize = useCallback(() => {
@@ -1613,6 +1613,20 @@ export function DataAnalysisWorkspace({
         )}
       </div>
 
+      <div id="cs-type" className={cn(!showRail("cs-type") && "!hidden", "scroll-mt-3 rounded-lg transition-shadow", flashId === "cs-type" && "ring-2 ring-[var(--n9-accent,#965034)]/40")}>
+        <SectionLabel><FnIcon className="h-3.5 w-3.5" /> Chart type</SectionLabel>
+        <div className="grid grid-cols-4 gap-1.5">
+          {CHART_TYPES.map((t) => (
+            <button key={t.id} onClick={() => setChartType(t.id)} title={t.label}
+              className={cn("flex flex-col items-center gap-1 rounded-lg border p-2 text-[10px] transition-colors",
+                chartType === t.id ? "border-[var(--n9-accent,#965034)]/40 bg-[var(--n9-accent,#965034)]/10 text-[var(--n9-accent,#965034)]" : "border-border text-muted-foreground hover:text-foreground")}>
+              <t.Icon className="h-4 w-4" weight="bold" /> {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div id="cs-data" className={cn(!showRail("cs-data") && "!hidden", "scroll-mt-3 space-y-4 rounded-lg transition-shadow", flashId === "cs-data" && "ring-2 ring-[var(--n9-accent,#965034)]/40")}>
+      <SectionLabel><TableIcon className="h-3.5 w-3.5" /> Data</SectionLabel>
       {/* Bind the selected sheet cell → chart title / axis / series.
           Two clearly-separated intents: use the cell's TEXT as a title, or
           plot its COLUMN as data. */}
@@ -1668,20 +1682,6 @@ export function DataAnalysisWorkspace({
           </motion.div>
         )}
       </AnimatePresence>
-      <div id="cs-type" className={cn(!showRail("cs-type") && "!hidden", "scroll-mt-3 rounded-lg transition-shadow", flashId === "cs-type" && "ring-2 ring-[var(--n9-accent,#965034)]/40")}>
-        <SectionLabel><FnIcon className="h-3.5 w-3.5" /> Chart type</SectionLabel>
-        <div className="grid grid-cols-4 gap-1.5">
-          {CHART_TYPES.map((t) => (
-            <button key={t.id} onClick={() => setChartType(t.id)} title={t.label}
-              className={cn("flex flex-col items-center gap-1 rounded-lg border p-2 text-[10px] transition-colors",
-                chartType === t.id ? "border-[var(--n9-accent,#965034)]/40 bg-[var(--n9-accent,#965034)]/10 text-[var(--n9-accent,#965034)]" : "border-border text-muted-foreground hover:text-foreground")}>
-              <t.Icon className="h-4 w-4" weight="bold" /> {t.label}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div id="cs-data" className={cn(!showRail("cs-data") && "!hidden", "scroll-mt-3 space-y-4 rounded-lg transition-shadow", flashId === "cs-data" && "ring-2 ring-[var(--n9-accent,#965034)]/40")}>
-      <SectionLabel><TableIcon className="h-3.5 w-3.5" /> Data</SectionLabel>
       <Field label={`Columns — assign axes${is3D(chartType) ? " (X · Y · Z)" : ""}`}>
         <div className="space-y-1 rounded-md border border-input bg-background p-1.5">
           {table.columns.map((c) => {

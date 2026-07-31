@@ -15,6 +15,33 @@ const FORMATS: { id: ExportFormat; label: string; hint: string }[] = [
   { id: "svg", label: "SVG", hint: "Vector · infinitely scalable" },
 ]
 const DPI_PRESETS = [150, 300, 600, 1200]
+
+/**
+ * Journal presets, front and centre (§976).
+ *
+ * Every one of these is a real submission requirement someone would otherwise
+ * look up, then hand-enter, then get wrong. Widths are the standard column
+ * measures in millimetres, converted to pixels at the preset's own DPI, so
+ * "85mm at 300dpi" comes out exactly rather than approximately.
+ */
+const MM_PER_INCH = 25.4
+const JOURNAL_PRESETS: {
+  id: string
+  label: string
+  note: string
+  format: ExportFormat
+  dpi: number
+  widthMm: number | null
+  colourSpace: "rgb" | "cmyk"
+  transparent: boolean
+}[] = [
+  { id: "single", label: "Single column", note: "85 mm · 300 dpi · TIFF · CMYK", format: "tiff", dpi: 300, widthMm: 85, colourSpace: "cmyk", transparent: false },
+  { id: "double", label: "Double column", note: "180 mm · 300 dpi · TIFF · CMYK", format: "tiff", dpi: 300, widthMm: 180, colourSpace: "cmyk", transparent: false },
+  { id: "line-art", label: "Line art", note: "180 mm · 1200 dpi · TIFF", format: "tiff", dpi: 1200, widthMm: 180, colourSpace: "cmyk", transparent: false },
+  { id: "vector", label: "Vector", note: "SVG · editable in Illustrator", format: "svg", dpi: 300, widthMm: null, colourSpace: "rgb", transparent: false },
+  { id: "slide", label: "Slide or poster", note: "600 dpi · PNG · transparent", format: "png", dpi: 600, widthMm: null, colourSpace: "rgb", transparent: true },
+  { id: "preprint", label: "Preprint / web", note: "150 dpi · PNG", format: "png", dpi: 150, widthMm: null, colourSpace: "rgb", transparent: false },
+]
 const DPI_MIN = 72
 const DPI_MAX = 2400
 const PANEL_W = 300
@@ -37,7 +64,15 @@ export function ExportMenu({
 }: {
   disabled?: boolean
   defaultName: string
-  onExport: (opts: { format: ExportFormat; dpi: number; filename: string }) => Promise<void>
+  onExport: (opts: {
+    format: ExportFormat
+    dpi: number
+    filename: string
+    transparent?: boolean
+    colourSpace?: "rgb" | "cmyk"
+    width?: number | null
+    height?: number | null
+  }) => Promise<void>
   getPng?: () => Promise<string | null>
   getCanvasSize?: () => { width: number; height: number } | null
   onSaveToLibrary?: () => void
@@ -47,6 +82,10 @@ export function ExportMenu({
   const [open, setOpen] = useState(false)
   const [format, setFormat] = useState<ExportFormat>("png")
   const [dpiText, setDpiText] = useState("600")
+  const [transparent, setTransparent] = useState(false)
+  const [colourSpace, setColourSpace] = useState<"rgb" | "cmyk">("rgb")
+  const [widthMmText, setWidthMmText] = useState("")
+  const [presetId, setPresetId] = useState<string | null>(null)
   const [fname, setFname] = useState("")
   const [busy, setBusy] = useState<null | "export" | "copy">(null)
   const [copied, setCopied] = useState(false)
@@ -105,7 +144,20 @@ export function ExportMenu({
   const doDownload = async () => {
     setBusy("export")
     try {
-      await onExport({ format, dpi, filename: (fname || cleanBase).trim() || "figure" })
+      const widthMm = Number(widthMmText)
+      const px = Number.isFinite(widthMm) && widthMm > 0 ? Math.round((widthMm / MM_PER_INCH) * dpi) : null
+      const size = getCanvasSize?.() ?? null
+      await onExport({
+        format,
+        dpi,
+        filename: (fname || cleanBase).trim() || "figure",
+        transparent,
+        colourSpace,
+        width: px,
+        // Height follows the on-screen aspect, so a width-constrained journal
+        // spec never silently distorts the figure.
+        height: px && size ? Math.round((px * size.height) / size.width) : null,
+      })
       setOpen(false)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Export failed")
@@ -167,6 +219,37 @@ export function ExportMenu({
                 className="fixed z-[200] w-[300px] rounded-xl border border-border bg-popover/95 p-3 text-sm shadow-2xl backdrop-blur-md"
                 style={{ left: pos.left, top: pos.top }}
               >
+                {/* Journal presets first: the whole point of owning the last
+                    mile is that a submission spec should be one click, not five
+                    fields the author has to look up and re-enter. */}
+                <div className="mb-1.5 text-xs font-medium text-muted-foreground">Journal preset</div>
+                <div className="mb-3 grid grid-cols-2 gap-1.5">
+                  {JOURNAL_PRESETS.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      title={preset.note}
+                      onClick={() => {
+                        setPresetId(preset.id)
+                        setFormat(preset.format)
+                        setDpiText(String(preset.dpi))
+                        setColourSpace(preset.colourSpace)
+                        setTransparent(preset.transparent)
+                        setWidthMmText(preset.widthMm ? String(preset.widthMm) : "")
+                      }}
+                      className={cn(
+                        "rounded-lg border px-2 py-1.5 text-left transition-colors",
+                        presetId === preset.id
+                          ? "border-[var(--n9-accent,#965034)]/50 bg-[var(--n9-accent,#965034)]/10"
+                          : "border-border hover:bg-muted/50",
+                      )}
+                    >
+                      <span className="block text-[11.5px] font-semibold">{preset.label}</span>
+                      <span className="block text-[10px] leading-tight text-muted-foreground">{preset.note}</span>
+                    </button>
+                  ))}
+                </div>
+
                 {/* Format */}
                 <div className="mb-1.5 text-xs font-medium text-muted-foreground">Format</div>
                 <div className="grid grid-cols-4 gap-1.5">
@@ -237,6 +320,48 @@ export function ExportMenu({
                     <p className="mt-1.5 text-[11px] text-red-500">Enter a DPI between {DPI_MIN} and {DPI_MAX}.</p>
                   )}
                 </div>
+
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-medium text-muted-foreground">Colour space</span>
+                    <select
+                      value={colourSpace}
+                      onChange={(e) => { setColourSpace(e.target.value as "rgb" | "cmyk"); setPresetId(null) }}
+                      className="h-8 w-full rounded-lg border border-border bg-background px-2 text-[12px] outline-none"
+                    >
+                      <option value="rgb">RGB (screen)</option>
+                      <option value="cmyk">CMYK (print, TIFF)</option>
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-medium text-muted-foreground">Width (mm)</span>
+                    <input
+                      value={widthMmText}
+                      onChange={(e) => { setWidthMmText(e.target.value); setPresetId(null) }}
+                      placeholder="auto"
+                      inputMode="decimal"
+                      className="h-8 w-full rounded-lg border border-border bg-background px-2 text-[12px] outline-none"
+                    />
+                  </label>
+                </div>
+                <label className="mt-2 flex items-center gap-2 text-[12px]">
+                  <input
+                    type="checkbox"
+                    checked={transparent}
+                    onChange={(e) => { setTransparent(e.target.checked); setPresetId(null) }}
+                    disabled={format !== "png"}
+                    className="accent-[var(--n9-accent,#965034)]"
+                  />
+                  Transparent background
+                  {format !== "png" && <span className="text-[10px] text-muted-foreground">(PNG only)</span>}
+                </label>
+                {colourSpace === "cmyk" && (
+                  <p className="mt-1.5 rounded-md bg-amber-500/[0.08] px-2 py-1 text-[10.5px] leading-snug text-amber-800 dark:text-amber-300">
+                    Written as a CMYK TIFF using an uncalibrated separation — there is no ICC
+                    profile in the browser. Fine for line art and flat colour; for colour-critical
+                    figures let the production house convert against their own profile.
+                  </p>
+                )}
 
                 {/* File name */}
                 <div className="mt-3">

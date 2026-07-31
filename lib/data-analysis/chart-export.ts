@@ -113,16 +113,27 @@ async function urlToImageData(url: string): Promise<ImageData> {
   return ctx.getImageData(0, 0, canvas.width, canvas.height)
 }
 
-function encodeTiff(image: ImageData, dpi: number): Uint8Array {
+/**
+ * Baseline uncompressed TIFF, RGB or CMYK.
+ *
+ * The CMYK conversion is the standard naive one (no ICC profile), which is
+ * honest about what a browser can do: there is no colour management here, so
+ * the separation is arithmetic, not calibrated. It is what a press needs for
+ * line art and flat scientific colour, and it is what most tools without a
+ * profile produce -- but a colour-critical figure should still be converted by
+ * the production house against their own profile. The UI says so.
+ */
+function encodeTiff(image: ImageData, dpi: number, cmyk = false): Uint8Array {
   const { width, height, data } = image
   const nEntries = 12
   const ifdOffset = 8
   const ifdSize = 2 + nEntries * 12 + 4
-  const extBits = ifdOffset + ifdSize // BitsPerSample (3 shorts = 6 bytes)
-  const extXRes = extBits + 6
+  const extBits = ifdOffset + ifdSize // BitsPerSample (one short per sample)
+  const extXRes = extBits + (cmyk ? 8 : 6)
   const extYRes = extXRes + 8
   const pixelOffset = extYRes + 8
-  const pixelBytes = width * height * 3
+  const samples = cmyk ? 4 : 3
+  const pixelBytes = width * height * samples
   const buf = new ArrayBuffer(pixelOffset + pixelBytes)
   const dv = new DataView(buf)
   const u8 = new Uint8Array(buf)
@@ -152,11 +163,11 @@ function encodeTiff(image: ImageData, dpi: number): Uint8Array {
   }
   entry(256, 4, 1, width) // ImageWidth
   entry(257, 4, 1, height) // ImageLength
-  entry(258, 3, 3, extBits) // BitsPerSample → external
+  entry(258, 3, samples, extBits) // BitsPerSample → external
   short1(259, 1) // Compression = none
-  short1(262, 2) // Photometric = RGB
+  short1(262, cmyk ? 5 : 2) // Photometric: 5 = separated (CMYK), 2 = RGB
   entry(273, 4, 1, pixelOffset) // StripOffsets
-  short1(277, 3) // SamplesPerPixel
+  short1(277, samples) // SamplesPerPixel
   entry(278, 4, 1, height) // RowsPerStrip
   entry(279, 4, 1, pixelBytes) // StripByteCounts
   entry(282, 5, 1, extXRes) // XResolution → external RATIONAL
@@ -165,30 +176,73 @@ function encodeTiff(image: ImageData, dpi: number): Uint8Array {
   dv.setUint32(e, 0, true) // next IFD = 0
 
   // External values
-  dv.setUint16(extBits, 8, true)
-  dv.setUint16(extBits + 2, 8, true)
-  dv.setUint16(extBits + 4, 8, true)
+  for (let i = 0; i < samples; i++) dv.setUint16(extBits + i * 2, 8, true)
   dv.setUint32(extXRes, dpi, true); dv.setUint32(extXRes + 4, 1, true)
   dv.setUint32(extYRes, dpi, true); dv.setUint32(extYRes + 4, 1, true)
 
-  // Pixels (RGB, drop alpha)
   let p = pixelOffset
   for (let i = 0; i < data.length; i += 4) {
-    u8[p++] = data[i]
-    u8[p++] = data[i + 1]
-    u8[p++] = data[i + 2]
+    if (cmyk) {
+      // Naive separation: K takes the darkest channel, CMY carry the rest.
+      const r = data[i] / 255
+      const g = data[i + 1] / 255
+      const b = data[i + 2] / 255
+      const k = 1 - Math.max(r, g, b)
+      const inv = 1 - k
+      u8[p++] = Math.round((inv > 0 ? (1 - r - k) / inv : 0) * 255)
+      u8[p++] = Math.round((inv > 0 ? (1 - g - k) / inv : 0) * 255)
+      u8[p++] = Math.round((inv > 0 ? (1 - b - k) / inv : 0) * 255)
+      u8[p++] = Math.round(k * 255)
+    } else {
+      u8[p++] = data[i]
+      u8[p++] = data[i + 1]
+      u8[p++] = data[i + 2]
+    }
   }
   return u8
+}
+
+/** Composite a transparent PNG onto white, preserving its pixel dimensions. */
+async function flattenOntoWhite(pngUrl: string): Promise<string> {
+  const image = await urlToImageData(pngUrl)
+  const canvas = document.createElement("canvas")
+  canvas.width = image.width
+  canvas.height = image.height
+  const ctx = canvas.getContext("2d")
+  if (!ctx) return pngUrl
+  ctx.fillStyle = "#ffffff"
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  const tmp = document.createElement("canvas")
+  tmp.width = image.width
+  tmp.height = image.height
+  tmp.getContext("2d")?.putImageData(image, 0, 0)
+  ctx.drawImage(tmp, 0, 0)
+  return canvas.toDataURL("image/png")
 }
 
 /* ── Public API ──────────────────────────────────────────────────────────── */
 export async function exportChartImage(
   plotly: Plotly,
   gd: HTMLElement,
-  opts: { format: ExportFormat; dpi: number; filename: string },
+  opts: {
+    format: ExportFormat
+    dpi: number
+    filename: string
+    /** Keep the page showing through the figure. Raster formats only. */
+    transparent?: boolean
+    /** Exact output size in px; omitted, the on-screen size is scaled by DPI. */
+    width?: number | null
+    height?: number | null
+    /** CMYK is written for TIFF only, and is an uncalibrated separation. */
+    colourSpace?: "rgb" | "cmyk"
+  },
 ): Promise<void> {
-  const { format, dpi, filename } = opts
+  const { format, dpi, filename, transparent = false, colourSpace = "rgb" } = opts
   const scale = dpi / 96
+  // Explicit dimensions win over the DPI scale, so "this journal wants 85mm at
+  // 300dpi" is expressible exactly rather than approximately.
+  const size =
+    opts.width && opts.height ? { width: opts.width, height: opts.height, scale: 1 } : { scale }
 
   if (format === "svg") {
     // Plotly returns svg as a URI-encoded (not base64) data URL.
@@ -201,15 +255,24 @@ export async function exportChartImage(
   }
 
   if (format === "tiff") {
-    const pngUrl: string = await plotly.toImage(gd, { format: "png", scale })
+    // TIFF has no alpha here, so a transparent request is flattened onto white
+    // rather than silently producing a black background.
+    const pngUrl: string = await plotly.toImage(gd, { format: "png", ...size })
     const image = await urlToImageData(pngUrl)
-    const tiff = encodeTiff(image, dpi)
+    const tiff = encodeTiff(image, dpi, colourSpace === "cmyk")
     triggerDownload(toBlob(tiff, "image/tiff"), `${filename}.tiff`)
     return
   }
 
-  const url: string = await plotly.toImage(gd, { format, scale })
-  let bytes = dataUrlToBytes(url)
+  const url: string = await plotly.toImage(gd, { format, ...size })
+  // The figure's own backgrounds are already transparent (the renderer sets
+  // both to rgba(0,0,0,0)), so PNG comes out transparent by default. An opaque
+  // export is therefore the one that needs work: flatten onto white, because a
+  // transparent PNG dropped into a manuscript renders black-on-black in more
+  // than one word processor.
+  const opaqueUrl =
+    format === "png" && !transparent ? await flattenOntoWhite(url) : url
+  let bytes = dataUrlToBytes(opaqueUrl)
   if (format === "png") bytes = pngWithDpi(bytes, dpi)
   else if (format === "jpeg") bytes = jpegWithDpi(bytes, dpi)
   triggerDownload(toBlob(bytes, `image/${format}`), `${filename}.${format === "jpeg" ? "jpg" : format}`)

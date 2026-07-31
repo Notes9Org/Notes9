@@ -5,7 +5,18 @@ import { createPortal } from "react-dom"
 import { exportChartImage, type ExportFormat } from "@/lib/data-analysis/chart-export"
 
 export type PlotlyEdits = { title?: string; xLabel?: string; yLabel?: string }
-export type ChartExportFn = (opts: { format: ExportFormat; dpi: number; filename: string }) => Promise<void>
+export type ChartExportFn = (opts: {
+  format: ExportFormat
+  dpi: number
+  filename: string
+  /** Raster only: leave the page showing through the figure. */
+  transparent?: boolean
+  /** CMYK is written for TIFF only, and is an uncalibrated separation. */
+  colourSpace?: "rgb" | "cmyk"
+  /** Exact output size in px; without it the on-screen size is scaled by DPI. */
+  width?: number | null
+  height?: number | null
+}) => Promise<void>
 export type ChartElement = "title" | "xaxis" | "yaxis" | "series" | "legend" | "annotation"
 export type ChartMenuItem = {
   label: string
