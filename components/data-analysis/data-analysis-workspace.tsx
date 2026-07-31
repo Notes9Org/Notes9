@@ -23,6 +23,7 @@ import {
   GridFour,
   Copy,
   SlidersHorizontal,
+  PencilSimpleLine,
   Sigma,
   TrendUp,
   CaretLeft,
@@ -33,7 +34,6 @@ import {
   Palette,
   Ruler,
   TextAa,
-  DotsThree,
   FolderOpen,
   FloppyDisk,
   MagnifyingGlass,
@@ -606,7 +606,6 @@ export function DataAnalysisWorkspace({
   // Data-aware tabs: Chart + Statistics always show; Standard curve / Plate
   // appear only when the data looks like a dose-response/ELISA or a microplate.
   const detected = useMemo(() => detectDataKind(table.columns, table.rows, grid), [table.columns, table.rows, grid])
-  const [showAllTabs, setShowAllTabs] = useState(false)
   const visiblePhases = useMemo(
     () =>
       PHASES.filter((p) => {
@@ -616,11 +615,12 @@ export function DataAnalysisWorkspace({
         if (p.id === "plate") return false
         // Chart, Statistics and Figure layout are the surface, not tools that
         // appear when the data happens to suit them.
-        if (p.id === "chart" || p.id === "stats" || p.id === "workspace") return true
-        if (showAllTabs) return true
-        return p.id === "curve" && detected.standardCurve
+        // Every remaining phase is offered outright. Hiding some behind an
+        // overflow button meant a feature you had used could vanish because the
+        // next sheet did not look like the last one.
+        return true
       }),
-    [detected, showAllTabs],
+    [detected],
   )
   useEffect(() => {
     if (!visiblePhases.some((p) => p.id === phase)) setPhase("chart")
@@ -1680,6 +1680,8 @@ export function DataAnalysisWorkspace({
           ))}
         </div>
       </div>
+      <div id="cs-data" className={cn(!showRail("cs-data") && "!hidden", "scroll-mt-3 space-y-4 rounded-lg transition-shadow", flashId === "cs-data" && "ring-2 ring-[var(--n9-accent,#965034)]/40")}>
+      <SectionLabel><TableIcon className="h-3.5 w-3.5" /> Data</SectionLabel>
       <Field label={`Columns — assign axes${is3D(chartType) ? " (X · Y · Z)" : ""}`}>
         <div className="space-y-1 rounded-md border border-input bg-background p-1.5">
           {table.columns.map((c) => {
@@ -1710,6 +1712,7 @@ export function DataAnalysisWorkspace({
           </NativeSelect>
         </Field>
       )}
+      </div>
       <div id="cs-title" className={cn(!showRail("cs-title") && "!hidden", "scroll-mt-3 space-y-4 rounded-lg transition-shadow", flashId === "cs-title" && "ring-2 ring-[var(--n9-accent,#965034)]/40")}>
         <Field label="Chart title"><Input className="h-9" value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
         <Field label="Subtitle"><Input className="h-9" value={subtitle} onChange={(e) => setSubtitle(e.target.value)} placeholder="optional" /></Field>
@@ -1720,7 +1723,9 @@ export function DataAnalysisWorkspace({
           <Field label="Y unit"><Input className="h-9" value={yUnit} onChange={(e) => setYUnit(e.target.value)} /></Field>
         </div>
       </div>
-      <PalettePicker value={paletteName} onChange={setPaletteName} />
+      <div id="cs-palette" className={cn(!showRail("cs-palette") && "!hidden", "scroll-mt-3 rounded-lg transition-shadow", flashId === "cs-palette" && "ring-2 ring-[var(--n9-accent,#965034)]/40")}>
+        <PalettePicker value={paletteName} onChange={setPaletteName} />
+      </div>
       <div id="cs-toggles" className={cn(!showRail("cs-toggles") && "!hidden", "scroll-mt-3 flex flex-col gap-2.5 border-t border-border pt-3 text-sm transition-shadow", flashId === "cs-toggles" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
         <Toggle label="Show markers" checked={markers} onChange={setMarkers} />
         <Toggle label="Log Y axis" checked={yLog} onChange={setYLog} />
@@ -2035,9 +2040,9 @@ export function DataAnalysisWorkspace({
                     <TabsTrigger value={p.id} className="gap-1.5">
                       <p.Icon className="h-4 w-4" weight={phase === p.id ? "fill" : "regular"} />
                       {p.label}
-                      {auto && !showAllTabs && (
+                      {auto && (
                         <span
-                          title="Surfaced automatically for your data"
+                          title="Your data suits this view"
                           className="ml-0.5 h-1.5 w-1.5 rounded-full bg-[var(--n9-accent,#965034)]"
                         />
                       )}
@@ -2048,15 +2053,7 @@ export function DataAnalysisWorkspace({
             </AnimatePresence>
           </TabsList>
         </Tabs>
-        {visiblePhases.length < PHASES.length && (
-          <button
-            onClick={() => setShowAllTabs(true)}
-            title="Show all analysis tools"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          >
-            <DotsThree className="h-4 w-4" weight="bold" />
-          </button>
-        )}
+
         <input ref={fileRef} type="file" accept=".csv,.tsv,.xlsx,.xls,.n9a,.json" className="hidden" onChange={(e) => { if (e.target.files?.[0]) onImport(e.target.files[0]); e.target.value = "" }} />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -2315,10 +2312,12 @@ function PaneHeader({ Icon, title, children }: { Icon: React.ComponentType<{ cla
 /** The rail's sections, in the order they appear, for the jump bar. */
 const RAIL_SECTIONS: { id: string; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "cs-type", label: "Chart type", Icon: FnIcon },
+  { id: "cs-data", label: "Data and axes assignment", Icon: TableIcon },
   { id: "cs-title", label: "Titles and labels", Icon: TextAa },
+  { id: "cs-palette", label: "Palette", Icon: Palette },
   { id: "cs-toggles", label: "Display", Icon: SlidersHorizontal },
   { id: "cs-error", label: "Error bars and annotations", Icon: TrendUp },
-  { id: "cs-series", label: "Series style", Icon: Palette },
+  { id: "cs-series", label: "Series style", Icon: PencilSimpleLine },
   { id: "cs-axes", label: "Axes", Icon: Ruler },
   { id: "cs-type-face", label: "Typography", Icon: TextAa },
   { id: "cs-export", label: "Export figure", Icon: DownloadSimple },
