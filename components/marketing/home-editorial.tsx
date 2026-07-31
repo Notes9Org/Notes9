@@ -1,19 +1,20 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
+import type { ReactNode } from "react"
 import Link from "next/link"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { ArrowRight, Plus, Check, X } from "@phosphor-icons/react/ssr"
 import { BrowserFrame } from "@/components/marketing/browser-frame"
 import { cn } from "@/lib/utils"
 
-/** House easing — matches `--n9-ease`. */
+/** House easing, matches `--n9-ease`. */
 const EASE = [0.22, 1, 0.36, 1] as const
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Proof band
    ═══════════════════════════════════════════════════════════════════════════
-   Three sourced figures. Every number here is attributable — the brand's
+   Three sourced figures. Every number here is attributable, the brand's
    proof-and-claims rule forbids unsourced statistics, so each carries its
    citation inline rather than in a distant footnote.
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -38,6 +39,7 @@ const STATS = [
 
 export function ProofBand() {
   const reduceMotion = useReducedMotion()
+  const rowRefs = useRef<(HTMLDivElement | null)[]>([])
   return (
     <section className="border-t border-border/50">
       <div className="container mx-auto px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
@@ -63,7 +65,7 @@ export function ProofBand() {
         </div>
 
         <p className="mt-14 max-w-2xl font-serif text-[clamp(1.5rem,3.2vw,2.2rem)] leading-[1.25] tracking-tight text-foreground">
-          The gap isn&apos;t capability. It&apos;s context — general models have never seen
+          The gap isn&apos;t capability. It&apos;s context. General models have never seen
           your data, so nothing they say can be checked.
         </p>
       </div>
@@ -72,7 +74,7 @@ export function ProofBand() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Fracture — before / after
+   Fracture: before / after
    ═══════════════════════════════════════════════════════════════════════════
    The V7 device: a deliberately flat, colourless "today" panel beside a warm,
    saturated "with Notes9" panel. The contrast does the argument's work before
@@ -95,6 +97,7 @@ const WITH_NOTES9 = [
 
 export function FractureSection() {
   const reduceMotion = useReducedMotion()
+  const rowRefs = useRef<(HTMLDivElement | null)[]>([])
   return (
     <section className="border-t border-border/50">
       <div className="container mx-auto px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
@@ -201,7 +204,7 @@ function Panel({
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   The chain — numbered accordion
+   The chain: numbered accordion
    ═══════════════════════════════════════════════════════════════════════════
    IntegratedBio's numbered-accordion device, carrying a real screenshot in the
    expanded panel. One row open at a time keeps the screen large enough to read
@@ -233,7 +236,7 @@ const CHAIN = [
   {
     n: "04",
     title: "Analysis",
-    body: "Drop in a spreadsheet and build the figure — t-tests and ANOVA with post-hoc correction, dose–response curves, plate maps — exported at publication DPI.",
+    body: "Drop in a spreadsheet and build the figure: t-tests and ANOVA with post-hoc correction, dose–response curves, plate maps, exported at publication DPI.",
     shot: "data-analysis",
     alt: "The Notes9 data workspace: a spreadsheet of ELISA readings beside a fitted standard curve",
   },
@@ -249,6 +252,7 @@ const CHAIN = [
 export function ChainSection() {
   const [open, setOpen] = useState(0)
   const reduceMotion = useReducedMotion()
+  const rowRefs = useRef<(HTMLDivElement | null)[]>([])
 
   return (
     <section className="border-t border-border/50">
@@ -261,7 +265,7 @@ export function ChainSection() {
             </h2>
           </div>
           <p className="max-w-xs text-[15px] leading-6 text-muted-foreground">
-            That chain is what makes an answer checkable — and what an ELN throws away.
+            That chain is what makes an answer checkable, and what an ELN throws away.
           </p>
         </div>
 
@@ -269,10 +273,30 @@ export function ChainSection() {
           {CHAIN.map((row, i) => {
             const isOpen = i === open
             return (
-              <div key={row.n} className="border-t border-border/60 last:border-b">
+              <div
+                key={row.n}
+                ref={(el) => {
+                  rowRefs.current[i] = el
+                }}
+                className="border-t border-border/60 last:border-b scroll-mt-24"
+              >
                 <button
                   type="button"
-                  onClick={() => setOpen(isOpen ? -1 : i)}
+                  onClick={() => {
+                    const opening = !isOpen
+                    setOpen(opening ? i : -1)
+                    // Bring the row into view once it has actually grown.
+                    // Scrolling immediately would target the collapsed height
+                    // and leave the screenshot below the fold; waiting for the
+                    // height transition means the whole row is there to see.
+                    if (opening && !reduceMotion) {
+                      window.setTimeout(() => {
+                        rowRefs.current[i]?.scrollIntoView({ behavior: "smooth", block: "start" })
+                      }, 460)
+                    } else if (opening) {
+                      rowRefs.current[i]?.scrollIntoView({ block: "start" })
+                    }
+                  }}
                   aria-expanded={isOpen}
                   className="group flex w-full items-center gap-5 py-6 text-left sm:gap-8"
                 >
@@ -309,15 +333,40 @@ export function ChainSection() {
                       initial={reduceMotion ? false : { height: 0, opacity: 0 }}
                       animate={{ height: "auto", opacity: 1 }}
                       exit={reduceMotion ? undefined : { height: 0, opacity: 0 }}
-                      transition={{ duration: 0.42, ease: EASE }}
+                      /* Height and opacity on separate curves. Fading the
+                         content in over the same 0.42s as the box meant the
+                         screenshot was already fully visible while the row was
+                         still growing, which reads as a pop rather than an
+                         open. Opacity now trails the height on the way in and
+                         leads it on the way out, so the box is always the thing
+                         you watch move. */
+                      transition={{
+                        height: { duration: 0.44, ease: EASE },
+                        opacity: { duration: 0.24, ease: EASE, delay: isOpen ? 0.14 : 0 },
+                      }}
                       className="overflow-hidden"
+                      style={{ willChange: "height" }}
                     >
-                      <div className="grid gap-8 pb-10 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] lg:gap-12 lg:pl-[3.25rem]">
-                        <p className="max-w-sm text-[15px] leading-7 text-muted-foreground">
+                      <motion.div
+                        initial={reduceMotion ? false : { y: 8 }}
+                        animate={{ y: 0 }}
+                        exit={reduceMotion ? undefined : { y: 4 }}
+                        transition={{ duration: 0.36, ease: EASE, delay: isOpen ? 0.08 : 0 }}
+                        /* Two columns from `md`, and centred against each other.
+                           The copy used to sit at the top of a row as tall as
+                           the screenshot beside it, which left it stranded above
+                           a lot of empty space; centring puts the sentence
+                           opposite the middle of the image where the eye moves
+                           between them. The text column is also given real room
+                           — it was capped narrower than the column it lived in,
+                           so it wrapped early while the space went unused. */
+                        className="grid items-center gap-8 pb-10 md:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] md:gap-10 lg:gap-14 lg:pl-[3.25rem]"
+                      >
+                        <p className="text-[15px] leading-7 text-muted-foreground">
                           {row.body}
                         </p>
                         <BrowserFrame src={row.shot} alt={row.alt} />
-                      </div>
+                      </motion.div>
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -331,7 +380,7 @@ export function ChainSection() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Catalyst — inverted band
+   Catalyst: inverted band
    ═══════════════════════════════════════════════════════════════════════════
    The one dark moment on the page. Inversion is used sparingly and on purpose:
    it marks the product's centre of gravity and gives the scroll a change in
@@ -340,6 +389,7 @@ export function ChainSection() {
 
 export function CatalystBand() {
   const reduceMotion = useReducedMotion()
+  const rowRefs = useRef<(HTMLDivElement | null)[]>([])
   return (
     <section className="relative isolate overflow-hidden bg-[#1a1714] text-[#f5f0e8]">
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 opacity-70">
@@ -351,7 +401,7 @@ export function CatalystBand() {
           <div>
             {/* Colours are set explicitly on every element in this band rather
                 than inherited from the section. A global heading rule pins
-                headings to `--foreground`, which is the light-theme charcoal —
+                headings to `--foreground`, which is the light-theme charcoal,
                 on this near-black background that rendered the headline all but
                 invisible. */}
             <p className="n9-label !text-[#f5f0e8]/70">Meet Catalyst</p>
@@ -359,14 +409,14 @@ export function CatalystBand() {
               Not a search box. An assistant that has read your lab.
             </h2>
             <p className="mt-6 max-w-md text-[16px] leading-7 text-[#f5f0e8]/75">
-              Catalyst answers from your projects, notes and saved papers — and cites the
+              Catalyst answers from your projects, notes and saved papers, and cites the
               record behind every claim, so you can open the source instead of trusting the
               summary.
             </p>
 
             <Link
               href="/auth/sign-up"
-              className="n9-press mt-9 inline-flex h-12 items-center gap-2 rounded-full bg-[#f5f0e8] px-7 text-[15px] font-semibold text-[#1a1714] transition-opacity hover:opacity-90"
+              className="n9-press mt-9 inline-flex h-11 items-center gap-2 rounded-full bg-[#f5f0e8] px-6 text-[15px] font-medium text-[#1a1714] transition-opacity hover:opacity-90"
             >
               Ask it about your work
               <ArrowRight className="size-4" aria-hidden />
@@ -413,75 +463,81 @@ export function CatalystBand() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Closing — oversized wordmark
+   Closing: oversized wordmark
    ═══════════════════════════════════════════════════════════════════════════ */
 
-export function ClosingSection() {
+/**
+ * The page's single closing act.
+ *
+ * This used to be two sections stacked: a "start free" CTA under an oversized
+ * wordmark, then a separate "Get in touch" block with the contact form. Back to
+ * back they asked the same thing twice and the second heading read as a
+ * duplicate of the first. Merged, the left column makes the closing argument and
+ * carries both the self-serve CTAs and the direct contact details, the form sits
+ * beside it on its own surface. The oversized wordmark that used to sign this
+ * section off now lives in the footer, so the sign-off happens once, at the very
+ * bottom of the page, rather than twice in the last two screens.
+ *
+ * The form arrives as `children` so this stays free of the contact form's
+ * dependencies and the server page keeps ownership of what it renders.
+ */
+export function ClosingSection({ children }: { children?: ReactNode }) {
   return (
-    <section className="relative isolate overflow-hidden border-t border-border/50">
+    <section
+      id="contact"
+      className="relative isolate scroll-mt-20 overflow-hidden border-t border-border/50"
+    >
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
         <div className="n9-organic n9-organic-mask opacity-60" />
       </div>
 
-      <div className="container mx-auto px-4 pt-20 sm:px-6 sm:pt-28 lg:px-8">
-        <div className="grid gap-10 lg:grid-cols-2 lg:items-end">
-          <h2 className="max-w-xl font-serif text-[clamp(2rem,4.6vw,3.4rem)] leading-[1.06] tracking-[-0.02em] text-foreground">
-            Your whole career, from first protocol to published paper.
-          </h2>
-          <div className="lg:pb-2">
-            <p className="max-w-sm text-[15px] leading-6 text-muted-foreground">
+      <div className="container mx-auto px-4 py-20 sm:px-6 sm:py-28 lg:px-8">
+        <div className="grid gap-12 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1fr)] lg:gap-20">
+          <div>
+            <p className="n9-label">Get started</p>
+            <h2 className="mt-6 max-w-xl font-serif text-[clamp(2rem,4.6vw,3.4rem)] leading-[1.06] tracking-[-0.02em] text-foreground">
+              Your whole career, from first protocol to published paper.
+            </h2>
+            <p className="mt-5 max-w-sm text-[15px] leading-7 text-muted-foreground">
               Answer three questions and Notes9 sets up a workspace matched to your field,
               with a sample project you can pull apart to see how it fits together.
             </p>
             <div className="mt-7 flex flex-wrap items-center gap-3">
               <Link
                 href="/auth/sign-up"
-                className="n9-press inline-flex h-12 items-center gap-2 rounded-full bg-[var(--n9-accent)] px-7 text-[15px] font-semibold text-white shadow-[0_14px_44px_-12px_var(--n9-accent-glow)] transition-colors hover:bg-[var(--n9-accent-hover)]"
+                className="n9-press inline-flex h-11 items-center gap-2 rounded-full bg-[var(--n9-accent)] px-6 text-[15px] font-medium text-white shadow-sm transition-colors hover:bg-[var(--n9-accent-hover)]"
               >
                 Start free
                 <ArrowRight className="size-4" aria-hidden />
               </Link>
               <Link
                 href="/pricing"
-                className="inline-flex h-12 items-center gap-2 rounded-full border border-border px-6 text-[15px] font-semibold text-foreground transition-colors hover:bg-muted"
+                className="inline-flex h-11 items-center gap-2 rounded-full border border-border bg-background px-6 text-[15px] font-medium text-foreground transition-colors hover:bg-muted"
               >
                 See pricing
               </Link>
             </div>
-          </div>
-        </div>
 
-        {/* Masthead: the logo mark sits on the wordmark's baseline at cap height,
-            so the two read as one lockup rather than an image parked next to
-            text. Without the mark the wordmark looked unfinished — the mark is
-            the "o" in the real lockup, so its absence is legible even at this
-            scale. Both share one opacity so they sink into the page together. */}
-        <div
-          aria-hidden
-          /* Alpha lives on the PARENT, not on `text-foreground/[0.09]`: a text
-             colour alpha tints the letters but leaves the <img> at full
-             strength, which rendered the mark as a solid spiral beside
-             9%-grey letters. Group opacity fades both identically. */
-          className="n9-wordmark mt-16 flex select-none items-baseline font-serif text-foreground opacity-[0.09] dark:opacity-[0.18] sm:mt-20"
-        >
-          <span>N</span>
-          {/* The mark stands in for the "o" — that is the real lockup, so it
-              reads as the wordmark rather than as a logo placed beside text.
-              Sized in em so it tracks the clamped display size.
-              `items-baseline` already sits the image's bottom edge on the text
-              baseline, which is where a lowercase "o" belongs; the small
-              positive nudge only compensates for the transparent padding baked
-              into the asset. An earlier negative value lifted it clear of the
-              other letters.
-              The artwork is dark, so it needs the same dark-mode inversion the
-              header wordmark uses (components/brand/notes9-brand.tsx) or it
-              disappears against a dark background. */}
-          <img
-            src="/notes9-logo-mark-transparent.png"
-            alt=""
-            className="mx-[0.015em] h-[0.5em] w-auto translate-y-[0.03em] object-contain dark:invert dark:brightness-125"
-          />
-          <span>tes9</span>
+            <hr className="n9-hairline mt-10" />
+
+            <p className="mt-8 max-w-sm text-[15px] leading-7 text-muted-foreground">
+              Or tell us what you are working on and how your group records it today, and
+              we will show you how Notes9 would fit around it.
+            </p>
+            <div className="mt-6">
+              <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                Email
+              </p>
+              <a
+                href="mailto:admin@notes9.com"
+                className="mt-2 inline-block text-[17px] text-foreground underline-offset-4 transition-colors hover:text-[var(--n9-accent)] hover:underline"
+              >
+                admin@notes9.com
+              </a>
+            </div>
+          </div>
+
+          {children}
         </div>
       </div>
     </section>

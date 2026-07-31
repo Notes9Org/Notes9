@@ -63,7 +63,7 @@ export function detectDataKind(
 
   // Serial dilution: a numeric column whose sorted-descending consecutive ratios
   // are near-constant (2-, 3-, 10-fold …) — the signature of a standard series.
-  const serial = numericCols.some((c) => {
+  const serialColumns = numericCols.filter((c) => {
     const vals = rows
       .map((r) => Number(r[c]))
       .filter((v) => isFinite(v) && v > 0)
@@ -76,8 +76,18 @@ export function detectDataKind(
     const cv = Math.sqrt(ratios.reduce((a, b) => a + (b - mean) ** 2, 0) / ratios.length) / mean
     return cv < 0.18
   })
+  const serial = serialColumns.length > 0
 
-  const standardCurve = (hasConc && (hasSignal || numericCols.length >= 2)) || serial
+  /**
+   * A serial dilution and an exponential growth curve look identical to the
+   * ratio test: both have near-constant ratios between sorted values. The
+   * difference is what the column MEANS — a dilution series is a
+   * concentration, so it is never itself the signal. Requiring that the serial
+   * column is not signal-named stops an OD600 growth curve being read as a
+   * standard series, which is what put a Standard curve tab on every sheet.
+   */
+  const serialIsConcentration = serial && !serialColumns.every((c) => SIGNAL_RE.test(c))
+  const standardCurve = (hasConc && (hasSignal || numericCols.length >= 2)) || serialIsConcentration
   if (standardCurve) labels.push(hasSignal && hasConc ? "ELISA / standard curve" : "dose-response")
 
   return { plate, plateFormat, standardCurve, labels }

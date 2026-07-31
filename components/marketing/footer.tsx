@@ -37,8 +37,49 @@ const footerLinks = {
 
 export function Footer() {
   return (
-    <footer className="border-t border-border/60 bg-muted/40 backdrop-blur-[10px]">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
+    <footer className="relative isolate overflow-hidden border-t border-border/60 bg-muted/40 backdrop-blur-[10px]">
+      <div className="relative container mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
+        {/* The columns and the masthead share one positioning context, which is
+            what puts the masthead BEHIND the columns while keeping it ABOVE the
+            closing line: its bottom edge is this wrapper's bottom edge, and the
+            closing line comes after the wrapper. */}
+        <div className="relative">
+          {/* Masthead watermark. `-z-10` drops it behind the links (the footer's
+              own background still paints first, so it stays visible), and
+              pointer events are off so every link above it stays clickable.
+              `overflow-hidden` lets it run past the right gutter at this size
+              without ever widening the page. */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 bottom-0 -z-10 overflow-hidden"
+          >
+            <div
+              /* Alpha lives on the PARENT, not on `text-foreground/[0.07]`: a
+                 text colour alpha tints the letters but leaves the <img> at full
+                 strength, which rendered the mark as a solid spiral beside grey
+                 letters. Group opacity fades both identically. */
+              className="n9-wordmark n9-wordmark-footer flex select-none items-baseline font-serif text-foreground opacity-[0.07] dark:opacity-[0.13]"
+            >
+              <span>N</span>
+              {/* The mark stands in for the "o", that is the real lockup, so it
+                  reads as the wordmark rather than as a logo placed beside text.
+                  Sized in em so it tracks the clamped display size.
+                  `items-baseline` already sits the image's bottom edge on the
+                  text baseline, which is where a lowercase "o" belongs; the
+                  small positive nudge only compensates for the transparent
+                  padding baked into the asset.
+                  The artwork is dark, so it needs the same dark-mode inversion
+                  the header wordmark uses (components/brand/notes9-brand.tsx) or
+                  it disappears against a dark background. */}
+              <img
+                src="/notes9-logo-mark-transparent.png"
+                alt=""
+                className="mx-[0.015em] h-[0.5em] w-auto translate-y-[0.03em] object-contain dark:invert dark:brightness-125"
+              />
+              <span>tes9</span>
+            </div>
+          </div>
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
           <div className="md:col-span-1">
             <Link href="/" className="flex items-center space-x-3 mb-4">
@@ -108,7 +149,9 @@ export function Footer() {
           </div>
         </div>
 
-        <div className="border-t border-border/60 pt-8 text-center md:text-left">
+        </div>
+
+        <div className="mt-6 border-t border-border/60 pt-8 text-center md:text-left">
           <span className="text-[16px] text-foreground/80">
             Notes9 is built by a multidisciplinary team spanning scientific research, AI systems, and product engineering.
           </span>

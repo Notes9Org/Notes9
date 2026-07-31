@@ -81,7 +81,7 @@ export default async function HomePage({
               visitor reached pricing. This composition is a normal document:
               sections follow one another, and the page is roughly half as tall.
 
-              The previous version is not deleted — every section component it
+              The previous version is not deleted, every section component it
               used still exists in components/marketing/home-sections.tsx, so
               reverting is an import change rather than a rebuild. */}
           <HeroSplit />
@@ -89,45 +89,15 @@ export default async function HomePage({
           <FractureSection />
           <ChainSection />
           <CatalystBand />
-          <ClosingSection />
 
-          <section className="border-t border-border/40">
-            <div className="container mx-auto px-4 py-20 sm:px-6 sm:py-24 lg:px-8" id="contact">
-              {/* Two columns rather than a stacked block. ContactForm brings its
-                  own card and heading, so a second heading above it read as a
-                  duplicate; the left column now carries the editorial framing
-                  and the direct details, and the form keeps its own surface. */}
-              <div className="grid gap-12 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)] lg:gap-20">
-                <div>
-                  <p className="n9-label">Get in touch</p>
-                  <h2 className="mt-6 max-w-sm font-serif text-[clamp(1.9rem,4vw,2.9rem)] leading-[1.08] tracking-[-0.02em] text-foreground">
-                    Talk to us about your lab.
-                  </h2>
-                  <p className="mt-5 max-w-sm text-[16px] leading-7 text-muted-foreground">
-                    Tell us what you are working on and how your group records it today.
-                    We will show you how Notes9 would fit around it.
-                  </p>
-
-                  <hr className="n9-hairline mt-10" />
-
-
-                  <div className="mt-8">
-                    <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                      Email
-                    </p>
-                    <a
-                      href="mailto:admin@notes9.com"
-                      className="mt-2 inline-block text-[17px] text-foreground underline-offset-4 transition-colors hover:text-[var(--n9-accent)] hover:underline"
-                    >
-                      admin@notes9.com
-                    </a>
-                  </div>
-                </div>
-
-                <ContactForm />
-              </div>
-            </div>
-          </section>
+          {/* The closing CTA and the contact form are one section now. As two
+              they made the same ask twice in a row, and the second heading read
+              as a duplicate of the first. ClosingSection owns the anchor, the
+              framing and the sign-off wordmark; the form is passed in so the
+              page keeps ownership of what it renders. */}
+          <ClosingSection>
+            <ContactForm />
+          </ClosingSection>
         </main>
         <Footer />
       </div>

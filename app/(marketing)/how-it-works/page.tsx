@@ -11,7 +11,7 @@ import {
 export const metadata: Metadata = {
   title: "How Notes9 works | From question to published paper",
   description:
-    "Walk through a full research cycle in Notes9 — literature search, protocol, experiment, analysis and manuscript — and see how each step stays connected to the last.",
+    "Walk through a full research cycle in Notes9: literature search, protocol, experiment, analysis and manuscript, and see how each step stays connected to the last.",
 }
 
 /**
@@ -19,12 +19,12 @@ export const metadata: Metadata = {
  *
  * `/platform` sells the surface area (here are the modules); this page sells the
  * throughline (here is one piece of work moving through them). That distinction
- * is the product's actual argument — an ELN records what happened, Notes9 keeps
- * the chain between steps intact — and nothing on the site made it concretely
+ * is the product's actual argument, an ELN records what happened, Notes9 keeps
+ * the chain between steps intact, and nothing on the site made it concretely
  * before this page.
  *
  * NB: this route must also be listed in `publicRoutes` in
- * lib/supabase/middleware.ts, which matches exact pathnames — otherwise a
+ * lib/supabase/middleware.ts, which matches exact pathnames, otherwise a
  * logged-out visitor is redirected to /auth/login.
  */
 export default function HowItWorksPage() {
@@ -64,7 +64,7 @@ export default function HowItWorksPage() {
           <SectionHeader
             badge="Why it compounds"
             title="The connections are the product"
-            description="Each step above writes a link, not just a record. After a few months those links are a map of how your lab actually reached its conclusions — and it is what Catalyst reads when you ask it a question."
+            description="Each step above writes a link, not just a record. After a few months those links are a map of how your lab actually reached its conclusions, and it is what Catalyst reads when you ask it a question."
             align="center"
           />
 

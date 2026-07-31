@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils"
  * A full-screen stacked "page". Each section pins to the top (sticky) with a
  * rising z-index and an opaque surface, so the next locks over the previous one
  * and fully covers what's behind it. Motion is a one-shot content reveal (inner
- * wrapper only) fired by an IntersectionObserver — deliberately NOT a
+ * wrapper only) fired by an IntersectionObserver, deliberately NOT a
  * scroll-driven transform on the sticky card, which would freeze mid-value and
  * stop the card reaching the top.
  */

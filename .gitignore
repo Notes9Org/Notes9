@@ -72,3 +72,7 @@ agentdb.rvf.lock
 .gstack/
 CLAUDE.local.md
 supabase/.temp/
+
+# Python bytecode from local engine validation runs
+__pycache__/
+*.pyc

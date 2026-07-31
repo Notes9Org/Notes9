@@ -71,7 +71,15 @@ export async function updateSession(request: NextRequest) {
   // Exact-match list — a new marketing route must be added here or a logged-out
   // visitor is redirected to /auth/login.
   const publicRoutes = ["/", "/about", "/pricing", "/docs", "/platform", "/how-it-works", "/resources", "/terms", "/privacy", "/survey", "/webinar", "/auth/invite"]
-  const isPublicRoute = publicRoutes.some(route => request.nextUrl.pathname === route)
+  // Prefix-matched static assets. The data-analysis engine's Python source is
+  // fetched by a Web Worker, and a worker fetch that gets bounced to the login
+  // page receives HTML where it expected Python and fails with a parse error
+  // rather than an auth error. The file is static, contains no secrets, and no
+  // user data passes through it, so it is served like any other public asset.
+  const publicPrefixes = ["/data-analysis-engine/"]
+  const isPublicRoute =
+    publicRoutes.some(route => request.nextUrl.pathname === route) ||
+    publicPrefixes.some(prefix => request.nextUrl.pathname.startsWith(prefix))
   const isAuthRoute = request.nextUrl.pathname.startsWith("/auth")
 
   // If it's a public or auth route, we don't need to verify the user session in middleware.

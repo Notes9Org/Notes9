@@ -408,7 +408,7 @@ const PRICING = [
 /**
  * Pricing, set as columns rather than cards.
  *
- * The previous version was three-card SaaS boilerplate — rounded borders, a
+ * The previous version was three-card SaaS boilerplate, rounded borders, a
  * tinted "recommended" panel, and a hover tilt on each. Runner and Sana both
  * drop the card entirely and let a hairline do the separating, which suits an
  * editorial page and stops two tiers from looking like a comparison grid that
@@ -572,14 +572,14 @@ export function FinalCtaSection() {
             <Button
               asChild
               size="lg"
-              className="h-14 w-full rounded-full bg-[linear-gradient(115deg,var(--n9-accent),color-mix(in_oklab,var(--n9-accent)_58%,#d9a24a))] px-10 text-[17px] font-semibold text-white shadow-[0_16px_44px_-14px_var(--n9-accent-glow)] hover:opacity-95 sm:w-auto"
+              className="h-11 w-full rounded-full bg-[var(--n9-accent)] px-6 text-[15px] font-medium text-white shadow-sm hover:bg-[var(--n9-accent-hover)] sm:w-auto"
             >
               <Link href="/auth/sign-up">
                 Start free
-                <ArrowRight className="ml-2 h-5 w-5" />
+                <ArrowRight className="ml-1.5 h-4 w-4" />
               </Link>
             </Button>
-            <Button asChild size="lg" variant="outline" className="h-14 w-full rounded-full px-10 text-[17px] font-semibold sm:w-auto">
+            <Button asChild size="lg" variant="outline" className="h-11 w-full rounded-full border-border bg-background px-6 text-[15px] font-medium hover:bg-muted sm:w-auto">
               <Link href="/#contact">Book a 15-min demo</Link>
             </Button>
           </div>

@@ -1,8 +1,11 @@
 import React from 'react'
 
 export function PrivacyContent() {
+    // `break-words` is load-bearing on mobile: this document contains
+    // slash-joined tokens with no spaces, and at 390px one of them was wide
+    // enough to push the whole page into horizontal scroll.
     return (
-        <div className="prose dark:prose-invert max-w-none space-y-6">
+        <div className="prose dark:prose-invert max-w-none space-y-6 break-words">
             <div>
                 <h1 className="text-3xl font-bold mb-2">Notes9 Data Terms & Privacy Notice</h1>
                 <p className="text-muted-foreground">
@@ -45,7 +48,10 @@ export function PrivacyContent() {
                     For research content you upload (“Customer Content”), the organisation or your lab/institute/company or firm typically determines why and how that content is processed. In that case:
                 </p>
                 <ul className="list-disc pl-6 space-y-1">
-                    <li>The organisation/university/Insitute/lab/company is the Data Controller</li>
+                    <li>
+                      The organisation, university, institute, lab or company is the Data
+                      Controller
+                    </li>
                     <li>Notes9 is the Data Processor, processing Customer Content only on documented instructions from the Controller</li>
                 </ul>
                 <p className="mt-2">

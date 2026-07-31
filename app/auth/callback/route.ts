@@ -6,7 +6,7 @@ import type { SupabaseClient, User } from "@supabase/supabase-js"
 
 /**
  * Isolated from the main handler so production bundlers (Turbopack) do not merge
- * short-lived locals like `next` with inner `{ data: … }` bindings — that bug
+ * short-lived locals like `next` with inner `{ data: … }` bindings, that bug
  * produced bad redirects / ReferenceErrors on Vercel for this route.
  */
 async function provisionOauthProfileAndOrg(

@@ -7,7 +7,7 @@ export type FlareIconProps = SVGAttributes<SVGSVGElement> & {
 }
 
 /**
- * Concave four-point flare for Catalyst — one continuous path whose edges
+ * Concave four-point flare for Catalyst, one continuous path whose edges
  * bow inward toward the core, so the glyph reads as a single sculpted spark
  * rather than a star outline. Custom SVG (Phosphor has no concave flare).
  * Mirrors the Phosphor icon API: className sizing plus `weight`, where
