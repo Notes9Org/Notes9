@@ -329,9 +329,17 @@ export function ChainSection() {
                         animate={{ y: 0 }}
                         exit={reduceMotion ? undefined : { y: 4 }}
                         transition={{ duration: 0.36, ease: EASE, delay: isOpen ? 0.08 : 0 }}
-                        className="grid gap-8 pb-10 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] lg:gap-12 lg:pl-[3.25rem]"
+                        /* Two columns from `md`, and centred against each other.
+                           The copy used to sit at the top of a row as tall as
+                           the screenshot beside it, which left it stranded above
+                           a lot of empty space; centring puts the sentence
+                           opposite the middle of the image where the eye moves
+                           between them. The text column is also given real room
+                           — it was capped narrower than the column it lived in,
+                           so it wrapped early while the space went unused. */
+                        className="grid items-center gap-8 pb-10 md:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] md:gap-10 lg:gap-14 lg:pl-[3.25rem]"
                       >
-                        <p className="max-w-sm text-[15px] leading-7 text-muted-foreground">
+                        <p className="text-[15px] leading-7 text-muted-foreground">
                           {row.body}
                         </p>
                         <BrowserFrame src={row.shot} alt={row.alt} />

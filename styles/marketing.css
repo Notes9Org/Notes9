@@ -454,7 +454,10 @@
    behind the link columns rather than beside them, so it is free to overrun the
    right gutter (its wrapper clips it) and only the left edge has to line up. */
 .n9-wordmark-footer {
-  font-size: clamp(5rem, 26vw, 23rem);
+  /* Sized to sit behind the footer columns rather than compete with them. The
+     earlier 26vw / 23rem ran the wordmark past the content it backs, which
+     reads as a mistake rather than as a watermark. */
+  font-size: clamp(3rem, 14vw, 12rem);
 }
 
 /* Hero scroll cue. The caret nudges down on a long, shallow loop: enough
