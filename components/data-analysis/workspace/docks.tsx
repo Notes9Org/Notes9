@@ -29,6 +29,7 @@ import { motion, useReducedMotion } from "framer-motion"
 import { CaretDown, CaretLeft, CaretRight, CaretUp } from "@phosphor-icons/react/ssr"
 
 import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
 import { PANEL_SPRING } from "./motion"
 
 export type DockSide = "left" | "right" | "bottom"
@@ -299,15 +300,16 @@ export function Dock({
             <h2 className="text-[13px] font-medium text-muted-foreground">{title}</h2>
             <div className="ml-auto flex items-center gap-1.5">
               {actions}
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="icon-sm"
                 onClick={onToggle}
                 aria-label={`Hide ${title.toLowerCase()}`}
                 title={`Hide ${title.toLowerCase()}`}
-                className="rounded-md p-1 text-muted-foreground/60 transition-colors hover:bg-muted/60 hover:text-foreground"
+                className="text-muted-foreground/60"
               >
                 <CollapseIcon className="size-3.5" />
-              </button>
+              </Button>
             </div>
           </header>
           <div className={cn("min-h-0 flex-1 overflow-auto", bodyClassName)}>{children}</div>

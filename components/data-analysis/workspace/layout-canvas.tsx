@@ -41,6 +41,7 @@ import {
   type FigureLayout,
 } from "@/lib/data-analysis/render/figure-layout"
 import { writeTiff } from "@/lib/data-analysis/chart-export"
+import { Button } from "@/components/ui/button"
 import { ExportMenu } from "@/components/data-analysis/export-menu"
 import type { ChartExportFn } from "@/components/data-analysis/plotly-chart"
 import { FigureCanvas } from "./figure-canvas"
@@ -148,13 +149,9 @@ export function LayoutCanvas({
             <option value="none">None</option>
           </select>
         </label>
-        <button
-          type="button"
-          onClick={() => onChange(addPanel(layout))}
-          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border/70 px-2.5 text-[12.5px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          <Plus className="size-3.5" /> Add panel
-        </button>
+        <Button variant="outline" size="sm" onClick={() => onChange(addPanel(layout))}>
+          <Plus className="mr-1.5 size-3.5" /> Add panel
+        </Button>
         {/* The same export menu the single figure uses. A composed figure is
             the one most likely to be the one submitted, so it needs the journal
             presets, the colour space and the exact dimensions at least as much. */}
@@ -362,15 +359,16 @@ function PanelButton({
   children: React.ReactNode
 }) {
   return (
-    <button
-      type="button"
+    <Button
+      variant="ghost"
+      size="icon-sm"
       onClick={onClick}
       aria-label={label}
       title={label}
-      className="rounded bg-background/80 p-1 text-muted-foreground shadow-sm backdrop-blur-sm transition-colors hover:text-foreground"
+      className="size-6 bg-background/80 text-muted-foreground shadow-sm backdrop-blur-sm"
     >
       {children}
-    </button>
+    </Button>
   )
 }
 

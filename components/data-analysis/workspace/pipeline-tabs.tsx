@@ -22,8 +22,8 @@ import { motion, useReducedMotion } from "framer-motion"
 import { Plus, X, CopySimple, GridFour, PencilSimple } from "@phosphor-icons/react/ssr"
 
 import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
 import type { AnalysisPipeline } from "@/lib/data-analysis/workspace/pipelines"
-import { EASE_OUT } from "./motion"
 
 const INDICATOR_SPRING = { type: "spring", stiffness: 500, damping: 40, mass: 0.7 } as const
 
@@ -210,15 +210,16 @@ export function PipelineTabs({
         })}
 
         {/* New sits at the end of the strip, where a new tab actually appears. */}
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="icon-sm"
           onClick={onNew}
           aria-label="New analysis"
           title="New analysis"
-          className="mb-1 grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground"
+          className="mb-1 shrink-0 text-muted-foreground/60"
         >
           <Plus className="size-3.5" />
-        </button>
+        </Button>
       </div>
 
       <div className="mb-1 flex shrink-0 items-center gap-0.5">
@@ -273,16 +274,15 @@ function IconButton({
 }) {
   const reduce = useReducedMotion()
   return (
-    <motion.button
-      type="button"
+    <Button
+      variant="ghost"
+      size="icon-sm"
       onClick={onClick}
       aria-label={label}
       title={label}
-      whileTap={reduce ? undefined : { scale: 0.92 }}
-      transition={{ duration: 0.12, ease: EASE_OUT }}
-      className="rounded-md p-1.5 text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
+      className="text-muted-foreground/70"
     >
       {children}
-    </motion.button>
+    </Button>
   )
 }
