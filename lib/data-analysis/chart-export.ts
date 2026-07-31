@@ -220,6 +220,16 @@ async function flattenOntoWhite(pngUrl: string): Promise<string> {
   return canvas.toDataURL("image/png")
 }
 
+/**
+ * Write an already-composed raster as a TIFF.
+ *
+ * Exposed so the multi-panel composer produces byte-identical output to the
+ * single-figure path: same resolution tags, same separation, same encoder.
+ */
+export function writeTiff(image: ImageData, dpi: number, cmyk: boolean, filename: string): void {
+  triggerDownload(toBlob(encodeTiff(image, dpi, cmyk), "image/tiff"), `${filename}.tiff`)
+}
+
 /* ── Public API ──────────────────────────────────────────────────────────── */
 export async function exportChartImage(
   plotly: Plotly,

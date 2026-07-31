@@ -40,6 +40,9 @@ import {
   setPanelSpan,
   type FigureLayout,
 } from "@/lib/data-analysis/render/figure-layout"
+import { writeTiff } from "@/lib/data-analysis/chart-export"
+import { ExportMenu } from "@/components/data-analysis/export-menu"
+import type { ChartExportFn } from "@/components/data-analysis/plotly-chart"
 import { FigureCanvas } from "./figure-canvas"
 import { EASE_OUT, Reveal } from "./motion"
 
@@ -70,17 +73,38 @@ export function LayoutCanvas({
     Object.fromEntries(pipelines.map((p) => [p.id, { spec: p.spec, name: p.name }]))
   )
 
-  const exportPng = useCallback(async () => {
-    setExporting(true)
-    setExportError(null)
-    try {
-      await composeLayoutPng(layout, gridRef.current)
-    } catch (err) {
-      setExportError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setExporting(false)
-    }
-  }, [layout])
+  /**
+   * Compose and write the figure with the settings the export menu supplies.
+   *
+   * Width comes from the menu when it is given (a journal's column measure at
+   * its DPI); otherwise the layout's own export width stands. The composer
+   * handles the panel raster itself, so format and colour space are applied to
+   * the composed canvas rather than to each panel.
+   */
+  const exportComposed = useCallback(
+    async (opts: Parameters<ChartExportFn>[0]) => {
+      setExporting(true)
+      setExportError(null)
+      try {
+        await composeLayoutPng(
+          { ...layout, exportWidth: opts.width ?? layout.exportWidth, title: layout.title },
+          gridRef.current,
+          {
+            format: opts.format,
+            dpi: opts.dpi,
+            filename: opts.filename,
+            transparent: opts.transparent,
+            colourSpace: opts.colourSpace,
+          }
+        )
+      } catch (err) {
+        setExportError(err instanceof Error ? err.message : String(err))
+      } finally {
+        setExporting(false)
+      }
+    },
+    [layout]
+  )
 
   return (
     <div className={cn("flex min-h-0 flex-col gap-3", className)}>
@@ -131,15 +155,17 @@ export function LayoutCanvas({
         >
           <Plus className="size-3.5" /> Add panel
         </button>
-        <button
-          type="button"
-          onClick={exportPng}
-          disabled={exporting}
-          className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-md border border-border/70 px-2.5 text-[12.5px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-60"
-        >
-          <DownloadSimple className="size-3.5" />
-          {exporting ? "Composing…" : "Export figure"}
-        </button>
+        {/* The same export menu the single figure uses. A composed figure is
+            the one most likely to be the one submitted, so it needs the journal
+            presets, the colour space and the exact dimensions at least as much. */}
+        <div className="ml-auto">
+          <ExportMenu
+            variant="ghost"
+            defaultName={layout.title || layout.name || "figure"}
+            disabled={exporting}
+            onExport={exportComposed}
+          />
+        </div>
       </div>
 
       {exportError && (
@@ -376,8 +402,22 @@ interface PlotlyToImage {
  */
 export async function composeLayoutPng(
   layout: FigureLayout,
-  gridEl: HTMLElement | null
+  gridEl: HTMLElement | null,
+  options: {
+    format?: "png" | "jpeg" | "tiff" | "svg"
+    dpi?: number
+    filename?: string
+    transparent?: boolean
+    colourSpace?: "rgb" | "cmyk"
+  } = {}
 ): Promise<void> {
+  const { format = "png", dpi = 300, transparent = false, colourSpace = "rgb" } = options
+  if (format === "svg") {
+    // A composed figure is a raster of several independent plots; there is no
+    // single SVG to hand back without re-laying out every panel's vector
+    // output, so say that rather than writing a PNG with an .svg name.
+    throw new Error("Vector export is available per panel; the composed figure exports as a raster.")
+  }
   if (!gridEl) throw new Error("The figure is not on screen yet.")
   const placements = placePanels(layout)
   const bound = placements.filter((p) => p.panel.pipelineId)
@@ -404,8 +444,12 @@ export async function composeLayoutPng(
 
   // White, not transparent: a transparent PNG dropped into a manuscript renders
   // black text on a black background in more than one word processor.
-  ctx.fillStyle = "#ffffff"
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  if (!transparent) {
+    // White, not transparent: a transparent PNG dropped into a manuscript
+    // renders black text on a black background in more than one word processor.
+    ctx.fillStyle = "#ffffff"
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+  }
 
   if (layout.title) {
     ctx.fillStyle = "#111111"
@@ -443,12 +487,25 @@ export async function composeLayoutPng(
     }
   }
 
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"))
+  const name = (options.filename || layout.title || layout.name || "figure").replace(/[^\w-]+/g, "-")
+
+  if (format === "tiff" || colourSpace === "cmyk") {
+    // TIFF (and any CMYK request) goes through the shared encoder, so a
+    // composed figure carries the same resolution tags and separation as a
+    // single one.
+    const image = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    writeTiff(image, dpi, colourSpace === "cmyk", name)
+    return
+  }
+
+  const blob = await new Promise<Blob | null>((resolve) =>
+    canvas.toBlob(resolve, format === "jpeg" ? "image/jpeg" : "image/png")
+  )
   if (!blob) throw new Error("The composed figure could not be encoded.")
   const url = URL.createObjectURL(blob)
   const link = document.createElement("a")
   link.href = url
-  link.download = `${(layout.title || layout.name || "figure").replace(/[^\w-]+/g, "-")}.png`
+  link.download = `${name}.${format === "jpeg" ? "jpg" : "png"}`
   document.body.appendChild(link)
   link.click()
   link.remove()

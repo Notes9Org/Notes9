@@ -68,6 +68,7 @@ export interface ChartState {
   yLabel: string
   yUnit?: string
   yLog?: boolean
+  xLog?: boolean
   showGrid?: boolean
   showLegend?: boolean
   legendPos?: string
@@ -182,6 +183,7 @@ export function specFromChartState(
     x: {
       label: state.xLabel,
       unit: state.xUnit || null,
+      scale: state.xLog ? ("log10" as const) : ("linear" as const),
       min: num(state.xMin),
       max: num(state.xMax),
       tickCount: num(state.nticks),

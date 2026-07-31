@@ -24,6 +24,7 @@ import {
   Copy,
   SlidersHorizontal,
   PencilSimpleLine,
+  PushPin,
   Sigma,
   TrendUp,
   CaretLeft,
@@ -606,25 +607,8 @@ export function DataAnalysisWorkspace({
   // Data-aware tabs: Chart + Statistics always show; Standard curve / Plate
   // appear only when the data looks like a dose-response/ELISA or a microplate.
   const detected = useMemo(() => detectDataKind(table.columns, table.rows, grid), [table.columns, table.rows, grid])
-  const visiblePhases = useMemo(
-    () =>
-      PHASES.filter((p) => {
-        // The plate map is hidden for now. The model behind it still runs — the
-        // standard curve reads the plate layout to know which wells are
-        // standards — so this hides the tab, it does not remove the feature.
-        if (p.id === "plate") return false
-        // Chart, Statistics and Figure layout are the surface, not tools that
-        // appear when the data happens to suit them.
-        // Every remaining phase is offered outright. Hiding some behind an
-        // overflow button meant a feature you had used could vanish because the
-        // next sheet did not look like the last one.
-        return true
-      }),
-    [detected],
-  )
-  useEffect(() => {
-    if (!visiblePhases.some((p) => p.id === phase)) setPhase("chart")
-  }, [visiblePhases, phase])
+  /** Pinning keeps the standard curve offered on a sheet that does not look like one. */
+  const [curvePinned, setCurvePinned] = useState(false)
 
   /* chart config */
   /** The author's figure legend. Null means "use the generated wording". */
@@ -640,6 +624,8 @@ export function DataAnalysisWorkspace({
   const [yLabel, setYLabel] = useState("OD₄₅₀")
   const [yUnit, setYUnit] = useState("")
   const [yLog, setYLog] = useState(false)
+  /** A log x is what a dose-response needs; concentration spans decades. */
+  const [xLog, setXLog] = useState(false)
   const [showGrid, setShowGrid] = useState(true)
   const [showLegend, setShowLegend] = useState(true)
   const [markers, setMarkers] = useState(true)
@@ -706,7 +692,7 @@ export function DataAnalysisWorkspace({
       return specFromChartState(
         {
           chartType, xKey, yKeys, zKey, sizeKey, title, subtitle, xLabel, xUnit, yLabel, yUnit,
-          yLog, showGrid, showLegend, legendPos, paletteName, errorMode, fontFamily,
+          yLog, xLog, showGrid, showLegend, legendPos, paletteName, errorMode, fontFamily,
           titleSize, axisTitleSize, xMin, xMax, yMin, yMax, nticks, seriesStyles, caption,
         },
         specTable,
@@ -718,10 +704,47 @@ export function DataAnalysisWorkspace({
     }
   }, [
     chartType, xKey, yKeys, zKey, sizeKey, title, subtitle, xLabel, xUnit, yLabel, yUnit,
-    yLog, showGrid, showLegend, legendPos, paletteName, errorMode, fontFamily,
+    yLog, xLog, showGrid, showLegend, legendPos, paletteName, errorMode, fontFamily,
     titleSize, axisTitleSize, xMin, xMax, yMin, yMax, nticks, seriesStyles, caption,
     specTable, sheetFileName,
   ])
+
+  const visiblePhases = useMemo(
+    () =>
+      PHASES.filter((p) => {
+        // The plate map is hidden for now. The model behind it still runs — the
+        // standard curve reads the plate layout to know which wells are
+        // standards — so this hides the tab, it does not remove the feature.
+        if (p.id === "plate") return false
+        /**
+         * Standard curve is the one phase with a structural precondition: it
+         * needs standards (a known concentration against a signal) before it
+         * can fit anything, so offering it on a sheet that has none is offering
+         * a dead end. Three independent signals earn it:
+         *
+         *   structure — a concentration-like column beside a signal column, or
+         *               a numeric column whose ratios form a serial dilution;
+         *   intent    — the chart or the test already asks for a fit, so the
+         *               panel that performs it should be reachable;
+         *   memory    — pinned, and pinning sticks (§Tier 1.3).
+         */
+        if (p.id === "curve") {
+          return (
+            detected.standardCurve ||
+            derivedSpec?.figure.kind === "dose-response" ||
+            derivedSpec?.analysis.test === "nonlinear-regression" ||
+            curvePinned
+          )
+        }
+        // Everything else is offered outright. Hiding a view you have used
+        // because the next sheet looks different is worse than one tab too many.
+        return true
+      }),
+    [detected, derivedSpec, curvePinned],
+  )
+  useEffect(() => {
+    if (!visiblePhases.some((p) => p.id === phase)) setPhase("chart")
+  }, [visiblePhases, phase])
 
   /**
    * The engine's answer for that spec.
@@ -987,7 +1010,7 @@ export function DataAnalysisWorkspace({
       xaxis: {
         title: { text: horizontal ? yAxisLabel : xAxisLabel, font: { size: axisTitleSize } },
         showgrid: showGrid, gridcolor: gridColor, zeroline: false,
-        type: (chartType === "bar" || chartType === "barStacked") ? "category" : horizontal && yLog ? "log" : "-",
+        type: (chartType === "bar" || chartType === "barStacked") ? "category" : horizontal && yLog ? "log" : xLog && !horizontal ? "log" : "-",
         ...(xRange ? { range: xRange, autorange: false } : {}),
         ...(tickN ? { nticks: tickN } : {}),
       },
@@ -1027,7 +1050,7 @@ export function DataAnalysisWorkspace({
           }
         : {}),
     }
-  }, [title, ink, palette, xAxisLabel, yAxisLabel, showGrid, gridColor, chartType, yLog, showLegend, xMin, xMax, yMin, yMax, nticks, fontFamily, titleSize, axisTitleSize, zKey, activeY, seriesStyles, subtitle, legendPos, hlines, vlines, isDark])
+  }, [title, ink, palette, xAxisLabel, yAxisLabel, showGrid, gridColor, chartType, yLog, xLog, showLegend, xMin, xMax, yMin, yMax, nticks, fontFamily, titleSize, axisTitleSize, zKey, activeY, seriesStyles, subtitle, legendPos, hlines, vlines, isDark])
 
   // Edits made directly on the chart (double-click title / axis) flow back here.
   const handleChartEdit = useCallback((e: PlotlyEdits) => {
@@ -1168,6 +1191,7 @@ export function DataAnalysisWorkspace({
           { label: "Gridlines", section: "Show", checked: showGrid, onClick: () => setShowGrid(!showGrid) },
           { label: "Legend", section: "Show", checked: showLegend, onClick: () => setShowLegend(!showLegend) },
           { label: "Markers", section: "Show", checked: markers, onClick: () => setMarkers(!markers) },
+          { label: "Log X axis", section: "Show", checked: xLog, onClick: () => setXLog(!xLog) },
           { label: "Log Y axis", section: "Show", checked: yLog, onClick: () => setYLog(!yLog) },
           { label: "Individual points", section: "Show", checked: showPoints, onClick: () => setShowPoints(!showPoints) },
         ],
@@ -1192,7 +1216,7 @@ export function DataAnalysisWorkspace({
       },
     ],
     [
-      askCatalyst, chartType, errorMode, paletteName, showGrid, showLegend, markers, yLog,
+      askCatalyst, chartType, errorMode, paletteName, showGrid, showLegend, markers, yLog, xLog,
       showPoints, jumpToSection, setDockOpen,
     ],
   )
@@ -1371,7 +1395,7 @@ export function DataAnalysisWorkspace({
   const buildConfig = () => ({
     chartType, xKey, yKeys, zKey, sizeKey, title, xLabel, xUnit, yLabel, yUnit, yLog, showGrid, showLegend, markers, paletteName,
     seriesStyles, xMin, xMax, yMin, yMax, nticks, fontFamily, titleSize, axisTitleSize,
-    errorMode, showPoints, subtitle, legendPos, hlines, vlines, chartH, caption,
+    errorMode, showPoints, subtitle, legendPos, hlines, vlines, chartH, caption, xLog,
     plate: { format: plateModel.format, originRow: plateModel.originRow, originCol: plateModel.originCol, roleOverrides: plateModel.roleOverrides, annOverrides: plateModel.annOverrides },
     phase,
   })
@@ -1392,6 +1416,7 @@ export function DataAnalysisWorkspace({
     if (typeof c.yLabel === "string") setYLabel(c.yLabel)
     if (typeof c.yUnit === "string") setYUnit(c.yUnit)
     if (typeof c.yLog === "boolean") setYLog(c.yLog)
+    if (typeof c.xLog === "boolean") setXLog(c.xLog)
     if (typeof c.showGrid === "boolean") setShowGrid(c.showGrid)
     if (typeof c.showLegend === "boolean") setShowLegend(c.showLegend)
     if (typeof c.markers === "boolean") setMarkers(c.markers)
@@ -1728,6 +1753,7 @@ export function DataAnalysisWorkspace({
       </div>
       <div id="cs-toggles" className={cn(!showRail("cs-toggles") && "!hidden", "scroll-mt-3 flex flex-col gap-2.5 border-t border-border pt-3 text-sm transition-shadow", flashId === "cs-toggles" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
         <Toggle label="Show markers" checked={markers} onChange={setMarkers} />
+        <Toggle label="Log X axis" checked={xLog} onChange={setXLog} />
         <Toggle label="Log Y axis" checked={yLog} onChange={setYLog} />
         <Toggle label="Gridlines" checked={showGrid} onChange={setShowGrid} />
         <Toggle label="Legend" checked={showLegend} onChange={setShowLegend} />
@@ -1850,8 +1876,10 @@ export function DataAnalysisWorkspace({
       {/* Publication export — same advanced menu as the chart header */}
       <div id="cs-export" className={cn(!showRail("cs-export") && "!hidden", "scroll-mt-3 border-t border-border pt-3 transition-shadow", flashId === "cs-export" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
         <SectionLabel><DownloadSimple className="h-3.5 w-3.5" /> Export figure</SectionLabel>
-        <ExportMenu variant="solid" disabled={!hasPlot} defaultName={title} onExport={runExport} getPng={getChartPng} getCanvasSize={getChartSize} onSaveToLibrary={() => setSaveChartOpen(true)} />
-        <p className="mt-1.5 text-[11px] text-muted-foreground">Pick a format, type any DPI, and copy or save straight to your data files.</p>
+        {/* Inline, not a button that opens a panel: this section IS the export
+            panel, and making it a trigger meant two clicks and two surfaces for
+            one job. */}
+        <ExportMenu variant="inline" disabled={!hasPlot} defaultName={title} onExport={runExport} getPng={getChartPng} getCanvasSize={getChartSize} onSaveToLibrary={() => setSaveChartOpen(true)} />
       </div>
     </div>
   )
@@ -1975,8 +2003,30 @@ export function DataAnalysisWorkspace({
     </div>
   )
 
+  const curveSettings = (
+    <div className="flex flex-col gap-3">
+      <label className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/20 p-2.5 text-[12.5px]">
+        <input
+          type="checkbox"
+          checked={curvePinned}
+          onChange={(e) => setCurvePinned(e.target.checked)}
+          className="mt-0.5 accent-[var(--n9-accent,#965034)]"
+        />
+        <span>
+          <span className="font-medium">Always offer this tab</span>
+          <span className="mt-0.5 block text-[11.5px] leading-snug text-muted-foreground">
+            {detected.standardCurve
+              ? "This sheet already looks like a standard curve, so the tab is offered anyway."
+              : "This sheet has no concentration-and-signal pair, so the tab is normally hidden. Pin it to keep it."}
+          </span>
+        </span>
+      </label>
+      {curve.settings}
+    </div>
+  )
+
   const canvasForPhase = phase === "chart" ? chartCanvas : phase === "stats" ? statsCanvas : phase === "curve" ? curve.canvas : plate.canvas
-  const settingsForPhase = phase === "chart" ? chartSettings : phase === "stats" ? stats.settings : phase === "curve" ? curve.settings : plate.settings
+  const settingsForPhase = phase === "chart" ? chartSettings : phase === "stats" ? stats.settings : phase === "curve" ? curveSettings : plate.settings
   const activePhase = PHASES.find((p) => p.id === phase)!
   const ActiveIcon = activePhase.Icon
 
@@ -2044,6 +2094,12 @@ export function DataAnalysisWorkspace({
                         <span
                           title="Your data suits this view"
                           className="ml-0.5 h-1.5 w-1.5 rounded-full bg-[var(--n9-accent,#965034)]"
+                        />
+                      )}
+                      {p.id === "curve" && curvePinned && !detected.standardCurve && (
+                        <PushPin
+                          className="ml-0.5 h-3 w-3 text-muted-foreground/60"
+                          weight="fill"
                         />
                       )}
                     </TabsTrigger>
