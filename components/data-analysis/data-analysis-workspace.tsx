@@ -1039,11 +1039,43 @@ export function DataAnalysisWorkspace({
   // Right-click "Edit ▸ <element>" (or double-click an element) opens the
   // inspector scrolled to that section; a clicked series selects itself.
   const [flashId, setFlashId] = useState<string | null>(null)
-  /** Scroll a rail section into view and flash it, so the jump is legible. */
+  /**
+   * Which rail section is showing. "all" stacks them as before.
+   *
+   * Filtering rather than scrolling: an automatic scroll moves the content out
+   * from under the pointer and leaves you unsure whether you arrived, and it
+   * still leaves everything else to scroll past. Showing one section at a time
+   * means the thing you asked for is simply there, at the top, with nothing
+   * below it to wade through.
+   */
+  /** The workspace given the whole viewport. */
+  const [fullscreen, setFullscreen] = useState(false)
+  useEffect(() => {
+    if (!fullscreen) return
+    const onKey = (e: KeyboardEvent) => {
+      // Escape is what people try first, and without it a full-screen surface
+      // with no browser chrome feels like a trap.
+      if (e.key === "Escape") setFullscreen(false)
+    }
+    window.addEventListener("keydown", onKey)
+    // The page behind must not scroll while the overlay is up.
+    const previous = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    return () => {
+      window.removeEventListener("keydown", onKey)
+      document.body.style.overflow = previous
+    }
+  }, [fullscreen])
+
+  const [railSection, setRailSection] = useState<string>("all")
+  const showRail = useCallback(
+    (id: string) => railSection === "all" || railSection === id,
+    [railSection],
+  )
+
+  /** Used by the chart's context menu to open the rail at a given section. */
   const jumpToSection = useCallback((id: string) => {
-    setFlashId(id)
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" })
-    window.setTimeout(() => setFlashId((current) => (current === id ? null : current)), 1400)
+    setRailSection(id)
   }, [])
 
   const onEditElement = useCallback(
@@ -1102,41 +1134,54 @@ export function DataAnalysisWorkspace({
           { label: "Which statistical test?", onClick: () => askCatalyst("stats") },
         ],
       },
-      // Chart types grouped the way the picker groups them, so the menu and the
-      // rail teach the same organisation rather than two different ones.
-      ...CHART_GROUP_ORDER.filter((g) => CHART_TYPES.some((t) => t.group === g)).map((group) => ({
-        label: `Chart: ${group}`,
-        items: CHART_TYPES.filter((t) => t.group === group).map((t) => ({
-          label: chartType === t.id ? `${t.label}  ✓` : t.label,
-          onClick: () => setChartType(t.id),
-        })),
-      })),
+      // One entry per intent, not one per category. The menu was twelve rows
+      // deep before the built-in zoom and export items even began; grouping by
+      // what you are trying to do keeps the first screen readable, and the
+      // headings inside each submenu carry the finer structure.
       {
-        label: "Error bars",
-        items: ERROR_BAR_OPTIONS.map((o) => ({
-          label: `${o.id === "none" ? "None" : ERROR_BAR_LABEL[o.id]}${errorMode === o.id ? "  ✓" : ""}`,
-          onClick: () => setErrorMode(o.id),
-        })),
+        label: "Chart type",
+        items: CHART_GROUP_ORDER.flatMap((group) =>
+          CHART_TYPES.filter((t) => t.group === group).map((t) => ({
+            label: t.label,
+            section: group,
+            checked: chartType === t.id,
+            onClick: () => setChartType(t.id),
+          })),
+        ),
       },
       {
-        label: "Palette",
-        items: PALETTE_DEFINITIONS.map((p) => ({
-          label: `${p.label}${p.cvdSafe ? " · colour-blind safe" : ""}${paletteName === p.id ? "  ✓" : ""}`,
-          onClick: () => setPaletteName(p.id),
-        })),
-      },
-      {
-        label: "Show",
+        label: "Style",
         items: [
-          { label: `Gridlines${showGrid ? "  ✓" : ""}`, onClick: () => setShowGrid(!showGrid) },
-          { label: `Legend${showLegend ? "  ✓" : ""}`, onClick: () => setShowLegend(!showLegend) },
-          { label: `Markers${markers ? "  ✓" : ""}`, onClick: () => setMarkers(!markers) },
-          { label: `Log Y axis${yLog ? "  ✓" : ""}`, onClick: () => setYLog(!yLog) },
-          { label: `Individual points${showPoints ? "  ✓" : ""}`, onClick: () => setShowPoints(!showPoints) },
+          ...ERROR_BAR_OPTIONS.map((o) => ({
+            label: o.id === "none" ? "No error bars" : ERROR_BAR_LABEL[o.id],
+            section: "Error bars",
+            checked: errorMode === o.id,
+            onClick: () => setErrorMode(o.id),
+          })),
+          ...PALETTE_DEFINITIONS.map((p) => ({
+            label: p.label,
+            section: "Palette",
+            hint: p.cvdSafe ? "CVD" : undefined,
+            checked: paletteName === p.id,
+            onClick: () => setPaletteName(p.id),
+          })),
+          { label: "Gridlines", section: "Show", checked: showGrid, onClick: () => setShowGrid(!showGrid) },
+          { label: "Legend", section: "Show", checked: showLegend, onClick: () => setShowLegend(!showLegend) },
+          { label: "Markers", section: "Show", checked: markers, onClick: () => setMarkers(!markers) },
+          { label: "Log Y axis", section: "Show", checked: yLog, onClick: () => setYLog(!yLog) },
+          { label: "Individual points", section: "Show", checked: showPoints, onClick: () => setShowPoints(!showPoints) },
         ],
       },
       {
-        label: "Jump to settings",
+        label: "Statistics",
+        items: [
+          { label: "Add to the sheet", onClick: () => addStatsSheetRef.current() },
+          { label: "Copy", onClick: () => copyStatsRef.current() },
+          { label: "Export (.xlsx)", onClick: () => exportStatsRef.current() },
+        ],
+      },
+      {
+        label: "Open settings",
         items: RAIL_SECTIONS.map((sec) => ({
           label: sec.label,
           onClick: () => {
@@ -1144,14 +1189,6 @@ export function DataAnalysisWorkspace({
             jumpToSection(sec.id)
           },
         })),
-      },
-      {
-        label: "Statistics",
-        items: [
-          { label: "Add statistics to the sheet", onClick: () => addStatsSheetRef.current() },
-          { label: "Copy statistics", onClick: () => copyStatsRef.current() },
-          { label: "Export statistics (.xlsx)", onClick: () => exportStatsRef.current() },
-        ],
       },
     ],
     [
@@ -1531,24 +1568,49 @@ export function DataAnalysisWorkspace({
           (axes, typography, export) were the furthest down. This puts every
           section one click away instead of one scroll, and highlights the one
           you land on so the jump is legible rather than a silent scroll. */}
-      <div className="sticky top-0 z-10 -mx-4 mb-1 flex items-center gap-0.5 overflow-x-auto border-b border-border/50 bg-card/95 px-4 py-1.5 backdrop-blur-sm">
-        {RAIL_SECTIONS.map((sec) => (
+      <div className="sticky top-0 z-10 -mx-4 mb-1 border-b border-border/50 bg-card/95 px-4 py-1.5 backdrop-blur-sm">
+        <div className="flex items-center gap-0.5 overflow-x-auto">
           <button
-            key={sec.id}
             type="button"
-            onClick={() => jumpToSection(sec.id)}
-            title={sec.label}
-            aria-label={sec.label}
+            onClick={() => setRailSection("all")}
+            title="Show every setting"
             className={cn(
-              "shrink-0 rounded-md p-1.5 transition-colors",
-              flashId === sec.id
+              "shrink-0 rounded-md px-2 py-1 text-[11.5px] font-medium transition-colors",
+              railSection === "all"
                 ? "bg-[var(--n9-accent,#965034)]/12 text-[var(--n9-accent,#965034)]"
                 : "text-muted-foreground/70 hover:bg-muted hover:text-foreground",
             )}
           >
-            <sec.Icon className="h-3.5 w-3.5" />
+            All
           </button>
-        ))}
+          {RAIL_SECTIONS.map((sec) => (
+            <button
+              key={sec.id}
+              type="button"
+              onClick={() => setRailSection(sec.id)}
+              title={sec.label}
+              aria-label={sec.label}
+              aria-pressed={railSection === sec.id}
+              className={cn(
+                "shrink-0 rounded-md p-1.5 transition-colors",
+                railSection === sec.id
+                  ? "bg-[var(--n9-accent,#965034)]/12 text-[var(--n9-accent,#965034)]"
+                  : "text-muted-foreground/70 hover:bg-muted hover:text-foreground",
+              )}
+            >
+              <sec.Icon className="h-3.5 w-3.5" />
+            </button>
+          ))}
+        </div>
+        {railSection !== "all" && (
+          <p className="mt-1 text-[11px] text-muted-foreground/80">
+            {RAIL_SECTIONS.find((sec) => sec.id === railSection)?.label}
+            <span className="mx-1 opacity-50">·</span>
+            <button type="button" onClick={() => setRailSection("all")} className="underline underline-offset-2 hover:text-foreground">
+              show all
+            </button>
+          </p>
+        )}
       </div>
 
       {/* Bind the selected sheet cell → chart title / axis / series.
@@ -1606,7 +1668,7 @@ export function DataAnalysisWorkspace({
           </motion.div>
         )}
       </AnimatePresence>
-      <div id="cs-type" className={cn("scroll-mt-3 rounded-lg transition-shadow", flashId === "cs-type" && "ring-2 ring-[var(--n9-accent,#965034)]/40")}>
+      <div id="cs-type" className={cn(!showRail("cs-type") && "!hidden", "scroll-mt-3 rounded-lg transition-shadow", flashId === "cs-type" && "ring-2 ring-[var(--n9-accent,#965034)]/40")}>
         <SectionLabel><FnIcon className="h-3.5 w-3.5" /> Chart type</SectionLabel>
         <div className="grid grid-cols-4 gap-1.5">
           {CHART_TYPES.map((t) => (
@@ -1648,7 +1710,7 @@ export function DataAnalysisWorkspace({
           </NativeSelect>
         </Field>
       )}
-      <div id="cs-title" className={cn("scroll-mt-3 space-y-4 rounded-lg transition-shadow", flashId === "cs-title" && "ring-2 ring-[var(--n9-accent,#965034)]/40")}>
+      <div id="cs-title" className={cn(!showRail("cs-title") && "!hidden", "scroll-mt-3 space-y-4 rounded-lg transition-shadow", flashId === "cs-title" && "ring-2 ring-[var(--n9-accent,#965034)]/40")}>
         <Field label="Chart title"><Input className="h-9" value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
         <Field label="Subtitle"><Input className="h-9" value={subtitle} onChange={(e) => setSubtitle(e.target.value)} placeholder="optional" /></Field>
         <div className="grid grid-cols-2 gap-2">
@@ -1659,7 +1721,7 @@ export function DataAnalysisWorkspace({
         </div>
       </div>
       <PalettePicker value={paletteName} onChange={setPaletteName} />
-      <div id="cs-toggles" className={cn("scroll-mt-3 flex flex-col gap-2.5 border-t border-border pt-3 text-sm transition-shadow", flashId === "cs-toggles" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
+      <div id="cs-toggles" className={cn(!showRail("cs-toggles") && "!hidden", "scroll-mt-3 flex flex-col gap-2.5 border-t border-border pt-3 text-sm transition-shadow", flashId === "cs-toggles" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
         <Toggle label="Show markers" checked={markers} onChange={setMarkers} />
         <Toggle label="Log Y axis" checked={yLog} onChange={setYLog} />
         <Toggle label="Gridlines" checked={showGrid} onChange={setShowGrid} />
@@ -1680,7 +1742,7 @@ export function DataAnalysisWorkspace({
       </div>
 
       {/* Error bars, individual points & reference lines (Prism-style) */}
-      <div id="cs-error" className={cn("flex scroll-mt-3 flex-col gap-2.5 border-t border-border pt-3 transition-shadow", flashId === "cs-error" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
+      <div id="cs-error" className={cn(!showRail("cs-error") && "!hidden", "flex scroll-mt-3 flex-col gap-2.5 border-t border-border pt-3 transition-shadow", flashId === "cs-error" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
         <SectionLabel><TrendUp className="h-3.5 w-3.5" /> Error &amp; annotations</SectionLabel>
         <Field label="Error bars (aggregate replicate rows sharing an X value)">
           <NativeSelect value={errorMode} onChange={(v) => setErrorMode(v as ErrorMode)}>
@@ -1706,7 +1768,7 @@ export function DataAnalysisWorkspace({
 
       {/* Per-series style inspector */}
       {activeY.length > 0 && (
-        <div id="cs-series" className={cn("scroll-mt-3 border-t border-border pt-3 transition-shadow", flashId === "cs-series" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
+        <div id="cs-series" className={cn(!showRail("cs-series") && "!hidden", "scroll-mt-3 border-t border-border pt-3 transition-shadow", flashId === "cs-series" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
           <SectionLabel><Palette className="h-3.5 w-3.5" /> Series style</SectionLabel>
           {activeY.length > 1 && (
             <div className="mb-2.5 flex flex-wrap gap-1">
@@ -1753,7 +1815,7 @@ export function DataAnalysisWorkspace({
       )}
 
       {/* Axes */}
-      <div id="cs-axes" className={cn("scroll-mt-3 border-t border-border pt-3 transition-shadow", flashId === "cs-axes" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
+      <div id="cs-axes" className={cn(!showRail("cs-axes") && "!hidden", "scroll-mt-3 border-t border-border pt-3 transition-shadow", flashId === "cs-axes" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
         <SectionLabel><Ruler className="h-3.5 w-3.5" /> Axes</SectionLabel>
         <div className="grid grid-cols-2 gap-2">
           <Field label="X min"><Input className="h-9" value={xMin} onChange={(e) => setXMin(e.target.value)} placeholder="auto" /></Field>
@@ -1767,7 +1829,7 @@ export function DataAnalysisWorkspace({
       </div>
 
       {/* Fonts */}
-      <div id="cs-type-face" className={cn("scroll-mt-3 border-t border-border pt-3 transition-shadow", flashId === "cs-type-face" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
+      <div id="cs-type-face" className={cn(!showRail("cs-type-face") && "!hidden", "scroll-mt-3 border-t border-border pt-3 transition-shadow", flashId === "cs-type-face" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
         <SectionLabel><TextAa className="h-3.5 w-3.5" /> Typography</SectionLabel>
         <Field label="Font family">
           <NativeSelect value={fontFamily} onChange={setFontFamily}>
@@ -1781,7 +1843,7 @@ export function DataAnalysisWorkspace({
       </div>
 
       {/* Publication export — same advanced menu as the chart header */}
-      <div id="cs-export" className={cn("scroll-mt-3 border-t border-border pt-3 transition-shadow", flashId === "cs-export" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
+      <div id="cs-export" className={cn(!showRail("cs-export") && "!hidden", "scroll-mt-3 border-t border-border pt-3 transition-shadow", flashId === "cs-export" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
         <SectionLabel><DownloadSimple className="h-3.5 w-3.5" /> Export figure</SectionLabel>
         <ExportMenu variant="solid" disabled={!hasPlot} defaultName={title} onExport={runExport} getPng={getChartPng} getCanvasSize={getChartSize} onSaveToLibrary={() => setSaveChartOpen(true)} />
         <p className="mt-1.5 text-[11px] text-muted-foreground">Pick a format, type any DPI, and copy or save straight to your data files.</p>
@@ -1914,8 +1976,19 @@ export function DataAnalysisWorkspace({
   const ActiveIcon = activePhase.Icon
 
   return (
-    <div className="flex flex-col gap-4">
-      <CatalystSectionHero scope="lab" placeholder="Ask Catalyst to analyze your data, pick a chart, or explain a result…" />
+    <div
+      className={cn(
+        "flex flex-col gap-4",
+        // Full screen is a container change, not a different tree: the same
+        // workspace, given the whole viewport. Rendering a second copy would
+        // remount Univer and Plotly and lose the user's cursor and zoom.
+        fullscreen &&
+          "fixed inset-0 z-50 overflow-auto bg-[color:var(--background)] p-4 md:p-6",
+      )}
+    >
+      {!fullscreen && (
+        <CatalystSectionHero scope="lab" placeholder="Ask Catalyst to analyze your data, pick a chart, or explain a result…" />
+      )}
 
       {/* Analyses. Several views of one sheet: the dose-response beside the
           timecourse beside the plate, each keeping its own chart, statistics and
@@ -2021,6 +2094,18 @@ export function DataAnalysisWorkspace({
           </DropdownMenuContent>
         </DropdownMenu>
         <Button variant="outline" size="sm" onClick={() => setTemplatesOpen(true)}><SquaresFour className="mr-1.5 h-4 w-4" /> Templates</Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setFullscreen((v) => !v)}
+          title={fullscreen ? "Leave full screen (Esc)" : "Use the whole window"}
+        >
+          {fullscreen ? (
+            <><ArrowsInSimple className="mr-1.5 h-4 w-4" /> Exit full screen</>
+          ) : (
+            <><ArrowsOutSimple className="mr-1.5 h-4 w-4" /> Full screen</>
+          )}
+        </Button>
         <span className="ml-auto text-xs text-muted-foreground">{table.rows.length} rows · {table.columns.length} cols</span>
       </div>
 
