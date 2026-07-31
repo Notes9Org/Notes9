@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import type { ReactNode } from "react"
 import Link from "next/link"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
@@ -39,6 +39,7 @@ const STATS = [
 
 export function ProofBand() {
   const reduceMotion = useReducedMotion()
+  const rowRefs = useRef<(HTMLDivElement | null)[]>([])
   return (
     <section className="border-t border-border/50">
       <div className="container mx-auto px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
@@ -96,6 +97,7 @@ const WITH_NOTES9 = [
 
 export function FractureSection() {
   const reduceMotion = useReducedMotion()
+  const rowRefs = useRef<(HTMLDivElement | null)[]>([])
   return (
     <section className="border-t border-border/50">
       <div className="container mx-auto px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
@@ -250,6 +252,7 @@ const CHAIN = [
 export function ChainSection() {
   const [open, setOpen] = useState(0)
   const reduceMotion = useReducedMotion()
+  const rowRefs = useRef<(HTMLDivElement | null)[]>([])
 
   return (
     <section className="border-t border-border/50">
@@ -270,10 +273,30 @@ export function ChainSection() {
           {CHAIN.map((row, i) => {
             const isOpen = i === open
             return (
-              <div key={row.n} className="border-t border-border/60 last:border-b">
+              <div
+                key={row.n}
+                ref={(el) => {
+                  rowRefs.current[i] = el
+                }}
+                className="border-t border-border/60 last:border-b scroll-mt-24"
+              >
                 <button
                   type="button"
-                  onClick={() => setOpen(isOpen ? -1 : i)}
+                  onClick={() => {
+                    const opening = !isOpen
+                    setOpen(opening ? i : -1)
+                    // Bring the row into view once it has actually grown.
+                    // Scrolling immediately would target the collapsed height
+                    // and leave the screenshot below the fold; waiting for the
+                    // height transition means the whole row is there to see.
+                    if (opening && !reduceMotion) {
+                      window.setTimeout(() => {
+                        rowRefs.current[i]?.scrollIntoView({ behavior: "smooth", block: "start" })
+                      }, 460)
+                    } else if (opening) {
+                      rowRefs.current[i]?.scrollIntoView({ block: "start" })
+                    }
+                  }}
                   aria-expanded={isOpen}
                   className="group flex w-full items-center gap-5 py-6 text-left sm:gap-8"
                 >
@@ -366,6 +389,7 @@ export function ChainSection() {
 
 export function CatalystBand() {
   const reduceMotion = useReducedMotion()
+  const rowRefs = useRef<(HTMLDivElement | null)[]>([])
   return (
     <section className="relative isolate overflow-hidden bg-[#1a1714] text-[#f5f0e8]">
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 opacity-70">
