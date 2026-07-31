@@ -55,12 +55,12 @@ function InviteAcceptContent() {
       const supabase = createClient()
 
       // Check auth status first. This route is public (users land here via
-      // email link before signing in), so we cannot use the AuthProvider —
+      // email link before signing in), so we cannot use the AuthProvider,
       // we read the session directly.
       const { data: { session } } = await supabase.auth.getSession()
       const user = session?.user
       if (!user) {
-        // Unauthenticated — redirect to sign-up with token preserved
+        // Unauthenticated, redirect to sign-up with token preserved
         router.replace(`/auth/sign-up?token=${encodeURIComponent(token!)}`)
         return
       }

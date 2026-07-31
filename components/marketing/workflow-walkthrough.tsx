@@ -5,7 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { BrowserFrame } from "@/components/marketing/browser-frame"
 import { cn } from "@/lib/utils"
 
-/** House easing — matches `--n9-ease` and the marketing EASE_OUT constant. */
+/** House easing, matches `--n9-ease` and the marketing EASE_OUT constant. */
 const EASE = [0.22, 1, 0.36, 1] as const
 
 type WorkflowStepSpec = {
@@ -19,7 +19,7 @@ type WorkflowStepSpec = {
 
 /**
  * The five moves of a research cycle, in the order they actually happen. Each
- * one is a real screen in the product — no mockups, no aspirational UI.
+ * one is a real screen in the product, no mockups, no aspirational UI.
  */
 const STEPS: WorkflowStepSpec[] = [
   {
@@ -76,7 +76,7 @@ export function WorkflowWalkthrough() {
 
   return (
     <div>
-      {/* Step rail — horizontally scrollable on small screens rather than
+      {/* Step rail, horizontally scrollable on small screens rather than
           wrapping, so the numbered sequence still reads as a sequence. */}
       <div className="scrollbar-none -mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
         <ol className="flex min-w-max gap-2 sm:min-w-0 sm:grid sm:grid-cols-5 sm:gap-3">

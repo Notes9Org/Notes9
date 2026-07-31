@@ -70,3 +70,7 @@ scripts/ruvector.db
 agentdb.rvf
 agentdb.rvf.lock
 .gstack/
+
+# Python bytecode from local engine validation runs
+__pycache__/
+*.pyc

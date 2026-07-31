@@ -15,10 +15,16 @@ type Option = { id: string; name: string }
 type ExperimentOption = Option & { project_id: string | null }
 
 /**
- * Top-level Data hub. Mirrors the Literature page's two-section shell
- * (Search & read / My Library): a glass-pill toggle switches between the
- * live **Analysis** workspace and the **Data files** browser. The active
- * section persists across visits.
+ * Top-level Data hub: two sections behind one glass-pill toggle.
+ *
+ *   Analysis    the single analysis surface — charts, statistics, standard
+ *               curve, plate map, and the spec-driven workspace with its
+ *               multi-panel figure layouts, all over one spreadsheet;
+ *   Data files  every file across the user's experiments.
+ *
+ * There is deliberately no second analysis section. Two surfaces over the same
+ * data meant two places to keep in step, and the one you landed on decided
+ * which half of the features you could see.
  */
 export function DataHub({
   files,
@@ -31,11 +37,6 @@ export function DataHub({
 }) {
   const reduce = useReducedMotion()
   const [section, setSection] = useState<Section>("analysis")
-
-  useEffect(() => {
-    const s = localStorage.getItem(SECTION_KEY)
-    if (s === "files" || s === "analysis") setSection(s)
-  }, [])
   useEffect(() => {
     try {
       localStorage.setItem(SECTION_KEY, section)
@@ -51,9 +52,16 @@ export function DataHub({
         <SectionPill active={section === "files"} onClick={() => setSection("files")} Icon={Database} label="Data files" reduce={reduce} count={files.length} />
       </div>
 
-      {section === "analysis" ? (
+      {/* One analysis surface. The spec-driven workspace and the multi-panel
+          figure layout live inside it as phases, sharing its sheet, so there is
+          a single place data is analysed rather than two that must be kept in
+          step. It stays mounted while the file browser shows, because it owns
+          the spreadsheet and unmounting it would drop the user's edits. */}
+      <div className={cn(section !== "analysis" && "hidden")}>
         <DataAnalysisWorkspace files={files} projects={projects} experiments={experiments} />
-      ) : (
+      </div>
+
+      {section === "files" && (
         <div className="space-y-6">
           <DataFilesListClient files={files} projects={projects} experiments={experiments} />
         </div>

@@ -44,7 +44,7 @@ export function PageHero({
         <div className="max-w-2xl">
           <Badge
             variant="outline"
-            className="mb-6 rounded-full border-[var(--n9-accent)]/30 bg-[var(--n9-accent-light)] px-4 py-1 text-[14px] font-semibold uppercase tracking-[0.24em] text-[var(--n9-accent)]"
+            className="mb-6 rounded-full border-[var(--n9-accent)]/25 bg-[var(--n9-accent-light)] px-3 py-1 text-[12px] font-medium uppercase tracking-[0.16em] text-[var(--n9-accent)]"
           >
             {badge}
           </Badge>
@@ -63,13 +63,14 @@ export function PageHero({
                   size="lg"
                   variant={action.variant ?? (index === 0 ? "default" : "outline")}
                   className={cn(
-                    "h-14 w-full rounded-full px-10 text-[17px] font-semibold sm:w-auto",
-                    index === 0 && "bg-[var(--n9-accent)] text-white shadow-[0_12px_40px_-12px_var(--n9-accent-glow)] hover:bg-[var(--n9-accent-hover)]",
+                    "h-11 w-full rounded-full px-6 text-[15px] font-medium sm:w-auto",
+                    index === 0 && "bg-[var(--n9-accent)] text-white shadow-sm hover:bg-[var(--n9-accent-hover)]",
+                    index > 0 && "border-border bg-background hover:bg-muted",
                   )}
                 >
                   <Link href={action.href}>
                     {action.label}
-                    {index === 0 ? <ArrowRight className="ml-2 h-5 w-5" /> : null}
+                    {index === 0 ? <ArrowRight className="ml-1.5 h-4 w-4" /> : null}
                   </Link>
                 </Button>
               ))}
@@ -123,7 +124,7 @@ export function SectionHeader({
   return (
     <div className={cn("n9-readable relative z-10 max-w-2xl", align === "center" && "mx-auto text-center", className)}>
       {badge ? (
-        <span className="mb-5 inline-flex items-center gap-2 rounded-full border border-[var(--n9-accent)]/20 bg-[var(--n9-accent-light)] px-3.5 py-1.5 text-[14px] font-semibold uppercase tracking-[0.2em] text-[var(--n9-accent)]">
+        <span className="mb-5 inline-flex items-center gap-2 rounded-full border border-[var(--n9-accent)]/20 bg-[var(--n9-accent-light)] px-3 py-1 text-[12px] font-medium uppercase tracking-[0.16em] text-[var(--n9-accent)]">
           <span className="h-1.5 w-1.5 rounded-full bg-[var(--n9-accent)]" />
           {badge}
         </span>
@@ -191,7 +192,7 @@ export function WorkflowStep({
 }) {
   return (
     <MinimalCard className="h-full">
-      <div className="mb-3 inline-flex rounded-full border border-[var(--n9-accent)]/30 bg-[var(--n9-accent-light)] px-3 py-1 text-[14px] font-semibold uppercase tracking-[0.2em] text-[var(--n9-accent)]">
+      <div className="mb-3 inline-flex rounded-full border border-[var(--n9-accent)]/25 bg-[var(--n9-accent-light)] px-3 py-1 text-[12px] font-medium uppercase tracking-[0.16em] text-[var(--n9-accent)]">
         {step}
       </div>
       <h3 className="text-[20px] font-semibold text-foreground">{title}</h3>
@@ -268,15 +269,15 @@ export function CTAPanel({
         <Button
           asChild
           size="lg"
-          className="h-14 w-full rounded-full bg-[var(--n9-accent)] px-10 text-[17px] font-semibold text-white shadow-[0_12px_40px_-12px_var(--n9-accent-glow)] hover:bg-[var(--n9-accent-hover)] sm:w-auto"
+          className="h-11 w-full rounded-full bg-[var(--n9-accent)] px-6 text-[15px] font-medium text-white shadow-sm hover:bg-[var(--n9-accent-hover)] sm:w-auto"
         >
           <Link href={primary.href}>
             {primary.label}
-            <ArrowRight className="ml-2 h-5 w-5" />
+            <ArrowRight className="ml-1.5 h-4 w-4" />
           </Link>
         </Button>
         {secondary ? (
-          <Button asChild size="lg" variant="outline" className="h-14 w-full rounded-full px-10 text-[17px] font-semibold sm:w-auto">
+          <Button asChild size="lg" variant="outline" className="h-11 w-full rounded-full border-border bg-background px-6 text-[15px] font-medium hover:bg-muted sm:w-auto">
             <Link href={secondary.href}>{secondary.label}</Link>
           </Button>
         ) : null}

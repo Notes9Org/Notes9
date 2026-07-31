@@ -51,21 +51,21 @@ export function AcademicHero() {
             <Button
               asChild
               size="lg"
-              className="group h-12 w-full rounded-full bg-[linear-gradient(115deg,var(--n9-accent),color-mix(in_oklab,var(--n9-accent)_58%,#d9a24a))] px-8 text-[16px] font-semibold text-white shadow-[0_14px_44px_-12px_var(--n9-accent-glow)] transition-all duration-300 hover:opacity-95 hover:shadow-[0_22px_56px_-12px_var(--n9-accent-glow)] sm:w-auto"
+              className="group h-11 w-full rounded-full bg-[var(--n9-accent)] px-6 text-[15px] font-medium text-white shadow-sm transition-colors hover:bg-[var(--n9-accent-hover)] sm:w-auto"
             >
               <Link href="/auth/sign-up">
                 Start free
-                <ArrowRight className="ml-2 h-5 w-5 transition-transform duration-200 group-hover:translate-x-1" />
+                <ArrowRight className="ml-1.5 h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
               </Link>
             </Button>
             <Button
               asChild
               variant="ghost"
               size="lg"
-              className="h-12 w-full rounded-full px-6 text-[16px] font-semibold text-muted-foreground transition-colors duration-200 hover:text-foreground sm:w-auto"
+              className="h-11 w-full rounded-full px-5 text-[15px] font-medium text-muted-foreground transition-colors duration-200 hover:text-foreground sm:w-auto"
             >
               <Link href="/#contact">
-                <Play className="mr-2 h-5 w-5" />
+                <Play className="mr-2 h-4 w-4" />
                 Book a demo
               </Link>
             </Button>

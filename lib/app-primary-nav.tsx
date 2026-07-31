@@ -66,7 +66,7 @@ export const APP_PRIMARY_NAV: NavItem[] = [
   // Unified Data hub: Analysis workspace + Data files browser (retired /data).
   { name: "Data", href: "/data-analysis", icon: ChartLine },
   { name: "Reports", href: "/reports", icon: FileText },
-  // Concave four-point flare (custom SVG) — Catalyst's glyph after ruling
+  // Concave four-point flare (custom SVG), Catalyst's glyph after ruling
   // out sparkles, brain/head-circuit, lightning, atom and galaxy: a single
   // sculpted spark, the current visual shorthand for AI, without the
   // multi-star sparkles cluster.

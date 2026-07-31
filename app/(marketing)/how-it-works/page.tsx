@@ -19,12 +19,12 @@ export const metadata: Metadata = {
  *
  * `/platform` sells the surface area (here are the modules); this page sells the
  * throughline (here is one piece of work moving through them). That distinction
- * is the product's actual argument — an ELN records what happened, Notes9 keeps
- * the chain between steps intact — and nothing on the site made it concretely
+ * is the product's actual argument, an ELN records what happened, Notes9 keeps
+ * the chain between steps intact, and nothing on the site made it concretely
  * before this page.
  *
  * NB: this route must also be listed in `publicRoutes` in
- * lib/supabase/middleware.ts, which matches exact pathnames — otherwise a
+ * lib/supabase/middleware.ts, which matches exact pathnames, otherwise a
  * logged-out visitor is redirected to /auth/login.
  */
 export default function HowItWorksPage() {

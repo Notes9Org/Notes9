@@ -11,7 +11,7 @@ import { Notes9Brand } from "@/components/brand/notes9-brand"
  * side of the button, because that is the question someone hesitating over a
  * signup form is asking.
  *
- * Below `lg` it collapses to the single centred column it was before — the
+ * Below `lg` it collapses to the single centred column it was before, the
  * right panel is supporting material, never a reason to scroll on a phone.
  *
  * The API is unchanged (`children`, `title`, `subtitle`, `aside`) so all seven
@@ -63,7 +63,7 @@ export function AuthShell({
 
 /**
  * The right half, as its own inset surface rather than copy floating in the page
- * background — which is what made the earlier version read as unfinished. Every
+ * background, which is what made the earlier version read as unfinished. Every
  * modern auth screen worth copying (Fabric, Lindy, Typeform, Runway) gives this
  * half a contained surface with real visual weight and a product artefact in it.
  *
@@ -149,7 +149,7 @@ function PanelField() {
 
 
 /**
- * What happens after signup, in the order it happens. Concrete and checkable —
+ * What happens after signup, in the order it happens. Concrete and checkable,
  * no invented customer quotes, no logo wall we have not earned.
  */
 const STEPS = [
@@ -161,7 +161,7 @@ const STEPS = [
   {
     n: "02",
     title: "Get a workspace built around your field",
-    body: "A sample project matched to your research — protocols, lab notes and real reference papers you can pull apart.",
+    body: "A sample project matched to your research, protocols, lab notes and real reference papers you can pull apart.",
   },
   {
     n: "03",

@@ -11,6 +11,7 @@ import { useEffect, useState } from "react"
 import type { CSSProperties } from "react"
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react"
 import { HeroSearch } from "@/components/marketing/hero-search"
+import { HeroScrollCue } from "@/components/marketing/hero-scroll-cue"
 import {
   HeroChartPanel,
   HeroGroundedAnswerPanel,
@@ -24,13 +25,13 @@ import {
  * Split hero: the argument on the left, the answer on the right.
  *
  * Structure borrowed from the sign-up screen, which already solves this problem
- * — a left column you act in, and a right column that is its own contained
+ *, a left column you act in, and a right column that is its own contained
  * surface showing what happens next. Giving that half a real surface is what
  * stops it reading as decoration; the earlier attempt at floating panels over
  * the whole section failed precisely because nothing contained them.
  *
  * The pairing is deliberate rather than ornamental. The left column ends in a
- * question box; the right column shows what comes back from asking — Catalyst
+ * question box; the right column shows what comes back from asking, Catalyst
  * reasoning, naming the records it opened, and building the answer section by
  * section. Question on one side, answer on the other.
  *
@@ -110,10 +111,10 @@ export function HeroSplit() {
   const { front, select } = useDeckRotation(DECK.length)
 
   return (
-    <section className="relative isolate min-h-[92svh] overflow-hidden">
+    <section id="hero" className="relative isolate min-h-[92svh] overflow-hidden">
       {/* One continuous field across the whole section. The sign-up screen is
           two surfaces meeting down the middle; this is a single plane with
-          something sitting on it — which is the structural difference, not a
+          something sitting on it, which is the structural difference, not a
           styling one. */}
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute inset-0 bg-[radial-gradient(58%_54%_at_16%_4%,color-mix(in_oklab,var(--n9-accent)_12%,transparent),transparent_70%)]" />
@@ -123,7 +124,7 @@ export function HeroSplit() {
 
       {/* One claim, made twice.
 
-          On the right, the answer — held still and fully legible, because the
+          On the right, the answer, held still and fully legible, because the
           whole argument of the page is that it cites real work. On the left,
           the records it cites, circulating so each takes its turn in front. No
           hover is needed for the point to land; hovering only pauses the
@@ -131,7 +132,7 @@ export function HeroSplit() {
 
           The pairing is what carries the meaning: the titles in the deck are
           the titles in the answer's source list, so the two halves are visibly
-          the same four records seen twice — once as a citation, once as the
+          the same four records seen twice, once as a citation, once as the
           screen it lives on.
 
           Motion lives in styles/marketing.css (.n9-deck); each card only
@@ -187,7 +188,7 @@ export function HeroSplit() {
       </div>
 
       {/* The content layer paints above the deck, so it would otherwise swallow
-          every hover meant for the cards — an empty column still hit-tests.
+          every hover meant for the cards, an empty column still hit-tests.
           Making the wrapper transparent to the pointer and restoring it on the
           text column itself is what lets the deck be hovered at all. */}
       <div className="container pointer-events-none relative mx-auto flex min-h-[92svh] items-center px-4 py-20 sm:px-6 lg:px-8">
@@ -239,6 +240,11 @@ export function HeroSplit() {
           </div>
         </div>
       </div>
+
+      {/* "There is more below." The hero fills the screen and ends in a search
+          box, so without this a visitor who does not type has no signal that the
+          rest of the page exists. */}
+      <HeroScrollCue />
     </section>
   )
 }

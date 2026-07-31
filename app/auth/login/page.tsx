@@ -30,7 +30,7 @@ const SIGN_IN_TIMEOUT_MS = 30_000
 /**
  * Detects the browser's network-level "Failed to fetch" so we can translate it
  * into a human-readable hint instead of a TypeError that scares the user. This
- * fires when the request can't reach the server at all — paused Supabase
+ * fires when the request can't reach the server at all, paused Supabase
  * project, offline, ad blocker, content-blocker extensions, captive portals,
  * DNS hiccups, etc. The actual auth response (wrong password, etc.) never
  * comes through this path.
@@ -90,7 +90,7 @@ function LoginForm() {
 
     // Network-only errors get one transparent retry after a short pause. A
     // genuine credentials failure or any other supabase error path returns
-    // immediately — we only retry the "Failed to fetch" / browser-blocked
+    // immediately, we only retry the "Failed to fetch" / browser-blocked
     // case where retrying might succeed.
     const attemptSignIn = async () => {
       const signInPromise = supabase.auth.signInWithPassword({ email, password })

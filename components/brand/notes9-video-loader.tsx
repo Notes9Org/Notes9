@@ -360,7 +360,7 @@ function NotesScene({
   )
 }
 
-/** Writing section — same ScrollText icon as AppSidebar "Writing" / papers nav. */
+/** Writing section: same ScrollText icon as AppSidebar "Writing" / papers nav. */
 function WritingScene({
   compact,
   horizontal,
@@ -458,7 +458,7 @@ export function Notes9VideoLoader({
       return <LiteratureScene compact={sceneCompact} horizontal={horizontal} inline={inline} />
     if (variant === "search") return <SearchScene compact={sceneCompact} horizontal={horizontal} inline={inline} />
     if (variant === "projects") return <ProjectsScene compact={sceneCompact} horizontal={horizontal} inline={inline} />
-    // Data shares the experiments scene (data lives inside an experiment) —
+    // Data shares the experiments scene (data lives inside an experiment),
     // the loader COPY is data-specific, see navigation-loader.
     if (variant === "experiments" || variant === "data") return <ExperimentsScene compact={sceneCompact} horizontal={horizontal} inline={inline} />
     if (variant === "samples") return <SamplesScene compact={sceneCompact} horizontal={horizontal} inline={inline} />

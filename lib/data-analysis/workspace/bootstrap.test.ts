@@ -1,0 +1,158 @@
+import { describe, it, expect } from "vitest"
+import type { Table } from "@/lib/data-analysis/engine/resolver"
+import { hashTable, pipelineFromTable, specFromTable, tableFromGrid } from "./bootstrap"
+
+const meta = { fileName: "plate.xlsx", sheet: "Sheet1", versionHash: "sha256:a" }
+
+const unpaired: Table = {
+  columns: ["Well", "Treatment", "Viability (%)"],
+  rows: ["Vehicle", "10 uM", "50 uM"].flatMap((t, gi) =>
+    Array.from({ length: 6 }, (_, i) => ({
+      rowId: `r${gi}-${i}`,
+      values: { Well: `${"ABC"[gi]}${i}`, Treatment: t, "Viability (%)": 90 - gi * 20 + i },
+    }))
+  ),
+}
+
+const paired: Table = {
+  columns: ["Mouse", "Timepoint", "Volume"],
+  rows: ["Before", "After"].flatMap((t, ti) =>
+    Array.from({ length: 6 }, (_, i) => ({
+      rowId: `r${ti}-${i}`,
+      values: { Mouse: `M${i}`, Timepoint: t, Volume: t === "Before" ? 100 + i : 60 + i },
+    }))
+  ),
+}
+
+describe("building a spec from a sheet", () => {
+  it("picks the test the design supports, not a fixed default", () => {
+    expect(specFromTable(unpaired, meta).analysis.test).toBe("anova-one-way")
+    expect(specFromTable(paired, meta).analysis.test).toBe("t-paired")
+  })
+
+  it("pairs the correction with the test", () => {
+    expect(specFromTable(unpaired, meta).analysis.postHoc).toBe("tukey")
+    expect(specFromTable(paired, meta).analysis.postHoc).toBe("none")
+  })
+
+  it("wires the response and grouping columns through", () => {
+    const spec = specFromTable(unpaired, meta)
+    expect(spec.analysis.groupColumn).toBe("Treatment")
+    expect(spec.analysis.responseColumns).toEqual(["Viability (%)"])
+  })
+
+  it("carries the unit onto the y axis", () => {
+    expect(specFromTable(unpaired, meta).figure.y.unit).toBe("%")
+  })
+
+  it("only ever chooses a test the capability matrix allows", () => {
+    // A menu that offers something the resolver then refuses is worse than one
+    // that never offered it.
+    for (const table of [unpaired, paired]) {
+      const spec = specFromTable(table, meta)
+      expect(spec.analysis.test).not.toBe("t-unpaired")
+    }
+    expect(specFromTable(paired, meta).analysis.test).not.toBe("anova-one-way")
+  })
+
+  it("falls back to no test rather than inventing one", () => {
+    const shapeless: Table = {
+      columns: ["Note"],
+      rows: [{ rowId: "r1", values: { Note: "hello" } }],
+    }
+    expect(specFromTable(shapeless, meta).analysis.test).toBe("none")
+  })
+
+  it("respects an explicit test override", () => {
+    expect(specFromTable(unpaired, meta, { test: "kruskal-wallis" }).analysis.test).toBe("kruskal-wallis")
+  })
+
+  it("never re-guesses a role the record supplied", () => {
+    const spec = specFromTable(unpaired, meta, {
+      knownRoles: [{ column: "Well", role: "subject", unit: null, source: "project-record", confidence: null }],
+    })
+    expect(spec.roles.find((r) => r.column === "Well")?.role).toBe("subject")
+  })
+
+  it("chooses a chart that suits the question", () => {
+    expect(specFromTable(unpaired, meta).figure.kind).toBe("bar-scatter-error")
+    expect(specFromTable(unpaired, meta, { test: "kruskal-wallis" }).figure.kind).toBe("box")
+    expect(specFromTable(unpaired, meta, { test: "linear-regression" }).figure.kind).toBe("xy-scatter-fit")
+    expect(specFromTable(unpaired, meta, { test: "kaplan-meier" }).figure.kind).toBe("kaplan-meier")
+  })
+
+  it("opens a pipeline stale, so nothing is shown before the engine runs", () => {
+    const pipeline = pipelineFromTable("p1", "Plate", unpaired, meta)
+    expect(pipeline.result).toBeNull()
+    expect(pipeline.stale).toBe(true)
+  })
+})
+
+describe("reading a grid", () => {
+  it("takes the first row as the header", () => {
+    const table = tableFromGrid([
+      ["Treatment", "Value"],
+      ["Ctrl", 1],
+      ["Drug", 2],
+    ])
+    expect(table.columns).toEqual(["Treatment", "Value"])
+    expect(table.rows).toHaveLength(2)
+    expect(table.rows[0].values).toEqual({ Treatment: "Ctrl", Value: 1 })
+  })
+
+  it("drops blank rows instead of plotting them as empty points", () => {
+    const table = tableFromGrid([
+      ["A", "B"],
+      [1, 2],
+      [null, null],
+      ["", ""],
+      [3, 4],
+    ])
+    expect(table.rows).toHaveLength(2)
+  })
+
+  it("keeps a partially filled row", () => {
+    const table = tableFromGrid([
+      ["A", "B"],
+      [1, null],
+    ])
+    expect(table.rows).toHaveLength(1)
+    expect(table.rows[0].values.B).toBeNull()
+  })
+
+  it("names an unlabelled column rather than leaving it blank", () => {
+    expect(tableFromGrid([["A", ""], [1, 2]]).columns).toEqual(["A", "Column 2"])
+  })
+
+  it("uses the sheet's own row numbers as identities", () => {
+    // A point traced back to "row 2" must land where the user can find it.
+    expect(tableFromGrid([["A"], [1], [2]]).rows.map((r) => r.rowId)).toEqual(["row-2", "row-3"])
+  })
+
+  it("survives an empty grid", () => {
+    expect(tableFromGrid([])).toEqual({ columns: [], rows: [] })
+  })
+})
+
+describe("data version hash", () => {
+  it("is stable for identical data", () => {
+    expect(hashTable(unpaired)).toBe(hashTable(unpaired))
+  })
+
+  it("changes when a single cell changes", () => {
+    // This is what makes a stored result detectably stale on reopen (§3A.3).
+    const edited: Table = {
+      ...unpaired,
+      rows: unpaired.rows.map((r, i) =>
+        i === 0 ? { ...r, values: { ...r.values, "Viability (%)": 999 } } : r
+      ),
+    }
+    expect(hashTable(edited)).not.toBe(hashTable(unpaired))
+  })
+
+  it("changes when a column is renamed", () => {
+    expect(hashTable({ ...unpaired, columns: ["Well", "Group", "Viability (%)"] })).not.toBe(
+      hashTable(unpaired)
+    )
+  })
+})

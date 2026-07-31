@@ -15,7 +15,7 @@ import {
 
 /**
  * Interactive proof that Catalyst is an agent across the whole research
- * workflow — not a literature search box. The visitor picks a task type and
+ * workflow, not a literature search box. The visitor picks a task type and
  * watches Catalyst produce the actual kind of output: a cited answer, a
  * protocol, an experiment plan, a generated chart, a spreadsheet edit, or a
  * project plan. All in-page (no data/sign-up needed to feel it).

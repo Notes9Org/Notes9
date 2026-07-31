@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowRight, MagnifyingGlass } from "@phosphor-icons/react/ssr"
+import { ArrowRight } from "@phosphor-icons/react/ssr"
+import { FlareIcon } from "@/components/ui/flare-icon"
 
 /**
  * Real, interactive literature-search entry point on the marketing hero.
@@ -14,14 +15,24 @@ import { ArrowRight, MagnifyingGlass } from "@phosphor-icons/react/ssr"
 
 const PENDING_QUERY_COOKIE = "n9_pending_lit_query"
 
-// Example questions the placeholder types out, to invite the user to try a
-// real search. Purely a live affordance — nothing is submitted until the user
-// types their own question and hits Search.
+/**
+ * What the placeholder types out, on a loop.
+ *
+ * The first line is an instruction rather than an example, because the box needs
+ * to say what it is FOR before the examples mean anything: a visitor reading a
+ * research question in a hero input assumes it is decorative copy, not a live
+ * control they are invited to use. Naming Catalyst and literature search once
+ * per cycle turns the same animation into the invitation.
+ *
+ * Purely a live affordance; nothing is submitted until the user types their own
+ * question and hits Search.
+ */
 const DEMO_QUESTIONS = [
+  "Try it: run a real literature search with Notes9 Catalyst",
   "Why does a 3:1 PEI:DNA ratio maximize transient transfection yield?",
   "Summarize recent CRISPR base-editing off-target safety findings",
   "Compare AAV serotypes for CNS gene delivery",
-  "What stabilizes antibody–drug conjugate linkers in circulation?",
+  "What stabilizes antibody-drug conjugate linkers in circulation?",
 ]
 
 export function HeroSearch() {
@@ -87,12 +98,22 @@ export function HeroSearch() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-2xl">
+    <div className="w-full max-w-2xl">
       <form onSubmit={onSubmit} className="group relative">
         {/* focus glow */}
         <div className="pointer-events-none absolute -inset-1 rounded-full bg-[var(--n9-accent)]/[0.12] opacity-0 blur-xl transition-opacity duration-500 group-focus-within:opacity-100" />
-        <div className="relative flex items-center gap-2 rounded-full border border-border/60 bg-card/90 py-1.5 pl-5 pr-1.5 shadow-[0_14px_40px_-22px_var(--n9-accent-glow)] backdrop-blur-md transition-colors duration-200 focus-within:border-[var(--n9-accent)]/50">
-          <MagnifyingGlass className="h-5 w-5 shrink-0 text-muted-foreground/70" weight="bold" />
+        {/* The accent ring is the same affordance the app's sidebar search uses:
+            a tinted border with a soft 3px accent ring, so the one live control
+            on the page is recognisably the product's own search field rather
+            than a generic hero input. */}
+        <div className="relative flex items-center gap-2 rounded-full border border-[var(--n9-accent)]/35 bg-card/90 py-1.5 pl-5 pr-1.5 shadow-[0_0_0_3px_color-mix(in_srgb,var(--n9-accent)_10%,transparent),0_14px_40px_-22px_var(--n9-accent-glow)] backdrop-blur-md transition-[border-color,box-shadow] duration-200 focus-within:border-[var(--n9-accent)]/70 focus-within:shadow-[0_0_0_4px_color-mix(in_srgb,var(--n9-accent)_16%,transparent),0_16px_44px_-20px_var(--n9-accent-glow)]">
+          {/* The Catalyst mark rather than a magnifier: this is not a site
+              search, and the glyph is the first thing that says so. */}
+          <FlareIcon
+            className="h-5 w-5 shrink-0 text-[var(--n9-accent)]"
+            weight="fill"
+            aria-hidden
+          />
           <div className="relative flex-1">
             <input
               ref={inputRef}
@@ -110,7 +131,9 @@ export function HeroSearch() {
                 aria-hidden
                 className="pointer-events-none absolute inset-0 flex items-center truncate text-[15px] text-muted-foreground/60"
               >
-                <span className="truncate">{typed || "Ask a research question…"}</span>
+                <span className="truncate">
+                  {typed || "Ask a research question and Catalyst searches the literature…"}
+                </span>
                 <span className="ml-0.5 inline-block h-[1.1em] w-px animate-pulse bg-[var(--n9-accent)]/70" />
               </div>
             )}
@@ -129,9 +152,9 @@ export function HeroSearch() {
         </div>
       </form>
 
-      <p className="mt-3 text-center text-[13px] text-muted-foreground/80">
-        Answered from live literature, with citations, in seconds.
-      </p>
+      {/* No helper line under the box. The typed placeholder already says what
+          this is and invites the visitor to use it, so a sentence repeating that
+          underneath was saying the same thing twice. */}
     </div>
   )
 }

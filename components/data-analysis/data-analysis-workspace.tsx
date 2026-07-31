@@ -20,6 +20,7 @@ import {
   ChartLineUp,
   Waveform,
   GridNine,
+  GridFour,
   Sigma,
   TrendUp,
   CaretLeft,
@@ -67,6 +68,29 @@ import { usePlate, usePlateModel } from "@/components/data-analysis/plate-view"
 import { TemplatesDialog } from "@/components/data-analysis/templates-dialog"
 import { SaveChartDialog } from "@/components/data-analysis/save-chart-dialog"
 import { detectDataKind } from "@/lib/data-analysis/detect"
+import {
+  PALETTE_DEFINITIONS,
+  getPalette,
+  palettesByKind,
+  sampleRamp,
+  type PaletteKind,
+} from "@/lib/data-analysis/render/palettes"
+import { ERROR_BAR_LABEL, ERROR_BAR_OPTIONS } from "@/lib/data-analysis/render/plotly-adapter"
+import { Dock, DockTab, useDockLayout } from "@/components/data-analysis/workspace/docks"
+import { LayoutCanvas } from "@/components/data-analysis/workspace/layout-canvas"
+import { PipelineTabs } from "@/components/data-analysis/workspace/pipeline-tabs"
+import { ResultsCard } from "@/components/data-analysis/workspace/results-card"
+import {
+  LAYOUT_PRESETS,
+  assignPanel,
+  layoutFromPreset,
+  type FigureLayout,
+} from "@/lib/data-analysis/render/figure-layout"
+import { specFromChartState, tableFromChartRows } from "@/lib/data-analysis/workspace/chart-state-spec"
+import { computeAnalysis } from "@/lib/data-analysis/engine/client"
+import type { EngineResult } from "@/lib/data-analysis/engine/contract"
+import type { Table as SpecTable } from "@/lib/data-analysis/engine/resolver"
+import type { AnalysisPipeline } from "@/lib/data-analysis/workspace/pipelines"
 import { BUILTIN_TEMPLATES, ELISA_AOA, type AnalysisTemplate } from "@/lib/data-analysis/templates"
 import {
   buildSpreadsheetWorkbookSnapshot,
@@ -108,7 +132,7 @@ function snapshotToTable(snapshot: UniverWorkbookSnapshot): Table {
 }
 
 /** Error-bar representation for aggregated replicates. */
-type ErrorMode = "none" | "sd" | "sem" | "ci95"
+type ErrorMode = "none" | "sd" | "sem" | "ci90" | "ci95" | "ci99" | "range" | "iqr" | "mad"
 
 /**
  * Aggregate rows sharing an X value into mean ± error, preserving first-seen
@@ -119,7 +143,7 @@ function aggregateByX(
   rows: Record<string, number | string>[],
   xKey: string,
   yKey: string,
-  errKind: "sd" | "sem" | "ci95",
+  errKind: Exclude<ErrorMode, "none">,
 ): { cats: (string | number)[]; mean: number[]; err: number[]; points: { x: string | number; y: number }[] } {
   const order: (string | number)[] = []
   const groups = new Map<string, number[]>()
@@ -144,11 +168,135 @@ function aggregateByX(
     if (!ys.length) continue
     const d = describeStats(ys)
     cats.push(xv)
-    mean.push(d.mean)
-    err.push(errKind === "sd" ? d.sd : errKind === "sem" ? d.sem : d.ci95[1] - d.mean)
+    // Robust bars are drawn around the median, since that is the centre they
+    // describe; quoting an IQR around a mean would place the bar off the
+    // statistic it belongs to.
+    mean.push(errKind === "iqr" || errKind === "mad" ? d.median : d.mean)
+    err.push(errorBarValue(ys, d, errKind))
     for (const y of ys) points.push({ x: xv, y })
   }
   return { cats, mean, err, points }
+}
+
+/**
+ * The half-length of one error bar.
+ *
+ * Confidence intervals come from `describeStats`, which computes them from the
+ * t distribution — at bench n the normal approximation is materially too
+ * narrow, so a "95% CI" drawn at 1.96·SEM would understate the interval it
+ * claims to be.
+ */
+function errorBarValue(
+  ys: number[],
+  d: ReturnType<typeof describeStats>,
+  kind: Exclude<ErrorMode, "none">,
+): number {
+  const n = ys.length
+  switch (kind) {
+    case "sd":
+      return d.sd
+    case "sem":
+      return d.sem
+    case "ci95":
+      return d.ci95[1] - d.mean
+    case "ci90":
+    case "ci99": {
+      if (n < 2) return 0
+      const level = kind === "ci90" ? 0.9 : 0.99
+      // describeStats only carries the 95% interval, so the other levels are
+      // rescaled through the t multipliers rather than re-deriving the SEM.
+      const t95 = studentT(n - 1, 0.95)
+      const t = studentT(n - 1, level)
+      return t95 > 0 ? ((d.ci95[1] - d.mean) / t95) * t : 0
+    }
+    case "range":
+      return Math.max(...ys) - d.mean
+    case "iqr": {
+      const sorted = [...ys].sort((a, b) => a - b)
+      const q = (p: number) => {
+        const idx = (sorted.length - 1) * p
+        const lo = Math.floor(idx)
+        const hi = Math.ceil(idx)
+        return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo)
+      }
+      return q(0.75) - q(0.25)
+    }
+    case "mad": {
+      const deviations = ys.map((v) => Math.abs(v - d.median)).sort((a, b) => a - b)
+      const mid = (deviations.length - 1) / 2
+      const mad =
+        deviations.length % 2
+          ? deviations[mid]
+          : (deviations[Math.floor(mid)] + deviations[Math.ceil(mid)]) / 2
+      // Scaled so a robust bar is comparable with the SD bar it replaces.
+      return mad * 1.4826
+    }
+  }
+}
+
+/** Two-sided t critical value, by bisection on the normal-inverse-seeded CDF. */
+function studentT(df: number, level: number): number {
+  if (df <= 0) return 0
+  const target = 1 - (1 - level) / 2
+  let lo = 0
+  let hi = 100
+  for (let i = 0; i < 120; i++) {
+    const mid = (lo + hi) / 2
+    if (studentCdf(mid, df) < target) lo = mid
+    else hi = mid
+  }
+  return (lo + hi) / 2
+}
+
+function studentCdf(t: number, df: number): number {
+  // Regularised incomplete beta via its continued fraction (Lentz).
+  const x = df / (df + t * t)
+  const a = df / 2
+  const b = 0.5
+  const p = 0.5 * regularisedBeta(a, b, x)
+  return t > 0 ? 1 - p : p
+}
+
+function regularisedBeta(a: number, b: number, x: number): number {
+  if (x <= 0) return 0
+  if (x >= 1) return 1
+  if (x >= (a + 1) / (a + b + 2)) return 1 - regularisedBeta(b, a, 1 - x)
+  const front =
+    Math.exp(lnGamma(a + b) - lnGamma(a) - lnGamma(b) + a * Math.log(x) + b * Math.log(1 - x)) / a
+  let f = 1
+  let c = 1
+  let dd = 0
+  for (let i = 0; i <= 300; i++) {
+    const m = Math.floor(i / 2)
+    const numerator =
+      i === 0
+        ? 1
+        : i % 2 === 0
+          ? (m * (b - m) * x) / ((a + 2 * m - 1) * (a + 2 * m))
+          : -((a + m) * (a + b + m) * x) / ((a + 2 * m) * (a + 2 * m + 1))
+    dd = 1 + numerator * dd
+    if (Math.abs(dd) < 1e-30) dd = 1e-30
+    dd = 1 / dd
+    c = 1 + numerator / c
+    if (Math.abs(c) < 1e-30) c = 1e-30
+    const delta = c * dd
+    f *= delta
+    if (Math.abs(1 - delta) < 1e-12) break
+  }
+  return front * (f - 1)
+}
+
+function lnGamma(z: number): number {
+  const g = [
+    676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059,
+    12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7,
+  ]
+  if (z < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * z)) - lnGamma(1 - z)
+  const zz = z - 1
+  let x = 0.99999999999980993
+  for (let i = 0; i < g.length; i++) x += g[i] / (zz + i + 1)
+  const t = zz + g.length - 0.5
+  return 0.5 * Math.log(2 * Math.PI) + (zz + 0.5) * Math.log(t) - t + Math.log(x)
 }
 
 /** Pearson r between two paired numeric arrays (for correlation matrices). */
@@ -222,11 +370,89 @@ const BINDING_HINTS: Partial<Record<ChartType, string>> = {
   corrMatrix: "Y = columns to correlate (defaults to all numeric)",
 }
 
-const PALETTES: Record<string, string[]> = {
-  "Okabe–Ito": ["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9", "#F0E442"],
-  Notes9: ["#965034", "#c07b5a", "#8f9f86", "#7a8fa7", "#c5a46d", "#9b4722"],
-  Viridis: ["#440154", "#3b528b", "#21908d", "#5dc863", "#fde725", "#27ad81"],
-  Grayscale: ["#111111", "#555555", "#888888", "#aaaaaa", "#cccccc"],
+/**
+ * The palette catalogue, shared with the spec-driven renderer so a colour
+ * chosen here means the same thing there. Keyed by id; `getPalette` also
+ * accepts the display names saved by earlier versions of this workspace.
+ */
+const PALETTES: Record<string, string[]> = Object.fromEntries(
+  PALETTE_DEFINITIONS.map((p) => [p.id, p.colours])
+)
+
+/**
+ * The palette picker.
+ *
+ * Grouped by what each family is FOR, because the distinction is not cosmetic:
+ * a sequential ramp on unordered groups implies a ranking the data does not
+ * have. Colour-blind-safe sets are marked rather than merely listed first, so
+ * the choice is informed instead of accidental.
+ */
+function PalettePicker({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (id: string) => void
+}) {
+  const groups = palettesByKind()
+  const current = getPalette(value)
+  const sections: { kind: PaletteKind; label: string; hint: string }[] = [
+    { kind: "qualitative", label: "Categories", hint: "Separate groups with no order" },
+    { kind: "sequential", label: "Magnitude", hint: "Low to high, for heatmaps" },
+    { kind: "diverging", label: "Diverging", hint: "Distance either side of a midpoint" },
+  ]
+
+  return (
+    <Field label="Palette">
+      <div className="space-y-3">
+        {sections.map((section) => (
+          <div key={section.kind}>
+            <p className="mb-1 flex items-baseline gap-1.5 text-[10.5px] font-medium uppercase tracking-wide text-muted-foreground/80">
+              {section.label}
+              <span className="font-normal normal-case tracking-normal text-muted-foreground/60">
+                {section.hint}
+              </span>
+            </p>
+            <div className="grid grid-cols-2 gap-1.5">
+              {groups[section.kind].map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => onChange(p.id)}
+                  title={`${p.note}${p.cvdSafe ? " Colour-blind safe." : ""}${p.print ? " Reads in greyscale." : ""}`}
+                  className={cn(
+                    "flex flex-col gap-1 rounded-lg border px-2 py-1.5 text-left transition-colors",
+                    current.id === p.id
+                      ? "border-[var(--n9-accent,#965034)]/50 bg-[var(--n9-accent,#965034)]/10"
+                      : "border-border hover:bg-muted/40",
+                  )}
+                >
+                  <span className="flex overflow-hidden rounded-[3px]">
+                    {(p.kind === "qualitative" ? p.colours.slice(0, 6) : sampleRamp(p.id, 6)).map(
+                      (c, i) => (
+                        <span key={i} className="h-3 flex-1" style={{ background: c }} />
+                      ),
+                    )}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="truncate text-[11px] font-medium">{p.label}</span>
+                    {p.cvdSafe && (
+                      <span
+                        title="Colour-blind safe"
+                        className="shrink-0 rounded-sm bg-emerald-500/15 px-1 text-[9px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400"
+                      >
+                        CVD
+                      </span>
+                    )}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Field>
+  )
 }
 
 /** Per-series appearance overrides (default from the palette). */
@@ -292,13 +518,17 @@ function SheetHost({
   )
 }
 
-type Phase = "chart" | "stats" | "curve" | "plate"
+type Phase = "chart" | "stats" | "curve" | "plate" | "workspace"
 
 const PHASES: { id: Phase; label: string; Icon: React.ComponentType<{ className?: string; weight?: "regular" | "bold" | "fill" }> }[] = [
   { id: "chart", label: "Chart", Icon: ChartLine },
   { id: "stats", label: "Statistics", Icon: Sigma },
   { id: "curve", label: "Standard curve", Icon: TrendUp },
   { id: "plate", label: "Plate", Icon: GridNine },
+  // Multi-panel figure assembly (Prism's "Layouts", Tier 1 #8). Panels draw
+  // from the spec this workspace derives, so a figure composed here is the same
+  // figure the Chart phase shows.
+  { id: "workspace", label: "Figure layout", Icon: GridFour },
 ]
 
 export function DataAnalysisWorkspace({
@@ -321,8 +551,10 @@ export function DataAnalysisWorkspace({
 
   const fileRef = useRef<HTMLInputElement>(null)
   const [phase, setPhase] = useState<Phase>("chart")
-  const [dataOpen, setDataOpen] = useState(true)
-  const [settingsOpen, setSettingsOpen] = useState(true)
+  // Dock geometry (open/closed and width) is shared with the spec-driven
+  // workspace and persists per browser, so a layout set once survives reloads.
+  const docks = useDockLayout("n9.data-analysis.docks")
+  const { setOpen: setDockOpen } = docks
   const [dataMax, setDataMax] = useState(false)
   const [sheetSel, setSheetSel] = useState<SheetSelection | null>(null)
   const wide = useIsWide()
@@ -337,6 +569,16 @@ export function DataAnalysisWorkspace({
   }, [])
 
   const table = useMemo(() => snapshotToTable(liveSnapshot), [liveSnapshot])
+
+  const sheetFileName =
+    typeof liveSnapshot.name === "string" && liveSnapshot.name ? liveSnapshot.name : "analysis.xlsx"
+  /** The live sheet, in the shape the spec layer resolves against. */
+  const specTable = useMemo<SpecTable>(
+    () => tableFromChartRows(table.columns, table.rows),
+    [table]
+  )
+
+
   const numericCols = useMemo(() => table.columns.filter((c) => table.rows.some((r) => typeof r[c] === "number")), [table])
 
   // Raw sheet grid (header row included) — the plate mirrors this 1:1, live.
@@ -357,14 +599,17 @@ export function DataAnalysisWorkspace({
   const [showAllTabs, setShowAllTabs] = useState(false)
   const visiblePhases = useMemo(
     () =>
-      PHASES.filter(
-        (p) =>
-          p.id === "chart" ||
-          p.id === "stats" ||
-          showAllTabs ||
-          (p.id === "curve" && detected.standardCurve) ||
-          (p.id === "plate" && detected.plate),
-      ),
+      PHASES.filter((p) => {
+        // The plate map is hidden for now. The model behind it still runs — the
+        // standard curve reads the plate layout to know which wells are
+        // standards — so this hides the tab, it does not remove the feature.
+        if (p.id === "plate") return false
+        // Chart, Statistics and Figure layout are the surface, not tools that
+        // appear when the data happens to suit them.
+        if (p.id === "chart" || p.id === "stats" || p.id === "workspace") return true
+        if (showAllTabs) return true
+        return p.id === "curve" && detected.standardCurve
+      }),
     [detected, showAllTabs],
   )
   useEffect(() => {
@@ -386,7 +631,7 @@ export function DataAnalysisWorkspace({
   const [showGrid, setShowGrid] = useState(true)
   const [showLegend, setShowLegend] = useState(true)
   const [markers, setMarkers] = useState(true)
-  const [paletteName, setPaletteName] = useState("Okabe–Ito")
+  const [paletteName, setPaletteName] = useState("okabe-ito")
 
   // Granular per-element editing
   const [seriesStyles, setSeriesStyles] = useState<Record<string, SeriesStyle>>({})
@@ -432,7 +677,83 @@ export function DataAnalysisWorkspace({
     setYKeys(numericCols.filter((c) => c !== table.columns[0]).slice(0, 2))
   }
 
-  const palette = PALETTES[paletteName] ?? PALETTES["Okabe–Ito"]
+  // `getPalette` also accepts the display names saved by earlier versions, so a
+  // chart saved before the catalogue existed still opens with its own colours.
+  const palette = getPalette(paletteName).colours
+
+  /**
+   * The chart rail's settings, as an Analysis Spec.
+   *
+   * Derived rather than dispatched: every control keeps the behaviour it has,
+   * and the spec becomes the record underneath. This is what lets one figure be
+   * saved, reopened, reproduced, dropped into a figure panel, and checked
+   * against the data version it was computed from.
+   */
+  const derivedSpec = useMemo(() => {
+    try {
+      return specFromChartState(
+        {
+          chartType, xKey, yKeys, zKey, sizeKey, title, subtitle, xLabel, xUnit, yLabel, yUnit,
+          yLog, showGrid, showLegend, legendPos, paletteName, errorMode, fontFamily,
+          titleSize, axisTitleSize, xMin, xMax, yMin, yMax, nticks, seriesStyles,
+        },
+        specTable,
+        { fileName: sheetFileName }
+      )
+    } catch {
+      // A spec that will not derive must never take the figure down with it.
+      return null
+    }
+  }, [
+    chartType, xKey, yKeys, zKey, sizeKey, title, subtitle, xLabel, xUnit, yLabel, yUnit,
+    yLog, showGrid, showLegend, legendPos, paletteName, errorMode, fontFamily,
+    titleSize, axisTitleSize, xMin, xMax, yMin, yMax, nticks, seriesStyles,
+    specTable, sheetFileName,
+  ])
+
+  /**
+   * The engine's answer for that spec.
+   *
+   * Debounced, because Pyodide is a real round trip and the rail can change on
+   * every keystroke. `attemptedRef` stops a spec the engine refuses from being
+   * retried forever.
+   */
+  const [engineResult, setEngineResult] = useState<EngineResult | null>(null)
+  const [engineBusy, setEngineBusy] = useState(false)
+  const [engineNote, setEngineNote] = useState<string | null>(null)
+  const attemptedRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!derivedSpec || specTable.rows.length === 0) return
+    const signature = `${derivedSpec.dataset.versionHash}|${JSON.stringify(derivedSpec.analysis)}`
+    if (attemptedRef.current === signature) return
+    const timer = setTimeout(async () => {
+      attemptedRef.current = signature
+      setEngineBusy(true)
+      setEngineNote(null)
+      try {
+        const outcome = await computeAnalysis(derivedSpec, specTable, { force: true })
+        if (outcome.ok) setEngineResult(outcome.result)
+        else if ("blocked" in outcome) {
+          setEngineResult(null)
+          setEngineNote(outcome.blocked.map((b) => b.message).join(" "))
+        } else {
+          setEngineResult(null)
+          setEngineNote(outcome.question.question)
+        }
+      } catch (err) {
+        setEngineNote(err instanceof Error ? err.message : String(err))
+      } finally {
+        setEngineBusy(false)
+      }
+    }, 700)
+    return () => clearTimeout(timer)
+  }, [derivedSpec, specTable])
+
+  const [figureLayout, setFigureLayout] = useState<FigureLayout>(() => {
+    const preset = LAYOUT_PRESETS.find((p) => p.id === "single")!
+    const base = layoutFromPreset(preset, "Figure 1")
+    return assignPanel(base, base.panels[0].id, "current")
+  })
   const activeY = yKeys.filter((k) => table.columns.includes(k))
   const editKey = activeY.includes(editSeries) ? editSeries : activeY[0] ?? ""
   const editIdx = Math.max(0, activeY.indexOf(editKey))
@@ -713,7 +1034,9 @@ export function DataAnalysisWorkspace({
         series: "cs-series", legend: "cs-toggles", annotation: "cs-toggles",
       }
       if (el === "series" && detail?.series) setEditSeries(detail.series)
-      setSettingsOpen(true)
+      // Clicking a chart element jumps to its control, so the settings dock has
+      // to be open for the scroll target to exist.
+      setDockOpen("right", true)
       const id = section[el]
       setFlashId(id)
       requestAnimationFrame(() =>
@@ -721,7 +1044,7 @@ export function DataAnalysisWorkspace({
       )
       window.setTimeout(() => setFlashId(null), 1500)
     },
-    [],
+    [setDockOpen],
   )
 
   // Fire an AI request straight from the chart's right-click menu.
@@ -755,12 +1078,19 @@ export function DataAnalysisWorkspace({
         ],
       },
       { label: "Change chart type", items: CHART_TYPES.map((t) => ({ label: t.label, onClick: () => setChartType(t.id) })) },
-      { label: "Palette", items: Object.keys(PALETTES).map((p) => ({ label: p, onClick: () => setPaletteName(p) })) },
+      {
+        label: "Palette",
+        items: PALETTE_DEFINITIONS.map((p) => ({
+          label: p.cvdSafe ? `${p.label} (colour-blind safe)` : p.label,
+          onClick: () => setPaletteName(p.id),
+        })),
+      },
     ],
     [askCatalyst],
   )
 
   const hasPlot = activeY.length > 0 && plotData.length > 0
+
 
   // Feature hooks (called unconditionally; each renders lazily where placed).
   // The plate model is shared so the plate layout drives the standard curve.
@@ -768,6 +1098,96 @@ export function DataAnalysisWorkspace({
   const stats = useStatsPanel(table, numericCols)
   const curve = useStandardCurve(table, numericCols, plateModel)
   const plate = usePlate(plateModel)
+
+  /* ── Analyses (tabs) ──────────────────────────────────────────────────────
+     Several analyses of the same sheet, open at once. Each is a saved chart
+     configuration — the very object `.n9a` export already serialises — so a tab
+     costs nothing new to persist and everything the rail can express travels
+     with it. Switching tabs stores the configuration you are leaving and
+     applies the one you are entering. */
+  const [analyses, setAnalyses] = useState<{ id: string; name: string; config: unknown }[]>([])
+  const [activeAnalysisId, setActiveAnalysisId] = useState<string>("a1")
+  const analysisSeq = useRef(1)
+  const buildConfigRef = useRef<() => unknown>(() => ({}))
+
+  /**
+   * Tab handlers work off a ref of the list, and apply the incoming
+   * configuration OUTSIDE the state updater.
+   *
+   * `applyConfig` is thirty `setState` calls. Running it inside an updater
+   * makes it a side effect of computing state, which React may invoke twice and
+   * may discard — which is exactly how switching tabs left the previous tab's
+   * settings on screen.
+   */
+  const analysesRef = useRef(analyses)
+  analysesRef.current = analyses
+
+  /** Fold the current rail state back into the active tab before leaving it. */
+  const captureActive = useCallback(
+    () =>
+      analysesRef.current.map((a) =>
+        a.id === activeAnalysisId ? { ...a, config: buildConfigRef.current() } : a
+      ),
+    [activeAnalysisId]
+  )
+
+  const switchAnalysis = useCallback(
+    (id: string) => {
+      if (id === activeAnalysisId) return
+      const saved = captureActive()
+      const target = saved.find((a) => a.id === id)
+      if (!target) return
+      setAnalyses(saved)
+      setActiveAnalysisId(id)
+      applyConfigRef.current(target.config)
+    },
+    [activeAnalysisId, captureActive]
+  )
+
+  const newAnalysis = useCallback(() => {
+    const id = `a${++analysisSeq.current}`
+    setAnalyses([
+      ...captureActive(),
+      { id, name: `Analysis ${analysisSeq.current}`, config: buildConfigRef.current() },
+    ])
+    setActiveAnalysisId(id)
+  }, [captureActive])
+
+  const duplicateAnalysis = useCallback(
+    (id: string) => {
+      const saved = captureActive()
+      const index = saved.findIndex((a) => a.id === id)
+      if (index === -1) return
+      const newId = `a${++analysisSeq.current}`
+      const copy = { id: newId, name: `${saved[index].name} (copy)`, config: saved[index].config }
+      const next = [...saved]
+      next.splice(index + 1, 0, copy)
+      setAnalyses(next)
+      setActiveAnalysisId(newId)
+      applyConfigRef.current(copy.config)
+    },
+    [captureActive]
+  )
+
+  const closeAnalysis = useCallback(
+    (id: string) => {
+      const list = analysesRef.current
+      // Never close the last one: an empty workspace has no affordance to start
+      // a new analysis from.
+      if (list.length <= 1) return
+      const index = list.findIndex((a) => a.id === id)
+      const next = list.filter((a) => a.id !== id)
+      setAnalyses(next)
+      if (id === activeAnalysisId) {
+        const neighbour = next[index] ?? next[index - 1]
+        if (neighbour) {
+          setActiveAnalysisId(neighbour.id)
+          applyConfigRef.current(neighbour.config)
+        }
+      }
+    },
+    [activeAnalysisId]
+  )
 
   /* ── Import (local + from Notes9 library) · Save ──────────────────────────── */
   const [libraryOpen, setLibraryOpen] = useState(false)
@@ -781,6 +1201,55 @@ export function DataAnalysisWorkspace({
       ),
     [files],
   )
+
+  // Refs, not values: `buildConfig` closes over ~30 pieces of rail state and is
+  // rebuilt every render, so a tab handler capturing it directly would save a
+  // stale configuration.
+  useEffect(() => {
+    buildConfigRef.current = buildConfig
+    applyConfigRef.current = applyConfig as (c: unknown) => void
+  })
+
+  useEffect(() => {
+    if (analyses.length === 0) {
+      setAnalyses([{ id: "a1", name: title || "Analysis 1", config: buildConfigRef.current() }])
+    }
+  }, [analyses.length, title])
+
+  /**
+   * Every open analysis, as a figure-layout panel source.
+   *
+   * Each tab's stored configuration derives its own spec, so a panel can draw
+   * any of them — which is the point of layouts: a published figure's panels
+   * come from different analyses, not different views of one.
+   */
+  const layoutPipelines = useMemo<AnalysisPipeline[]>(() => {
+    const out: AnalysisPipeline[] = []
+    for (const a of analyses) {
+      // The active tab's spec comes from the live rail; the others from the
+      // configuration they were left in.
+      const spec =
+        a.id === activeAnalysisId
+          ? derivedSpec
+          : (() => {
+              try {
+                return specFromChartState(a.config as never, specTable, { fileName: sheetFileName })
+              } catch {
+                return null
+              }
+            })()
+      if (!spec) continue
+      out.push({
+        id: a.id,
+        name: a.name,
+        spec,
+        table: specTable,
+        result: a.id === activeAnalysisId ? engineResult : null,
+        stale: a.id === activeAnalysisId ? engineResult === null : true,
+      })
+    }
+    return out
+  }, [analyses, activeAnalysisId, derivedSpec, specTable, engineResult, sheetFileName])
 
   const loadSnapshot = useCallback((snap: UniverWorkbookSnapshot) => {
     seededRef.current = false
@@ -798,6 +1267,9 @@ export function DataAnalysisWorkspace({
     plate: { format: plateModel.format, originRow: plateModel.originRow, originCol: plateModel.originCol, roleOverrides: plateModel.roleOverrides, annOverrides: plateModel.annOverrides },
     phase,
   })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const applyConfigRef = useRef<(c: unknown) => void>(() => undefined)
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const applyConfig = useCallback((c: any) => {
     if (!c || typeof c !== "object") return
@@ -1089,27 +1561,7 @@ export function DataAnalysisWorkspace({
           <Field label="Y unit"><Input className="h-9" value={yUnit} onChange={(e) => setYUnit(e.target.value)} /></Field>
         </div>
       </div>
-      <Field label="Palette">
-        <div className="grid grid-cols-2 gap-1.5">
-          {Object.entries(PALETTES).map(([name, colors]) => (
-            <button
-              key={name}
-              onClick={() => setPaletteName(name)}
-              className={cn(
-                "flex items-center gap-2 rounded-lg border px-2 py-1.5 transition-colors",
-                paletteName === name ? "border-[var(--n9-accent,#965034)]/50 bg-[var(--n9-accent,#965034)]/10" : "border-border hover:bg-muted/40",
-              )}
-            >
-              <span className="flex">
-                {colors.slice(0, 5).map((c, i) => (
-                  <span key={i} className="-ml-0.5 h-3.5 w-3.5 rounded-full border border-background first:ml-0" style={{ background: c }} />
-                ))}
-              </span>
-              <span className="truncate text-[11px] font-medium">{name}</span>
-            </button>
-          ))}
-        </div>
-      </Field>
+      <PalettePicker value={paletteName} onChange={setPaletteName} />
       <div id="cs-toggles" className={cn("flex flex-col gap-2.5 border-t border-border pt-3 text-sm transition-shadow", flashId === "cs-toggles" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
         <Toggle label="Show markers" checked={markers} onChange={setMarkers} />
         <Toggle label="Log Y axis" checked={yLog} onChange={setYLog} />
@@ -1135,11 +1587,17 @@ export function DataAnalysisWorkspace({
         <SectionLabel><TrendUp className="h-3.5 w-3.5" /> Error &amp; annotations</SectionLabel>
         <Field label="Error bars (aggregate replicate rows sharing an X value)">
           <NativeSelect value={errorMode} onChange={(v) => setErrorMode(v as ErrorMode)}>
-            <option value="none">None</option>
-            <option value="sd">Mean ± SD</option>
-            <option value="sem">Mean ± SEM</option>
-            <option value="ci95">Mean ± 95% CI</option>
+            {ERROR_BAR_OPTIONS.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.id === "none" ? "None" : ERROR_BAR_LABEL[o.id]}
+              </option>
+            ))}
           </NativeSelect>
+          {errorMode !== "none" && (
+            <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+              {ERROR_BAR_OPTIONS.find((o) => o.id === errorMode)?.note}
+            </p>
+          )}
         </Field>
         {errorMode !== "none" && <Toggle label="Overlay individual points" checked={showPoints} onChange={setShowPoints} />}
         <div className="grid grid-cols-2 gap-2">
@@ -1234,7 +1692,34 @@ export function DataAnalysisWorkspace({
     </div>
   )
 
-  const canvasForPhase = phase === "chart" ? chartCanvas : phase === "stats" ? stats.canvas : phase === "curve" ? curve.canvas : plate.canvas
+  /**
+   * The Statistics phase, with the validated engine's answer above the
+   * workspace's own summaries.
+   *
+   * The engine is the authority: it runs the same scipy/statsmodels code the
+   * validation corpus is asserted against, so its result leads. The existing
+   * panel stays beneath it because it carries per-column summaries and the
+   * exploratory tables the engine result does not replace.
+   */
+  const statsCanvas = (
+    <div className="flex flex-col gap-3">
+      {derivedSpec && (
+        <ResultsCard
+          spec={derivedSpec}
+          result={engineResult}
+          computing={engineBusy}
+        />
+      )}
+      {engineNote && !engineBusy && (
+        <p className="rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[12.5px] text-amber-800 dark:text-amber-300">
+          {engineNote}
+        </p>
+      )}
+      {stats.canvas}
+    </div>
+  )
+
+  const canvasForPhase = phase === "chart" ? chartCanvas : phase === "stats" ? statsCanvas : phase === "curve" ? curve.canvas : plate.canvas
   const settingsForPhase = phase === "chart" ? chartSettings : phase === "stats" ? stats.settings : phase === "curve" ? curve.settings : plate.settings
   const activePhase = PHASES.find((p) => p.id === phase)!
   const ActiveIcon = activePhase.Icon
@@ -1242,6 +1727,28 @@ export function DataAnalysisWorkspace({
   return (
     <div className="flex flex-col gap-4">
       <CatalystSectionHero scope="lab" placeholder="Ask Catalyst to analyze your data, pick a chart, or explain a result…" />
+
+      {/* Analyses. Several views of one sheet: the dose-response beside the
+          timecourse beside the plate, each keeping its own chart, statistics and
+          settings, and each available as a panel in a figure layout. */}
+      <PipelineTabs
+        pipelines={analyses.map((a) => ({
+          id: a.id,
+          name: a.name,
+          spec: derivedSpec!,
+          table: specTable,
+          result: a.id === activeAnalysisId ? engineResult : null,
+          stale: a.id === activeAnalysisId ? engineResult === null : true,
+        }))}
+        activeId={activeAnalysisId}
+        onActivate={switchAnalysis}
+        onNew={newAnalysis}
+        onClose={closeAnalysis}
+        onDuplicate={duplicateAnalysis}
+        onRename={(id, name) =>
+          setAnalyses((list) => list.map((a) => (a.id === id ? { ...a, name } : a)))
+        }
+      />
 
       {/* Tabs + toolbar */}
       <div className="flex flex-wrap items-center gap-2">
@@ -1345,27 +1852,71 @@ export function DataAnalysisWorkspace({
         </div>
       )}
 
-      {/* 3-pane: Data rail (left) · canvas (center) · settings rail (right) */}
-      {!dataMax && (
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
-        {/* Data rail — sheet stays mounted; only the rail width animates */}
-        <motion.aside
-          initial={false}
-          animate={{ width: wide ? (dataOpen ? DATA_W : 0) : "100%", opacity: dataOpen || !wide ? 1 : 0 }}
-          transition={{ type: "spring", stiffness: 320, damping: 36 }}
-          className="shrink-0 overflow-hidden"
-        >
-          <div style={{ width: wide ? DATA_W : "100%" }} className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card/80 shadow-sm backdrop-blur-sm">
+      {/* The spec-driven workspace takes the whole area: it brings its own docks
+          (data, statistics, settings) and its own analysis tabs, so nesting it
+          inside this page's rails would give two sets of the same chrome. It
+          reads the sheet loaded above, so both phases analyse one dataset. */}
+      {!dataMax && phase === "workspace" && (
+        <div className="flex min-h-[calc(100vh-24rem)] flex-col">
+          <LayoutCanvas
+            layout={figureLayout}
+            pipelines={layoutPipelines}
+            onChange={setFigureLayout}
+            className="flex-1"
+          />
+        </div>
+      )}
+
+      {/* Data dock (left) · canvas (centre) · settings dock (right).
+          The docks are the shared primitive from the spec-driven workspace, so
+          both surfaces collapse, drag-resize and remember their widths the same
+          way. On a narrow viewport `wide` is false and they stack full-width,
+          where dragging a rail edge would be meaningless. */}
+      {!dataMax && phase !== "workspace" && (
+      <div className={cn("flex min-h-0 flex-col gap-1.5", wide && "xl:flex-row xl:items-stretch")}>
+        {wide && !docks.layout.left.open && (
+          <DockTab
+            side="left"
+            label="Data"
+            icon={<TableIcon className="h-3.5 w-3.5" />}
+            onOpen={() => docks.setOpen("left", true)}
+          />
+        )}
+        {wide ? (
+          <Dock
+            side="left"
+            open={docks.layout.left.open}
+            size={docks.layout.left.size}
+            onToggle={() => docks.toggle("left")}
+            onResize={(s) => docks.resize("left", s)}
+            title="Data"
+            icon={<TableIcon className="h-3.5 w-3.5 text-muted-foreground" />}
+            /* This page scrolls rather than filling the viewport, so the dock
+               has to state its own height; without one the sheet inside it
+               stretches to its full row count and the page grows to match. */
+            className="h-[620px]"
+            bodyClassName="overflow-hidden"
+            actions={
+              <button
+                onClick={toggleDataMax}
+                title="Maximize data editor"
+                className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <ArrowsOutSimple className="h-4 w-4" />
+              </button>
+            }
+          >
+            {/* The sheet stays mounted through a collapse: remounting Univer
+                would drop the user's cursor and selection. */}
+            <div className="h-full p-2">
+              <SheetHost mountSnapshot={mountSnapshot} mountKey={mountKey} onPersist={setLiveSnapshot} onSelectionChange={setSheetSel} heightClass="h-full" compact />
+            </div>
+          </Dock>
+        ) : (
+          <div className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card/80 shadow-sm backdrop-blur-sm">
             <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
-              {wide ? (
-                <button onClick={() => setDataOpen(false)} title="Hide data" className="-ml-1 flex items-center gap-2 rounded-md px-1 py-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
-                  <TableIcon className="h-4 w-4" />
-                  <span className="text-sm font-semibold text-foreground">Data</span>
-                  <CaretLeft className="h-3.5 w-3.5" />
-                </button>
-              ) : (
-                <><TableIcon className="h-4 w-4 text-muted-foreground" /><span className="text-sm font-semibold">Data</span></>
-              )}
+              <TableIcon className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-semibold">Data</span>
               <button onClick={toggleDataMax} title="Maximize data editor" className="ml-auto rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
                 <ArrowsOutSimple className="h-4 w-4" />
               </button>
@@ -1374,15 +1925,6 @@ export function DataAnalysisWorkspace({
               <SheetHost mountSnapshot={mountSnapshot} mountKey={mountKey} onPersist={setLiveSnapshot} onSelectionChange={setSheetSel} heightClass="h-[560px]" compact />
             </div>
           </div>
-        </motion.aside>
-
-        {/* Collapsed Data rail — the data symbol reopens it */}
-        {wide && !dataOpen && (
-          <button onClick={() => setDataOpen(true)} className="group flex h-[620px] shrink-0 flex-col items-center gap-2 rounded-2xl border border-border bg-card/70 px-2 py-3 text-muted-foreground shadow-sm transition-colors hover:bg-card hover:text-foreground" title="Show data">
-            <TableIcon className="h-5 w-5 text-[var(--n9-accent,#965034)]" />
-            <CaretRight className="h-4 w-4" />
-            <span className="mt-1 text-[11px] font-medium [writing-mode:vertical-rl]">Data</span>
-          </button>
         )}
 
         {/* Canvas — always visible */}
@@ -1392,34 +1934,36 @@ export function DataAnalysisWorkspace({
           </motion.div>
         </div>
 
-        {/* Settings rail — collapsible */}
-        {wide && !settingsOpen && (
-          <button onClick={() => setSettingsOpen(true)} className="flex h-[620px] shrink-0 flex-col items-center gap-2 rounded-2xl border border-border bg-card/70 px-2 py-3 text-muted-foreground shadow-sm transition-colors hover:bg-card hover:text-foreground" title={`Show ${activePhase.label} settings`}>
-            <ActiveIcon className="h-5 w-5 text-[var(--n9-accent,#965034)]" weight="fill" />
-            <CaretLeft className="h-4 w-4" />
-            <span className="mt-1 text-[11px] font-medium [writing-mode:vertical-rl]">Settings</span>
-          </button>
-        )}
-        <motion.aside
-          initial={false}
-          animate={{ width: wide ? (settingsOpen ? SET_W : 0) : "100%", opacity: settingsOpen || !wide ? 1 : 0 }}
-          transition={{ type: "spring", stiffness: 320, damping: 36 }}
-          className={cn("shrink-0 overflow-hidden", !settingsOpen && wide && "pointer-events-none")}
-        >
-          <div style={{ width: wide ? SET_W : "100%" }} className="flex h-[620px] flex-col overflow-hidden rounded-2xl border border-border bg-card/80 shadow-sm backdrop-blur-sm xl:sticky xl:top-4">
-            <div className="flex items-center gap-2 border-b border-border bg-[var(--n9-accent,#965034)]/[0.06] px-4 py-3">
-              <ActiveIcon className="h-4 w-4 text-[var(--n9-accent,#965034)]" weight="fill" />
-              <span className="text-sm font-semibold">{activePhase.label}</span>
-              <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">settings</span>
-              {wide && (
-                <button onClick={() => setSettingsOpen(false)} className="ml-auto rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"><CaretRight className="h-4 w-4" /></button>
-              )}
+        {wide ? (
+          <Dock
+            side="right"
+            open={docks.layout.right.open}
+            size={docks.layout.right.size}
+            onToggle={() => docks.toggle("right")}
+            onResize={(s) => docks.resize("right", s)}
+            title={`${activePhase.label} settings`}
+            icon={<ActiveIcon className="h-3.5 w-3.5 text-muted-foreground" weight="fill" />}
+            className="h-[620px] xl:sticky xl:top-4"
+          >
+            <div className="p-4">{settingsForPhase}</div>
+          </Dock>
+        ) : (
+          <div className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card/80 shadow-sm backdrop-blur-sm">
+            <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+              <ActiveIcon className="h-4 w-4 text-muted-foreground" weight="fill" />
+              <span className="text-sm font-semibold">{activePhase.label} settings</span>
             </div>
-            <div className="flex-1 overflow-y-auto p-4">
-              {settingsForPhase}
-            </div>
+            <div className="p-4">{settingsForPhase}</div>
           </div>
-        </motion.aside>
+        )}
+        {wide && !docks.layout.right.open && (
+          <DockTab
+            side="right"
+            label="Settings"
+            icon={<ActiveIcon className="h-3.5 w-3.5" weight="fill" />}
+            onOpen={() => docks.setOpen("right", true)}
+          />
+        )}
       </div>
       )}
 
