@@ -22,9 +22,14 @@
  *               mono, and a figure that collapses to three identical greys is
  *               unreadable in the version of record.
  *
- * The journal-named sets are the widely used `ggsci` colour sets that match the
- * house style of those journals. They are approximations chosen to sit
- * comfortably in that context, not official brand palettes.
+ * PROVENANCE OF THE JOURNAL-NAMED SETS. These are the `ggsci` R package's
+ * palettes (npg, aaas, lancet, nejm, jama) — one author's derivation from
+ * figures published in those journals, widely used in the R ecosystem. No
+ * journal publishes an official palette, and none of these is endorsed by one.
+ * The names say which house style they were derived from; they are not a claim
+ * that a journal requires or supplies these colours. Each note says so, because
+ * a palette labelled "Nature" that a user believes is a submission requirement
+ * is a small lie the product would be telling on every figure.
  */
 
 export type PaletteKind = "qualitative" | "sequential" | "diverging"
@@ -88,7 +93,7 @@ export const PALETTE_DEFINITIONS: PaletteDefinition[] = [
     colours: ["#E64B35", "#4DBBD5", "#00A087", "#3C5488", "#F39B7F", "#8491B4", "#91D1C2", "#DC0000", "#7E6148"],
     cvdSafe: false,
     print: false,
-    note: "The saturated set Nature figures tend to use.",
+    note: "ggsci npg, derived from Nature figures. Not an official journal palette.",
   },
   {
     id: "science",
@@ -97,7 +102,7 @@ export const PALETTE_DEFINITIONS: PaletteDefinition[] = [
     colours: ["#3B4992", "#EE0000", "#008B45", "#631879", "#008280", "#BB0021", "#5F559B", "#A20056"],
     cvdSafe: false,
     print: false,
-    note: "Deep primaries, close to the AAAS journal style.",
+    note: "ggsci aaas, derived from Science figures. Not an official journal palette.",
   },
   {
     id: "lancet",
@@ -106,7 +111,7 @@ export const PALETTE_DEFINITIONS: PaletteDefinition[] = [
     colours: ["#00468B", "#ED0000", "#42B540", "#0099B4", "#925E9F", "#FDAF91", "#AD002A", "#ADB6B6"],
     cvdSafe: false,
     print: false,
-    note: "Clinical-trial figures; strong blue and red for two arms.",
+    note: "ggsci lancet. Strong blue and red, which suits two trial arms.",
   },
   {
     id: "nejm",
@@ -115,7 +120,7 @@ export const PALETTE_DEFINITIONS: PaletteDefinition[] = [
     colours: ["#BC3C29", "#0072B5", "#E18727", "#20854E", "#7876B1", "#6F99AD", "#FFDC91", "#EE4C97"],
     cvdSafe: false,
     print: false,
-    note: "Warm-led set matching New England Journal of Medicine figures.",
+    note: "ggsci nejm, derived from NEJM figures. Not an official journal palette.",
   },
   {
     id: "jama",
@@ -124,16 +129,19 @@ export const PALETTE_DEFINITIONS: PaletteDefinition[] = [
     colours: ["#374E55", "#DF8F44", "#00A1D5", "#B24745", "#79AF97", "#6A6599", "#80796B"],
     cvdSafe: false,
     print: true,
-    note: "Muted and well separated in greyscale as well as colour.",
+    note: "ggsci jama. Muted, and well separated in greyscale as well as colour.",
   },
   {
-    id: "cell",
-    label: "Cell",
+    // Renamed from "Cell": these are a common ggpubr example triplet extended
+    // with a complementary set, not a journal-derived palette. Naming it after
+    // a journal implied a provenance it does not have.
+    id: "teal-amber",
+    label: "Teal and amber",
     kind: "qualitative",
     colours: ["#00AFBB", "#E7B800", "#FC4E07", "#3D5A80", "#98C1D9", "#EE6C4D", "#293241"],
     cvdSafe: false,
     print: false,
-    note: "Teal-and-amber pairing common in cell-biology figures.",
+    note: "High-contrast trio common in cell-biology figures; no journal source.",
   },
   {
     id: "prism",
@@ -142,7 +150,7 @@ export const PALETTE_DEFINITIONS: PaletteDefinition[] = [
     colours: ["#4E79A7", "#F28E2B", "#E15759", "#76B7B2", "#59A14F", "#EDC948", "#B07AA1", "#FF9DA7"],
     cvdSafe: false,
     print: false,
-    note: "The familiar GraphPad-style ordering, for figures that must match older panels.",
+    note: "Tableau 10, the ordering GraphPad figures often use. For matching older panels.",
   },
 
   /* ── Qualitative: general purpose ────────────────────────────────────── */
@@ -273,6 +281,7 @@ const ALIASES: Record<string, string> = {
   Grayscale: "grayscale",
   Greyscale: "grayscale",
   Notes9: "notes9",
+  cell: "teal-amber",
 }
 
 export function getPalette(id: string | null | undefined): PaletteDefinition {

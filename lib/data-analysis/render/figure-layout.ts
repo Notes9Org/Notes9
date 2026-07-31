@@ -49,6 +49,12 @@ export interface FigureLayout {
   exportWidth: number
   /** Shared title above the whole figure, e.g. "Figure 2". */
   title: string
+  /**
+   * The author's caption. Null uses the one composed from the panels' own
+   * titles. Once written it is never regenerated over, the same rule the single
+   * figure's legend follows.
+   */
+  caption: string | null
 }
 
 /* ── Presets ───────────────────────────────────────────────────────────────*/
@@ -168,6 +174,7 @@ export function layoutFromPreset(preset: LayoutPreset, name = "Figure 1"): Figur
     gap: 16,
     exportWidth: 1600,
     title: "",
+    caption: null,
   }
 }
 

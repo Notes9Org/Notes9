@@ -273,7 +273,16 @@ export function PlotlyChart({
                     <MenuItem onClick={() => { it.onClick(); setMenu(null); setOpenSub(null) }}>
                       <span className="flex w-full items-center gap-2">
                         <span className="w-3 shrink-0 text-[var(--n9-accent,#965034)]">{it.checked ? "✓" : ""}</span>
-                        <span className="flex-1 truncate">{it.label}</span>
+                        {/* The selected item is bold as well as ticked: a tick
+                            is easy to miss in a long list, weight is not. */}
+                        <span
+                          className={
+                            "flex-1 truncate" +
+                            (it.checked ? " font-semibold text-[var(--n9-accent,#965034)]" : "")
+                          }
+                        >
+                          {it.label}
+                        </span>
                         {it.hint && <span className="shrink-0 text-[10px] text-muted-foreground/70">{it.hint}</span>}
                       </span>
                     </MenuItem>

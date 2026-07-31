@@ -445,7 +445,16 @@ function PalettePicker({
                     )}
                   </span>
                   <span className="flex items-center gap-1">
-                    <span className="truncate text-[11px] font-medium">{p.label}</span>
+                    <span
+                      className={cn(
+                        "truncate text-[11px]",
+                        current.id === p.id
+                          ? "font-semibold text-[var(--n9-accent,#965034)]"
+                          : "font-medium",
+                      )}
+                    >
+                      {p.label}
+                    </span>
                     {p.cvdSafe && (
                       <span
                         title="Colour-blind safe"
@@ -1641,7 +1650,9 @@ export function DataAnalysisWorkspace({
         </div>
         {railSection !== "all" && (
           <p className="mt-1 text-[11px] text-muted-foreground/80">
-            {RAIL_SECTIONS.find((sec) => sec.id === railSection)?.label}
+            <span className="font-semibold text-foreground">
+              {RAIL_SECTIONS.find((sec) => sec.id === railSection)?.label}
+            </span>
             <span className="mx-1 opacity-50">·</span>
             <button type="button" onClick={() => setRailSection("all")} className="underline underline-offset-2 hover:text-foreground">
               show all
@@ -1656,7 +1667,9 @@ export function DataAnalysisWorkspace({
           {CHART_TYPES.map((t) => (
             <button key={t.id} onClick={() => setChartType(t.id)} title={t.label}
               className={cn("flex flex-col items-center gap-1 rounded-lg border p-2 text-[10px] transition-colors",
-                chartType === t.id ? "border-[var(--n9-accent,#965034)]/40 bg-[var(--n9-accent,#965034)]/10 text-[var(--n9-accent,#965034)]" : "border-border text-muted-foreground hover:text-foreground")}>
+                chartType === t.id
+                  ? "border-[var(--n9-accent,#965034)]/40 bg-[var(--n9-accent,#965034)]/10 font-semibold text-[var(--n9-accent,#965034)]"
+                  : "border-border text-muted-foreground hover:text-foreground")}>
               <t.Icon className="h-4 w-4" weight="bold" /> {t.label}
             </button>
           ))}
@@ -1760,9 +1773,6 @@ export function DataAnalysisWorkspace({
           <Field label="Y unit"><Input className="h-9" value={yUnit} onChange={(e) => setYUnit(e.target.value)} /></Field>
         </div>
       </div>
-      <div id="cs-palette" className={cn(!showRail("cs-palette") && "!hidden", "scroll-mt-3 rounded-lg transition-shadow", flashId === "cs-palette" && "ring-2 ring-[var(--n9-accent,#965034)]/40")}>
-        <PalettePicker value={paletteName} onChange={setPaletteName} />
-      </div>
       <div id="cs-toggles" className={cn(!showRail("cs-toggles") && "!hidden", "scroll-mt-3 flex flex-col gap-2.5 border-t border-border pt-3 text-sm transition-shadow", flashId === "cs-toggles" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
         <Toggle label="Show markers" checked={markers} onChange={setMarkers} />
         <Toggle label="Log X axis" checked={xLog} onChange={setXLog} />
@@ -1856,6 +1866,9 @@ export function DataAnalysisWorkspace({
           </div>
         </div>
       )}
+      <div id="cs-palette" className={cn(!showRail("cs-palette") && "!hidden", "scroll-mt-3 rounded-lg transition-shadow", flashId === "cs-palette" && "ring-2 ring-[var(--n9-accent,#965034)]/40")}>
+        <PalettePicker value={paletteName} onChange={setPaletteName} />
+      </div>
 
       {/* Axes */}
       <div id="cs-axes" className={cn(!showRail("cs-axes") && "!hidden", "scroll-mt-3 border-t border-border pt-3 transition-shadow", flashId === "cs-axes" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>

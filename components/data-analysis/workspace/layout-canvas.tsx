@@ -318,12 +318,34 @@ export function LayoutCanvas({
         })}
       </div>
 
-      {caption && (
+      {(caption || layout.caption) && (
         <Reveal className="rounded-xl border border-border/50 bg-card px-4 py-3">
-          <p className="text-[12px] text-muted-foreground">Draft caption</p>
-          <p className="mt-1 select-text text-[13.5px] leading-[1.7] text-foreground/85">
-            {caption}
-          </p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[12px] text-muted-foreground">
+              {layout.caption ? "Caption (edited)" : "Draft caption"}
+            </p>
+            {layout.caption && (
+              <button
+                type="button"
+                onClick={() => onChange({ ...layout, caption: null })}
+                title="Go back to the caption composed from the panels"
+                className="rounded-md px-1.5 py-1 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                Reset
+              </button>
+            )}
+          </div>
+          {/* Editable for the same reason the single figure's legend is: the
+              composed wording is a starting point, not the product's opinion
+              about how the author should write. */}
+          <textarea
+            value={layout.caption ?? caption}
+            onChange={(e) => onChange({ ...layout, caption: e.target.value })}
+            rows={Math.min(6, Math.max(2, Math.ceil((layout.caption ?? caption).length / 90)))}
+            aria-label="Figure caption"
+            spellCheck
+            className="mt-1 w-full resize-y rounded-lg border border-transparent bg-transparent px-2 py-1.5 text-[13.5px] leading-[1.7] text-foreground/85 outline-none transition-colors hover:border-border/60 focus:border-[var(--n9-accent)]/50 focus:bg-background"
+          />
         </Reveal>
       )}
     </div>
