@@ -23,7 +23,6 @@ import {
   GridFour,
   Copy,
   SlidersHorizontal,
-  PencilSimpleLine,
   PushPin,
   Sigma,
   TrendUp,
@@ -1091,9 +1090,22 @@ export function DataAnalysisWorkspace({
   }, [fullscreen])
 
   const [railSection, setRailSection] = useState<string>("all")
+  /**
+   * Sections that belong to the same idea.
+   *
+   * Titles and typography are both "text on the figure"; palette and per-series
+   * styling are both "colour". Splitting them made two jump-bar entries for one
+   * decision. They keep their own blocks and headings — this only makes them
+   * filter together, so choosing Text shows both, adjacent, with everything
+   * between hidden.
+   */
+  const RAIL_GROUPS: Record<string, string> = useMemo(
+    () => ({ "cs-type-face": "cs-title", "cs-series": "cs-palette" }),
+    [],
+  )
   const showRail = useCallback(
-    (id: string) => railSection === "all" || railSection === id,
-    [railSection],
+    (id: string) => railSection === "all" || railSection === (RAIL_GROUPS[id] ?? id),
+    [railSection, RAIL_GROUPS],
   )
 
   /** Used by the chart's context menu to open the rail at a given section. */
@@ -2369,13 +2381,11 @@ function PaneHeader({ Icon, title, children }: { Icon: React.ComponentType<{ cla
 const RAIL_SECTIONS: { id: string; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "cs-type", label: "Chart type", Icon: FnIcon },
   { id: "cs-data", label: "Data and axes assignment", Icon: TableIcon },
-  { id: "cs-title", label: "Titles and labels", Icon: TextAa },
-  { id: "cs-palette", label: "Palette", Icon: Palette },
+  { id: "cs-title", label: "Text — titles, labels and typography", Icon: TextAa },
+  { id: "cs-palette", label: "Colour — palette and series style", Icon: Palette },
   { id: "cs-toggles", label: "Display", Icon: SlidersHorizontal },
   { id: "cs-error", label: "Error bars and annotations", Icon: TrendUp },
-  { id: "cs-series", label: "Series style", Icon: PencilSimpleLine },
   { id: "cs-axes", label: "Axes", Icon: Ruler },
-  { id: "cs-type-face", label: "Typography", Icon: TextAa },
   { id: "cs-export", label: "Export figure", Icon: DownloadSimple },
 ]
 

@@ -3,11 +3,15 @@
 /**
  * The analysis tab strip.
  *
- * Mirrors the literature reader's tabs on purpose: same pill indicator, same
- * hover-to-reveal close control, same scrolling behaviour. Two surfaces that
- * both mean "several things open at once" should not need to be learned twice.
+ * Tabs sit ON a hairline rather than inside a grey tray, and the active one
+ * paints over that rule so it reads as continuous with the panel beneath it.
+ * That is the difference between a tab and a chip: a chip floats above the
+ * work, a tab is the front edge of it.
  *
- * A tab shows a dot when its result is stale — the spec or the data moved and
+ * Each tab carries its index, because that is what the figure panels and the
+ * draft caption call this analysis — the number is a reference, not decoration.
+ *
+ * A tab shows a dot when its result is stale: the spec or the data moved and
  * the engine has not caught up. Without it, switching to a tab shows numbers
  * that describe a spec the user has already edited, which is the quietest way
  * for a stale p-value to be read as current.
@@ -22,22 +26,6 @@ import type { AnalysisPipeline } from "@/lib/data-analysis/workspace/pipelines"
 import { EASE_OUT } from "./motion"
 
 const INDICATOR_SPRING = { type: "spring", stiffness: 500, damping: 40, mass: 0.7 } as const
-
-function TabPill() {
-  const reduce = useReducedMotion()
-  if (reduce) {
-    return (
-      <span className="pointer-events-none absolute inset-0 rounded-md border border-border/50 bg-background shadow-sm" />
-    )
-  }
-  return (
-    <motion.span
-      layoutId="analysis-pipeline-pill"
-      className="pointer-events-none absolute inset-0 rounded-md border border-border/50 bg-background shadow-sm"
-      transition={INDICATOR_SPRING}
-    />
-  )
-}
 
 export function PipelineTabs({
   pipelines,
@@ -87,67 +75,111 @@ export function PipelineTabs({
   }
 
   return (
-    <div className={cn("flex items-stretch gap-1 rounded-lg bg-muted/25 p-1", className)}>
+    <div
+      className={cn(
+        // A rail on a hairline, not a tray. The old chip-in-a-grey-box reads as
+        // a toolbar from a decade ago; sitting the tabs ON a rule is what every
+        // modern editor does, and it lets the active tab feel attached to the
+        // work below it rather than floating above it.
+        "flex items-end gap-2 border-b border-border/60",
+        className
+      )}
+    >
       <div
         ref={stripRef}
         role="tablist"
         aria-label="Open analyses"
-        className="no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scroll-smooth"
+        className="no-scrollbar -mb-px flex min-w-0 flex-1 items-end gap-1 overflow-x-auto scroll-smooth pb-0"
       >
-        {pipelines.map((p) => {
+        {pipelines.map((p, index) => {
           const active = !layoutActive && p.id === activeId
+          const isEditing = editing === p.id
           return (
             <div
               key={p.id}
               data-tab={p.id}
-              className="group relative flex shrink-0 items-center"
+              role="tab"
+              aria-selected={active}
+              tabIndex={active ? 0 : -1}
+              onClick={() => onActivate(p.id)}
+              onDoubleClick={() => {
+                setEditing(p.id)
+                setDraft(p.name)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault()
+                  onActivate(p.id)
+                }
+              }}
+              title={`${p.name}${p.stale ? " — not yet computed for the current spec" : ""}`}
+              className={cn(
+                "group relative flex max-w-[240px] shrink-0 cursor-pointer items-center gap-2 rounded-t-lg border border-b-0 px-3 py-2 text-[13px] transition-colors",
+                active
+                  ? "border-border/60 bg-card text-foreground"
+                  : "border-transparent text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+              )}
             >
-              <button
-                role="tab"
-                aria-selected={active}
-                onClick={() => onActivate(p.id)}
-                onDoubleClick={() => {
-                  setEditing(p.id)
-                  setDraft(p.name)
-                }}
-                title={`${p.name}${p.stale ? " — not yet computed for the current spec" : ""}`}
+              {/* The active tab's underline is painted over the container rule,
+                  which is what makes it read as one continuous surface with the
+                  panel beneath rather than a chip sitting on top of it. */}
+              {active && (
+                <span className="absolute inset-x-0 -bottom-px h-px bg-card" aria-hidden />
+              )}
+              {!reduce && active && (
+                <motion.span
+                  layoutId="analysis-pipeline-accent"
+                  className="absolute inset-x-2 top-0 h-[2px] rounded-full bg-[var(--n9-accent,#965034)]"
+                  transition={INDICATOR_SPRING}
+                />
+              )}
+              {reduce && active && (
+                <span className="absolute inset-x-2 top-0 h-[2px] rounded-full bg-[var(--n9-accent,#965034)]" />
+              )}
+
+              {/* An index chip rather than an icon: it is what the figure
+                  panels and the caption call this analysis. */}
+              <span
                 className={cn(
-                  "relative flex max-w-[220px] items-center gap-1.5 rounded-md px-3 py-1.5 text-[13px] transition-colors",
-                  active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                  "grid size-[18px] shrink-0 place-items-center rounded-[5px] text-[10px] font-semibold tabular-nums transition-colors",
+                  active
+                    ? "bg-[var(--n9-accent,#965034)]/12 text-[var(--n9-accent,#965034)]"
+                    : "bg-muted text-muted-foreground/70"
                 )}
               >
-                {active && <TabPill />}
-                <span className="relative z-[1] flex items-center gap-1.5">
-                  {p.stale && (
-                    <span
-                      aria-hidden
-                      title="Not yet computed for the current spec"
-                      className="size-1.5 shrink-0 rounded-full bg-amber-500"
-                    />
-                  )}
-                  {editing === p.id ? (
-                    <input
-                      ref={inputRef}
-                      value={draft}
-                      onChange={(e) => setDraft(e.target.value)}
-                      onBlur={commit}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") commit()
-                        if (e.key === "Escape") setEditing(null)
-                        e.stopPropagation()
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                      aria-label="Analysis name"
-                      className="w-[140px] rounded-sm bg-background px-1 text-[13px] outline-none ring-1 ring-[var(--n9-accent)]/40"
-                    />
-                  ) : (
-                    <span className="truncate font-medium">{p.name}</span>
-                  )}
-                </span>
-              </button>
+                {index + 1}
+              </span>
 
-              {/* Not a nested <button>: this sits inside the tab's button, and
-                  nesting one is invalid HTML that React will refuse to hydrate. */}
+              {isEditing ? (
+                <input
+                  ref={inputRef}
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onBlur={commit}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") commit()
+                    if (e.key === "Escape") setEditing(null)
+                    e.stopPropagation()
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  aria-label="Analysis name"
+                  className="w-[150px] rounded-sm bg-background px-1 text-[13px] outline-none ring-1 ring-[var(--n9-accent,#965034)]/40"
+                />
+              ) : (
+                <span className="truncate font-medium">{p.name}</span>
+              )}
+
+              {p.stale && !isEditing && (
+                <span
+                  aria-hidden
+                  title="Not yet computed for the current spec"
+                  className="size-1.5 shrink-0 rounded-full bg-amber-500"
+                />
+              )}
+
+              {/* Inline, not overlaid. The close control used to sit absolutely
+                  over the label, which cramped long names and made the tab a
+                  minefield to click. */}
               <span
                 role="button"
                 tabIndex={0}
@@ -165,16 +197,31 @@ export function PipelineTabs({
                     onClose(p.id)
                   }
                 }}
-                className="absolute right-1 z-[2] cursor-pointer rounded p-0.5 text-muted-foreground/60 opacity-0 transition-opacity hover:bg-muted hover:text-foreground focus:opacity-100 group-hover:opacity-100"
+                className={cn(
+                  "-mr-1 grid size-5 shrink-0 cursor-pointer place-items-center rounded transition-all",
+                  "text-muted-foreground/50 opacity-0 hover:bg-muted hover:text-foreground focus:opacity-100 group-hover:opacity-100",
+                  active && "opacity-60"
+                )}
               >
                 <X className="size-3" />
               </span>
             </div>
           )
         })}
+
+        {/* New sits at the end of the strip, where a new tab actually appears. */}
+        <button
+          type="button"
+          onClick={onNew}
+          aria-label="New analysis"
+          title="New analysis"
+          className="mb-1 grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <Plus className="size-3.5" />
+        </button>
       </div>
 
-      <div className="flex shrink-0 items-center gap-0.5 border-l border-border/50 pl-1">
+      <div className="mb-1 flex shrink-0 items-center gap-0.5">
         {activeId && (
           <>
             <IconButton
@@ -193,9 +240,6 @@ export function PipelineTabs({
             </IconButton>
           </>
         )}
-        <IconButton label="New analysis" onClick={onNew}>
-          <Plus className="size-3.5" />
-        </IconButton>
         {onOpenLayout && (
           <button
             type="button"
@@ -203,15 +247,14 @@ export function PipelineTabs({
             aria-pressed={layoutActive}
             title="Compose a multi-panel figure from these analyses"
             className={cn(
-              "relative ml-0.5 flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12.5px] font-medium transition-colors",
-              layoutActive ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+              "ml-1 flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12.5px] font-medium transition-colors",
+              layoutActive
+                ? "bg-[var(--n9-accent,#965034)]/12 text-[var(--n9-accent,#965034)]"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
           >
-            {layoutActive && <TabPill />}
-            <span className="relative z-[1] flex items-center gap-1.5">
-              <GridFour className="size-3.5" weight={layoutActive ? "fill" : "regular"} />
-              Figure layout
-            </span>
+            <GridFour className="size-3.5" weight={layoutActive ? "fill" : "regular"} />
+            Figure layout
           </button>
         )}
       </div>
