@@ -29,7 +29,7 @@ import { motion, useReducedMotion } from "framer-motion"
 import { CaretDown, CaretLeft, CaretRight, CaretUp } from "@phosphor-icons/react/ssr"
 
 import { cn } from "@/lib/utils"
-import { EASE_OUT } from "./motion"
+import { PANEL_SPRING } from "./motion"
 
 export type DockSide = "left" | "right" | "bottom"
 
@@ -254,9 +254,9 @@ export function Dock({
 }) {
   const reduce = useReducedMotion()
   const vertical = side !== "bottom"
-  const transition = reduce
-    ? { duration: 0.12 }
-    : ({ duration: 0.26, ease: EASE_OUT } as const)
+  // The house spring, so a dock opening feels like every other panel in the
+  // product rather than like a different component library.
+  const transition = reduce ? { duration: 0.12 } : PANEL_SPRING
 
   const CollapseIcon =
     side === "left" ? CaretLeft : side === "right" ? CaretRight : CaretDown

@@ -30,8 +30,14 @@ import { cn } from "@/lib/utils"
 /** Expo-style ease-out: decisive arrival, no overshoot. */
 export const EASE_OUT = [0.22, 1, 0.36, 1] as const
 
-/** For panels that slide. Damped hard enough not to overshoot. */
-export const PANEL_SPRING = { type: "spring", stiffness: 420, damping: 40, mass: 0.8 } as const
+/**
+ * For panels that slide.
+ *
+ * The platform's own spring (components/literature-reviews/motion.tsx), so a
+ * dock here and a panel there move with the same weight. Damped hard enough
+ * not to overshoot, because a surface carrying numbers should not wobble.
+ */
+export const PANEL_SPRING = { type: "spring", stiffness: 320, damping: 30, mass: 0.8 } as const
 
 /** Fade and lift. The workhorse for cards and result blocks. */
 export function Reveal({

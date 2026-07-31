@@ -1985,27 +1985,17 @@ export function DataAnalysisWorkspace({
     <div className="flex flex-col gap-3">
       {derivedSpec && (
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={addStatsSheet}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-[12.5px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          >
-            <TableIcon className="h-3.5 w-3.5" /> Add to sheet
-          </button>
-          <button
-            type="button"
-            onClick={copyStats}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-[12.5px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          >
-            <Copy className="h-3.5 w-3.5" /> Copy
-          </button>
-          <button
-            type="button"
-            onClick={exportStats}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-[12.5px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          >
-            <DownloadSimple className="h-3.5 w-3.5" /> Export (.xlsx)
-          </button>
+          {/* The platform's own Button, the same one Import / Save / Templates
+              use, rather than three hand-rolled lookalikes. */}
+          <Button variant="outline" size="sm" onClick={addStatsSheet}>
+            <TableIcon className="mr-1.5 h-4 w-4" /> Add to sheet
+          </Button>
+          <Button variant="outline" size="sm" onClick={copyStats}>
+            <Copy className="mr-1.5 h-4 w-4" /> Copy
+          </Button>
+          <Button variant="outline" size="sm" onClick={exportStats}>
+            <DownloadSimple className="mr-1.5 h-4 w-4" /> Export (.xlsx)
+          </Button>
           <span className="text-[11.5px] text-muted-foreground/70">
             Every number here came from the engine, not from this page.
           </span>

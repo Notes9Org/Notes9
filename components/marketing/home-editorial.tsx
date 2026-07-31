@@ -310,15 +310,32 @@ export function ChainSection() {
                       initial={reduceMotion ? false : { height: 0, opacity: 0 }}
                       animate={{ height: "auto", opacity: 1 }}
                       exit={reduceMotion ? undefined : { height: 0, opacity: 0 }}
-                      transition={{ duration: 0.42, ease: EASE }}
+                      /* Height and opacity on separate curves. Fading the
+                         content in over the same 0.42s as the box meant the
+                         screenshot was already fully visible while the row was
+                         still growing, which reads as a pop rather than an
+                         open. Opacity now trails the height on the way in and
+                         leads it on the way out, so the box is always the thing
+                         you watch move. */
+                      transition={{
+                        height: { duration: 0.44, ease: EASE },
+                        opacity: { duration: 0.24, ease: EASE, delay: isOpen ? 0.14 : 0 },
+                      }}
                       className="overflow-hidden"
+                      style={{ willChange: "height" }}
                     >
-                      <div className="grid gap-8 pb-10 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] lg:gap-12 lg:pl-[3.25rem]">
+                      <motion.div
+                        initial={reduceMotion ? false : { y: 8 }}
+                        animate={{ y: 0 }}
+                        exit={reduceMotion ? undefined : { y: 4 }}
+                        transition={{ duration: 0.36, ease: EASE, delay: isOpen ? 0.08 : 0 }}
+                        className="grid gap-8 pb-10 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] lg:gap-12 lg:pl-[3.25rem]"
+                      >
                         <p className="max-w-sm text-[15px] leading-7 text-muted-foreground">
                           {row.body}
                         </p>
                         <BrowserFrame src={row.shot} alt={row.alt} />
-                      </div>
+                      </motion.div>
                     </motion.div>
                   )}
                 </AnimatePresence>
