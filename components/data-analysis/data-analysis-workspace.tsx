@@ -21,6 +21,8 @@ import {
   Waveform,
   GridNine,
   GridFour,
+  Copy,
+  SlidersHorizontal,
   Sigma,
   TrendUp,
   CaretLeft,
@@ -80,6 +82,11 @@ import { Dock, DockTab, useDockLayout } from "@/components/data-analysis/workspa
 import { LayoutCanvas } from "@/components/data-analysis/workspace/layout-canvas"
 import { PipelineTabs } from "@/components/data-analysis/workspace/pipeline-tabs"
 import { ResultsCard } from "@/components/data-analysis/workspace/results-card"
+import {
+  RESULTS_SHEET_NAME,
+  buildResultsSheet,
+  resultsSheetColumnWidths,
+} from "@/lib/data-analysis/render/results-sheet"
 import {
   LAYOUT_PRESETS,
   assignPanel,
@@ -331,6 +338,9 @@ type ChartType =
   | "heatmap" | "corrMatrix"
   | "volcano" | "blandAltman" | "roc" | "km" | "forest"
   | "scatter3d" | "mesh3d"
+
+/** The order chart groups are offered in, in the picker and the context menu. */
+const CHART_GROUP_ORDER: string[] = ["XY", "Categorical", "Distribution", "Matrix", "Scientific", "3D"]
 
 const CHART_TYPES: { id: ChartType; label: string; Icon: React.ComponentType<{ className?: string; weight?: "bold" | "fill" }>; group: string }[] = [
   { id: "line", label: "Line", Icon: ChartLine, group: "XY" },
@@ -617,6 +627,8 @@ export function DataAnalysisWorkspace({
   }, [visiblePhases, phase])
 
   /* chart config */
+  /** The author's figure legend. Null means "use the generated wording". */
+  const [caption, setCaption] = useState<string | null>(null)
   const [chartType, setChartType] = useState<ChartType>("line")
   const [xKey, setXKey] = useState("")
   const [yKeys, setYKeys] = useState<string[]>([])
@@ -695,7 +707,7 @@ export function DataAnalysisWorkspace({
         {
           chartType, xKey, yKeys, zKey, sizeKey, title, subtitle, xLabel, xUnit, yLabel, yUnit,
           yLog, showGrid, showLegend, legendPos, paletteName, errorMode, fontFamily,
-          titleSize, axisTitleSize, xMin, xMax, yMin, yMax, nticks, seriesStyles,
+          titleSize, axisTitleSize, xMin, xMax, yMin, yMax, nticks, seriesStyles, caption,
         },
         specTable,
         { fileName: sheetFileName }
@@ -707,7 +719,7 @@ export function DataAnalysisWorkspace({
   }, [
     chartType, xKey, yKeys, zKey, sizeKey, title, subtitle, xLabel, xUnit, yLabel, yUnit,
     yLog, showGrid, showLegend, legendPos, paletteName, errorMode, fontFamily,
-    titleSize, axisTitleSize, xMin, xMax, yMin, yMax, nticks, seriesStyles,
+    titleSize, axisTitleSize, xMin, xMax, yMin, yMax, nticks, seriesStyles, caption,
     specTable, sheetFileName,
   ])
 
@@ -1027,6 +1039,13 @@ export function DataAnalysisWorkspace({
   // Right-click "Edit ▸ <element>" (or double-click an element) opens the
   // inspector scrolled to that section; a clicked series selects itself.
   const [flashId, setFlashId] = useState<string | null>(null)
+  /** Scroll a rail section into view and flash it, so the jump is legible. */
+  const jumpToSection = useCallback((id: string) => {
+    setFlashId(id)
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" })
+    window.setTimeout(() => setFlashId((current) => (current === id ? null : current)), 1400)
+  }, [])
+
   const onEditElement = useCallback(
     (el: ChartElement, detail?: { series?: string }) => {
       const section: Record<ChartElement, string> = {
@@ -1066,6 +1085,12 @@ export function DataAnalysisWorkspace({
     [table.columns, table.rows, chartType, activeY, xKey, title],
   )
 
+  // The statistics actions are defined below (they need the derived spec), so
+  // the menu reaches them through refs rather than forcing a declaration order.
+  const addStatsSheetRef = useRef<() => void>(() => undefined)
+  const copyStatsRef = useRef<() => void>(() => undefined)
+  const exportStatsRef = useRef<() => void>(() => undefined)
+
   const chartMenuGroups = useMemo<ChartMenuGroup[]>(
     () => [
       {
@@ -1077,16 +1102,62 @@ export function DataAnalysisWorkspace({
           { label: "Which statistical test?", onClick: () => askCatalyst("stats") },
         ],
       },
-      { label: "Change chart type", items: CHART_TYPES.map((t) => ({ label: t.label, onClick: () => setChartType(t.id) })) },
+      // Chart types grouped the way the picker groups them, so the menu and the
+      // rail teach the same organisation rather than two different ones.
+      ...CHART_GROUP_ORDER.filter((g) => CHART_TYPES.some((t) => t.group === g)).map((group) => ({
+        label: `Chart: ${group}`,
+        items: CHART_TYPES.filter((t) => t.group === group).map((t) => ({
+          label: chartType === t.id ? `${t.label}  ✓` : t.label,
+          onClick: () => setChartType(t.id),
+        })),
+      })),
+      {
+        label: "Error bars",
+        items: ERROR_BAR_OPTIONS.map((o) => ({
+          label: `${o.id === "none" ? "None" : ERROR_BAR_LABEL[o.id]}${errorMode === o.id ? "  ✓" : ""}`,
+          onClick: () => setErrorMode(o.id),
+        })),
+      },
       {
         label: "Palette",
         items: PALETTE_DEFINITIONS.map((p) => ({
-          label: p.cvdSafe ? `${p.label} (colour-blind safe)` : p.label,
+          label: `${p.label}${p.cvdSafe ? " · colour-blind safe" : ""}${paletteName === p.id ? "  ✓" : ""}`,
           onClick: () => setPaletteName(p.id),
         })),
       },
+      {
+        label: "Show",
+        items: [
+          { label: `Gridlines${showGrid ? "  ✓" : ""}`, onClick: () => setShowGrid(!showGrid) },
+          { label: `Legend${showLegend ? "  ✓" : ""}`, onClick: () => setShowLegend(!showLegend) },
+          { label: `Markers${markers ? "  ✓" : ""}`, onClick: () => setMarkers(!markers) },
+          { label: `Log Y axis${yLog ? "  ✓" : ""}`, onClick: () => setYLog(!yLog) },
+          { label: `Individual points${showPoints ? "  ✓" : ""}`, onClick: () => setShowPoints(!showPoints) },
+        ],
+      },
+      {
+        label: "Jump to settings",
+        items: RAIL_SECTIONS.map((sec) => ({
+          label: sec.label,
+          onClick: () => {
+            setDockOpen("right", true)
+            jumpToSection(sec.id)
+          },
+        })),
+      },
+      {
+        label: "Statistics",
+        items: [
+          { label: "Add statistics to the sheet", onClick: () => addStatsSheetRef.current() },
+          { label: "Copy statistics", onClick: () => copyStatsRef.current() },
+          { label: "Export statistics (.xlsx)", onClick: () => exportStatsRef.current() },
+        ],
+      },
     ],
-    [askCatalyst],
+    [
+      askCatalyst, chartType, errorMode, paletteName, showGrid, showLegend, markers, yLog,
+      showPoints, jumpToSection, setDockOpen,
+    ],
   )
 
   const hasPlot = activeY.length > 0 && plotData.length > 0
@@ -1263,7 +1334,7 @@ export function DataAnalysisWorkspace({
   const buildConfig = () => ({
     chartType, xKey, yKeys, zKey, sizeKey, title, xLabel, xUnit, yLabel, yUnit, yLog, showGrid, showLegend, markers, paletteName,
     seriesStyles, xMin, xMax, yMin, yMax, nticks, fontFamily, titleSize, axisTitleSize,
-    errorMode, showPoints, subtitle, legendPos, hlines, vlines, chartH,
+    errorMode, showPoints, subtitle, legendPos, hlines, vlines, chartH, caption,
     plate: { format: plateModel.format, originRow: plateModel.originRow, originCol: plateModel.originCol, roleOverrides: plateModel.roleOverrides, annOverrides: plateModel.annOverrides },
     phase,
   })
@@ -1300,6 +1371,7 @@ export function DataAnalysisWorkspace({
     if (typeof c.errorMode === "string") setErrorMode(c.errorMode)
     if (typeof c.showPoints === "boolean") setShowPoints(c.showPoints)
     if (typeof c.subtitle === "string") setSubtitle(c.subtitle)
+    setCaption(typeof c.caption === "string" ? c.caption : null)
     if (typeof c.legendPos === "string") setLegendPos(c.legendPos)
     if (typeof c.hlines === "string") setHlines(c.hlines)
     if (typeof c.vlines === "string") setVlines(c.vlines)
@@ -1454,6 +1526,31 @@ export function DataAnalysisWorkspace({
 
   const chartSettings = (
     <div className="space-y-4">
+      {/* Section jump bar.
+          The rail is eight sections deep, and the ones people reach for most
+          (axes, typography, export) were the furthest down. This puts every
+          section one click away instead of one scroll, and highlights the one
+          you land on so the jump is legible rather than a silent scroll. */}
+      <div className="sticky top-0 z-10 -mx-4 mb-1 flex items-center gap-0.5 overflow-x-auto border-b border-border/50 bg-card/95 px-4 py-1.5 backdrop-blur-sm">
+        {RAIL_SECTIONS.map((sec) => (
+          <button
+            key={sec.id}
+            type="button"
+            onClick={() => jumpToSection(sec.id)}
+            title={sec.label}
+            aria-label={sec.label}
+            className={cn(
+              "shrink-0 rounded-md p-1.5 transition-colors",
+              flashId === sec.id
+                ? "bg-[var(--n9-accent,#965034)]/12 text-[var(--n9-accent,#965034)]"
+                : "text-muted-foreground/70 hover:bg-muted hover:text-foreground",
+            )}
+          >
+            <sec.Icon className="h-3.5 w-3.5" />
+          </button>
+        ))}
+      </div>
+
       {/* Bind the selected sheet cell → chart title / axis / series.
           Two clearly-separated intents: use the cell's TEXT as a title, or
           plot its COLUMN as data. */}
@@ -1509,7 +1606,7 @@ export function DataAnalysisWorkspace({
           </motion.div>
         )}
       </AnimatePresence>
-      <div>
+      <div id="cs-type" className={cn("scroll-mt-3 rounded-lg transition-shadow", flashId === "cs-type" && "ring-2 ring-[var(--n9-accent,#965034)]/40")}>
         <SectionLabel><FnIcon className="h-3.5 w-3.5" /> Chart type</SectionLabel>
         <div className="grid grid-cols-4 gap-1.5">
           {CHART_TYPES.map((t) => (
@@ -1551,7 +1648,7 @@ export function DataAnalysisWorkspace({
           </NativeSelect>
         </Field>
       )}
-      <div id="cs-title" className={cn("space-y-4 rounded-lg transition-shadow", flashId === "cs-title" && "ring-2 ring-[var(--n9-accent,#965034)]/40")}>
+      <div id="cs-title" className={cn("scroll-mt-3 space-y-4 rounded-lg transition-shadow", flashId === "cs-title" && "ring-2 ring-[var(--n9-accent,#965034)]/40")}>
         <Field label="Chart title"><Input className="h-9" value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
         <Field label="Subtitle"><Input className="h-9" value={subtitle} onChange={(e) => setSubtitle(e.target.value)} placeholder="optional" /></Field>
         <div className="grid grid-cols-2 gap-2">
@@ -1562,7 +1659,7 @@ export function DataAnalysisWorkspace({
         </div>
       </div>
       <PalettePicker value={paletteName} onChange={setPaletteName} />
-      <div id="cs-toggles" className={cn("flex flex-col gap-2.5 border-t border-border pt-3 text-sm transition-shadow", flashId === "cs-toggles" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
+      <div id="cs-toggles" className={cn("scroll-mt-3 flex flex-col gap-2.5 border-t border-border pt-3 text-sm transition-shadow", flashId === "cs-toggles" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
         <Toggle label="Show markers" checked={markers} onChange={setMarkers} />
         <Toggle label="Log Y axis" checked={yLog} onChange={setYLog} />
         <Toggle label="Gridlines" checked={showGrid} onChange={setShowGrid} />
@@ -1583,7 +1680,7 @@ export function DataAnalysisWorkspace({
       </div>
 
       {/* Error bars, individual points & reference lines (Prism-style) */}
-      <div className="flex flex-col gap-2.5 border-t border-border pt-3">
+      <div id="cs-error" className={cn("flex scroll-mt-3 flex-col gap-2.5 border-t border-border pt-3 transition-shadow", flashId === "cs-error" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
         <SectionLabel><TrendUp className="h-3.5 w-3.5" /> Error &amp; annotations</SectionLabel>
         <Field label="Error bars (aggregate replicate rows sharing an X value)">
           <NativeSelect value={errorMode} onChange={(v) => setErrorMode(v as ErrorMode)}>
@@ -1609,7 +1706,7 @@ export function DataAnalysisWorkspace({
 
       {/* Per-series style inspector */}
       {activeY.length > 0 && (
-        <div id="cs-series" className={cn("border-t border-border pt-3 transition-shadow", flashId === "cs-series" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
+        <div id="cs-series" className={cn("scroll-mt-3 border-t border-border pt-3 transition-shadow", flashId === "cs-series" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
           <SectionLabel><Palette className="h-3.5 w-3.5" /> Series style</SectionLabel>
           {activeY.length > 1 && (
             <div className="mb-2.5 flex flex-wrap gap-1">
@@ -1656,7 +1753,7 @@ export function DataAnalysisWorkspace({
       )}
 
       {/* Axes */}
-      <div id="cs-axes" className={cn("border-t border-border pt-3 transition-shadow", flashId === "cs-axes" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
+      <div id="cs-axes" className={cn("scroll-mt-3 border-t border-border pt-3 transition-shadow", flashId === "cs-axes" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
         <SectionLabel><Ruler className="h-3.5 w-3.5" /> Axes</SectionLabel>
         <div className="grid grid-cols-2 gap-2">
           <Field label="X min"><Input className="h-9" value={xMin} onChange={(e) => setXMin(e.target.value)} placeholder="auto" /></Field>
@@ -1670,7 +1767,7 @@ export function DataAnalysisWorkspace({
       </div>
 
       {/* Fonts */}
-      <div className="border-t border-border pt-3">
+      <div id="cs-type-face" className={cn("scroll-mt-3 border-t border-border pt-3 transition-shadow", flashId === "cs-type-face" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
         <SectionLabel><TextAa className="h-3.5 w-3.5" /> Typography</SectionLabel>
         <Field label="Font family">
           <NativeSelect value={fontFamily} onChange={setFontFamily}>
@@ -1684,7 +1781,7 @@ export function DataAnalysisWorkspace({
       </div>
 
       {/* Publication export — same advanced menu as the chart header */}
-      <div className="border-t border-border pt-3">
+      <div id="cs-export" className={cn("scroll-mt-3 border-t border-border pt-3 transition-shadow", flashId === "cs-export" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
         <SectionLabel><DownloadSimple className="h-3.5 w-3.5" /> Export figure</SectionLabel>
         <ExportMenu variant="solid" disabled={!hasPlot} defaultName={title} onExport={runExport} getPng={getChartPng} getCanvasSize={getChartSize} onSaveToLibrary={() => setSaveChartOpen(true)} />
         <p className="mt-1.5 text-[11px] text-muted-foreground">Pick a format, type any DPI, and copy or save straight to your data files.</p>
@@ -1701,13 +1798,105 @@ export function DataAnalysisWorkspace({
    * panel stays beneath it because it carries per-column summaries and the
    * exploratory tables the engine result does not replace.
    */
+  /**
+   * Put the statistics into the spreadsheet as their own sheet.
+   *
+   * The result stops being something you can only look at: it becomes cells you
+   * can sort, format, paste and export with the data it came from. Written as a
+   * new sheet rather than over the data, and regenerated on every press, so it
+   * is a report and never an input.
+   */
+  const addStatsSheet = useCallback(() => {
+    if (!derivedSpec) return
+    try {
+      const wb = snapshotToXlsxWorkbook(liveRef.current)
+      const rows = buildResultsSheet(derivedSpec, engineResult, { analysisName: title })
+      const ws = XLSX.utils.aoa_to_sheet(rows)
+      ws["!cols"] = resultsSheetColumnWidths(rows)
+      // A fresh name each time, so pressing it twice does not overwrite the
+      // sheet the user may already have annotated.
+      let name = RESULTS_SHEET_NAME
+      let n = 2
+      while (wb.SheetNames.includes(name)) name = `${RESULTS_SHEET_NAME} ${n++}`
+      XLSX.utils.book_append_sheet(wb, ws, name)
+      loadSnapshot(buildSpreadsheetWorkbookSnapshot(sheetFileName, wb))
+      toast.success(`Statistics added to the sheet as "${name}"`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not add the statistics sheet")
+    }
+  }, [derivedSpec, engineResult, title, sheetFileName, loadSnapshot])
+
+  /** The statistics as tab-separated text, for pasting anywhere. */
+  const copyStats = useCallback(async () => {
+    if (!derivedSpec) return
+    const rows = buildResultsSheet(derivedSpec, engineResult, { analysisName: title })
+    const text = rows.map((r) => r.map((c) => (c === null ? "" : String(c))).join("\t")).join("\n")
+    try {
+      await navigator.clipboard.writeText(text)
+      toast.success("Statistics copied")
+    } catch {
+      toast.error("The clipboard is blocked; use Export instead")
+    }
+  }, [derivedSpec, engineResult, title])
+
+  /** The statistics as their own workbook, alongside the data they describe. */
+  const exportStats = useCallback(() => {
+    if (!derivedSpec) return
+    const wb = XLSX.utils.book_new()
+    const dataAoa: (string | number)[][] = [
+      table.columns,
+      ...table.rows.map((r) => table.columns.map((c) => (r[c] ?? "") as string | number)),
+    ]
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(dataAoa), "Data")
+    const rows = buildResultsSheet(derivedSpec, engineResult, { analysisName: title })
+    const ws = XLSX.utils.aoa_to_sheet(rows)
+    ws["!cols"] = resultsSheetColumnWidths(rows)
+    XLSX.utils.book_append_sheet(wb, ws, RESULTS_SHEET_NAME)
+    XLSX.writeFile(wb, `${(title || "analysis").replace(/[^\w-]+/g, "-")}-statistics.xlsx`)
+  }, [derivedSpec, engineResult, title, table])
+
+  useEffect(() => {
+    addStatsSheetRef.current = addStatsSheet
+    copyStatsRef.current = copyStats
+    exportStatsRef.current = exportStats
+  }, [addStatsSheet, copyStats, exportStats])
+
   const statsCanvas = (
     <div className="flex flex-col gap-3">
+      {derivedSpec && (
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={addStatsSheet}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-[12.5px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <TableIcon className="h-3.5 w-3.5" /> Add to sheet
+          </button>
+          <button
+            type="button"
+            onClick={copyStats}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-[12.5px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <Copy className="h-3.5 w-3.5" /> Copy
+          </button>
+          <button
+            type="button"
+            onClick={exportStats}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-[12.5px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <DownloadSimple className="h-3.5 w-3.5" /> Export (.xlsx)
+          </button>
+          <span className="text-[11.5px] text-muted-foreground/70">
+            Every number here came from the engine, not from this page.
+          </span>
+        </div>
+      )}
       {derivedSpec && (
         <ResultsCard
           spec={derivedSpec}
           result={engineResult}
           computing={engineBusy}
+          onEditCaption={setCaption}
         />
       )}
       {engineNote && !engineBusy && (
@@ -2038,6 +2227,18 @@ function PaneHeader({ Icon, title, children }: { Icon: React.ComponentType<{ cla
     </div>
   )
 }
+/** The rail's sections, in the order they appear, for the jump bar. */
+const RAIL_SECTIONS: { id: string; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
+  { id: "cs-type", label: "Chart type", Icon: FnIcon },
+  { id: "cs-title", label: "Titles and labels", Icon: TextAa },
+  { id: "cs-toggles", label: "Display", Icon: SlidersHorizontal },
+  { id: "cs-error", label: "Error bars and annotations", Icon: TrendUp },
+  { id: "cs-series", label: "Series style", Icon: Palette },
+  { id: "cs-axes", label: "Axes", Icon: Ruler },
+  { id: "cs-type-face", label: "Typography", Icon: TextAa },
+  { id: "cs-export", label: "Export figure", Icon: DownloadSimple },
+]
+
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/80">{children}</div>
 }

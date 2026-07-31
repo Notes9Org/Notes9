@@ -8,6 +8,7 @@ import {
   Copy,
   Check,
   Info,
+  ArrowCounterClockwise,
 } from "@phosphor-icons/react/ssr"
 
 import { cn } from "@/lib/utils"
@@ -72,6 +73,7 @@ export function ResultsCard({
   computing,
   className,
   onShowProvenance,
+  onEditCaption,
   flush,
 }: {
   spec: AnalysisSpec
@@ -79,6 +81,8 @@ export function ResultsCard({
   computing?: boolean
   className?: string
   onShowProvenance?: () => void
+  /** Edit the legend. Null resets it to the wording generated from the result. */
+  onEditCaption?: (caption: string | null) => void
   /** Set when a dock already supplies the card surface and title. */
   flush?: boolean
 }) {
@@ -87,7 +91,13 @@ export function ResultsCard({
 
   const test = result?.test ?? null
   const fit = result?.curveFit ?? null
-  const legend = result ? draftFigureLegend(spec, result) : ""
+  // The author's wording wins over the generated one, always.
+  const isCustomCaption = typeof spec.figure.caption === "string" && spec.figure.caption.length > 0
+  const legend = isCustomCaption
+    ? spec.figure.caption!
+    : result
+      ? draftFigureLegend(spec, result)
+      : ""
   // The interval quoted must be the one the spec asked for. Printing "95% CI"
   // beside an analysis declared at alpha = 0.01 would misreport the engine.
   const ciPct = `${+((1 - spec.analysis.alpha) * 100).toFixed(4)}%`
@@ -269,27 +279,56 @@ export function ResultsCard({
         </div>
       )}
 
-      {/* 4 — the legend, ready to paste. This is the last mile to the paper. */}
+      {/* 4 — the legend, ready to paste. This is the last mile to the paper,
+             so it is fully editable: the generated wording is a starting point,
+             not the product's opinion about how the author should write. Once
+             edited it is stored on the spec and never regenerated over. */}
       {legend && (
         <div className="mt-4 border-t border-border/40 px-5 py-4">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-[12px] text-muted-foreground">Draft figure legend</p>
-            <button
-              type="button"
-              onClick={copyLegend}
-              className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              {copied ? (
-                <Check className="size-3.5 text-emerald-600" weight="bold" />
-              ) : (
-                <Copy className="size-3.5" />
+            <p className="text-[12px] text-muted-foreground">
+              {isCustomCaption ? "Figure legend (edited)" : "Draft figure legend"}
+            </p>
+            <div className="flex items-center gap-1">
+              {isCustomCaption && onEditCaption && (
+                <button
+                  type="button"
+                  onClick={() => onEditCaption(null)}
+                  title="Go back to the wording generated from the result"
+                  className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <ArrowCounterClockwise className="size-3.5" />
+                  Reset
+                </button>
               )}
-              {copied ? "Copied" : "Copy"}
-            </button>
+              <button
+                type="button"
+                onClick={copyLegend}
+                className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                {copied ? (
+                  <Check className="size-3.5 text-emerald-600" weight="bold" />
+                ) : (
+                  <Copy className="size-3.5" />
+                )}
+                {copied ? "Copied" : "Copy"}
+              </button>
+            </div>
           </div>
-          <p className="mt-2 select-text text-[13.5px] leading-[1.7] text-foreground/85">
-            {legend}
-          </p>
+          {onEditCaption ? (
+            <textarea
+              value={legend}
+              onChange={(e) => onEditCaption(e.target.value)}
+              rows={Math.min(8, Math.max(2, Math.ceil(legend.length / 90)))}
+              aria-label="Figure legend"
+              spellCheck
+              className="mt-2 w-full resize-y rounded-lg border border-transparent bg-transparent px-2 py-1.5 text-[13.5px] leading-[1.7] text-foreground/85 outline-none transition-colors hover:border-border/60 focus:border-[var(--n9-accent)]/50 focus:bg-background"
+            />
+          ) : (
+            <p className="mt-2 select-text text-[13.5px] leading-[1.7] text-foreground/85">
+              {legend}
+            </p>
+          )}
         </div>
       )}
 

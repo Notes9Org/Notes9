@@ -35,6 +35,7 @@ export type SpecMutation =
   /* Figure — style. These never trigger a recompute (Law 5). */
   | { kind: "figure.setKind"; value: FigureKind }
   | { kind: "figure.setTitle"; value: string | null }
+  | { kind: "figure.setCaption"; value: string | null }
   | { kind: "figure.setSubtitle"; value: string | null }
   | { kind: "figure.setPalette"; value: AnalysisSpec["figure"]["palette"] }
   | { kind: "figure.setLegend"; show: boolean; position?: AnalysisSpec["figure"]["legendPosition"] }
@@ -130,6 +131,8 @@ export function describeMutation(m: SpecMutation): string {
       return `Chart type set to ${m.value}`
     case "figure.setTitle":
       return m.value ? `Title set to "${m.value}"` : "Title cleared"
+    case "figure.setCaption":
+      return m.value ? "Caption edited" : "Caption reset to the generated wording"
     case "figure.setSubtitle":
       return m.value ? `Subtitle set to "${m.value}"` : "Subtitle cleared"
     case "figure.setPalette":
@@ -219,6 +222,8 @@ export function applyMutation(spec: AnalysisSpec, m: SpecMutation): AnalysisSpec
       return { ...spec, figure: { ...figure, kind: m.value } }
     case "figure.setTitle":
       return { ...spec, figure: { ...figure, title: m.value } }
+    case "figure.setCaption":
+      return { ...spec, figure: { ...figure, caption: m.value } }
     case "figure.setSubtitle":
       return { ...spec, figure: { ...figure, subtitle: m.value } }
     case "figure.setPalette":

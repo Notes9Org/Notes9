@@ -456,6 +456,16 @@ export const FigureSpec = z.object({
   kind: FigureKind,
   title: z.string().max(512).nullable().default(null),
   subtitle: z.string().max(512).nullable().default(null),
+  /**
+   * The figure legend.
+   *
+   * Null means "use the one the engine's numbers generate". Once the user
+   * writes their own it is stored here and never regenerated over, which is the
+   * same sticky-manual-edit rule the AI patch path follows: a caption someone
+   * has worded is a decision, and silently rewriting it when the analysis
+   * changes would be the product overruling its author.
+   */
+  caption: z.string().max(4000).nullable().default(null),
   x: AxisSpec,
   y: AxisSpec,
   /** Secondary axis, when a series is assigned to the right. */

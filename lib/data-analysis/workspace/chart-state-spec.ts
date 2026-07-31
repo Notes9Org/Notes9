@@ -83,6 +83,8 @@ export interface ChartState {
   yMin?: string | number | null
   yMax?: string | number | null
   nticks?: string | number | null
+  /** The author's figure legend; null uses the generated wording. */
+  caption?: string | null
   seriesStyles?: Record<
     string,
     { color?: string; width?: number; dash?: string; marker?: string; size?: number; opacity?: number; axis?: "y" | "y2" }
@@ -164,6 +166,7 @@ export function specFromChartState(
     kind: CHART_TYPE_TO_FIGURE_KIND[state.chartType] ?? "bar-scatter-error",
     title: state.title,
     subtitle: state.subtitle || null,
+    caption: state.caption ?? null,
     errorBars: state.errorMode,
     palette: state.paletteName,
     showGridlines: state.showGrid ?? true,
