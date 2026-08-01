@@ -10,9 +10,15 @@ over SSE (see `docs/AGENT_STREAM_API.md`, `lib/catalyst-client.ts`).
 Package manager is **pnpm**.
 
 - `pnpm dev` — dev server (http://localhost:3000)
-- `pnpm typecheck` — `tsc --noEmit` (also runs as `prebuild`)
+- `pnpm typecheck` — `tsc --noEmit` (also runs as `prebuild`, so `pnpm build` typechecks first)
 - `pnpm test` — vitest run · `pnpm test:watch` — watch mode
+- `pnpm vitest run path/to/file.test.ts` — one file · add `-t "test name"` for one test
 - `pnpm lint` — eslint · `pnpm build` — production build
+
+**After switching branches, `rm -rf .next` before trusting `pnpm typecheck`.** Next
+generates route types into `.next/types/validator.ts`; they survive a checkout and then
+fail on routes that only exist on the other branch. The errors name real-looking paths
+and are pure noise — a stale-artifact false positive, not a source error.
 
 Run `pnpm typecheck` **and** `pnpm test` before claiming a change is done. `tsc`/tests
 passing ≠ runtime-correct — trace the data flow, or use `/browse` to verify UI behavior.
@@ -28,6 +34,10 @@ passing ≠ runtime-correct — trace the data flow, or use `/browse` to verify 
 - **Keep the "orphan" Catalyst files** (`catalyst-page` / `chat` / `messages` /
   `sidebar` / `greeting`) and the project-scoped sidebar nav exclusions — both are
   intentional, not dead code. Don't remove them in refactors/dead-code sweeps.
+  The corollary matters when debugging: **the live chat is `components/layout/right-sidebar.tsx`**,
+  which has its own inline implementation. `components/catalyst/chat.tsx` is imported
+  nowhere, so editing it changes nothing a user sees — including the chat-history panel,
+  which the live sidebar reimplements rather than sharing.
 - **Skip `components/marketing/` and `app/(marketing)/`** in audits and refactors.
 
 ## Database
@@ -39,6 +49,17 @@ RLS/auth-check-heavy patterns and repeated `auth.getUser()` (connection-slot exh
 have crashed the DB before. See `docs/rls-quick-reference.md` and
 `docs/row-level-security-policies.md`.
 
+## Shipping
+
+**`main` is PR-protected — a direct push is rejected** (`GH013: Changes must be made
+through a pull request`), no matter how green the branch is. Land work by pushing a
+branch and opening a PR; "push to main" is never a mechanical option.
+
+`scripts/` migration numbers are not globally unique — long-lived branches have
+independently claimed the same numbers, so a filename collision on merge is expected
+and is resolved by renumbering the *incoming* branch's files, never migrations already
+applied in production.
+
 ## Where to look (don't duplicate these here)
 
 - `README.md` — setup + quickstart
@@ -47,3 +68,6 @@ have crashed the DB before. See `docs/rls-quick-reference.md` and
 - `docs/DATA_MODEL.md` · `docs/GLOSSARY.md` — schema & domain terms
 - `docs/CATALYST_INTEGRATION.md` · `docs/AGENT_STREAM_API.md` — backend + SSE contracts
 - `docs/ENVIRONMENT_VARIABLES.md` — config
+- `.cursor/rules/*.mdc` + `.cursor/skills/` — marketing-campaign authoring only, all
+  glob-scoped to `docs/marketing/**` with `alwaysApply: false`. They never apply to
+  product code; ignore them unless the task is marketing copy.
