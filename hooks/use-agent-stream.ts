@@ -7,12 +7,15 @@ import type {
   DonePayload,
   RagChunk,
 } from '@/lib/agent-stream-types';
-import { normalizeSourceNames } from '@/lib/agent-stream-types';
+import { normalizeSourceNames } from '@/lib/agent-stream-types'
+import { byokRequestHeaders } from '@/lib/byok-preference';
 import type { AllowedMimeType } from '@/lib/attachment-types';
 import { buildNotes9AgentRequestBody } from '@/lib/notes9-agent-request';
+import { entityFromPath } from '@/lib/entity-from-path';
 import { splitSseBuffer, parseSseDataJson } from '@/lib/sse-event-blocks';
 import { recordRumEvent } from '@/lib/rum';
 import { AnalyticsEvent } from '@/lib/analytics/events';
+import { notifyCatalyst } from '@/lib/catalyst-launch';
 import {
   extractSseTokenPiece,
   maskCiteTokensForStream,
@@ -294,9 +297,23 @@ export interface AgentStreamState {
   runId: string | null;
   /** Set when the agent is paused awaiting a tool-permission decision. */
   pendingPermission: PermissionPrompt | null;
+  /** Structured clarification question from the `clarify` SSE event — the
+   * agent ended its turn asking the user something instead of streaming an
+   * answer. Cleared on each new send. */
+  clarify: { question: string; options: string[] } | null;
   donePayload: DonePayload | null;
   error: string | null;
   isStreaming: boolean;
+  /** Estimated prompt tokens vs the model context window for the current
+   * turn (`context_usage` events). Drives the small usage circle in the chat
+   * composer. Survives across turns within a session; reset on session switch. */
+  contextUsage: ContextUsage | null;
+}
+
+export interface ContextUsage {
+  usedTokens: number;
+  windowTokens: number;
+  percent: number;
 }
 
 function normalizeNotes9AgentResponse(raw: Record<string, unknown>): DonePayload {
@@ -455,9 +472,11 @@ export function useAgentStream() {
     liveCitationCount: 0,
     runId: null,
     pendingPermission: null,
+    clarify: null,
     donePayload: null,
     error: null,
     isStreaming: false,
+    contextUsage: null,
   });
 
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -511,7 +530,7 @@ export function useAgentStream() {
       // locally so the caller persists the FINAL manifest, not the render-time null.
       let collectedManifest: CitationsManifest | null = null;
 
-      setState({
+      setState((s) => ({
         thinkingSteps: [],
         currentStage: null,
         currentThinkingMessage: null,
@@ -531,10 +550,14 @@ export function useAgentStream() {
         liveCitationCount: 0,
         runId: null,
         pendingPermission: null,
+        clarify: null,
         donePayload: null,
         error: null,
         isStreaming: true,
-      });
+        // Carry the last known context usage across turns so the ring doesn't
+        // blank out between a send and the next context_usage event.
+        contextUsage: s.contextUsage,
+      }));
 
       let donePayload: DonePayload | null = null;
       let streamError: string | null = null;
@@ -575,8 +598,22 @@ export function useAgentStream() {
             'Content-Type': 'application/json',
             Accept: 'text/event-stream',
             Authorization: `Bearer ${token}`,
+            // BYOK: user's own Anthropic key (Settings) — runs on their account
+            ...byokRequestHeaders(),
           },
-          body: JSON.stringify(buildNotes9AgentRequestBody(params)),
+          body: JSON.stringify(
+            buildNotes9AgentRequestBody({
+              ...params,
+              // What the user has open on screen when they hit send (URL → entity).
+              // Explicit @-tags in `params` always win; the server enforces the
+              // @-tags > focus > recency precedence and ignores focus unless
+              // NOTES9_FOCUS_ENVELOPE is on, so this is always safe to send.
+              focus:
+                entityFromPath(
+                  typeof window !== 'undefined' ? window.location.pathname : null,
+                ) ?? undefined,
+            }),
+          ),
           signal,
         });
 
@@ -652,6 +689,29 @@ export function useAgentStream() {
             switch (ev) {
               case 'ping':
                 break;
+              case 'context_usage': {
+                const p = (payload ?? {}) as Record<string, unknown>;
+                const used = typeof p.used_tokens === 'number' ? p.used_tokens : null;
+                const windowTokens =
+                  typeof p.window_tokens === 'number' && p.window_tokens > 0
+                    ? p.window_tokens
+                    : null;
+                if (used !== null && windowTokens !== null) {
+                  const percent =
+                    typeof p.percent === 'number'
+                      ? p.percent
+                      : (used * 100) / windowTokens;
+                  setState((s) => ({
+                    ...s,
+                    contextUsage: {
+                      usedTokens: used,
+                      windowTokens,
+                      percent: Math.max(0, Math.min(100, percent)),
+                    },
+                  }));
+                }
+                break;
+              }
               case 'run_started': {
                 // Carries the cancel handle for this run. Only emitted when the
                 // backend HITL flag is on; absent ⇒ the Stop button stays hidden.
@@ -1113,6 +1173,34 @@ export function useAgentStream() {
                 }
                 break;
               }
+              case 'notice': {
+                // Contained info strip (NOT an assistant reply) — e.g. a requested
+                // capability is unavailable for the selected model. Rendered by the
+                // CATALYST_NOTICE_EVENT listener in the Catalyst chat.
+                const message =
+                  payload && typeof (payload as { message?: string }).message === 'string'
+                    ? (payload as { message: string }).message
+                    : '';
+                if (message) notifyCatalyst(message);
+                break;
+              }
+              case 'clarify': {
+                // Structured clarification question — emitted instead of
+                // token-streaming the question. The turn still ends with `done`.
+                const question =
+                  payload && typeof (payload as { question?: string }).question === 'string'
+                    ? (payload as { question: string }).question
+                    : '';
+                const options = Array.isArray((payload as { options?: unknown })?.options)
+                  ? ((payload as { options: unknown[] }).options).filter(
+                      (o): o is string => typeof o === 'string'
+                    )
+                  : [];
+                if (question) {
+                  setState((s) => ({ ...s, clarify: { question, options } }));
+                }
+                break;
+              }
               case 'error': {
                 flushTokens();
                 const msg =
@@ -1263,9 +1351,11 @@ export function useAgentStream() {
       liveCitationCount: 0,
       runId: null,
       pendingPermission: null,
+      clarify: null,
       donePayload: null,
       error: null,
       isStreaming: false,
+      contextUsage: null,
     });
     runIdRef.current = null;
   }, []);

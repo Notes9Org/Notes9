@@ -6,6 +6,7 @@ import {
 import { verifyBearerToken } from "@/lib/verify-bearer-token";
 import { enforceLimits, checkBodyBytes, checkHistory, checkQueryChars, checkAttachments } from '@/lib/limits/guards';
 import { tryCatalystBaseUrl } from '@/lib/catalyst-client';
+import type { PathEntity } from '@/lib/entity-from-path';
 
 export const maxDuration = 300;
 // Node runtime buffers a passed-through ReadableStream until a flush threshold
@@ -16,6 +17,15 @@ export const maxDuration = 300;
 export const runtime = 'edge';
 
 const NOTES9_API_BASE = tryCatalystBaseUrl();
+
+function byokHeaders(request: Request): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const h of ['x-byok-provider', 'x-byok-api-key', 'x-byok-model']) {
+    const v = request.headers.get(h);
+    if (v) out[h] = v;
+  }
+  return out;
+}
 
 export async function POST(req: Request) {
   // Pre-parse: Content-Length ceiling before the body is buffered.
@@ -72,6 +82,13 @@ export async function POST(req: Request) {
     literature_sources: Array.isArray(rest.literature_sources)
       ? (rest.literature_sources as Notes9LiteratureSource[])
       : undefined,
+    // What the user has open on screen (URL → entity). Same silent-drop trap as
+    // attachments/literature above — must be named here or it never reaches the
+    // backend FocusEnvelope.
+    focus:
+      rest.focus && typeof rest.focus === 'object' && !Array.isArray(rest.focus)
+        ? (rest.focus as PathEntity)
+        : undefined,
   });
   const token = headerToken;
 
@@ -123,6 +140,9 @@ export async function POST(req: Request) {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
+          // BYOK: pass the user's own provider key through untouched (never
+          // logged here; the AI service keeps it request-scoped only).
+          ...byokHeaders(req),
         },
         body: JSON.stringify(upstreamBody),
       });

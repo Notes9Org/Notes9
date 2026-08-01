@@ -54,7 +54,7 @@ import {
   parseLiteratureAssistantStoredContent,
   serializeLiteratureAssistantStoredContent,
 } from '@/lib/literature-assistant-stored';
-import { useAgentStream, type AgentFileAttachment, type AgentLiteratureSource, type CitationsManifest, type CitationsManifestEntry, type AgentGraph } from '@/hooks/use-agent-stream';
+import { useAgentStream, type AgentFileAttachment, type AgentLiteratureSource, type CitationsManifest, type CitationsManifestEntry, type AgentGraph, type ContextUsage } from '@/hooks/use-agent-stream';
 import { useResolvedCitationTitles, type ResolvableCite } from '@/hooks/use-resolved-citation-titles';
 import { isPlaceholderTitle } from '@/lib/citation-title';
 import { resolveLiteratureTitle } from '@/lib/literature-title';
@@ -610,6 +610,39 @@ interface SidebarChatMessageItemProps {
   onSetEditingMessageId: (id: string | null) => void;
   onSaveEdit: (messageId: string, newContent: string) => Promise<void>;
   onRegenerate: (() => Promise<void>) | undefined;
+}
+
+/**
+ * Cursor-style context ring: how much of the model's context window the
+ * conversation currently occupies (from `context_usage` SSE events). Hidden
+ * until the first event arrives; amber past 80%.
+ */
+function ContextUsageRing({ usage }: { usage: ContextUsage | null }) {
+  if (!usage) return null;
+  const pct = Math.max(0, Math.min(100, usage.percent));
+  const r = 5.5;
+  const c = 2 * Math.PI * r;
+  return (
+    <div
+      className="flex items-center px-1"
+      title={`Context: ${Math.round(pct)}% used (~${Math.round(usage.usedTokens / 1000)}k of ${Math.round(usage.windowTokens / 1000)}k tokens). Older turns are summarized automatically when the limit nears.`}
+    >
+      <svg width="16" height="16" viewBox="0 0 16 16" className="-rotate-90 shrink-0">
+        <circle cx="8" cy="8" r={r} fill="none" strokeWidth="2" className="stroke-border" />
+        <circle
+          cx="8"
+          cy="8"
+          r={r}
+          fill="none"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeDasharray={c}
+          strokeDashoffset={c * (1 - pct / 100)}
+          className={pct >= 80 ? 'stroke-amber-500' : 'stroke-[var(--n9-accent)]'}
+        />
+      </svg>
+    </div>
+  );
 }
 
 /** Height above which a completed assistant message collapses behind Show more. */
@@ -2297,7 +2330,9 @@ export function RightSidebar({
     resizeInput();
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // `overrideText` lets programmatic senders (ClarifyCard answer/skip) reuse
+  // the exact composer send path with text that isn't in the input box.
+  const handleSubmit = async (e: React.FormEvent, overrideText?: string) => {
     e.preventDefault();
     // Drop second-and-later fires until the first send has finished kicking
     // off its async work (createSession, then streaming start). Without this,
@@ -2341,7 +2376,7 @@ export function RightSidebar({
     if (agentMode === 'literature' && isLiteratureRoute) {
       if (!canSendLiterature || isLoading || isUploading) return;
     } else if (
-      (!input.trim() && attachments.length === 0) ||
+      (!overrideText?.trim() && !input.trim() && attachments.length === 0) ||
       isLoading ||
       isUploading
     ) {
@@ -2354,7 +2389,10 @@ export function RightSidebar({
     const text =
       agentMode === 'literature' && isLiteratureRoute
         ? literaturePlain
-        : (getCatalystComposerPlainText(inputRef.current).trim() || input).trim();
+        : (
+            overrideText ??
+            (getCatalystComposerPlainText(inputRef.current).trim() || input)
+          ).trim();
     const mentionsBefore =
       agentMode === 'literature' && isLiteratureRoute && litEl
         ? getMentionsFromLiteratureEditable(litEl)
@@ -4079,6 +4117,7 @@ export function RightSidebar({
               {micListening && <VoiceWaveform getWaveformData={getWaveformData} />}
             </div>
 
+            <ContextUsageRing usage={agentStream.contextUsage} />
             {isLoading ? (
               <Button
                 type="button"
@@ -5166,6 +5205,28 @@ export function RightSidebar({
                             options={literatureAgentStream.clarify.options}
                             onAnswer={handleLiteratureClarifyAnswer}
                             onSkip={handleLiteratureClarifySkip}
+                          />
+                        </div>
+                      )}
+                      {agentMode === 'notes9' &&
+                        !agentStream.isStreaming &&
+                        agentStream.clarify && (
+                        <div className="flex w-full justify-start pl-10">
+                          <ClarifyCard
+                            question={agentStream.clarify.question}
+                            options={agentStream.clarify.options}
+                            onAnswer={(answer) =>
+                              void handleSubmit(
+                                { preventDefault: () => {} } as React.FormEvent,
+                                answer
+                              )
+                            }
+                            onSkip={() =>
+                              void handleSubmit(
+                                { preventDefault: () => {} } as React.FormEvent,
+                                'Proceed with your best judgment.'
+                              )
+                            }
                           />
                         </div>
                       )}

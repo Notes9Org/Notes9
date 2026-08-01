@@ -4,6 +4,14 @@ import { useState, useEffect, useRef } from "react"
 import { useRouter } from 'next/navigation'
 import { useTheme } from "next-themes"
 import { createClient } from "@/lib/supabase/client"
+import {
+  AI_MODEL_OPTIONS,
+  DEFAULT_AI_MODEL,
+  getPreferredAiModel,
+  setPreferredAiModel,
+  type AiModelKey,
+} from "@/lib/ai-model-preference"
+import { getByokKey, setByokKey } from "@/lib/byok-preference"
 import { useAuthUser } from "@/components/auth/auth-provider"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -109,6 +117,9 @@ export default function SettingsPage(): ReactNode {
   const user = useAuthUser();
   const router = useRouter()
   const { theme, setTheme } = useTheme()
+  const [aiModel, setAiModel] = useState<AiModelKey | null>(null)
+  const [byokKeyDraft, setByokKeyDraft] = useState("")
+  const [byokSaved, setByokSaved] = useState(false)
   const { toast } = useToast()
   const [profile, setProfile] = useState<any>(null)
   const [firstName, setFirstName] = useState("")
@@ -124,6 +135,8 @@ export default function SettingsPage(): ReactNode {
 
   useEffect(() => {
     setMounted(true)
+    setAiModel(getPreferredAiModel())
+    setByokSaved(Boolean(getByokKey()))
   }, [])
 
   useEffect(() => {
@@ -559,6 +572,83 @@ export default function SettingsPage(): ReactNode {
                       <Monitor className="mr-2 size-4" />
                       System
                     </Button>
+                  </div>
+                ) : null}
+              </SettingsRow>
+
+              <SettingsRow
+                title="AI model"
+                description="The model that runs your Catalyst tasks — usage credits scale with the model's cost"
+              >
+                {mounted ? (
+                  <div className="flex flex-wrap gap-2">
+                    {AI_MODEL_OPTIONS.map((option) => {
+                      const selected = (aiModel ?? DEFAULT_AI_MODEL) === option.key
+                      return (
+                        <Button
+                          key={option.key}
+                          variant={selected ? "default" : "outline"}
+                          className="h-auto flex-col items-start px-3 py-2 text-sm"
+                          onClick={() => {
+                            setAiModel(option.key)
+                            setPreferredAiModel(option.key)
+                          }}
+                        >
+                          <span className="font-medium">{option.label}</span>
+                          <span className={selected ? "text-xs font-normal opacity-80" : "text-xs font-normal text-muted-foreground"}>
+                            {option.description}
+                          </span>
+                        </Button>
+                      )
+                    })}
+                  </div>
+                ) : null}
+              </SettingsRow>
+
+              <SettingsRow
+                title="Your Anthropic API key"
+                description="Optional — run Catalyst on your own Anthropic account. No credit limits apply; the key stays in this browser and is never stored on our servers"
+              >
+                {mounted ? (
+                  <div className="flex w-full max-w-md flex-col gap-2">
+                    <div className="flex gap-2">
+                      <Input
+                        type="password"
+                        placeholder="sk-ant-…"
+                        value={byokKeyDraft}
+                        onChange={(e) => setByokKeyDraft(e.target.value)}
+                        className="h-10 font-mono text-sm"
+                        autoComplete="off"
+                      />
+                      <Button
+                        className="h-10 text-sm"
+                        disabled={byokKeyDraft.trim().length > 0 && byokKeyDraft.trim().length < 16}
+                        onClick={() => {
+                          setByokKey(byokKeyDraft.trim() || null)
+                          setByokSaved(Boolean(byokKeyDraft.trim()))
+                        }}
+                      >
+                        Save
+                      </Button>
+                      {byokSaved ? (
+                        <Button
+                          variant="outline"
+                          className="h-10 text-sm"
+                          onClick={() => {
+                            setByokKey(null)
+                            setByokKeyDraft("")
+                            setByokSaved(false)
+                          }}
+                        >
+                          Remove
+                        </Button>
+                      ) : null}
+                    </div>
+                    {byokSaved ? (
+                      <p className="text-xs text-muted-foreground">
+                        Active — your tasks run on your Anthropic account and don&apos;t use credits.
+                      </p>
+                    ) : null}
                   </div>
                 ) : null}
               </SettingsRow>
