@@ -18,7 +18,7 @@
 
 import { parseSpec, type AnalysisSpec, type FigureKind, type TestKind } from "@/lib/data-analysis/spec/analysis-spec"
 import type { Table } from "@/lib/data-analysis/engine/resolver"
-import { defaultGroupColumn, inferDesign, inferRoles, legalTests } from "@/lib/data-analysis/semantic/infer"
+import { defaultGroupColumn, inferDesign, inferRoles, legalTests, type TestCapability } from "@/lib/data-analysis/semantic/infer"
 import { hashTable } from "./bootstrap"
 
 /** Every chart type the workspace offers, mapped onto a figure kind. */
@@ -55,6 +55,9 @@ export const FIGURE_KIND_TO_CHART_TYPE: Record<string, string> = Object.fromEntr
 /** The workspace's error-bar setting; already the spec's own vocabulary. */
 type ErrorMode = AnalysisSpec["figure"]["errorBars"]
 
+/** The statistics slice, in the spec's own vocabulary, as ErrorMode above. */
+type Analysis = AnalysisSpec["analysis"]
+
 export interface ChartState {
   chartType: string
   xKey: string
@@ -90,6 +93,17 @@ export interface ChartState {
     string,
     { color?: string; width?: number; dash?: string; marker?: string; size?: number; opacity?: number; axis?: "y" | "y2" }
   >
+  /**
+   * The statistics slice. Every field is optional and every one, when absent,
+   * keeps inferring exactly as before: `test` from the chart type, the rest
+   * from the schema's own defaults. Set one and the choice is deliberate, so
+   * it survives the next derivation instead of being recomputed away.
+   */
+  test?: TestKind
+  postHoc?: Analysis["postHoc"]
+  alpha?: number
+  tails?: Analysis["tails"]
+  referenceLevel?: string | null
 }
 
 function num(value: unknown): number | null {
@@ -111,7 +125,10 @@ const POINT_SHAPES = new Set(["circle", "square", "diamond", "triangle", "cross"
  * whatever was last selected. The capability matrix still has the final say, so
  * a chart can never request a test this data cannot support.
  */
-function testForChart(chartType: string, draft: AnalysisSpec, table: Table): TestKind {
+const isLegal = (test: TestKind, capabilities: TestCapability[]) =>
+  capabilities.find((c) => c.test === test)?.legal === true
+
+function testForChart(chartType: string, capabilities: TestCapability[]): TestKind {
   const wanted: TestKind | null =
     chartType === "km"
       ? "kaplan-meier"
@@ -123,8 +140,7 @@ function testForChart(chartType: string, draft: AnalysisSpec, table: Table): Tes
             ? null // decided by the design below
             : null
 
-  const capabilities = legalTests(draft, table)
-  if (wanted && capabilities.find((c) => c.test === wanted)?.legal) return wanted
+  if (wanted && isLegal(wanted, capabilities)) return wanted
   const recommended = capabilities.find((c) => c.legal && c.recommended)
   return recommended?.test ?? "none"
 }
@@ -220,7 +236,16 @@ export function specFromChartState(
     throw new SpecDerivationError(draft.issues.map((i) => i.message).join("; "))
   }
 
-  const test = testForChart(state.chartType, draft.spec, table)
+  const capabilities = legalTests(draft.spec, table)
+  // A deliberate choice beats the chart-derived default — that is the same
+  // sticky-manual-edit rule the column mapping already follows. Except when the
+  // named test is not legal for this data: the resolver would reject it, so a
+  // spec that cannot run must not be reachable from here, and we fall back to
+  // the derived test rather than shipping the impossible one.
+  const test =
+    state.test && isLegal(state.test, capabilities)
+      ? state.test
+      : testForChart(state.chartType, capabilities)
   const parsed = parseSpec({
     ...base,
     analysis: {
@@ -228,11 +253,18 @@ export function specFromChartState(
       groupColumn,
       responseColumns,
       postHoc:
-        test === "anova-one-way" || test === "anova-rm" || test === "anova-two-way"
+        state.postHoc ??
+        (test === "anova-one-way" || test === "anova-rm" || test === "anova-two-way"
           ? "tukey"
           : test === "kruskal-wallis" || test === "friedman"
             ? "dunn"
-            : "none",
+            : "none"),
+      // Left undefined when unset, which is exactly today's behaviour: the
+      // schema's own default fills them in. Repeating those defaults here would
+      // give them a second place to drift from.
+      alpha: state.alpha,
+      tails: state.tails,
+      referenceLevel: state.referenceLevel,
     },
     figure,
   })
@@ -256,10 +288,13 @@ export class SpecDerivationError extends Error {}
  * own mapping stands in that case.
  *
  * Everything the spec holds that the rail has no control for — the second axis,
- * brackets, annotations, filters, and the statistics the panel owns (alpha,
- * tails, the test and its correction, the reference level) — is deliberately
- * absent rather than undefined: those live on the spec, and the caller keeps
- * them there.
+ * brackets, annotations and filters — is deliberately absent rather than
+ * undefined: those live on the spec, and the caller keeps them there.
+ *
+ * The statistics slice does come back, because it has to: the derivation the
+ * other way now prefers these over its chart-type guess, so dropping them here
+ * would hand the round trip a state whose next derivation quietly recomputes
+ * the test the spec had chosen.
  */
 export function chartStateFromSpec(spec: AnalysisSpec, table: Table): Partial<ChartState> {
   const { figure, analysis } = spec
@@ -281,6 +316,14 @@ export function chartStateFromSpec(spec: AnalysisSpec, table: Table): Partial<Ch
     yMax: figure.y.max,
     nticks: figure.x.tickCount,
     errorMode: figure.errorBars,
+    // The statistics the panel owns. A parsed spec always has all five, so
+    // reading them back is a plain copy — and null on the reference level is a
+    // value ("no reference"), the same as on the caption above.
+    test: analysis.test,
+    postHoc: analysis.postHoc,
+    alpha: analysis.alpha,
+    tails: analysis.tails,
+    referenceLevel: analysis.referenceLevel,
     paletteName: figure.palette,
     showGrid: figure.showGridlines,
     showLegend: figure.showLegend,

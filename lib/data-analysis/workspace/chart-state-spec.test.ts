@@ -205,12 +205,13 @@ describe("driving the rail from a spec", () => {
   it.each(ROUND_TRIPPABLE)("round-trips the columns and test of a %s figure", (kind) => {
     const spec = specOfKind(kind)
     const round = specFromChartState({ ...styled, ...chartStateFromSpec(spec, table) }, table)
-    // alpha, tails and the reference level are the statistics panel's, not the
-    // rail's, so they are not what this round trip is about.
     expect(round.analysis.groupColumn).toBe(spec.analysis.groupColumn)
     expect(round.analysis.responseColumns).toEqual(spec.analysis.responseColumns)
     expect(round.analysis.test).toBe(spec.analysis.test)
     expect(round.analysis.postHoc).toBe(spec.analysis.postHoc)
+    expect(round.analysis.alpha).toBe(spec.analysis.alpha)
+    expect(round.analysis.tails).toBe(spec.analysis.tails)
+    expect(round.analysis.referenceLevel).toBe(spec.analysis.referenceLevel)
   })
 
   it("returns every chart type the rail can select", () => {
@@ -241,11 +242,6 @@ describe("driving the rail from a spec", () => {
       "showExcludedPoints",
       "showConfidenceBands",
       "volcanoFoldChange",
-      "test",
-      "postHoc",
-      "alpha",
-      "tails",
-      "referenceLevel",
     ]) {
       expect(keys).not.toContain(absent)
     }
@@ -294,5 +290,49 @@ describe("driving the rail from a spec", () => {
       opacity: 0.5,
       axis: "y2",
     })
+  })
+})
+
+describe("the statistics slice survives a round trip", () => {
+  it("keeps an explicitly chosen test", () => {
+    // The bug this covers: the test used to be recomputed from the chart type
+    // on every derivation, so a chosen test — an AI answering "compare treated
+    // vs control", or the panel — was overwritten on the very next render.
+    const chosen = specFromChartState({ ...base, test: "kruskal-wallis" }, table)
+    expect(chosen.analysis.test).toBe("kruskal-wallis")
+
+    const state = chartStateFromSpec(chosen, table)
+    expect(state.test).toBe("kruskal-wallis")
+    expect(specFromChartState({ ...base, ...state }, table).analysis.test).toBe("kruskal-wallis")
+  })
+
+  it("still derives the test from the chart type when none is chosen", () => {
+    expect(specFromChartState(base, table).analysis.test).toBe("anova-one-way")
+    expect(specFromChartState({ ...base, test: undefined }, table).analysis.test).toBe("anova-one-way")
+  })
+
+  it("falls back to the derived test when the chosen one is illegal here", () => {
+    // t-unpaired compares two groups; this table has three. Carrying the
+    // choice through would hand the resolver a spec it can only reject, so an
+    // impossible test must not survive the way a legal one does.
+    expect(specFromChartState({ ...base, test: "t-unpaired" }, table).analysis.test).toBe("anova-one-way")
+  })
+
+  it("keeps the correction, alpha, tails and reference level", () => {
+    const chosen = { postHoc: "dunn", alpha: 0.01, tails: "greater", referenceLevel: "Vehicle" } as const
+    const spec = specFromChartState({ ...base, ...chosen }, table)
+    expect(spec.analysis).toMatchObject(chosen)
+
+    const state = chartStateFromSpec(spec, table)
+    expect(state).toMatchObject(chosen)
+    expect(specFromChartState({ ...base, ...state }, table).analysis).toMatchObject(chosen)
+  })
+
+  it("leaves the derived defaults alone when the rail chose nothing", () => {
+    const analysis = specFromChartState(base, table).analysis
+    expect(analysis.postHoc).toBe("tukey")
+    expect(analysis.alpha).toBe(0.05)
+    expect(analysis.tails).toBe("two")
+    expect(analysis.referenceLevel).toBeNull()
   })
 })
