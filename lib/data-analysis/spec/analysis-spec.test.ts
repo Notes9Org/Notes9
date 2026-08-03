@@ -51,6 +51,26 @@ describe("AnalysisSpec", () => {
     expect(parsed.spec.exclusions).toEqual([])
     // Two-sided unless a one-sided test is a deliberate choice.
     expect(parsed.spec.analysis.tails).toBe("two")
+    // Everything runs in the browser worker today; the field exists so a server
+    // tier is a routing change, not a migration of every stored spec.
+    expect(parsed.spec.runtime).toBe("browser")
+  })
+
+  it("opens a spec saved before `runtime` existed", () => {
+    // The reason the field was added early: a spec written without it must still
+    // parse, or the cheap change becomes an expensive one.
+    const legacy = minimalSpec() as Record<string, unknown>
+    expect("runtime" in legacy).toBe(false)
+
+    const parsed = parseSpec(legacy)
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    expect(parsed.spec.runtime).toBe("browser")
+
+    const migrated = migrateSpec({ ...legacy, schemaVersion: undefined })
+    expect(migrated.ok).toBe(true)
+    if (!migrated.ok) return
+    expect(migrated.spec.runtime).toBe("browser")
   })
 
   it("rejects a spec with no dataset version hash", () => {

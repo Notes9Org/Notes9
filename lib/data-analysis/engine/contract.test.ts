@@ -1,6 +1,13 @@
 import { describe, it, expect } from "vitest"
 import { AnalysisSpec, parseSpec } from "@/lib/data-analysis/spec/analysis-spec"
-import { computeCacheKey, checkResultIntegrity, hashObject, ENGINE_VERSION } from "./contract"
+import {
+  computeCacheKey,
+  checkResultIntegrity,
+  hashObject,
+  ENGINE_VERSION,
+  PYODIDE_VERSION,
+  resolvePyodideBaseUrl,
+} from "./contract"
 
 function spec(overrides: Record<string, unknown> = {}): AnalysisSpec {
   const parsed = parseSpec({
@@ -137,5 +144,40 @@ describe("integrity check on reopen (§3A.3 rule 3)", () => {
 
   it("names the current engine version so the banner can quote it", () => {
     expect(ENGINE_VERSION).toMatch(/^notes9-stats \d+\.\d+\.\d+ \(pyodide \d+\.\d+\.\d+\)$/)
+  })
+})
+
+describe("runtime origin", () => {
+  it("defaults to the CDN for the pinned version", () => {
+    // An existing deploy sets nothing, so the default has to stay byte-identical
+    // to the URL that was compiled in before it became configurable.
+    expect(resolvePyodideBaseUrl()).toBe(
+      `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`
+    )
+  })
+
+  it("carries the pinned version, never a second copy of it", () => {
+    // If this ever fails, the version has been restated somewhere and a bump to
+    // PYODIDE_VERSION will move the stamp on results without moving the runtime.
+    expect(resolvePyodideBaseUrl()).toContain(PYODIDE_VERSION)
+  })
+
+  it("honours a configured origin", () => {
+    expect(resolvePyodideBaseUrl("https://assets.internal/pyodide/")).toBe(
+      "https://assets.internal/pyodide/"
+    )
+  })
+
+  it("adds the trailing slash an operator will forget", () => {
+    // The value is concatenated, not resolved: "/pyodide" would ask for
+    // "/pyodidepyodide.js".
+    expect(resolvePyodideBaseUrl("/pyodide")).toBe("/pyodide/")
+  })
+
+  it("falls back when the env var is set but empty", () => {
+    // An unset variable in a CI template arrives as "" rather than undefined,
+    // and an empty base would silently resolve every asset against the page.
+    expect(resolvePyodideBaseUrl("")).toContain("cdn.jsdelivr.net")
+    expect(resolvePyodideBaseUrl("   ")).toContain("cdn.jsdelivr.net")
   })
 })

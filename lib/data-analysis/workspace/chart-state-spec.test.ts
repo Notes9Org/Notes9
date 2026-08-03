@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest"
 import type { Table } from "@/lib/data-analysis/engine/resolver"
+import type { AnalysisSpec, FigureKind } from "@/lib/data-analysis/spec/analysis-spec"
 import {
   CHART_TYPE_TO_FIGURE_KIND,
   FIGURE_KIND_TO_CHART_TYPE,
+  chartStateFromSpec,
   specFromChartState,
   tableFromChartRows,
   type ChartState,
@@ -147,5 +149,190 @@ describe("the test follows the chart's question", () => {
   it("asks for nothing when nothing is supportable", () => {
     const thin = tableFromChartRows(["Note"], [{ Note: "hello" }])
     expect(specFromChartState({ ...base, chartType: "line" }, thin).analysis.test).toBe("none")
+  })
+})
+
+/** A rail with every control moved off its default, so nothing survives by luck. */
+const styled: ChartState = {
+  ...base,
+  subtitle: "n = 6 per group",
+  caption: "Mean ± 95% CI.",
+  xUnit: "uM",
+  yUnit: "%",
+  xLog: true,
+  yLog: true,
+  xMin: 1,
+  xMax: 100,
+  yMin: 0,
+  yMax: 120,
+  nticks: 6,
+  errorMode: "ci95",
+  paletteName: "nature",
+  showGrid: false,
+  showLegend: false,
+  legendPos: "right",
+  fontFamily: "serif",
+  titleSize: 20,
+  axisTitleSize: 11,
+  width: 640,
+  height: 480,
+  seriesStyles: {
+    Viability: { color: "#ff0000", width: 3, dash: "dot", marker: "square", size: 9, opacity: 0.5, axis: "y2" },
+  },
+}
+
+/** The styled rail as a spec of the given kind, whether or not a control selects it. */
+function specOfKind(kind: FigureKind): AnalysisSpec {
+  const spec = specFromChartState({ ...styled, chartType: FIGURE_KIND_TO_CHART_TYPE[kind] ?? "bar" }, table)
+  return { ...spec, figure: { ...spec.figure, kind } }
+}
+
+describe("driving the rail from a spec", () => {
+  const ROUND_TRIPPABLE: FigureKind[] = [
+    "bar-scatter-error",
+    "box",
+    "xy-scatter-fit",
+    "kaplan-meier",
+    "heatmap",
+  ]
+
+  it.each(ROUND_TRIPPABLE)("round-trips a %s figure", (kind) => {
+    const spec = specOfKind(kind)
+    const round = specFromChartState({ ...styled, ...chartStateFromSpec(spec, table) }, table)
+    expect(round.figure).toEqual(spec.figure)
+  })
+
+  it.each(ROUND_TRIPPABLE)("round-trips the columns and test of a %s figure", (kind) => {
+    const spec = specOfKind(kind)
+    const round = specFromChartState({ ...styled, ...chartStateFromSpec(spec, table) }, table)
+    expect(round.analysis.groupColumn).toBe(spec.analysis.groupColumn)
+    expect(round.analysis.responseColumns).toEqual(spec.analysis.responseColumns)
+    expect(round.analysis.test).toBe(spec.analysis.test)
+    expect(round.analysis.postHoc).toBe(spec.analysis.postHoc)
+    expect(round.analysis.alpha).toBe(spec.analysis.alpha)
+    expect(round.analysis.tails).toBe(spec.analysis.tails)
+    expect(round.analysis.referenceLevel).toBe(spec.analysis.referenceLevel)
+  })
+
+  it("returns every chart type the rail can select", () => {
+    for (const [chart, kind] of Object.entries(CHART_TYPE_TO_FIGURE_KIND)) {
+      expect(chartStateFromSpec(specOfKind(kind), table).chartType).toBe(chart)
+    }
+  })
+
+  it("leaves the chart control alone for a kind no control selects", () => {
+    // dose-response is a spec kind with no button on the rail. Guessing the
+    // nearest chart would quietly redraw the figure as a different one.
+    const spec = specOfKind("dose-response")
+    const state = chartStateFromSpec(spec, table)
+    expect(Object.keys(state)).not.toContain("chartType")
+
+    const round = specFromChartState({ ...styled, ...state }, table)
+    expect(round.figure.kind).toBe(CHART_TYPE_TO_FIGURE_KIND[styled.chartType])
+    expect({ ...round.figure, kind: spec.figure.kind }).toEqual(spec.figure)
+  })
+
+  it("omits what the rail has no control for, rather than assigning undefined", () => {
+    const state = chartStateFromSpec(specOfKind("box"), table)
+    const keys = Object.keys(state)
+    for (const absent of [
+      "y2",
+      "brackets",
+      "annotations",
+      "showExcludedPoints",
+      "showConfidenceBands",
+      "volcanoFoldChange",
+    ]) {
+      expect(keys).not.toContain(absent)
+    }
+  })
+
+  it("leaves a required control standing when the spec is silent", () => {
+    const spec = specOfKind("box")
+    const quiet: AnalysisSpec = {
+      ...spec,
+      figure: { ...spec.figure, title: null, x: { ...spec.figure.x, label: null } },
+    }
+    const keys = Object.keys(chartStateFromSpec(quiet, table))
+    expect(keys).not.toContain("title")
+    expect(keys).not.toContain("xLabel")
+    expect(keys).toContain("yLabel")
+  })
+
+  it("does not point the chart at a column the sheet no longer has", () => {
+    const spec = specOfKind("box")
+    const stale: AnalysisSpec = {
+      ...spec,
+      analysis: { ...spec.analysis, groupColumn: "Batch", responseColumns: ["Absorbance"] },
+    }
+    const state = chartStateFromSpec(stale, table)
+    expect(Object.keys(state)).not.toContain("xKey")
+    expect(Object.keys(state)).not.toContain("yKeys")
+  })
+
+  it("carries the styling the figure was saved with", () => {
+    const state = chartStateFromSpec(specOfKind("box"), table)
+    expect(state.paletteName).toBe("nature")
+    expect(state.errorMode).toBe("ci95")
+    expect(state.legendPos).toBe("right")
+    expect(state.showGrid).toBe(false)
+    expect(state.yLog).toBe(true)
+    expect(state.yMax).toBe(120)
+    expect(state.nticks).toBe(6)
+    expect(state.fontFamily).toBe("serif")
+    expect(state.width).toBe(640)
+    expect(state.seriesStyles?.Viability).toEqual({
+      color: "#ff0000",
+      width: 3,
+      dash: "dot",
+      marker: "square",
+      size: 9,
+      opacity: 0.5,
+      axis: "y2",
+    })
+  })
+})
+
+describe("the statistics slice survives a round trip", () => {
+  it("keeps an explicitly chosen test", () => {
+    // The bug this covers: the test used to be recomputed from the chart type
+    // on every derivation, so a chosen test — an AI answering "compare treated
+    // vs control", or the panel — was overwritten on the very next render.
+    const chosen = specFromChartState({ ...base, test: "kruskal-wallis" }, table)
+    expect(chosen.analysis.test).toBe("kruskal-wallis")
+
+    const state = chartStateFromSpec(chosen, table)
+    expect(state.test).toBe("kruskal-wallis")
+    expect(specFromChartState({ ...base, ...state }, table).analysis.test).toBe("kruskal-wallis")
+  })
+
+  it("still derives the test from the chart type when none is chosen", () => {
+    expect(specFromChartState(base, table).analysis.test).toBe("anova-one-way")
+    expect(specFromChartState({ ...base, test: undefined }, table).analysis.test).toBe("anova-one-way")
+  })
+
+  it("falls back to the derived test when the chosen one is illegal here", () => {
+    // t-unpaired compares two groups; this table has three. Carrying the
+    // choice through would hand the resolver a spec it can only reject, so an
+    // impossible test must not survive the way a legal one does.
+    expect(specFromChartState({ ...base, test: "t-unpaired" }, table).analysis.test).toBe("anova-one-way")
+  })
+
+  it("keeps the correction, alpha, tails and reference level", () => {
+    const chosen = { postHoc: "dunn", alpha: 0.01, tails: "greater", referenceLevel: "Vehicle" } as const
+    const spec = specFromChartState({ ...base, ...chosen }, table)
+    expect(spec.analysis).toMatchObject(chosen)
+
+    const state = chartStateFromSpec(spec, table)
+    expect(state).toMatchObject(chosen)
+    expect(specFromChartState({ ...base, ...state }, table).analysis).toMatchObject(chosen)
+  })
+
+  it("leaves the derived defaults alone when the rail chose nothing", () => {
+    const analysis = specFromChartState(base, table).analysis
+    expect(analysis.postHoc).toBe("tukey")
+    expect(analysis.alpha).toBe(0.05)
+    expect(analysis.tails).toBe("two")
+    expect(analysis.referenceLevel).toBeNull()
   })
 })
