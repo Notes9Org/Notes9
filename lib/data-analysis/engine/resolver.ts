@@ -161,6 +161,50 @@ function applyTransform(rows: TableRow[], t: Transform): TableRow[] {
         return { ...r, values: { ...r.values, [t.column]: scaled } }
       })
     }
+    case "normaliseToControl": {
+      // "% of vehicle, per plate". The control mean is taken WITHIN each `per`
+      // bucket: normalising to an on-plate control exists to remove plate-to-plate
+      // signal drift, and one global control mean folds that drift back in.
+      const bucketOf = (r: TableRow) => t.per.map((c) => toLabel(r.values[c])).join("␟")
+      const controls = new Map<string, number[]>()
+      for (const r of rows) {
+        if (toLabel(r.values[t.groupColumn]) !== t.controlLevel) continue
+        const v = num(r, t.column)
+        if (v === null) continue
+        const key = bucketOf(r)
+        const list = controls.get(key) ?? []
+        list.push(v)
+        controls.set(key, list)
+      }
+      const scale = t.as === "percent" ? 100 : 1
+      return rows.map((r) => {
+        const ctrl = controls.get(bucketOf(r))
+        const mean = ctrl?.length ? ctrl.reduce((a, b) => a + b, 0) / ctrl.length : null
+        const v = num(r, t.column)
+        // A bucket with no control — or a control that read zero — yields null,
+        // not a number. A missing reference is not a reference of zero, and a
+        // plate quietly normalised against nothing is the error worth blocking.
+        const scaled = v !== null && mean !== null && mean !== 0 ? (v / mean) * scale : null
+        return { ...r, values: { ...r.values, [t.column]: scaled } }
+      })
+    }
+    case "pivotLonger": {
+      // The only transform that changes the row count and the column set. Row
+      // ids are extended rather than reused so a folded point is still
+      // hit-testable back to the cell it came from; as with collapseReplicates,
+      // exclusions recorded against the pre-fold ids no longer match, which is
+      // why a reshape belongs at the front of the transform list.
+      const carried = Object.keys(rows[0]?.values ?? {}).filter((c) => !t.columns.includes(c))
+      return rows.flatMap((r) =>
+        t.columns.map((c) => {
+          const values: Record<string, number | string | null> = {}
+          for (const k of carried) values[k] = r.values[k]
+          values[t.namesTo] = c
+          values[t.valuesTo] = r.values[c] ?? null
+          return { rowId: `${r.rowId}␟${c}`, values }
+        })
+      )
+    }
     case "baselineSubtract": {
       let blank = t.blankValue
       if (blank === null && t.blankGroup) {
@@ -288,9 +332,16 @@ export function resolvePayload(spec: AnalysisSpec, table: Table): ResolveOutcome
     case "none":
     case "descriptives":
     case "normality": {
+      // Declared columns first, then anything a transform introduced — a
+      // pivotLonger's value column exists only after step 2, and summarising the
+      // pre-transform column list would report "nothing numeric" about a table
+      // that is entirely numeric.
+      const available = [
+        ...new Set([...table.columns, ...included.flatMap((r) => Object.keys(r.values))]),
+      ]
       const cols = spec.analysis.responseColumns.length
         ? spec.analysis.responseColumns
-        : table.columns.filter((c) => included.some((r) => toNumber(r.values[c]) !== null))
+        : available.filter((c) => included.some((r) => toNumber(r.values[c]) !== null))
       if (cols.length === 0) {
         blocked.push({ code: "no-numeric", message: "No numeric column to summarise.", fix: "Pick a response column." })
         break

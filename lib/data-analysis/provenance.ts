@@ -61,12 +61,23 @@ function describeTransform(t: AnalysisSpec["transforms"][number]): string {
       return `${t.column} fold-change vs ${t.baseline}`
     case "normalise":
       return `${t.column} normalised to ${t.min}–${t.max}`
+    case "normaliseToControl":
+      return (
+        `${t.column} as ${t.as === "percent" ? "% of" : "ratio to"} ${t.controlLevel}` +
+        // The scope is the claim: "% of vehicle" and "% of vehicle on the same
+        // plate" are different numbers, and a reader must be able to tell which.
+        (t.per.length ? ` within ${t.per.join(", ")}` : "")
+      )
     case "baselineSubtract":
       return `${t.column} minus ${t.blankGroup ?? t.blankValue ?? "blank"}`
     case "collapseReplicates":
       return `replicates collapsed by ${t.by.join(", ")} (${t.statistic})`
     case "calculatedColumn":
       return `calculated column ${t.name}`
+    case "pivotLonger":
+      // The column names themselves are not listed: a 96-well fold would bury
+      // the rest of the card under twelve labels that say nothing a reader needs.
+      return `${t.columns.length} wide columns folded into ${t.namesTo}/${t.valuesTo}`
   }
 }
 
