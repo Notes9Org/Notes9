@@ -45,6 +45,30 @@ export const ENGINE_PACKAGES = {
   micropip: [] as readonly string[],
 } as const
 
+/**
+ * Where the runtime and its wheels are fetched from.
+ *
+ * Everything else about the engine is local — sandboxed, network-isolated,
+ * reproducible — but all of it holds only AFTER this one third-party fetch
+ * succeeds. On a network that blocks the CDN the feature simply does not exist,
+ * and a CDN outage is an outage of Data Analysis. Making the origin a
+ * deployment decision rather than a compiled-in constant is what turns that
+ * from an unfixable property into a configuration change.
+ *
+ * The default is the public CDN, so a deploy that sets nothing behaves exactly
+ * as before. `scripts/utilities/fetch-pyodide.ts` mirrors the distribution into
+ * `public/pyodide/` for an operator who needs same-origin hosting.
+ *
+ * The trailing slash is normalised because callers concatenate against this
+ * value rather than resolving against it, and a missing one turns every asset
+ * into a 404 that reads like a corrupt mirror.
+ */
+export function resolvePyodideBaseUrl(configured?: string): string {
+  const base =
+    configured?.trim() || `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`
+  return base.endsWith("/") ? base : `${base}/`
+}
+
 /** Bump when the Python engine source changes in any way that can alter a number. */
 export const ENGINE_SOURCE_VERSION = "1.1.0" as const
 
