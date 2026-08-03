@@ -16,15 +16,19 @@
  *
  * Loading is deliberately lazy: nobody pays the runtime download until they
  * actually run an analysis, and the browser caches it for every session after.
+ * Where it loads FROM is a deployment decision — see `resolvePyodideBaseUrl`.
  */
 
 import {
   ENGINE_PACKAGES,
   ENGINE_VERSION,
-  PYODIDE_VERSION,
+  resolvePyodideBaseUrl,
 } from "./contract"
 
-const PYODIDE_CDN = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`
+// Read once, at module scope: the bundler substitutes the literal at build
+// time, so a deploy's choice of origin is baked into the worker rather than
+// looked up per boot.
+const PYODIDE_BASE_URL = resolvePyodideBaseUrl(process.env.NEXT_PUBLIC_PYODIDE_BASE_URL)
 const ENGINE_SOURCE_URL = "/data-analysis-engine/notes9_engine.py"
 
 type PyodideApi = {
@@ -65,13 +69,25 @@ function bootPyodide(id: string): Promise<PyodideApi> {
 
   pyodidePromise = (async () => {
     post({ id, type: "progress", stage: "runtime", detail: "Starting the statistics engine" })
-    self.importScripts(`${PYODIDE_CDN}pyodide.js`)
-    if (!self.loadPyodide) throw new Error("Pyodide failed to load from the CDN.")
-    const pyodide = await self.loadPyodide({ indexURL: PYODIDE_CDN })
+    // Every failure in here — a blocked CDN, an incomplete self-hosted mirror, a
+    // base URL pointing at the wrong version — surfaces to an operator as one
+    // error string. Naming the origin is the difference between a diagnosis and
+    // a guess, so it is attached once, around all three fetching steps.
+    let pyodide: PyodideApi
+    try {
+      self.importScripts(`${PYODIDE_BASE_URL}pyodide.js`)
+      if (!self.loadPyodide) throw new Error("pyodide.js loaded but defined no loadPyodide")
+      pyodide = await self.loadPyodide({ indexURL: PYODIDE_BASE_URL })
 
-    post({ id, type: "progress", stage: "packages", detail: "Loading numpy, scipy, statsmodels" })
-    // Prebuilt wheels ship with the distribution, so this is a local unpack.
-    await pyodide.loadPackage([...ENGINE_PACKAGES.prebuilt])
+      post({ id, type: "progress", stage: "packages", detail: "Loading numpy, scipy, statsmodels" })
+      // Prebuilt wheels ship with the distribution, so this is a local unpack.
+      await pyodide.loadPackage([...ENGINE_PACKAGES.prebuilt])
+    } catch (err) {
+      throw new Error(
+        `Could not load the statistics engine from ${PYODIDE_BASE_URL} — ` +
+          `${err instanceof Error ? err.message : String(err)}`
+      )
+    }
 
     // Pure-Python packages are pinned in the contract so a resolver cannot
     // silently move a version that could move a p-value.
