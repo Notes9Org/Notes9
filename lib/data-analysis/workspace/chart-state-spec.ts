@@ -242,6 +242,88 @@ export function specFromChartState(
 
 export class SpecDerivationError extends Error {}
 
+/**
+ * Drive the rail from a spec — the direction a saved analysis or an AI-proposed
+ * patch arrives in.
+ *
+ * Partial, because the spec is not the whole rail: the caller merges this into
+ * the state it already has. Returning a full ChartState would mean every field
+ * the spec is silent about gets reset to a default the user never chose.
+ *
+ * `table` is the live sheet, and it is here as a guard: a spec authored against
+ * an older version of the data can name a column that has since gone, and
+ * pointing the chart at a column that does not exist draws nothing. The rail's
+ * own mapping stands in that case.
+ *
+ * Everything the spec holds that the rail has no control for — the second axis,
+ * brackets, annotations, filters, and the statistics the panel owns (alpha,
+ * tails, the test and its correction, the reference level) — is deliberately
+ * absent rather than undefined: those live on the spec, and the caller keeps
+ * them there.
+ */
+export function chartStateFromSpec(spec: AnalysisSpec, table: Table): Partial<ChartState> {
+  const { figure, analysis } = spec
+  const columns = new Set(table.columns)
+  const responseColumns = analysis.responseColumns.filter((c) => columns.has(c))
+
+  const state: Partial<ChartState> = {
+    // Null is a value here, not an absence: it is what "use the generated
+    // wording" looks like, so it has to overwrite an inherited caption.
+    caption: figure.caption,
+    subtitle: figure.subtitle ?? undefined,
+    xUnit: figure.x.unit ?? undefined,
+    yUnit: figure.y.unit ?? undefined,
+    xLog: figure.x.scale === "log10",
+    yLog: figure.y.scale === "log10",
+    xMin: figure.x.min,
+    xMax: figure.x.max,
+    yMin: figure.y.min,
+    yMax: figure.y.max,
+    nticks: figure.x.tickCount,
+    errorMode: figure.errorBars,
+    paletteName: figure.palette,
+    showGrid: figure.showGridlines,
+    showLegend: figure.showLegend,
+    legendPos: figure.legendPosition,
+    fontFamily: figure.fontFamily,
+    titleSize: figure.titleFontSize,
+    axisTitleSize: figure.axisFontSize,
+    width: figure.width,
+    height: figure.height,
+    seriesStyles: Object.fromEntries(
+      figure.series.map((s) => [
+        s.key,
+        {
+          color: s.colour ?? undefined,
+          width: s.lineWidth,
+          dash: s.lineStyle,
+          marker: s.pointShape,
+          size: s.pointSize,
+          opacity: s.opacity,
+          axis: s.axis === "right" ? ("y2" as const) : ("y" as const),
+        },
+      ])
+    ),
+  }
+
+  // The rail's required fields can be set but never cleared, so a spec that is
+  // silent on one leaves the user's own value standing.
+  //
+  // The chart type is the same case for a different reason: the map is total
+  // out of the rail but not back into it — dose-response and grouped-bar are
+  // spec kinds with no control to select them. Guessing the nearest chart would
+  // quietly redraw the figure as a different one.
+  const chartType = FIGURE_KIND_TO_CHART_TYPE[figure.kind]
+  if (chartType) state.chartType = chartType
+  if (figure.title !== null) state.title = figure.title
+  if (figure.x.label !== null) state.xLabel = figure.x.label
+  if (figure.y.label !== null) state.yLabel = figure.y.label
+  if (analysis.groupColumn && columns.has(analysis.groupColumn)) state.xKey = analysis.groupColumn
+  if (responseColumns.length > 0) state.yKeys = responseColumns
+
+  return state
+}
+
 /** Rows keyed by column name, as the chart workspace holds them, become a Table. */
 export function tableFromChartRows(
   columns: string[],
