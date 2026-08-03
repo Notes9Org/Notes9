@@ -5,6 +5,10 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname),
+      // `server-only` has no browser/node entry Vite can resolve, so any test
+      // that transitively imports a server module dies at transform time.
+      // Reuse the no-op shim Next itself aliases to outside RSC builds.
+      "server-only": "next/dist/compiled/server-only/empty.js",
     },
   },
   test: {
