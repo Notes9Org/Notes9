@@ -44,6 +44,7 @@ import {
   ArrowUp,
   Plus,
   Check,
+  Sparkle,
 } from "@phosphor-icons/react/ssr"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -93,7 +94,14 @@ import {
   layoutFromPreset,
   type FigureLayout,
 } from "@/lib/data-analysis/render/figure-layout"
-import { specFromChartState, tableFromChartRows } from "@/lib/data-analysis/workspace/chart-state-spec"
+import {
+  specFromChartState,
+  tableFromChartRows,
+  type ChartState,
+} from "@/lib/data-analysis/workspace/chart-state-spec"
+import { requestSpecPatch, type SpecPatchOutcome } from "@/lib/data-analysis/ai/spec-author-client"
+import { applyAiPatch, describeMutation, initHistory } from "@/lib/data-analysis/spec/mutations"
+import { aiNotice, railEditsFromSpec } from "@/lib/data-analysis/workspace/spec-prompt"
 import { computeAnalysis } from "@/lib/data-analysis/engine/client"
 import type { EngineResult } from "@/lib/data-analysis/engine/contract"
 import type { Table as SpecTable } from "@/lib/data-analysis/engine/resolver"
@@ -658,6 +666,20 @@ export function DataAnalysisWorkspace({
   const [hlines, setHlines] = useState("")
   const [vlines, setVlines] = useState("")
   const [chartH, setChartH] = useState(560)
+  /**
+   * The statistics the spec chooses rather than the chart implies.
+   *
+   * Undefined is the state this rail has always been in: the test comes from
+   * the chart type and the rest from the schema's defaults. They exist as state
+   * because a spec can now arrive with a deliberate choice in it — from a
+   * template, a reopened analysis, or the assistant — and a choice that is not
+   * held anywhere is recomputed away on the next derivation.
+   */
+  const [statTest, setStatTest] = useState<ChartState["test"]>(undefined)
+  const [statPostHoc, setStatPostHoc] = useState<ChartState["postHoc"]>(undefined)
+  const [statAlpha, setStatAlpha] = useState<number | undefined>(undefined)
+  const [statTails, setStatTails] = useState<ChartState["tails"]>(undefined)
+  const [statReferenceLevel, setStatReferenceLevel] = useState<string | null | undefined>(undefined)
   const setStyle = useCallback((series: string, patch: Partial<SeriesStyle>) => {
     setSeriesStyles((prev) => ({ ...prev, [series]: { ...prev[series], ...patch } }))
   }, [])
@@ -702,6 +724,8 @@ export function DataAnalysisWorkspace({
           chartType, xKey, yKeys, zKey, sizeKey, title, subtitle, xLabel, xUnit, yLabel, yUnit,
           yLog, xLog, showGrid, showLegend, legendPos, paletteName, errorMode, fontFamily,
           titleSize, axisTitleSize, xMin, xMax, yMin, yMax, nticks, seriesStyles, caption,
+          test: statTest, postHoc: statPostHoc, alpha: statAlpha, tails: statTails,
+          referenceLevel: statReferenceLevel,
         },
         specTable,
         { fileName: sheetFileName }
@@ -714,6 +738,7 @@ export function DataAnalysisWorkspace({
     chartType, xKey, yKeys, zKey, sizeKey, title, subtitle, xLabel, xUnit, yLabel, yUnit,
     yLog, xLog, showGrid, showLegend, legendPos, paletteName, errorMode, fontFamily,
     titleSize, axisTitleSize, xMin, xMax, yMin, yMax, nticks, seriesStyles, caption,
+    statTest, statPostHoc, statAlpha, statTails, statReferenceLevel,
     specTable, sheetFileName,
   ])
 
@@ -1417,6 +1442,8 @@ export function DataAnalysisWorkspace({
     chartType, xKey, yKeys, zKey, sizeKey, title, xLabel, xUnit, yLabel, yUnit, yLog, showGrid, showLegend, markers, paletteName,
     seriesStyles, xMin, xMax, yMin, yMax, nticks, fontFamily, titleSize, axisTitleSize,
     errorMode, showPoints, subtitle, legendPos, hlines, vlines, chartH, caption, xLog,
+    test: statTest, postHoc: statPostHoc, alpha: statAlpha, tails: statTails,
+    referenceLevel: statReferenceLevel,
     plate: { format: plateModel.format, originRow: plateModel.originRow, originCol: plateModel.originCol, roleOverrides: plateModel.roleOverrides, annOverrides: plateModel.annOverrides },
     phase,
   })
@@ -1459,6 +1486,13 @@ export function DataAnalysisWorkspace({
     if (typeof c.hlines === "string") setHlines(c.hlines)
     if (typeof c.vlines === "string") setVlines(c.vlines)
     if (typeof c.chartH === "number") setChartH(c.chartH)
+    // The statistics slice. Null on the reference level is a value ("compare
+    // against no baseline"), so it is accepted alongside a column name.
+    if (typeof c.test === "string") setStatTest(c.test)
+    if (typeof c.postHoc === "string") setStatPostHoc(c.postHoc)
+    if (typeof c.alpha === "number") setStatAlpha(c.alpha)
+    if (typeof c.tails === "string") setStatTails(c.tails)
+    if (c.referenceLevel === null || typeof c.referenceLevel === "string") setStatReferenceLevel(c.referenceLevel)
     if (c.plate) {
       if (c.plate.format) plateModel.setFormat(c.plate.format)
       if (typeof c.plate.originRow === "number") plateModel.setOriginRow(c.plate.originRow)
@@ -1468,6 +1502,76 @@ export function DataAnalysisWorkspace({
     if (c.phase) setPhase(c.phase)
     seededRef.current = true // config supplies the mappings; don't auto-seed over them
   }, [plateModel])
+
+  /* ── Ask for a change, in words ────────────────────────────────────────────
+     A sentence and a control are the same edit: both end as typed mutations on
+     the spec, so what arrives here moves the rail the user is looking at rather
+     than opening a conversation about it. That is the difference from the
+     Catalyst composer at the top of the page, which answers questions and
+     changes nothing — and the reason this is a second, narrower entry point
+     rather than a second use of that one.
+
+     Nothing below is load-bearing for the deterministic path. If the assistant
+     is off, every control, the engine and the statistics still work. */
+  const [aiPrompt, setAiPrompt] = useState("")
+  const [aiBusy, setAiBusy] = useState(false)
+  const [aiReply, setAiReply] = useState<{ outcome: SpecPatchOutcome; applied: string[] } | null>(null)
+  const aiAbortRef = useRef<AbortController | null>(null)
+
+  /** The hard precondition, mirrored from the route: no resolved rows, no ask. */
+  const aiReady = derivedSpec !== null && specTable.rows.length > 0
+
+  const askForChange = useCallback(async () => {
+    const prompt = aiPrompt.trim()
+    if (!prompt || !derivedSpec || specTable.rows.length === 0) return
+
+    // A new request supersedes the one in flight. The old one resolves as
+    // "aborted", which is deliberately silent: it was replaced, not failed.
+    aiAbortRef.current?.abort()
+    const controller = new AbortController()
+    aiAbortRef.current = controller
+    setAiBusy(true)
+    try {
+      const outcome = await requestSpecPatch({
+        prompt,
+        spec: derivedSpec,
+        table: specTable,
+        signal: controller.signal,
+      })
+      if (outcome.outcome === "aborted") return
+
+      let applied: string[] = []
+      if (outcome.outcome === "patch" && outcome.mutations.length > 0) {
+        // `initHistory` starts with an empty sticky set on purpose: this rail
+        // holds its settings in React state rather than dispatching mutations,
+        // so there is no record of which paths were edited by hand and nothing
+        // for a patch to collide with. The patch still goes through
+        // `applyAiPatch` so the spec and the sentences describing it come from
+        // the one code path the rest of L6 uses.
+        const patched = applyAiPatch(initHistory(derivedSpec), outcome.mutations)
+        applied = patched.applied.map(describeMutation)
+        const edits = railEditsFromSpec(derivedSpec, patched.history.spec, specTable)
+        // Merged over the current configuration, not applied alone: `applyConfig`
+        // is a total setter, and handing it a partial config would reset the
+        // fields the patch never mentioned.
+        if (Object.keys(edits).length > 0) {
+          applyConfigRef.current({ ...(buildConfigRef.current() as object), ...edits })
+        }
+      }
+      setAiReply({ outcome, applied })
+      // The box empties only when the request is finished with. A question back
+      // means the user is about to rephrase, and deleting what they wrote would
+      // make them type it again.
+      if (outcome.outcome === "patch" && !outcome.clarificationNeeded) setAiPrompt("")
+    } finally {
+      // A superseded request no longer owns the busy flag — the one that
+      // replaced it does.
+      if (aiAbortRef.current === controller) {
+        aiAbortRef.current = null
+        setAiBusy(false)
+      }
+    }
+  }, [aiPrompt, derivedSpec, specTable])
 
   // Import: local spreadsheet/CSV, or a saved .n9a analysis bundle.
   const onImport = useCallback(
@@ -2040,6 +2144,88 @@ export function DataAnalysisWorkspace({
     </div>
   )
 
+  const aiNote = aiReply ? aiNotice(aiReply.outcome) : null
+
+  /* One line to ask, the answer underneath. The answer is capped rather than
+     unbounded: a long rationale must not push the sheet off the screen. */
+  const specPrompt = (
+    <div className="rounded-2xl border border-border bg-card/80 shadow-sm backdrop-blur-sm">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          void askForChange()
+        }}
+        aria-label="Change this analysis by describing it"
+        className="flex items-center gap-2 px-3 py-2"
+      >
+        <Sparkle className="h-4 w-4 shrink-0 text-[var(--n9-accent,#965034)]" weight="fill" aria-hidden />
+        <Input
+          value={aiPrompt}
+          onChange={(e) => setAiPrompt(e.target.value)}
+          disabled={!aiReady}
+          aria-label="Describe the change you want"
+          placeholder={
+            aiReady
+              ? "Describe a change — “log the Y axis”, “colour-blind-safe palette”, “compare the groups with a Mann-Whitney”"
+              : "Import or type some data, then describe a change"
+          }
+          className="h-8 min-w-0 flex-1 border-0 bg-transparent px-0 text-[13px] shadow-none focus-visible:ring-0"
+        />
+        <Button
+          type="submit"
+          variant="outline"
+          size="sm"
+          disabled={!aiReady || aiBusy || aiPrompt.trim().length === 0}
+        >
+          {aiBusy ? "Working…" : "Apply"}
+        </Button>
+      </form>
+
+      {aiReply && (
+        <div className="max-h-56 overflow-y-auto border-t border-border/60 px-3 py-2 text-[12.5px] leading-relaxed">
+          {aiReply.outcome.outcome === "patch" ? (
+            <div className="flex flex-col gap-2">
+              {aiReply.outcome.rationale && <p className="text-foreground/90">{aiReply.outcome.rationale}</p>}
+              {aiReply.applied.length > 0 ? (
+                <ul className="list-disc space-y-0.5 pl-4 text-muted-foreground">
+                  {aiReply.applied.map((description, i) => (
+                    <li key={i}>{description}</li>
+                  ))}
+                </ul>
+              ) : aiReply.outcome.clarificationNeeded ? null : (
+                <p className="text-muted-foreground">Nothing needed changing — the figure already matches.</p>
+              )}
+              {aiReply.outcome.clarificationNeeded && (
+                // A question, not an error. Whatever was applied still stands;
+                // this is the assistant asking for the one thing it lacks.
+                <p className="rounded-lg border border-[var(--n9-accent,#965034)]/25 bg-[var(--n9-accent,#965034)]/[0.06] px-2.5 py-1.5 text-foreground/90">
+                  {aiReply.outcome.clarificationNeeded}
+                </p>
+              )}
+              {aiReply.outcome.rejected.length > 0 && (
+                // A rejection is information: something was proposed, left out,
+                // and the reason is worth reading. It is not a failure.
+                <div className="text-muted-foreground">
+                  <span className="font-medium text-foreground/80">Left out of the change:</span>
+                  <ul className="list-disc space-y-0.5 pl-4">
+                    {aiReply.outcome.rejected.map((r, i) => (
+                      <li key={i}>{r.reason || "No reason given."}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          ) : aiNote ? (
+            <div className="flex flex-col gap-1">
+              <p className="font-medium text-foreground/90">{aiNote.title}</p>
+              <p className="text-muted-foreground">{aiNote.body}</p>
+            </div>
+          ) : null}
+        </div>
+      )}
+    </div>
+  )
+
   const canvasForPhase = phase === "chart" ? chartCanvas : phase === "stats" ? statsCanvas : phase === "curve" ? curve.canvas : plate.canvas
   const settingsForPhase = phase === "chart" ? chartSettings : phase === "stats" ? stats.settings : phase === "curve" ? curveSettings : plate.settings
   const activePhase = PHASES.find((p) => p.id === phase)!
@@ -2081,6 +2267,10 @@ export function DataAnalysisWorkspace({
           setAnalyses((list) => list.map((a) => (a.id === id ? { ...a, name } : a)))
         }
       />
+
+      {/* Scoped to the analysis above it, and deliberately below the tabs: what
+          it changes is this analysis, not the page. */}
+      {specPrompt}
 
       {/* Tabs + toolbar */}
       <div className="flex flex-wrap items-center gap-2">
