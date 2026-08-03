@@ -245,6 +245,17 @@ export interface NoticePayload {
   [key: string]: unknown;
 }
 
+/** SSE event: clarify – a clarifying question the agent needs answered before
+ * it can proceed. Emitted INSTEAD of streaming the question as `token` events
+ * so the UI renders a ClarifyCard form (question + optional quick-picks).
+ * Wire shape mirrors catalyst `core/sse.py::SseEmitter.clarify`. */
+export interface ClarifyPayload {
+  question: string;
+  options?: string[];
+  source?: string;
+  [key: string]: unknown;
+}
+
 /** SSE event: ping – keep-alive */
 export interface PingPayload {
   ts?: number;
@@ -325,6 +336,7 @@ export type SseEvent =
   | { event: "done"; data: DonePayload }
   | { event: "error"; data: ErrorPayload }
   | { event: "notice"; data: NoticePayload }
+  | { event: "clarify"; data: ClarifyPayload }
   | { event: "ping"; data: PingPayload };
 
 // ── Source-name normalizer (AD1: structured fields → view model) ──────────────
@@ -411,6 +423,7 @@ const KNOWN_EVENT_TYPES = new Set([
   "done",
   "error",
   "notice",
+  "clarify",
   "ping",
 ] as const);
 
