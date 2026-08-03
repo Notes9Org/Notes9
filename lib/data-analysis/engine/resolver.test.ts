@@ -276,6 +276,96 @@ describe("transforms and exclusions", () => {
     expect(out.payload.columns.v).toEqual([11, 21])
   })
 
+  it("folds a wide plate layout into long form", () => {
+    // A plate reader writes one column per plate column. Everything below the
+    // resolver is long, so without this the raw export is unanalysable.
+    const t = table([
+      { row: "A", "1": 0.5, "2": 0.6 },
+      { row: "B", "1": 0.7, "2": 0.8 },
+    ])
+    const out = resolvePayload(
+      spec(
+        { test: "descriptives", responseColumns: ["signal"] },
+        { transforms: [{ kind: "pivotLonger", columns: ["1", "2"], namesTo: "col", valuesTo: "signal" }] }
+      ),
+      t
+    )
+    expect(out.ok).toBe(true)
+    if (!out.ok || out.payload.shape !== "columns") return
+    expect(out.payload.columns.signal).toEqual([0.5, 0.6, 0.7, 0.8])
+    // The carried column survives the fold, so "row A" is still addressable.
+    expect(out.payload.plotRows.map((r) => r.values.row)).toEqual(["A", "A", "B", "B"])
+    expect(out.payload.plotRows.map((r) => r.values.col)).toEqual(["1", "2", "1", "2"])
+    // Ids are extended, not reused, so a folded point stays hit-testable.
+    expect(new Set(out.payload.rowIds).size).toBe(4)
+  })
+
+  it("summarises a column that only exists after a transform", () => {
+    // The value column is invented at step 2; reading the pre-transform column
+    // list would report "nothing numeric" about a table that is entirely numeric.
+    const out = resolvePayload(
+      spec(
+        { test: "descriptives", responseColumns: [] },
+        { transforms: [{ kind: "pivotLonger", columns: ["1"], namesTo: "col", valuesTo: "signal" }] }
+      ),
+      table([{ row: "A", "1": 0.5 }, { row: "B", "1": 0.7 }])
+    )
+    expect(out.ok).toBe(true)
+    if (!out.ok || out.payload.shape !== "columns") return
+    expect(out.payload.columns.signal).toEqual([0.5, 0.7])
+  })
+
+  it("normalises to the control on the same plate, not the control overall", () => {
+    // The whole point of an on-plate control: plate 2 reads high across the
+    // board, and normalising per plate must remove that drift rather than
+    // reporting plate 2 as a treatment effect.
+    const t = table([
+      { plate: "P1", cond: "Vehicle", v: 100 },
+      { plate: "P1", cond: "Drug", v: 50 },
+      { plate: "P2", cond: "Vehicle", v: 200 },
+      { plate: "P2", cond: "Drug", v: 100 },
+    ])
+    const out = resolvePayload(
+      spec(
+        { test: "descriptives", responseColumns: ["v"] },
+        {
+          transforms: [
+            { kind: "normaliseToControl", column: "v", groupColumn: "cond", controlLevel: "Vehicle", per: ["plate"], as: "percent" },
+          ],
+        }
+      ),
+      t
+    )
+    expect(out.ok).toBe(true)
+    if (!out.ok || out.payload.shape !== "columns") return
+    // Both drugs are 50% of their own plate's vehicle despite the 2× offset.
+    expect(out.payload.columns.v).toEqual([100, 50, 100, 50])
+  })
+
+  it("yields null rather than a number when a bucket has no control", () => {
+    // A plate silently normalised against nothing is the error worth blocking:
+    // a missing reference is not a reference of zero.
+    const t = table([
+      { plate: "P1", cond: "Vehicle", v: 100 },
+      { plate: "P1", cond: "Drug", v: 50 },
+      { plate: "P2", cond: "Drug", v: 80 },
+    ])
+    const out = resolvePayload(
+      spec(
+        { test: "descriptives", responseColumns: ["v"] },
+        {
+          transforms: [
+            { kind: "normaliseToControl", column: "v", groupColumn: "cond", controlLevel: "Vehicle", per: ["plate"], as: "ratio" },
+          ],
+        }
+      ),
+      t
+    )
+    expect(out.ok).toBe(true)
+    if (!out.ok || out.payload.shape !== "columns") return
+    expect(out.payload.columns.v).toEqual([1, 0.5, null])
+  })
+
   it("drops non-positive concentrations from a log-x fit and says so", () => {
     const t = table([
       { c: 0, s: 0.05 }, { c: 1, s: 0.1 }, { c: 10, s: 0.4 },

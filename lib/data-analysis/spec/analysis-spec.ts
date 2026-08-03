@@ -122,6 +122,28 @@ export const Transform = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("zscore"), column: z.string().max(256) }),
   z.object({ kind: z.literal("foldChange"), column: z.string().max(256), baseline: z.string().max(256) }),
   z.object({ kind: z.literal("normalise"), column: z.string().max(256), min: z.number(), max: z.number() }),
+  /**
+   * "% of vehicle, per plate" — the plate-assay default, and not expressible as
+   * `normalise`, which rescales to a fixed range and knows nothing about which
+   * wells are the control. A separate member rather than extra fields on
+   * `normalise`, because widening that shape would change how every already-saved
+   * spec parses.
+   */
+  z.object({
+    kind: z.literal("normaliseToControl"),
+    column: z.string().max(256),
+    /** The condition column and the level within it that holds the control. */
+    groupColumn: z.string().max(256),
+    controlLevel: z.string().max(256),
+    /**
+     * Columns that scope the control mean, e.g. ["plate"]. Empty takes one
+     * control mean across the whole table, which is only right when there is one
+     * plate: normalising to an on-plate control exists to remove plate-to-plate
+     * drift, and a global mean folds that drift straight back in.
+     */
+    per: z.array(z.string().max(256)).default([]),
+    as: z.enum(["percent", "ratio"]).default("percent"),
+  }),
   z.object({
     kind: z.literal("baselineSubtract"),
     column: z.string().max(256),
@@ -139,6 +161,22 @@ export const Transform = z.discriminatedUnion("kind", [
     name: z.string().max(256),
     /** Spreadsheet-style formula, evaluated by the engine, never by the model. */
     formula: z.string().max(2000),
+  }),
+  /**
+   * Wide → long. A plate reader writes one column per plate column, so a raw
+   * 96-well export arrives as 8 rows × 12 value columns; every shape below the
+   * resolver is long, which makes that layout unanalysable until it is folded.
+   * This is the one transform that changes the row count and the column set
+   * rather than a column's values.
+   */
+  z.object({
+    kind: z.literal("pivotLonger"),
+    /** The wide columns to fold, e.g. the twelve plate columns "1".."12". */
+    columns: z.array(z.string().max(256)).min(1),
+    /** New column carrying the folded column's name. */
+    namesTo: z.string().max(256),
+    /** New column carrying its value. */
+    valuesTo: z.string().max(256),
   }),
 ])
 export type Transform = z.infer<typeof Transform>
@@ -531,6 +569,16 @@ export const AnalysisSpec = z.object({
   analysis: AnalysisConfig,
   figure: FigureSpec,
   export: ExportSettings,
+  /**
+   * Where the engine runs. Today there is only one answer — a Pyodide worker in
+   * the browser — and nothing reads this field yet. It exists now because the
+   * field is free to add before any analysis has been saved without it, and a
+   * migration afterwards; declaring it up front makes a future server tier a
+   * routing decision rather than a change to the contract every stored spec was
+   * written against. Deliberately absent from the cache key: it names where a
+   * number is computed, never what the number is.
+   */
+  runtime: z.enum(["browser", "server"]).default("browser"),
 })
 export type AnalysisSpec = z.infer<typeof AnalysisSpec>
 
