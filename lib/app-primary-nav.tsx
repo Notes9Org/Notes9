@@ -61,12 +61,12 @@ export const APP_PRIMARY_NAV: NavItem[] = [
       { name: "Lab notes", href: "/lab-notes", icon: NotebookPen },
     ],
   },
-  // Analysis reads experiment data, so it sits right after Experiments.
-  { name: "Analysis", href: "/analysis", icon: ChartLine },
   { name: "Samples", href: "/samples", icon: TestTube },
   { name: "Writing", href: "/papers", icon: PenNib },
-  // Unified Data hub: Analysis workspace + Data files browser (retired /data).
-  { name: "Data", href: "/data-analysis", icon: ChartLine },
+  // The one analysis surface: sheet, charts, statistics and the AI seam, plus
+  // the data files browser. The former standalone /analysis route was a second
+  // way to do the same job and was removed rather than kept in parallel.
+  { name: "Data analysis", href: "/data-analysis", icon: ChartLine },
   { name: "Reports", href: "/reports", icon: FileText },
   // Concave four-point flare (custom SVG), Catalyst's glyph after ruling
   // out sparkles, brain/head-circuit, lightning, atom and galaxy: a single

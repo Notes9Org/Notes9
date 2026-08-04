@@ -16,7 +16,6 @@ export const TOUR = {
   navDashboard: "nav-dashboard",
   navProjects: "nav-projects",
   navLiterature: "nav-literature",
-  navAnalysis: "nav-analysis",
   navCatalyst: "nav-catalyst",
   navResearchMap: "nav-research-map",
   help: "help",
@@ -98,8 +97,6 @@ export function navTourKey(href: string): TourKey | undefined {
       return TOUR.navProjects
     case "/literature-reviews":
       return TOUR.navLiterature
-    case "/analysis":
-      return TOUR.navAnalysis
     case "/catalyst":
       return TOUR.navCatalyst
     case "/research-map":
