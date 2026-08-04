@@ -136,6 +136,22 @@ describe("patch validation (§6.6: invalid rejected and repaired, never rendered
     expect(result.mutations).toHaveLength(0)
   })
 
+  it("refuses a calculatedColumn transform the resolver would silently ignore", () => {
+    // The resolver deliberately does not evaluate formulas, so this mutation would
+    // apply, report as applied, and change nothing. Refusing it keeps the applied list
+    // honest; a sibling transform on the same path still goes through.
+    const result = validateProposal({
+      rationale: "Deriving a ratio column.",
+      mutations: [
+        { kind: "data.addTransform", transform: { kind: "calculatedColumn", name: "ratio", formula: "a/b" } },
+        { kind: "data.addTransform", transform: { kind: "log10", column: "OD450" } },
+      ],
+    })
+    expect(result.mutations).toHaveLength(1)
+    expect(result.mutations[0]).toMatchObject({ transform: { kind: "log10" } })
+    expect(result.rejected[0].reason).toContain("sheet's own formulas")
+  })
+
   it("treats a malformed proposal as not ok rather than throwing", () => {
     const result = validateProposal({ nonsense: true })
     expect(result.ok).toBe(false)

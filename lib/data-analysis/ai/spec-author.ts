@@ -336,6 +336,19 @@ export function validateProposal(raw: unknown): ValidatedPatch {
       rejected.push({ mutation: candidate, reason: result.reason })
       continue
     }
+    // A calculatedColumn transform parses and applies, but the resolver deliberately
+    // ignores it — formula evaluation belongs to the sheet, which already owns it, and a
+    // second expression evaluator would be a second source of truth. Left through, it
+    // would be proposed, executed and reported as applied while doing nothing: exactly
+    // the silent-success the rest of this seam exists to remove. Refuse it here so it
+    // lands in `rejected` and the researcher is told, rather than in the applied list.
+    if (result.mutation.kind === "data.addTransform" && result.mutation.transform.kind === "calculatedColumn") {
+      rejected.push({
+        mutation: candidate,
+        reason: "Calculated columns are the sheet's own formulas — add the column there and it becomes available here.",
+      })
+      continue
+    }
     mutations.push(result.mutation)
   }
 
