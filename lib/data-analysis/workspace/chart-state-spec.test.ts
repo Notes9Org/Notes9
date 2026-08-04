@@ -7,6 +7,7 @@ import {
   chartStateFromSpec,
   specFromChartState,
   tableFromChartRows,
+  recomputeSignature,
   type ChartState,
 } from "./chart-state-spec"
 
@@ -334,5 +335,65 @@ describe("the statistics slice survives a round trip", () => {
     expect(analysis.alpha).toBe(0.05)
     expect(analysis.tails).toBe("two")
     expect(analysis.referenceLevel).toBeNull()
+  })
+})
+
+// P4 — the bridge: `ChartState` had no field for filters, transforms or
+// exclusions, so `data.setFilters` / `data.addTransform` landed on the spec
+// and vanished the moment `chartStateFromSpec` diffed it back through the
+// rail. These prove the round trip, and the guard that keeps a stale filter
+// from silently dropping every row once the named column is gone.
+describe("the data pipeline round-trips through the rail", () => {
+  const filters: NonNullable<ChartState["filters"]> = [{ column: "Treatment", op: "eq", value: "Vehicle" }]
+  const transforms: NonNullable<ChartState["transforms"]> = [{ kind: "log10", column: "Viability" }]
+  const exclusions: NonNullable<ChartState["exclusions"]> = [
+    {
+      rowId: "row-2",
+      reasonKind: "technical-failure",
+      reasonText: null,
+      method: null,
+      excludedBy: "user",
+      excludedAt: "2026-08-03T00:00:00.000Z",
+    },
+  ]
+
+  it("carries filters, transforms and exclusions from the rail onto the spec", () => {
+    const spec = specFromChartState({ ...base, filters, transforms, exclusions }, table)
+    expect(spec.filters).toEqual(filters)
+    expect(spec.transforms).toEqual(transforms)
+    expect(spec.exclusions).toEqual(exclusions)
+  })
+
+  it("carries them back off the spec and through a second derivation unchanged", () => {
+    const spec = specFromChartState({ ...base, filters, transforms, exclusions }, table)
+    const state = chartStateFromSpec(spec, table)
+    expect(state.filters).toEqual(filters)
+    expect(state.transforms).toEqual(transforms)
+    expect(state.exclusions).toEqual(exclusions)
+
+    const round = specFromChartState({ ...base, ...state }, table)
+    expect(round.filters).toEqual(filters)
+    expect(round.transforms).toEqual(transforms)
+    expect(round.exclusions).toEqual(exclusions)
+  })
+
+  it("drops a filter naming a column the current sheet doesn't have", () => {
+    const stale: NonNullable<ChartState["filters"]> = [{ column: "Batch", op: "eq", value: "1" }]
+    const spec = specFromChartState({ ...base, filters: stale }, table)
+    expect(chartStateFromSpec(spec, table).filters).toEqual([])
+  })
+})
+
+describe("recomputeSignature", () => {
+  it("changes when only spec.filters changes", () => {
+    const spec = specFromChartState(base, table)
+    const withFilter = { ...spec, filters: [{ column: "Treatment", op: "eq" as const, value: "Vehicle" }] }
+    expect(recomputeSignature(withFilter)).not.toBe(recomputeSignature(spec))
+  })
+
+  it("does not change when only figure.kind changes", () => {
+    const spec = specFromChartState(base, table)
+    const otherKind = { ...spec, figure: { ...spec.figure, kind: "box" as const } }
+    expect(recomputeSignature(otherKind)).toBe(recomputeSignature(spec))
   })
 })

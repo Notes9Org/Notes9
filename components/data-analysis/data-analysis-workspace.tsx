@@ -97,6 +97,7 @@ import {
 import {
   specFromChartState,
   tableFromChartRows,
+  recomputeSignature,
   type ChartState,
 } from "@/lib/data-analysis/workspace/chart-state-spec"
 import { requestSpecPatch, type SpecPatchOutcome } from "@/lib/data-analysis/ai/spec-author-client"
@@ -680,6 +681,14 @@ export function DataAnalysisWorkspace({
   const [statAlpha, setStatAlpha] = useState<number | undefined>(undefined)
   const [statTails, setStatTails] = useState<ChartState["tails"]>(undefined)
   const [statReferenceLevel, setStatReferenceLevel] = useState<string | null | undefined>(undefined)
+  // The data pipeline: filters, transforms and exclusions. Same reasoning as
+  // the statistics slice above — a spec-authored patch (`data.setFilters`,
+  // `data.addTransform`, `data.excludeRow`) is a deliberate choice that has to
+  // be held somewhere, or the next `derivedSpec` recompute drops it back to
+  // empty. Defaulting to `[]` keeps today's behaviour when nothing has set it.
+  const [dataFilters, setDataFilters] = useState<ChartState["filters"]>([])
+  const [dataTransforms, setDataTransforms] = useState<ChartState["transforms"]>([])
+  const [dataExclusions, setDataExclusions] = useState<ChartState["exclusions"]>([])
   const setStyle = useCallback((series: string, patch: Partial<SeriesStyle>) => {
     setSeriesStyles((prev) => ({ ...prev, [series]: { ...prev[series], ...patch } }))
   }, [])
@@ -726,6 +735,7 @@ export function DataAnalysisWorkspace({
           titleSize, axisTitleSize, xMin, xMax, yMin, yMax, nticks, seriesStyles, caption,
           test: statTest, postHoc: statPostHoc, alpha: statAlpha, tails: statTails,
           referenceLevel: statReferenceLevel,
+          filters: dataFilters, transforms: dataTransforms, exclusions: dataExclusions,
         },
         specTable,
         { fileName: sheetFileName }
@@ -739,6 +749,7 @@ export function DataAnalysisWorkspace({
     yLog, xLog, showGrid, showLegend, legendPos, paletteName, errorMode, fontFamily,
     titleSize, axisTitleSize, xMin, xMax, yMin, yMax, nticks, seriesStyles, caption,
     statTest, statPostHoc, statAlpha, statTails, statReferenceLevel,
+    dataFilters, dataTransforms, dataExclusions,
     specTable, sheetFileName,
   ])
 
@@ -792,7 +803,7 @@ export function DataAnalysisWorkspace({
   const attemptedRef = useRef<string | null>(null)
   useEffect(() => {
     if (!derivedSpec || specTable.rows.length === 0) return
-    const signature = `${derivedSpec.dataset.versionHash}|${JSON.stringify(derivedSpec.analysis)}`
+    const signature = recomputeSignature(derivedSpec)
     if (attemptedRef.current === signature) return
     const timer = setTimeout(async () => {
       attemptedRef.current = signature
@@ -1444,6 +1455,7 @@ export function DataAnalysisWorkspace({
     errorMode, showPoints, subtitle, legendPos, hlines, vlines, chartH, caption, xLog,
     test: statTest, postHoc: statPostHoc, alpha: statAlpha, tails: statTails,
     referenceLevel: statReferenceLevel,
+    filters: dataFilters, transforms: dataTransforms, exclusions: dataExclusions,
     plate: { format: plateModel.format, originRow: plateModel.originRow, originCol: plateModel.originCol, roleOverrides: plateModel.roleOverrides, annOverrides: plateModel.annOverrides },
     phase,
   })
@@ -1493,6 +1505,12 @@ export function DataAnalysisWorkspace({
     if (typeof c.alpha === "number") setStatAlpha(c.alpha)
     if (typeof c.tails === "string") setStatTails(c.tails)
     if (c.referenceLevel === null || typeof c.referenceLevel === "string") setStatReferenceLevel(c.referenceLevel)
+    // The data pipeline. Read back symmetrically with buildConfig above: the
+    // AI patch path merges `{...buildConfig(), ...edits}` before calling this,
+    // so a key written there and not read here is silently dropped on merge.
+    if (Array.isArray(c.filters)) setDataFilters(c.filters)
+    if (Array.isArray(c.transforms)) setDataTransforms(c.transforms)
+    if (Array.isArray(c.exclusions)) setDataExclusions(c.exclusions)
     if (c.plate) {
       if (c.plate.format) plateModel.setFormat(c.plate.format)
       if (typeof c.plate.originRow === "number") plateModel.setOriginRow(c.plate.originRow)

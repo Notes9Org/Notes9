@@ -16,7 +16,15 @@
  * that the spec cannot name would be a figure that silently fails to save.
  */
 
-import { parseSpec, type AnalysisSpec, type FigureKind, type TestKind } from "@/lib/data-analysis/spec/analysis-spec"
+import {
+  parseSpec,
+  type AnalysisSpec,
+  type FigureKind,
+  type TestKind,
+  type RowFilter,
+  type Transform,
+  type Exclusion,
+} from "@/lib/data-analysis/spec/analysis-spec"
 import type { Table } from "@/lib/data-analysis/engine/resolver"
 import { defaultGroupColumn, inferDesign, inferRoles, legalTests, type TestCapability } from "@/lib/data-analysis/semantic/infer"
 import { hashTable } from "./bootstrap"
@@ -104,6 +112,17 @@ export interface ChartState {
   alpha?: number
   tails?: Analysis["tails"]
   referenceLevel?: string | null
+  /**
+   * The data pipeline. Absent, like the statistics slice above, keeps
+   * deriving an empty pipeline exactly as before. These are the fields the AI
+   * patches through `data.setFilters` / `data.addTransform` / `data.excludeRow`
+   * — without a home on `ChartState` they land in the spec and vanish on the
+   * next `derivedSpec` recompute, because nothing carries them back into the
+   * rail's own state.
+   */
+  filters?: RowFilter[]
+  transforms?: Transform[]
+  exclusions?: Exclusion[]
 }
 
 function num(value: unknown): number | null {
@@ -176,6 +195,9 @@ export function specFromChartState(
     },
     roles,
     design,
+    filters: state.filters ?? [],
+    transforms: state.transforms ?? [],
+    exclusions: state.exclusions ?? [],
     export: {},
   }
 
@@ -288,13 +310,17 @@ export class SpecDerivationError extends Error {}
  * own mapping stands in that case.
  *
  * Everything the spec holds that the rail has no control for — the second axis,
- * brackets, annotations and filters — is deliberately absent rather than
- * undefined: those live on the spec, and the caller keeps them there.
+ * brackets and annotations — is deliberately absent rather than undefined:
+ * those live on the spec, and the caller keeps them there.
  *
  * The statistics slice does come back, because it has to: the derivation the
  * other way now prefers these over its chart-type guess, so dropping them here
  * would hand the round trip a state whose next derivation quietly recomputes
- * the test the spec had chosen.
+ * the test the spec had chosen. Filters, transforms and exclusions come back
+ * for the same reason: the AI patches them directly (`data.setFilters`,
+ * `data.addTransform`, `data.excludeRow`), and dropping them here is exactly
+ * how a patch that landed in the spec used to vanish on the next
+ * `derivedSpec` recompute.
  */
 export function chartStateFromSpec(spec: AnalysisSpec, table: Table): Partial<ChartState> {
   const { figure, analysis } = spec
@@ -316,6 +342,13 @@ export function chartStateFromSpec(spec: AnalysisSpec, table: Table): Partial<Ch
     yMax: figure.y.max,
     nticks: figure.x.tickCount,
     errorMode: figure.errorBars,
+    // Guarded the same way `responseColumns` is above: a filter naming a
+    // column the current sheet doesn't have would otherwise have `matches`
+    // (engine/resolver.ts) evaluate against `undefined` and silently drop
+    // every row on the next recompute.
+    filters: spec.filters.filter((f) => columns.has(f.column)),
+    transforms: spec.transforms,
+    exclusions: spec.exclusions,
     // The statistics the panel owns. A parsed spec always has all five, so
     // reading them back is a plain copy — and null on the reference level is a
     // value ("no reference"), the same as on the caption above.
@@ -365,6 +398,32 @@ export function chartStateFromSpec(spec: AnalysisSpec, table: Table): Partial<Ch
   if (responseColumns.length > 0) state.yKeys = responseColumns
 
   return state
+}
+
+/**
+ * The signature `derivedSpec`'s recompute effect watches. Mirrors
+ * `requiresRecompute` (`lib/data-analysis/spec/mutations.ts`) — the codebase's
+ * own statement of Law 5, "style edits never recompute; data and analysis
+ * edits always do" — plus `figure.errorBars`, which that rule already marks
+ * recompute-worthy but which nothing here previously watched: a real
+ * pre-existing miss, not a deliberate omission.
+ *
+ * Deliberately excludes `design`/`roles` (already a pure function of
+ * `versionHash`, via `inferDesign`/`inferRoles`) and `figure.kind` (a
+ * chart-type change already flows through `testForChart` into
+ * `analysis.test`; watching the kind directly would add a ~2s Pyodide round
+ * trip to every chart-type click for analysis the signature already covers).
+ * Do not "fix" that omission — it is the point.
+ */
+export function recomputeSignature(spec: AnalysisSpec): string {
+  return JSON.stringify([
+    spec.dataset.versionHash,
+    spec.analysis,
+    spec.filters,
+    spec.transforms,
+    spec.exclusions,
+    spec.figure.errorBars,
+  ])
 }
 
 /** Rows keyed by column name, as the chart workspace holds them, become a Table. */
