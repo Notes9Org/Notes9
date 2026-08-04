@@ -32,6 +32,15 @@ function workspaceRoute(sourceType: string, sourceId: string): string {
   }
 }
 
+// Per-click nonce so a repeat click on the SAME citation (identical excerpt,
+// same source) is still value-distinct through both delivery paths (the
+// dispatched CustomEvent detail and the `?highlight=` URL param). Content-keyed
+// dedup gates downstream (e.g. the PDF panel's fired-ref) never reset without
+// this. Monotonic counter, not Date.now()/Math.random() — deterministic and
+// SSR/hydration-safe.
+let hlSeq = 0
+const nextNonce = () => ++hlSeq
+
 export interface SourceNavDescriptor {
   sourceType: string
   sourceId?: string | null
@@ -70,6 +79,8 @@ export function useSourceNavigation(): (desc: SourceNavDescriptor) => void {
           desc.charStart != null && desc.charEnd != null
             ? { start: desc.charStart, end: desc.charEnd }
             : null,
+        // One nonce per click, attached before both delivery paths below.
+        nonce: nextNonce(),
       }
       // Same-page doc viewers handle this (scroll to the excerpt, no reload) —
       // also how a second citation into the SAME open document just scrolls.

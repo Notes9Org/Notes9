@@ -70,7 +70,7 @@ export async function updateSession(request: NextRequest) {
   // Define public routes that don't require authentication
   // Exact-match list — a new marketing route must be added here or a logged-out
   // visitor is redirected to /auth/login.
-  const publicRoutes = ["/", "/about", "/pricing", "/docs", "/platform", "/how-it-works", "/resources", "/terms", "/privacy", "/survey", "/auth/invite"]
+  const publicRoutes = ["/", "/about", "/pricing", "/docs", "/platform", "/how-it-works", "/resources", "/terms", "/privacy", "/survey", "/webinar", "/auth/invite"]
   // Prefix-matched static assets. The data-analysis engine's Python source is
   // fetched by a Web Worker, and a worker fetch that gets bounced to the login
   // page receives HTML where it expected Python and fails with a parse error

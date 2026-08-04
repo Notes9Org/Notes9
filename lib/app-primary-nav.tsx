@@ -61,6 +61,8 @@ export const APP_PRIMARY_NAV: NavItem[] = [
       { name: "Lab notes", href: "/lab-notes", icon: NotebookPen },
     ],
   },
+  // Analysis reads experiment data, so it sits right after Experiments.
+  { name: "Analysis", href: "/analysis", icon: ChartLine },
   { name: "Samples", href: "/samples", icon: TestTube },
   { name: "Writing", href: "/papers", icon: PenNib },
   // Unified Data hub: Analysis workspace + Data files browser (retired /data).

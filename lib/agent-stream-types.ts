@@ -245,14 +245,22 @@ export interface NoticePayload {
   [key: string]: unknown;
 }
 
-/** SSE event: clarify – a clarifying question the agent needs answered before
- * it can proceed. Emitted INSTEAD of streaming the question as `token` events
- * so the UI renders a ClarifyCard form (question + optional quick-picks).
- * Wire shape mirrors catalyst `core/sse.py::SseEmitter.clarify`. */
+/** SSE event: clarify – the agent's ask_clarification tool ended the turn with
+ * a structured question (emitted instead of token-streaming the question).
+ * Rendered as a ClarifyCard; the answer goes back as a normal user message. */
 export interface ClarifyPayload {
   question: string;
   options?: string[];
   source?: string;
+  [key: string]: unknown;
+}
+
+/** SSE event: context_usage – estimated prompt tokens vs the model context
+ * window for the current turn. Drives the small usage circle in the chat UI. */
+export interface ContextUsagePayload {
+  used_tokens: number;
+  window_tokens: number;
+  percent: number;
   [key: string]: unknown;
 }
 
@@ -337,6 +345,7 @@ export type SseEvent =
   | { event: "error"; data: ErrorPayload }
   | { event: "notice"; data: NoticePayload }
   | { event: "clarify"; data: ClarifyPayload }
+  | { event: "context_usage"; data: ContextUsagePayload }
   | { event: "ping"; data: PingPayload };
 
 // ── Source-name normalizer (AD1: structured fields → view model) ──────────────
@@ -424,6 +433,7 @@ const KNOWN_EVENT_TYPES = new Set([
   "error",
   "notice",
   "clarify",
+  "context_usage",
   "ping",
 ] as const);
 

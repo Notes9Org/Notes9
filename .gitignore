@@ -81,3 +81,5 @@ __pycache__/
 # incompressible binary payload in history permanently, once per runtime
 # upgrade. See docs/data-analysis/self-hosting-pyodide.md.
 /public/pyodide/
+CLAUDE.local.md
+supabase/.temp/

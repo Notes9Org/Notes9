@@ -25,6 +25,7 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import { Spinner } from "@/components/ui/spinner"
 import { useToast } from "@/hooks/use-toast"
+import { orgCollaborationEnabled } from "@/lib/collab-flag"
 
 const orgSetupSchema = z.object({
   name: z
@@ -150,8 +151,9 @@ export function OrgSetupForm() {
           Set up your lab
         </CardTitle>
         <CardDescription>
-          Create your organization to start collaborating with your research
-          team.
+          {orgCollaborationEnabled()
+            ? "Create your organization to start collaborating with your research team."
+            : "Create your organization to set up your research workspace."}
         </CardDescription>
       </CardHeader>
       <CardContent>

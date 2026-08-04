@@ -15,6 +15,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { useToast } from "@/hooks/use-toast"
 import { WarningCircle as AlertCircle, CheckCircle as CheckCircle2, Envelope as Mail } from "@phosphor-icons/react/ssr"
 import { Notes9Brand } from "@/components/brand/notes9-brand"
+import { orgCollaborationEnabled } from "@/lib/collab-flag"
 
 type InvitationDetails = {
   id: string
@@ -341,6 +342,8 @@ function InviteAcceptContent() {
 }
 
 export default function InviteAcceptPage() {
+  // Collaboration hidden behind flag: no invites exist to accept, render nothing.
+  if (!orgCollaborationEnabled()) return null
   return (
     <Suspense
       fallback={

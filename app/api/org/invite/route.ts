@@ -7,6 +7,7 @@ import { createServiceRoleClient } from "@/lib/supabase-service-role"
 import { generateInvitationToken, buildInvitationUrl } from "@/lib/org/invitation"
 import { isSystemAdminRow } from "@/lib/org/require-admin"
 import { resend } from "@/lib/resend"
+import { orgCollaborationEnabled } from "@/lib/collab-flag"
 
 function escapeHtml(s: string): string {
   return s
@@ -26,6 +27,13 @@ const inviteSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
+    if (!orgCollaborationEnabled()) {
+      return NextResponse.json(
+        { error: "Collaboration is not available yet" },
+        { status: 403 }
+      )
+    }
+
     // Authenticate the user via session cookie
     const supabase = await createClient()
     const user = await getCurrentUser()

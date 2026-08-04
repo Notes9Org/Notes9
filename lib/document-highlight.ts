@@ -15,6 +15,11 @@ export interface HighlightTarget {
    * Used as a precision bonus by the highlighter — the fuzzy match on `excerpt`
    * (which now prefers `cited_text`) is the reliable primary path. */
   charRange?: { start: number; end: number } | null;
+  /** Per-click monotonic id (see `hooks/use-source-navigation.ts`) that makes
+   * every navigation VALUE-DISTINCT even when the excerpt/target is identical
+   * to the previous click — this is what lets a repeat click on the same
+   * citation re-fire the highlight instead of being deduped by content. */
+  nonce?: number;
 }
 
 const HIGHLIGHT_PARAM = 'highlight';
@@ -29,6 +34,7 @@ export function encodeHighlightParam(target: HighlightTarget): string {
     ...(target.pageNumber != null ? { pg: target.pageNumber } : {}),
     ...(target.contentSurface ? { sf: target.contentSurface } : {}),
     ...(target.charRange ? { cr: [target.charRange.start, target.charRange.end] } : {}),
+    ...(target.nonce != null ? { n: target.nonce } : {}),
   });
   if (typeof window !== 'undefined') {
     return btoa(unescape(encodeURIComponent(json)));
@@ -61,6 +67,9 @@ export function decodeHighlightParam(param: string): HighlightTarget | null {
       cr[1] > cr[0]
         ? { start: cr[0], end: cr[1] }
         : null;
+    // Legacy params (minted before nonces existed) decode fine with `nonce`
+    // left undefined — no back-compat break.
+    const nonce = typeof o.n === 'number' ? o.n : undefined;
     return {
       sourceType,
       sourceId,
@@ -69,6 +78,7 @@ export function decodeHighlightParam(param: string): HighlightTarget | null {
       pageNumber: typeof o.pg === 'number' ? o.pg : null,
       contentSurface,
       charRange,
+      nonce,
     };
   } catch {
     return null;

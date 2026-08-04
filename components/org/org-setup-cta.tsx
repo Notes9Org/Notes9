@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Buildings as Building2 } from "@phosphor-icons/react/ssr";
 import { Button } from "@/components/ui/button";
 import { DashboardLabSection } from "@/components/org/dashboard-lab-section";
+import { orgCollaborationEnabled } from "@/lib/collab-flag";
 
 interface OrgSetupCTAProps {
   visible: boolean;
@@ -9,19 +10,25 @@ interface OrgSetupCTAProps {
 
 export function OrgSetupCTA({ visible }: OrgSetupCTAProps) {
   if (!visible) return null;
+  const collab = orgCollaborationEnabled();
 
   return (
     <DashboardLabSection
       eyebrow="New here?"
       title="Set up My Lab"
-      description="Create your lab organization to invite teammates, manage roles, and keep everyone on the same research workspace."
+      description={
+        collab
+          ? "Create your lab organization to invite teammates, manage roles, and keep everyone on the same research workspace."
+          : "Create your lab organization to keep your research organized in one workspace."
+      }
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3 text-sm text-muted-foreground">
           <Building2 className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden />
           <p className="max-w-xl">
-            Most research teams start here — it only takes a minute, and you can
-            invite collaborators right after.
+            {collab
+              ? "Most research teams start here — it only takes a minute, and you can invite collaborators right after."
+              : "Most researchers start here — it only takes a minute."}
           </p>
         </div>
         <Button asChild className="shrink-0 cursor-pointer">
