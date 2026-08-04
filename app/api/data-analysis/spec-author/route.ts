@@ -11,6 +11,7 @@ import {
   containsFabricatedStatistic,
   sanitiseRationale,
   screenRequest,
+  SPEC_AUTHOR_SYSTEM_PROMPT,
   validateProposal,
   type ColumnProfile,
   type DataProfile,
@@ -182,22 +183,35 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    // Computed once, used twice: to tell the model which tests are legal for
+    // this data shape, and — after the reply comes back — to enforce it. Same
+    // whitelist the UI's test menu uses, so the model can't see a wider set
+    // than the researcher would.
+    const legalTests = offerableTests(spec, table)
+
     // (d) Only the bundle crosses the seam. `buildContextBundle` is profile-only
     // by construction; raw rows never leave this process.
+    //
+    // `project`, `recentEdits`, and `result` are left unpopulated: this route
+    // has no producer for a notes9 project record, an edit-history feed, or a
+    // live engine result at this call site (confirmed against
+    // spec-author-client.ts, whose wire contract is just { prompt, spec, table
+    // }) — inventing one here would be a new data source, not a bundle fix.
     const bundle = buildContextBundle({
       prompt,
       spec,
       profile: toDataProfile(spec, table),
+      offerableTests: legalTests,
     })
 
     let reply: CatalystReply
     try {
-      reply = await callCatalyst<{ bundle: Record<string, unknown>; prompt: string }, CatalystReply>(
-        CATALYST_PATH,
-        { bundle, prompt },
-        accessToken,
-        { timeoutMs: CATALYST_TIMEOUT_MS }
-      )
+      reply = await callCatalyst<
+        { bundle: Record<string, unknown>; prompt: string; system: string },
+        CatalystReply
+      >(CATALYST_PATH, { bundle, prompt, system: SPEC_AUTHOR_SYSTEM_PROMPT }, accessToken, {
+        timeoutMs: CATALYST_TIMEOUT_MS,
+      })
     } catch (err) {
       // (f) Fail CLOSED and legibly. Unset env, timeout and HTTP error all land
       // here; the workspace keeps computing without the assistant.
@@ -218,8 +232,8 @@ export async function POST(req: NextRequest) {
     const { text: rationale } = sanitiseRationale(validated.rationale)
 
     // A test the data cannot support is not a suggestion, it is a wrong answer
-    // with a confident tone. The legality check is the same one the UI menu uses.
-    const allowedTests = new Set(offerableTests(spec, table).map((c) => c.test))
+    // with a confident tone. Same `legalTests` the bundle told the model about.
+    const allowedTests = new Set(legalTests.map((c) => c.test))
 
     const mutations = validated.mutations.filter((m) => {
       const record = m as unknown as Record<string, unknown>

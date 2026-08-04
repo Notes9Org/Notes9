@@ -1,7 +1,8 @@
 import { z } from "zod"
-import type { AnalysisSpec } from "@/lib/data-analysis/spec/analysis-spec"
+import type { AnalysisSpec, TestKind } from "@/lib/data-analysis/spec/analysis-spec"
 import type { SpecMutation } from "@/lib/data-analysis/spec/mutations"
 import type { EngineResult } from "@/lib/data-analysis/engine/contract"
+import { MUTATION_CONTRACT, parseMutation } from "@/lib/data-analysis/spec/mutation-schema"
 
 /**
  * L7 — AI orchestration.
@@ -45,7 +46,7 @@ export const SpecPatchProposal = z.object({
 export type SpecPatchProposal = z.infer<typeof SpecPatchProposal>
 
 /** Mutation kinds the assistant is allowed to author. */
-const ALLOWED_MUTATION_KINDS = new Set<SpecMutation["kind"]>([
+export const ALLOWED_MUTATION_KINDS = new Set<SpecMutation["kind"]>([
   "figure.setKind",
   "figure.setTitle",
   "figure.setSubtitle",
@@ -85,10 +86,15 @@ const ALLOWED_MUTATION_KINDS = new Set<SpecMutation["kind"]>([
  * capability simply does not exist on this path — the user excludes points
  * through the figure, and the record says they did.
  */
-const FORBIDDEN_MUTATION_KINDS = new Set<string>([
+export const FORBIDDEN_MUTATION_KINDS = new Set<string>([
   "data.excludeRow",
   "data.restoreRow",
   "figure.moveBracket",
+  // The caption doc comment on `FigureSpec` (analysis-spec.ts) is explicit:
+  // once a researcher has worded it, it is "never regenerated over." That is
+  // the same sticky, human-owned status as the fields above, so the assistant
+  // does not get a mutation for it either.
+  "figure.setCaption",
 ])
 
 /* ── Guardrails (§7 adversarial set, §8.1) ─────────────────────────────────*/
@@ -212,6 +218,14 @@ export interface SpecAuthorContext {
    * sanctioned wording.
    */
   result?: EngineResult | null
+  /**
+   * The legal test set for this data shape (lib/data-analysis/semantic/infer.ts),
+   * computed server-side from assumption checks the model cannot run itself.
+   * Without this the model can only guess at `analysis.setTest`'s domain from
+   * the contract's bare enum; with it, it knows which tests are actually valid
+   * for what's loaded and why the rest are not.
+   */
+  offerableTests?: { test: TestKind; legal: boolean; reason?: string; recommended: boolean }[]
 }
 
 /**
@@ -245,6 +259,18 @@ export function buildContextBundle(ctx: SpecAuthorContext): Record<string, unkno
       transforms: ctx.spec.transforms.map((t) => t.kind),
       exclusionCount: ctx.spec.exclusions.length,
     },
+    // Whole filter objects, not a count: `data.setFilters` replaces the array
+    // wholesale, so a filter the model wants to keep has to be re-emitted — it
+    // can only do that if it was told the full, exact objects to begin with.
+    filters: ctx.spec.filters,
+    // The legal kinds and their exact payload shapes, walked from
+    // `SpecMutationSchema` (mutation-schema.ts) — see that file for why this is
+    // generated rather than prose.
+    contract: MUTATION_CONTRACT,
+    // Which tests this data shape can actually support, and why the rest can't
+    // (lib/data-analysis/semantic/infer.ts). Withholding this used to leave the
+    // model guessing at `analysis.setTest`'s domain from the bare enum alone.
+    offerableTests: ctx.offerableTests ?? [],
     recentEdits: (ctx.recentEdits ?? []).slice(-10),
     // Assumption verdicts only — no statistics.
     assumptionFlags:
@@ -297,7 +323,7 @@ export function validateProposal(raw: unknown): ValidatedPatch {
     if (FORBIDDEN_MUTATION_KINDS.has(kind)) {
       rejected.push({
         mutation: candidate,
-        reason: `The assistant may not author "${kind}". Exclusions and bracket placement are the researcher's own acts.`,
+        reason: `The assistant may not author "${kind}". Exclusions, bracket placement, and the caption's wording are the researcher's own acts.`,
       })
       continue
     }
@@ -305,7 +331,12 @@ export function validateProposal(raw: unknown): ValidatedPatch {
       rejected.push({ mutation: candidate, reason: `Unknown mutation kind "${kind}".` })
       continue
     }
-    mutations.push(candidate as unknown as SpecMutation)
+    const result = parseMutation(candidate)
+    if (!result.ok) {
+      rejected.push({ mutation: candidate, reason: result.reason })
+      continue
+    }
+    mutations.push(result.mutation)
   }
 
   return {
@@ -368,7 +399,11 @@ export const SPEC_AUTHOR_SYSTEM_PROMPT = `You configure statistical analyses for
 
 You do NOT compute anything. A separate, validated engine computes every number. Never state a p-value, test statistic, effect size, R², or EC50 in your reply: the researcher reads those from the results panel, and any figure you write would be an invention.
 
-You return a patch: a list of typed mutations plus a short rationale in plain language.
+You return a patch: a JSON object with exactly three fields — "rationale" (a short plain-language explanation), "mutations" (an array of mutation objects), and "clarificationNeeded" (a string if you need to ask something instead of acting, otherwise null).
+
+Every mutation object must have a "kind" field naming one of the mutations listed under "contract" in the bundle, plus exactly the other fields that kind's entry names — nothing more, nothing invented. A mutation of a kind not listed there, or missing a required field, is rejected outright and never reaches the researcher's analysis.
+
+"data.setFilters" REPLACES the entire filter list; it does not append. If the bundle's "filters" already has entries you want to keep, re-emit them in full alongside whatever you are adding or changing — anything you leave out is gone.
 
 How to choose a test:
 - Prefer the design RECORDED in the project over the shape of the numbers. If the record says the same subjects were measured twice, the comparison is paired even if the columns look independent.

@@ -243,4 +243,33 @@ describe("context bundle (§11 decision 10: what the model sees)", () => {
     expect(serialised).not.toContain("224.6")
     expect(serialised).not.toContain("0.000001")
   })
+
+  it("carries the mutation contract, the offerable tests, and the current filters", () => {
+    const s = spec()
+    const bundle = buildContextBundle({
+      prompt: "compare the groups",
+      spec: s,
+      profile: { fileName: "plate.xlsx", rowCount: 24, columns: [] },
+      offerableTests: [{ test: "t-paired", legal: true, recommended: true }],
+    })
+
+    // Non-empty prose derived from mutation-schema.ts, not hand-copied here —
+    // see mutation-schema.test.ts for the drift guarantee itself.
+    expect(typeof bundle.contract).toBe("string")
+    expect((bundle.contract as string).length).toBeGreaterThan(0)
+
+    expect(bundle.offerableTests).toEqual([{ test: "t-paired", legal: true, recommended: true }])
+
+    // Whole filter objects, because `data.setFilters` replaces the array wholesale.
+    expect(bundle.filters).toEqual(s.filters)
+  })
+
+  it("defaults offerableTests to an empty array when the caller has none to offer", () => {
+    const bundle = buildContextBundle({
+      prompt: "compare the groups",
+      spec: spec(),
+      profile: { fileName: "plate.xlsx", rowCount: 24, columns: [] },
+    })
+    expect(bundle.offerableTests).toEqual([])
+  })
 })
