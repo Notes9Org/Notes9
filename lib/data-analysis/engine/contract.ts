@@ -70,7 +70,7 @@ export function resolvePyodideBaseUrl(configured?: string): string {
 }
 
 /** Bump when the Python engine source changes in any way that can alter a number. */
-export const ENGINE_SOURCE_VERSION = "1.1.0" as const
+export const ENGINE_SOURCE_VERSION = "1.2.0" as const
 
 /**
  * The single string stamped onto every result and compared on reopen. Human
@@ -299,6 +299,42 @@ export interface EngineResult {
 
   /** Non-fatal engine notes: convergence warnings, dropped rows, small n. */
   warnings: string[]
+
+  /**
+   * The routine that actually ran, as a machine key. It is not always the test
+   * that was requested: a non-2x2 table asked for Fisher's exact gets a
+   * chi-square, and a record that still names the request describes an analysis
+   * nobody performed. Null when nothing ran.
+   */
+  testRan: string | null
+
+  /**
+   * Non-null exactly when the run failed, in which case `test` is null because
+   * nothing was computed. See `EngineError` for why this is not a warning.
+   */
+  error: EngineError | null
+}
+
+/**
+ * Why a run produced no test.
+ *
+ * `test: null` on its own is ambiguous: "no hypothesis attached, here are the
+ * descriptives" and "the calculation raised" arrive looking identical, so a
+ * failure could be reported as a finished analysis. The failure also used to
+ * travel in `warnings` — the list a scientist is meant to read for caveats —
+ * carrying a Python exception repr, which is not something to put in front of a
+ * bench user. Hence: a code to branch on, a sentence to show, and the raw text
+ * kept separately for diagnostics.
+ */
+export interface EngineError {
+  /** Stable across message rewording, so callers may branch on it. */
+  code: "test-failed" | "no-routine"
+  /** The analysis that was attempted, e.g. "nonlinear-regression". */
+  test: string
+  /** Shown to the user. Never a Python exception repr. */
+  message: string
+  /** `OverflowError: …` as Python raised it — for logs and bug reports only. */
+  detail: string | null
 }
 
 /* ── Cache key ─────────────────────────────────────────────────────────────*/

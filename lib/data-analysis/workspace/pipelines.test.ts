@@ -49,6 +49,8 @@ const engineResult: EngineResult = {
   test: null,
   curveFit: null,
   survival: null,
+  testRan: null,
+  error: null,
   exclusionImpact: null,
   plotData: [],
   warnings: [],

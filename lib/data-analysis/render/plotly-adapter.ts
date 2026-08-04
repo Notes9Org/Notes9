@@ -1458,11 +1458,17 @@ export function buildFigure(
   // unlabelled is uninterpretable.
   const errorNote = ERROR_BAR_LABEL[figure.errorBars]
   const subtitleBits = [figure.subtitle, errorNote].filter(Boolean)
+  // Always subordinate type: with no title of its own, an untitled figure was
+  // promoting "mean ± SD" to the headline at full title weight.
+  const subtitleText =
+    subtitleBits.length > 0
+      ? `<span style="font-size:${Math.round(figure.titleFontSize * 0.62)}px;opacity:0.65">${subtitleBits.join(" · ")}</span>`
+      : ""
   const titleText = figure.title
-    ? subtitleBits.length > 0
-      ? `${figure.title}<br><span style="font-size:${Math.round(figure.titleFontSize * 0.62)}px;opacity:0.65">${subtitleBits.join(" · ")}</span>`
+    ? subtitleText
+      ? `${figure.title}<br>${subtitleText}`
       : figure.title
-    : subtitleBits.join(" · ")
+    : subtitleText
 
   const layout: Record<string, unknown> = {
     title: { text: titleText, font: { size: figure.titleFontSize } },
