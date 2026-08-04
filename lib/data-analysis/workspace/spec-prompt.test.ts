@@ -46,4 +46,28 @@ describe("railEditsFromSpec", () => {
   it("is empty when nothing moved", () => {
     expect(railEditsFromSpec(base, base, table)).toEqual({})
   })
+
+  // P4 — the bridge: `data.setFilters` / `data.addTransform` land on the spec
+  // (the resolver already implements every op), but `ChartState` had no field
+  // to carry them, so `chartStateFromSpec` dropped them and the diff below
+  // came back empty. The reply card said "Filters updated" while nothing
+  // changed. These fail on the old `ChartState` and pass once it carries the
+  // pipeline through.
+  it("writes back a filter patch as a non-empty edits.filters", () => {
+    const next = applyMutation(base, {
+      kind: "data.setFilters",
+      filters: [{ column: "group", op: "eq", value: "A" }],
+    })
+    const edits = railEditsFromSpec(base, next, table)
+    expect(edits.filters).toEqual([{ column: "group", op: "eq", value: "A" }])
+  })
+
+  it("writes back a transform patch as a non-empty edits.transforms", () => {
+    const next = applyMutation(base, {
+      kind: "data.addTransform",
+      transform: { kind: "log10", column: "value" },
+    })
+    const edits = railEditsFromSpec(base, next, table)
+    expect(edits.transforms).toEqual([{ kind: "log10", column: "value" }])
+  })
 })
