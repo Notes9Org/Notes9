@@ -281,7 +281,7 @@ export function ExportMenu({
           ))}
         </div>
         {isVector ? (
-          <p className="mt-1.5 text-[11px] text-muted-foreground">SVG is a vector — resolution-independent.</p>
+          <p className="mt-1.5 text-[11px] text-muted-foreground">SVG is a vector, resolution-independent.</p>
         ) : dpiValid ? (
           <p className="mt-1.5 text-[11px] text-muted-foreground">Physical DPI is embedded for print (journals check this).</p>
         ) : (
@@ -325,7 +325,7 @@ export function ExportMenu({
       </label>
       {colourSpace === "cmyk" && (
         <p className="mt-1.5 rounded-md bg-amber-500/[0.08] px-2 py-1 text-[10.5px] leading-snug text-amber-800 dark:text-amber-300">
-          Written as a CMYK TIFF using an uncalibrated separation — there is no ICC
+          Written as a CMYK TIFF using an uncalibrated separation, there is no ICC
           profile in the browser. Fine for line art and flat colour; for colour-critical
           figures let the production house convert against their own profile.
         </p>

@@ -75,7 +75,7 @@ export function AppTour() {
   // component still owns is the fast localStorage gate.
 
   // The welcome wizard must not appear until the user has accepted the current
-  // terms — a brand-new signup sees the terms gate FIRST, then the tour. This is
+  // terms, a brand-new signup sees the terms gate FIRST, then the tour. This is
   // read from the auth user, which the terms modal refreshes on accept (via
   // refreshSession → onAuthStateChange), so the value flips here automatically.
   // Existing users have already accepted, so this is true immediately (no change
@@ -113,9 +113,9 @@ export function AppTour() {
         return
       }
 
-      // The DB is the source of truth. A brand-new profile — created on email,
+      // The DB is the source of truth. A brand-new profile, created on email,
       // Google, or Microsoft sign-up (via app code or the handle_new_user
-      // trigger) — has `notes9_welcome_seen_at = NULL`, so onboarding shows. If
+      // trigger), has `notes9_welcome_seen_at = NULL`, so onboarding shows. If
       // the row isn't readable yet (provisioning/replication race right after
       // OAuth), retry briefly rather than silently skipping onboarding.
       let profile:

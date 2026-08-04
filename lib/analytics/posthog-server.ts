@@ -30,7 +30,7 @@ function getClient(): PostHog | null {
 
 /**
  * Capture a server-side event attributed to a user.
- * `properties` MUST contain only opaque ids / counts / enums — never free text.
+ * `properties` MUST contain only opaque ids / counts / enums, never free text.
  */
 export function captureServer(
   distinctId: string,
@@ -48,7 +48,7 @@ export function captureServer(
 
 /**
  * Capture a server-side exception into PostHog Error Tracking.
- * `distinctId` is optional — pass the user id when known (e.g. parsed from the
+ * `distinctId` is optional, pass the user id when known (e.g. parsed from the
  * PostHog cookie in the Next.js `onRequestError` hook) so the exception links
  * to a person. Never throws; inert when unconfigured.
  */
@@ -71,6 +71,6 @@ export async function flushServer(): Promise<void> {
   try {
     await _client?.flush()
   } catch {
-    // ignore flush errors — telemetry must never break the request
+    // ignore flush errors, telemetry must never break the request
   }
 }

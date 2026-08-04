@@ -57,7 +57,7 @@ async function download(file: string): Promise<Buffer> {
 /**
  * Resolve the wheels to mirror. `depends` is transitive, so numpy's openblas
  * and pandas' pytz have to come along or the mirror boots and then fails at the
- * first import — the worst possible failure, because it looks like a bug in the
+ * first import, the worst possible failure, because it looks like a bug in the
  * engine rather than a gap in the mirror.
  */
 function closure(lock: Lock, roots: readonly string[]): LockPackage[] {
@@ -94,7 +94,7 @@ async function main() {
 
   for (const pkg of closure(lock, ENGINE_PACKAGES.prebuilt)) {
     const body = await download(pkg.file_name)
-    // The lock ships the hashes, so verifying is nearly free — and a mirror is
+    // The lock ships the hashes, so verifying is nearly free, and a mirror is
     // exactly the place a silently truncated download would go unnoticed until
     // it produced a wrong number rather than an error.
     const digest = createHash("sha256").update(body).digest("hex")

@@ -175,7 +175,7 @@ export async function stagePaper(
 
     revalidatePath("/literature-reviews")
 
-    // PDF fetch/upload can take many seconds — run after the action returns so staging feels instant.
+    // PDF fetch/upload can take many seconds, run after the action returns so staging feels instant.
     const stagedAbstract = paper.abstract
 
     console.log(`[lit] stagePaper insert=new id=${literatureId} pdf_status=pending → import scheduled`)
@@ -262,7 +262,7 @@ export async function savePaperToRepository(
         .from("literature_reviews")
         .update({
           catalog_placement: "repository",
-          // Promoted to the library — no longer a temporary read, so clear the TTL.
+          // Promoted to the library, no longer a temporary read, so clear the TTL.
           staged_expires_at: null,
           project_id: options?.projectId || null,
           experiment_id: options?.experimentId || null,
@@ -334,7 +334,7 @@ export async function savePaperToRepository(
     const { data: existingDup } = await duplicateQuery.maybeSingle()
     if (existingDup) {
       if (existingDup.catalog_placement === "staging") {
-        // Already staged — "Save to library" should promote that row out of
+        // Already staged, "Save to library" should promote that row out of
         // staging, not dead-end. Re-run through the literatureId promote path.
         return savePaperToRepository(paper, { ...options, literatureId: existingDup.id })
       }
@@ -380,7 +380,7 @@ export async function savePaperToRepository(
       warning = importResult.message ?? "Paper saved but the search PDF link could not be downloaded."
     } else if (!importResult.ok && importResult.reason === "no_open_access_pdf") {
       warning =
-        "Paper saved; no fetchable PDF URL was on the search hit — upload the PDF if needed."
+        "Paper saved; no fetchable PDF URL was on the search hit, upload the PDF if needed."
     }
 
     revalidatePath("/literature-reviews")

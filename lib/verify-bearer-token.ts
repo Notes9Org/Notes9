@@ -10,11 +10,11 @@ import { verifyAccessTokenLocally } from "@/lib/auth/verify-token"
  * forwarding the request upstream.
  *
  * Without this verification a route can be reached by any caller who supplies
- * `Authorization: Bearer anything` — string presence is not authentication.
+ * `Authorization: Bearer anything`, string presence is not authentication.
  *
  * Fast path: verify the JWT LOCALLY against SUPABASE_JWT_SECRET (no auth-server
  * round-trip, no DB connection). This matters because the AI streaming routes
- * that use this run long and concurrently — a getUser() per request was opening
+ * that use this run long and concurrently, a getUser() per request was opening
  * a database connection each time and helping exhaust the Nano connection pool.
  * Falls back to the authoritative getUser() only when the secret is missing or
  * local verification fails.
@@ -22,7 +22,7 @@ import { verifyAccessTokenLocally } from "@/lib/auth/verify-token"
 export async function verifyBearerToken(token: string | null | undefined) {
   if (!token) return null
 
-  // Fast path — local signature/expiry check, no network, no DB connection.
+  // Fast path, local signature/expiry check, no network, no DB connection.
   const secret = process.env.SUPABASE_JWT_SECRET
   if (secret) {
     const payload = await verifyAccessTokenLocally(token, secret)
@@ -36,7 +36,7 @@ export async function verifyBearerToken(token: string | null | undefined) {
         user_metadata: (payload.user_metadata as Record<string, unknown>) ?? {},
       }
     }
-    // Local verification failed — fall through to the authoritative check.
+    // Local verification failed, fall through to the authoritative check.
   }
 
   // Fallback: secret not configured, or local verification failed.

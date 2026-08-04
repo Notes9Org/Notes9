@@ -69,12 +69,12 @@ export default async function EquipmentDetailPage({
     : null
 
   const formatDate = (date: string | null) => {
-    if (!date) return "—"
+    if (!date) return "-"
     return new Date(date).toLocaleDateString()
   }
 
   const formatDateTime = (datetime: string | null) => {
-    if (!datetime) return "—"
+    if (!datetime) return "-"
     return new Date(datetime).toLocaleString()
   }
 
@@ -143,7 +143,7 @@ export default async function EquipmentDetailPage({
               <div className="flex items-center gap-2">
                 <Microscope className="h-3.5 w-3.5 text-muted-foreground" />
                 <span className="text-sm font-medium text-foreground">
-                  {equipment.manufacturer || "—"}
+                  {equipment.manufacturer || "-"}
                 </span>
               </div>
             </CardContent>
@@ -337,7 +337,7 @@ export default async function EquipmentDetailPage({
                                 {usage.experiment.name}
                               </Link>
                             ) : (
-                              <span className="text-muted-foreground">—</span>
+                              <span className="text-muted-foreground">-</span>
                             )}
                           </TableCell>
                           <TableCell className="text-muted-foreground">
@@ -347,7 +347,7 @@ export default async function EquipmentDetailPage({
                             {formatDateTime(usage.end_time)}
                           </TableCell>
                           <TableCell className="text-muted-foreground">
-                            {usage.purpose || "—"}
+                            {usage.purpose || "-"}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -396,13 +396,13 @@ export default async function EquipmentDetailPage({
                           <TableCell className="text-muted-foreground">
                             {record.performed_by_user
                               ? `${record.performed_by_user.first_name} ${record.performed_by_user.last_name}`
-                              : "—"}
+                              : "-"}
                           </TableCell>
                           <TableCell className="text-muted-foreground">
                             {formatDate(record.next_maintenance_date)}
                           </TableCell>
                           <TableCell className="text-right text-muted-foreground">
-                            {record.cost ? `$${parseFloat(record.cost).toFixed(2)}` : "—"}
+                            {record.cost ? `$${parseFloat(record.cost).toFixed(2)}` : "-"}
                           </TableCell>
                         </TableRow>
                       ))}

@@ -3,7 +3,7 @@ import { deriveTableType } from "@/components/analysis/data/table-type-chip"
 import { detectDtype } from "@/components/analysis/data/column-role-grid"
 
 /**
- * The table type is derived, not chosen — if this rule drifts, the Data section
+ * The table type is derived, not chosen, if this rule drifts, the Data section
  * silently mislabels the analysis shape. One case per branch, plus the
  * precedence pairs that would break if the order were rearranged.
  */

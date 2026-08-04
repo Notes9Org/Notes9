@@ -84,7 +84,7 @@ describe("openRevision (§3A.3 rule 3: never silently recompute)", () => {
     if (verdict.state !== "drifted") return
     expect(verdict.dataChanged).toBe(true)
     expect(verdict.engineChanged).toBe(false)
-    // Still hands back the stored result — the choice is the user's.
+    // Still hands back the stored result, the choice is the user's.
     expect(verdict.results).not.toBeNull()
     expect(verdict.message).toContain("source file has changed")
     expect(verdict.message).toContain("Keep the stored result, or re-run")
@@ -102,7 +102,7 @@ describe("openRevision (§3A.3 rule 3: never silently recompute)", () => {
   })
 
   it("opens from the snapshot when the source file is gone, and says so", async () => {
-    // §3A.6: a deleted source is a stated, explicit state — not a failure.
+    // §3A.6: a deleted source is a stated, explicit state, not a failure.
     const verdict = await openRevision("rev-1", null)
     expect(verdict.state).toBe("detached")
     if (verdict.state !== "detached") return

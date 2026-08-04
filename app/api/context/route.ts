@@ -86,7 +86,7 @@ export async function GET(req: NextRequest) {
                 return NextResponse.json({
                     type: 'experiment',
                     // Supabase types embedded relations (project, lab_notes) as
-                    // arrays, but this single-row query returns them as objects —
+                    // arrays, but this single-row query returns them as objects
                     // the shape the formatter reads at runtime. Cast through
                     // unknown to that runtime shape without widening access.
                     context: formatExperimentContext(

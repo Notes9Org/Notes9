@@ -95,7 +95,7 @@ function SidebarProvider({
       }
 
       // This sets the cookie to keep the sidebar state. Cookie writes can throw
-      // (or silently no-op) in private browsing / when cookies are disabled —
+      // (or silently no-op) in private browsing / when cookies are disabled
       // guard so a persistence failure never breaks the in-memory toggle.
       try {
         document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
@@ -119,7 +119,7 @@ function SidebarProvider({
         (event.metaKey || event.ctrlKey)
       ) {
         // Don't hijack Cmd/Ctrl+B while the user is typing in an editor or input
-        // field — there it means "bold", not "toggle sidebar".
+        // field, there it means "bold", not "toggle sidebar".
         const target = event.target as HTMLElement | null
         const isEditingContext =
           !!target &&

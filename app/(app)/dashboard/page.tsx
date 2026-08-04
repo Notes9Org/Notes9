@@ -28,7 +28,7 @@ import { DashboardRecentWork } from "./dashboard-recent-work"
 /**
  * Dashboard = Unified lab workspace.
  *
- * This screen is the user's primary view — schedule, tasks, whiteboard,
+ * This screen is the user's primary view, schedule, tasks, whiteboard,
  * active experiments, and recently edited content.
  */
 export default async function DashboardPage() {
@@ -113,7 +113,7 @@ export default async function DashboardPage() {
     checklistMeasurement.state
   )
 
-  // A project of the user's own is required, not encouraged — every experiment,
+  // A project of the user's own is required, not encouraged, every experiment,
   // note, sample and paper hangs off one, so the bench panels below have nothing
   // to show without it. The seeded demo project deliberately does not satisfy
   // this: it is there to explore, not to work in. Anyone who reaches the
@@ -261,7 +261,7 @@ export default async function DashboardPage() {
   }
 
   // Greeting name priority: the first name the user set in Account Settings
-  // (profiles.first_name — already fetched in the fan-out above), then auth
+  // (profiles.first_name, already fetched in the fan-out above), then auth
   // metadata (OAuth), then the email prefix.
   const metadata = user.user_metadata ?? {}
   const firstName =
@@ -277,7 +277,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 md:gap-8 pb-8 min-w-0">
-      {/* Compact glass masthead: date + greeting — replaces the old centered
+      {/* Compact glass masthead: date + greeting, replaces the old centered
           hero stack (avatar sphere + date + separate summary row) that burned
           a lot of vertical space. (The AI activity strip was removed at the
           user's request; app/(app)/dashboard/activity-summary.tsx keeps the
@@ -291,7 +291,7 @@ export default async function DashboardPage() {
         <DashboardGreeting name={greetingName} />
       </header>
 
-      {/* Getting Started — the single recovery path for anything skipped during
+      {/* Getting Started, the single recovery path for anything skipped during
           onboarding. Hidden once the user dismisses it (Settings → Preferences
           brings it back). */}
       {!checklistMeasurement.state.dismissed && (
@@ -352,7 +352,7 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      {/* My Lab — bottom of dashboard, easy to spot for new users */}
+      {/* My Lab, bottom of dashboard, easy to spot for new users */}
       {labSummary ? (
         <DashboardMyLab lab={labSummary} />
       ) : (

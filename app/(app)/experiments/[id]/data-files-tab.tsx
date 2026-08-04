@@ -245,7 +245,7 @@ export function DataFilesTab({ experimentId }: { experimentId: string }) {
       })
       if (uploadError) throw uploadError
 
-      // Bucket is private — store the storage path; readers sign URLs on demand.
+      // Bucket is private, store the storage path; readers sign URLs on demand.
       const { data: inserted, error: dbError } = await supabase
         .from("experiment_data")
         .insert({
@@ -317,7 +317,7 @@ export function DataFilesTab({ experimentId }: { experimentId: string }) {
     }
   }
 
-  // After migration 051 the bucket is private — `file_url` holds the storage
+  // After migration 051 the bucket is private, `file_url` holds the storage
   // path for new rows, or a legacy public URL for old rows. Resolve to a
   // short-lived signed URL on demand so both shapes work.
   const resolveFileUrl = async (file: ExperimentFile): Promise<string> => {
@@ -508,7 +508,7 @@ export function DataFilesTab({ experimentId }: { experimentId: string }) {
                     <TableCell className="text-muted-foreground">
                       {file.uploaded_by_user 
                         ? `${file.uploaded_by_user.first_name} ${file.uploaded_by_user.last_name}`
-                        : '—'}
+                        : '-'}
                     </TableCell>
                     <TableCell className="text-muted-foreground text-xs">
                       {formatDate(file.created_at)}

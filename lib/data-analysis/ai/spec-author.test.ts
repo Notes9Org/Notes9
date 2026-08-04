@@ -60,7 +60,7 @@ describe("guardrails (§8.1, §7 adversarial set)", () => {
   })
 })
 
-describe("Law 2 — no statistic may originate from the model", () => {
+describe("Law 2, no statistic may originate from the model", () => {
   it("detects an invented p-value in the rationale", () => {
     expect(containsFabricatedStatistic("The groups differ, p = 0.03.")).toBe(true)
     expect(containsFabricatedStatistic("R² = 0.98 so the fit is good.")).toBe(true)
@@ -269,7 +269,7 @@ describe("context bundle (§11 decision 10: what the model sees)", () => {
       offerableTests: [{ test: "t-paired", legal: true, recommended: true }],
     })
 
-    // Non-empty prose derived from mutation-schema.ts, not hand-copied here —
+    // Non-empty prose derived from mutation-schema.ts, not hand-copied here
     // see mutation-schema.test.ts for the drift guarantee itself.
     expect(typeof bundle.contract).toBe("string")
     expect((bundle.contract as string).length).toBeGreaterThan(0)

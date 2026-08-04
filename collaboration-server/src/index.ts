@@ -45,7 +45,7 @@ const healthCheck = createHealthCheckHandler();
 const server = new Server({
   port,
 
-  // Debounce persistence — persist after 30s of inactivity before unloading idle docs
+  // Debounce persistence, persist after 30s of inactivity before unloading idle docs
   debounce: 30000,
   unloadImmediately: false,
   quiet: true,
@@ -53,17 +53,17 @@ const server = new Server({
   // Extensions
   extensions: [new Logger(), createDatabaseExtension()],
 
-  // HTTP request hook — handles /health endpoint
+  // HTTP request hook, handles /health endpoint
   async onRequest({ request, response }: onRequestPayload) {
     return healthCheck(request, response);
   },
 
-  // Authentication hook — validates JWT and returns user context
+  // Authentication hook, validates JWT and returns user context
   async onAuthenticate(data: onAuthenticatePayload) {
     return onAuthenticate({ token: data.token });
   },
 
-  // Connection hook — enforce allowed origins
+  // Connection hook, enforce allowed origins
   async onConnect({ request }: onConnectPayload) {
     if (allowedOrigins.length > 0 && !allowedOrigins.includes("*")) {
       const origin = request.headers.origin;

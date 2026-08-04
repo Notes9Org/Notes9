@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth/current-user"
 
 // Beacon endpoint for the recency half of the focus signal (context backend, Slice 3).
 // Upsert-last into recently_touched: one row per (user, entity), RLS owner-only.
-// Fire-and-forget from the client (navigator.sendBeacon) — always answers fast,
+// Fire-and-forget from the client (navigator.sendBeacon), always answers fast,
 // never surfaces errors to the UI.
 
 const ENTITY_TYPES = new Set([

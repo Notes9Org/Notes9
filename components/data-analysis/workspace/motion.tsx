@@ -4,7 +4,7 @@
  * Motion primitives for the analysis workspace.
  *
  * Deliberately quiet. This surface shows p-values and fitted curves, and motion
- * that draws attention to itself competes with the numbers — so everything here
+ * that draws attention to itself competes with the numbers, so everything here
  * is short, small in amplitude, and never bounces. The rules:
  *
  *   - nothing travels more than 8px;
@@ -96,7 +96,7 @@ export function Collapse({
  * A value that has just been recomputed.
  *
  * The whole animation is a 160ms opacity dip. It is enough to say "this number
- * is new" without the reader having to wait for it to settle — which is exactly
+ * is new" without the reader having to wait for it to settle, which is exactly
  * why it is not a slide or a count-up. A statistic must be readable the instant
  * it appears.
  */
@@ -117,7 +117,7 @@ export function ValueSwap({
           animate={{ opacity: 1 }}
           transition={{ duration: reduce ? 0 : 0.16, ease: "linear" }}
         >
-          {value ?? "—"}
+          {value ?? "-"}
         </motion.span>
       </AnimatePresence>
     </span>

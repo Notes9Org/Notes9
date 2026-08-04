@@ -5,8 +5,8 @@
  * from the welcome wizard picks one of these packs, so the demo project they
  * land on resembles their own work instead of always being antibody expression.
  *
- * Every pack seeds the same shape — 1 project → 2 experiments → 1 protocol →
- * 3 lab notes → 3 samples → 2 literature records — so `seedDemoProject` stays a
+ * Every pack seeds the same shape, 1 project → 2 experiments → 1 protocol →
+ * 3 lab notes → 3 samples → 2 literature records, so `seedDemoProject` stays a
  * single code path and the dashboard/research-map look identical across fields.
  *
  * Two hard rules for anything added here:
@@ -43,7 +43,7 @@ type PackLabNote = {
 }
 
 type PackSample = {
-  /** Suffixed with the user id at insert time — `samples.sample_code` is globally unique. */
+  /** Suffixed with the user id at insert time, `samples.sample_code` is globally unique. */
   code: string
   experiment: ExperimentRef
   sampleType: string
@@ -98,20 +98,20 @@ const MOLECULAR_BIOLOGY: DemoPack = {
     "oncolog",
   ],
   project: {
-    name: "Antibody Expression — anti-PD-1 (demo)",
+    name: "Antibody Expression, anti-PD-1 (demo)",
     description:
       "A ready-made demo project so you can explore Notes9 with real content. Recombinant expression and purification of an anti-PD-1 monoclonal antibody in HEK293T using a pET-28a construct.",
   },
   experiments: [
     {
-      name: "Transfection screen — PEI:DNA ratios",
+      name: "Transfection screen, PEI:DNA ratios",
       description:
         "Screen of PEI:DNA ratios (1:1 – 4:1) for transient anti-PD-1 expression in HEK293T.",
       hypothesis: "A 3:1 PEI:DNA ratio maximizes transient yield without excess cytotoxicity.",
       status: "data_ready",
     },
     {
-      name: "IMAC purification — His-tag elution",
+      name: "IMAC purification, His-tag elution",
       description: "Ni-NTA affinity purification of His-tagged anti-PD-1 with an imidazole gradient.",
       status: "analyzed",
     },
@@ -144,11 +144,11 @@ const MOLECULAR_BIOLOGY: DemoPack = {
         "<p>Across the ratio screen, <strong>condition B (3:1 PEI:DNA)</strong> produced the highest transient yield in HEK293T. Higher ratios (4:1) increased cytotoxicity with no yield gain, matching the ratio reported in the saved literature.</p>",
     },
     {
-      title: "IMAC elution lost ~38% — imidazole gradient too steep",
+      title: "IMAC elution lost ~38%, imidazole gradient too steep",
       noteType: "observation",
       experiment: 1,
       content:
-        "<p>His-tag elution lost <strong>~38%</strong> of product. The A280 trace and reducing gel both show protein in the flow-through/wash. Likely the imidazole gradient is too steep — flatten from 20 → 250 mM over more column volumes next run.</p>",
+        "<p>His-tag elution lost <strong>~38%</strong> of product. The A280 trace and reducing gel both show protein in the flow-through/wash. Likely the imidazole gradient is too steep, flatten from 20 → 250 mM over more column volumes next run.</p>",
     },
     {
       title: "Decision: switched to pET-28a for N-terminal His + TEV site",
@@ -200,7 +200,7 @@ const MOLECULAR_BIOLOGY: DemoPack = {
       year: 2008,
       doi: "10.1002/bit.21867",
       abstract:
-        "Optimization of PEI-mediated transient transfection at high cell density — including PEI:DNA ratio — to reach high volumetric yields of recombinant proteins in suspension HEK293 cultures.",
+        "Optimization of PEI-mediated transient transfection at high cell density, including PEI:DNA ratio, to reach high volumetric yields of recombinant proteins in suspension HEK293 cultures.",
       keywords: ["HEK293", "transient transfection", "PEI", "antibody expression"],
       relevance: 5,
     },
@@ -222,13 +222,13 @@ const NEUROSCIENCE: DemoPack = {
   id: "neuroscience",
   matches: ["neuro", "brain", "cognit", "electrophys", "synap", "psychiatr", "behavio"],
   project: {
-    name: "Cortical Excitability — layer 5 pyramidal neurons (demo)",
+    name: "Cortical Excitability, layer 5 pyramidal neurons (demo)",
     description:
       "A ready-made demo project so you can explore Notes9 with real content. Whole-cell patch-clamp characterisation of layer 5 pyramidal neurons in acute cortical slices, paired with GCaMP calcium imaging.",
   },
   experiments: [
     {
-      name: "Patch-clamp — intrinsic excitability by current step",
+      name: "Patch-clamp, intrinsic excitability by current step",
       description:
         "Whole-cell current-clamp recordings in acute slices; f–I curves across 0–400 pA current steps.",
       hypothesis:
@@ -236,7 +236,7 @@ const NEUROSCIENCE: DemoPack = {
       status: "data_ready",
     },
     {
-      name: "GCaMP6 imaging — evoked calcium transients",
+      name: "GCaMP6 imaging, evoked calcium transients",
       description:
         "Two-photon imaging of GCaMP6f transients in the same cortical region, aligned to the stimulation protocol.",
       status: "analyzed",
@@ -257,7 +257,7 @@ const NEUROSCIENCE: DemoPack = {
       "3. Cut **300 µm** slices on the vibratome in ice-cold, continuously bubbled cutting solution.",
       "4. Recover slices at 34°C for 30 min, then hold at room temperature for ≥1 h before recording.",
       "",
-      "> Slice health drops sharply if recovery is shortened — do not record before the 1 h hold.",
+      "> Slice health drops sharply if recovery is shortened, do not record before the 1 h hold.",
     ].join("\n"),
   },
   labNotes: [
@@ -273,7 +273,7 @@ const NEUROSCIENCE: DemoPack = {
       noteType: "observation",
       experiment: 0,
       content:
-        "<p>Three cells drifted above <strong>25 MΩ</strong> series resistance partway through the step protocol and were excluded. Suspect partial reseal — worth re-checking pipette pull parameters before the next session.</p>",
+        "<p>Three cells drifted above <strong>25 MΩ</strong> series resistance partway through the step protocol and were excluded. Suspect partial reseal, worth re-checking pipette pull parameters before the next session.</p>",
     },
     {
       title: "Decision: switched to GCaMP6f over GCaMP6s for kinetics",
@@ -321,7 +321,7 @@ const NEUROSCIENCE: DemoPack = {
       title:
         "Improved patch-clamp techniques for high-resolution current recording from cells and cell-free membrane patches",
       authors: "Hamill OP, Marty A, Neher E, Sakmann B, Sigworth FJ.",
-      journal: "Pflügers Archiv — European Journal of Physiology",
+      journal: "Pflügers Archiv, European Journal of Physiology",
       year: 1981,
       doi: "10.1007/BF00656997",
       abstract:
@@ -347,13 +347,13 @@ const MICROBIOLOGY: DemoPack = {
   id: "microbiology",
   matches: ["microbio", "bacteri", "microb", "infect", "antibiotic", "antimicrob", "virolog", "myco"],
   project: {
-    name: "Antimicrobial Resistance — P. aeruginosa isolates (demo)",
+    name: "Antimicrobial Resistance, P. aeruginosa isolates (demo)",
     description:
       "A ready-made demo project so you can explore Notes9 with real content. MIC profiling and biofilm characterisation of clinical Pseudomonas aeruginosa isolates against a panel of antibiotics.",
   },
   experiments: [
     {
-      name: "Broth microdilution MIC — ciprofloxacin panel",
+      name: "Broth microdilution MIC, ciprofloxacin panel",
       description:
         "Two-fold broth microdilution across 0.03–32 µg/mL ciprofloxacin for 12 clinical isolates, in triplicate.",
       hypothesis:
@@ -361,7 +361,7 @@ const MICROBIOLOGY: DemoPack = {
       status: "data_ready",
     },
     {
-      name: "Crystal violet biofilm assay — 96-well",
+      name: "Crystal violet biofilm assay, 96-well",
       description:
         "Static biofilm quantification by crystal violet staining at 24 h and 48 h across the same isolate panel.",
       status: "analyzed",
@@ -382,7 +382,7 @@ const MICROBIOLOGY: DemoPack = {
       "3. Add 50 µL inoculum to each well. Include an uninoculated sterility row.",
       "4. Incubate 16–20 h at 35°C, ambient air. Read the MIC as the lowest concentration with no visible growth.",
       "",
-      "> Inoculum density is the single largest source of MIC drift — verify by plate count on every run.",
+      "> Inoculum density is the single largest source of MIC drift, verify by plate count on every run.",
     ].join("\n"),
   },
   labNotes: [
@@ -470,13 +470,13 @@ const CHEMISTRY: DemoPack = {
   id: "chemistry",
   matches: ["chemi", "synthes", "catalys", "organic", "inorganic", "analytic", "material", "polymer", "nmr"],
   project: {
-    name: "Suzuki Coupling Optimisation — biaryl scaffold (demo)",
+    name: "Suzuki Coupling Optimisation, biaryl scaffold (demo)",
     description:
       "A ready-made demo project so you can explore Notes9 with real content. Ligand and base screening for a Suzuki–Miyaura coupling, with HPLC purity tracking and NMR structure confirmation.",
   },
   experiments: [
     {
-      name: "Ligand screen — Pd catalyst systems",
+      name: "Ligand screen, Pd catalyst systems",
       description:
         "Parallel screen of four phosphine ligands at 2 mol% Pd, monitoring conversion by HPLC at 2 h and 18 h.",
       hypothesis: "A bulky biaryl phosphine ligand improves conversion on the hindered substrate.",
@@ -504,7 +504,7 @@ const CHEMISTRY: DemoPack = {
       "3. Add degassed solvent by syringe; heat to 80°C with stirring.",
       "4. Monitor by HPLC or TLC. On consumption of the aryl halide, cool, filter through Celite, and concentrate.",
       "",
-      "> Incomplete degassing is the most common cause of low conversion — do not skip the freeze-pump-thaw cycles on the solvent.",
+      "> Incomplete degassing is the most common cause of low conversion, do not skip the freeze-pump-thaw cycles on the solvent.",
     ].join("\n"),
   },
   labNotes: [
@@ -605,20 +605,20 @@ const COMPUTATIONAL: DemoPack = {
     "statistic",
   ],
   project: {
-    name: "RNA-seq Differential Expression — treatment vs control (demo)",
+    name: "RNA-seq Differential Expression, treatment vs control (demo)",
     description:
       "A ready-made demo project so you can explore Notes9 with real content. A bulk RNA-seq differential expression workflow from alignment through DESeq2, with QC and pathway enrichment.",
   },
   experiments: [
     {
-      name: "Alignment and QC — STAR pipeline",
+      name: "Alignment and QC, STAR pipeline",
       description:
         "STAR alignment of 12 bulk RNA-seq libraries against the reference genome, with per-sample QC metrics.",
       hypothesis: "Library prep batch does not dominate the variance after normalisation.",
       status: "data_ready",
     },
     {
-      name: "Differential expression — DESeq2",
+      name: "Differential expression, DESeq2",
       description:
         "DESeq2 differential expression across treatment and control groups, with shrinkage and multiple-testing correction.",
       status: "analyzed",
@@ -639,7 +639,7 @@ const COMPUTATIONAL: DemoPack = {
       "3. Generate a gene-level count matrix; inspect the PCA for batch structure before modelling.",
       "4. Run **DESeq2** with the batch term in the design where PCA shows batch separation. Apply LFC shrinkage before ranking.",
       "",
-      "> Record the exact reference build and annotation version — differential expression results are not comparable across annotation releases.",
+      "> Record the exact reference build and annotation version, differential expression results are not comparable across annotation releases.",
     ].join("\n"),
   },
   labNotes: [
@@ -758,7 +758,7 @@ export const FALLBACK_PACK_ID: DemoPackId = "molecular-biology"
  * Picks a pack from the user's research field(s).
  *
  * The wizard lets users select several fields and type their own, storing them
- * comma-separated with their first choice first — so we try each segment in the
+ * comma-separated with their first choice first, so we try each segment in the
  * user's own order before falling back. That ordering matters: someone who
  * picks "Neuroscience, Bioinformatics" should get the neuroscience pack, not
  * whichever happens to sit earlier in `DEMO_PACKS`.
@@ -779,5 +779,5 @@ export function resolveDemoPack(researchField?: string | null): DemoPack {
   return MOLECULAR_BIOLOGY
 }
 
-/** Every pack's project name — used to tell seeded content apart from the user's own. */
+/** Every pack's project name, used to tell seeded content apart from the user's own. */
 export const DEMO_PROJECT_NAMES: string[] = DEMO_PACKS.map((p) => p.project.name)

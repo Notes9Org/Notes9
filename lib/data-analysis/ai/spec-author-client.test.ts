@@ -45,7 +45,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe("requestSpecPatch — wire contract", () => {
+describe("requestSpecPatch, wire contract", () => {
   it("posts prompt, spec and table to the seam route", async () => {
     const fetchMock = reply(
       JSON.stringify({ rationale: "", mutations: [], clarificationNeeded: null, rejected: [] })
@@ -101,7 +101,7 @@ describe("requestSpecPatch — wire contract", () => {
   })
 })
 
-describe("requestSpecPatch — the route's own failures", () => {
+describe("requestSpecPatch, the route's own failures", () => {
   it("surfaces a screened request as refused, with the alternative", async () => {
     reply(
       JSON.stringify({
@@ -143,7 +143,7 @@ describe("requestSpecPatch — the route's own failures", () => {
   })
 })
 
-describe("requestSpecPatch — failures the route never sees", () => {
+describe("requestSpecPatch, failures the route never sees", () => {
   it("turns an HTML 500 from a gateway into a typed error, not a parse crash", async () => {
     reply("<html><body>502 Bad Gateway</body></html>", 500)
 

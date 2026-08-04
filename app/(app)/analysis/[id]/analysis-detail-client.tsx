@@ -47,7 +47,7 @@ function isSection(value: string | null): value is Section {
 /**
  * Reads the roles already stored on the spec back onto a freshly loaded sheet,
  * falling back to a detected-type suggestion for columns the spec says nothing
- * about. Column names are the join key — that is what AnalysisSpec.roles holds.
+ * about. Column names are the join key, that is what AnalysisSpec.roles holds.
  */
 function assignmentsForSheet(sheet: ParsedSheet, spec: AnalysisSpec): ColumnAssignment[] {
   const roleFor = (name: string): ColumnRole | null => {
@@ -102,7 +102,7 @@ export function AnalysisDetailClient({
   projectName: string | null
   spec: AnalysisSpec
   results: Results | null
-  /** Null until the analysis has actually been run — there is no figure yet. */
+  /** Null until the analysis has actually been run, there is no figure yet. */
   figureSpec: FigureSpec | null
   files: DatasetFile[]
 }) {
@@ -257,7 +257,7 @@ export function AnalysisDetailClient({
               </EmptyMedia>
               <EmptyTitle>Nothing plotted yet</EmptyTitle>
               <EmptyDescription>
-                This analysis has no figure. Assign column roles in the Data section —
+                This analysis has no figure. Assign column roles in the Data section
                 the test and the figure follow from them.
               </EmptyDescription>
             </EmptyHeader>

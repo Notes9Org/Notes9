@@ -70,7 +70,7 @@ function isNetworkOrOpaqueFailure(e: unknown): boolean {
 function storagePolicyHint(message: string): string {
   const m = message.toLowerCase()
   if (m.includes("row-level") || m.includes("policy") || m.includes("denied") || m.includes("403")) {
-    return `${message} — If this persists, apply scripts/041_protocol_templates_user_bucket.sql in Supabase (org-scoped paths in the user bucket).`
+    return `${message}, If this persists, apply scripts/041_protocol_templates_user_bucket.sql in Supabase (org-scoped paths in the user bucket).`
   }
   return message
 }
@@ -141,7 +141,7 @@ export function ProtocolTemplatesPanel() {
       }
     }
 
-    /** Single POST with multipart body — avoids extra hops; needs proxyClientMaxBodySize in next.config. */
+    /** Single POST with multipart body, avoids extra hops; needs proxyClientMaxBodySize in next.config. */
     const tryServerMultipart = async (): Promise<boolean> => {
       const fd = new FormData()
       fd.append("file", file)
@@ -328,7 +328,7 @@ export function ProtocolTemplatesPanel() {
         )}
         <p className="text-sm font-medium text-foreground">Drop a DOCX or PDF here</p>
         <p className="text-xs text-muted-foreground mt-1 text-center max-w-md">
-          We extract section headings and logos (DOCX). PDF logos may not be extracted — see notes after upload.
+          We extract section headings and logos (DOCX). PDF logos may not be extracted, see notes after upload.
         </p>
       </div>
 
@@ -414,7 +414,7 @@ export function ProtocolTemplatesPanel() {
           ) : null}
           <ul className="text-sm space-y-1.5 max-h-[50vh] overflow-y-auto">
             {(preview?.extracted?.sectionHeadings ?? []).length === 0 ? (
-              <li className="text-muted-foreground">No sections detected — a default Procedure block will be used.</li>
+              <li className="text-muted-foreground">No sections detected, a default Procedure block will be used.</li>
             ) : (
               preview?.extracted?.sectionHeadings
                 ?.slice()

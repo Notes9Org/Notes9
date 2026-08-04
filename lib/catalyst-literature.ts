@@ -3,7 +3,7 @@
 /**
  * Live bridge for the literature search's AI summary. The summary is composed by
  * the literature page (via /api/chat) and streamed here so the Catalyst sidebar
- * can display it — with its references — the moment a search starts. Follow-up
+ * can display it, with its references, the moment a search starts. Follow-up
  * questions are handled by the sidebar's own stream endpoint; the summary is
  * available to that agent via the co-pilot context.
  */

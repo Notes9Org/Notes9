@@ -10,7 +10,7 @@ import type { Table } from "@/lib/data-analysis/engine/resolver"
  * (P3) may be executed.
  *
  * They live here rather than in the workspace component because neither needs
- * React and all are worth reading — and testing — on their own.
+ * React and all are worth reading, and testing, on their own.
  */
 
 /** Axis limits and the tick count are text in the rail and numbers in the spec. */
@@ -19,7 +19,7 @@ const RAIL_NUMERIC_TEXT = new Set<keyof ChartState>(["xMin", "xMax", "yMin", "yM
 const RAIL_TEXT = new Set<keyof ChartState>(["subtitle", "xUnit", "yUnit"])
 
 /**
- * The rail edits a spec change implies — only the fields that actually moved.
+ * The rail edits a spec change implies, only the fields that actually moved.
  *
  * The round trip is lossy in small ways (the rail's font is a CSS stack where
  * the spec names one of three; limits are text on one side and numbers on the
@@ -91,7 +91,7 @@ export function aiNotice(outcome: SpecPatchOutcome): { title: string; body: stri
       // case where the whole deterministic product is intact and unattended.
       return {
         title: "The assistant is off right now",
-        body: `${outcome.reason ? `${outcome.reason} ` : ""}Every control here still works — the chart, the engine and the statistics are unaffected.`,
+        body: `${outcome.reason ? `${outcome.reason} ` : ""}Every control here still works, the chart, the engine and the statistics are unaffected.`,
       }
     case "error":
       return { title: "The assistant didn't answer", body: outcome.reason }
@@ -99,7 +99,7 @@ export function aiNotice(outcome: SpecPatchOutcome): { title: string; body: stri
 }
 
 /**
- * P3 — propose then execute. Execute is offered only for a proposal that would
+ * P3, propose then execute. Execute is offered only for a proposal that would
  * actually do something and is not itself a question: a `clarificationNeeded`
  * reply is the assistant asking whether it understood, and a button offering
  * to act on a guess it just admitted might be wrong would undercut the ask.

@@ -2,7 +2,7 @@
  * Multi-panel figure layouts.
  *
  * A published figure is almost never one chart. It is Figure 2 with panels A,
- * B and C, and those panels routinely come from different experiments — the
+ * B and C, and those panels routinely come from different experiments, the
  * dose-response from one plate, the timecourse from another, the survival curve
  * from a third. So a layout composes PANELS, each bound to its own analysis
  * pipeline, rather than trying to squeeze several datasets into one chart.
@@ -14,7 +14,7 @@
  *   - each panel keeps its own axes, legend, chart kind and error-bar setting,
  *     which subplots would force into one shared layout;
  *   - each panel keeps its own hit-testing, so clicking a mark in panel B still
- *     resolves to a row in panel B's sheet — the data-to-figure link in §2 Tier
+ *     resolves to a row in panel B's sheet, the data-to-figure link in §2 Tier
  *     0 would otherwise break the moment a figure had two panels;
  *   - a panel can be recomputed on its own, because it is its own spec.
  *
@@ -338,7 +338,7 @@ export function setPanelSpan(
  *
  * Built from the panels' own specs so the caption cannot describe a figure
  * other than the one drawn. It is a starting point for the author, not a
- * finished legend — which is why it names the source rather than interpreting
+ * finished legend, which is why it names the source rather than interpreting
  * the result.
  */
 export function draftLayoutCaption(

@@ -20,7 +20,7 @@ const fixture: Record<string, unknown> = JSON.parse(
   readFileSync(FIXTURE_PATH, "utf-8")
 );
 
-describe("SSE contract — every fixture entry is a valid SseEvent", () => {
+describe("SSE contract, every fixture entry is a valid SseEvent", () => {
   for (const [eventType, data] of Object.entries(fixture)) {
     it(`accepts event_type "${eventType}"`, () => {
       const candidate = { event: eventType, data };

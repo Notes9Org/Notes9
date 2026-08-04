@@ -34,7 +34,7 @@ export type ChartMenuGroup = { label: string; items: ChartMenuItem[] }
  * SSR-safe Plotly wrapper. Plotly.js touches `window`, so it's dynamically
  * imported on the client only.
  *
- * The default mode bar is hidden — chart controls (zoom, reset, download) and
+ * The default mode bar is hidden, chart controls (zoom, reset, download) and
  * an "Edit ▸" submenu live in a custom right-click menu instead, so the canvas
  * stays clean and element editing routes to the modern inspector via
  * `onEditElement` rather than Plotly's overlay editors. `onEdit` still bridges

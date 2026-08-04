@@ -53,7 +53,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
-/** Safe nested read — the spec is user-editable JSON, so nothing is guaranteed. */
+/** Safe nested read, the spec is user-editable JSON, so nothing is guaranteed. */
 function at(root: unknown, ...keys: string[]): unknown {
   let node: unknown = root
   for (const key of keys) {
@@ -107,7 +107,7 @@ export interface FormatPanelProps {
 
 /**
  * Publication-formatting controls for the current figure. Every change is a
- * local spec patch applied on the spot — this component never touches the
+ * local spec patch applied on the spot, this component never touches the
  * network, and re-running the analysis is somebody else's button.
  */
 export function FormatPanel({

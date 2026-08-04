@@ -1,5 +1,5 @@
 /**
- * Data-Analysis templates — baked-in bio-analysis starting points (with example
+ * Data-Analysis templates, baked-in bio-analysis starting points (with example
  * data) plus the shape used for a user's own saved setups. A template carries a
  * chart/plate `config` (no data of its own unless `aoa` is set) and a target
  * `phase`, applied to whatever sheet is open.
@@ -19,7 +19,7 @@ export type AnalysisTemplate = {
   phase: string
 }
 
-/** The ELISA standard-curve dataset — also the app's opening demo. */
+/** The ELISA standard-curve dataset, also the app's opening demo. */
 export const ELISA_AOA: (string | number)[][] = [
   ["Concentration (pg/mL)", "OD450", "Sample"],
   [1000, 2.85, "Std 1"],
@@ -52,28 +52,28 @@ export const BUILTIN_TEMPLATES: AnalysisTemplate[] = [
   },
   {
     id: "growth", name: "Growth curve", category: "Microbiology", builtin: true,
-    description: "OD₆₀₀ over time for two conditions — line chart with markers.",
+    description: "OD₆₀₀ over time for two conditions, line chart with markers.",
     aoa: [["Time (h)", "Control OD600", "Treated OD600"], [0, 0.05, 0.05], [2, 0.08, 0.07], [4, 0.18, 0.12], [6, 0.41, 0.22], [8, 0.79, 0.38], [10, 1.12, 0.55], [12, 1.34, 0.66], [24, 1.51, 0.78]],
     config: { chartType: "line", xKey: "Time (h)", yKeys: ["Control OD600", "Treated OD600"], title: "Growth curve", xLabel: "Time", xUnit: "h", yLabel: "OD₆₀₀", yUnit: "" },
     phase: "chart",
   },
   {
     id: "bradford", name: "Bradford / BCA protein", category: "Protein", builtin: true,
-    description: "Protein standard curve — fit linear and back-calculate concentrations.",
+    description: "Protein standard curve, fit linear and back-calculate concentrations.",
     aoa: [["Protein (µg/mL)", "A595"], [0, 0.04], [125, 0.18], [250, 0.31], [500, 0.58], [750, 0.84], [1000, 1.09], [1500, 1.55], [2000, 1.98]],
     config: { chartType: "scatter", xKey: "Protein (µg/mL)", yKeys: ["A595"], title: "Bradford protein assay", xLabel: "Protein", xUnit: "µg/mL", yLabel: "A₅₉₅", yUnit: "" },
     phase: "curve",
   },
   {
     id: "qpcr", name: "qPCR Cq", category: "Molecular", builtin: true,
-    description: "Target vs reference Cq per sample — grouped bars (compute ΔΔCt from means).",
+    description: "Target vs reference Cq per sample, grouped bars (compute ΔΔCt from means).",
     aoa: [["Sample", "Target Cq", "Reference Cq"], ["Control", 24.1, 18.2], ["Control", 24.3, 18.1], ["Knockdown", 26.8, 18.3], ["Knockdown", 26.9, 18.2]],
     config: { chartType: "bar", xKey: "Sample", yKeys: ["Target Cq", "Reference Cq"], title: "qPCR Cq by sample", xLabel: "Sample", xUnit: "", yLabel: "Cq", yUnit: "" },
     phase: "chart",
   },
   {
     id: "kinetics", name: "Enzyme kinetics", category: "Enzymology", builtin: true,
-    description: "Rate vs [substrate] — Michaelis–Menten saturation (Vmax / Km).",
+    description: "Rate vs [substrate], Michaelis–Menten saturation (Vmax / Km).",
     aoa: [["[S] (µM)", "Rate (µM/min)"], [2, 12], [5, 26], [10, 42], [20, 60], [50, 82], [100, 95], [200, 103], [500, 108]],
     config: { chartType: "scatter", xKey: "[S] (µM)", yKeys: ["Rate (µM/min)"], title: "Michaelis–Menten", xLabel: "[S]", xUnit: "µM", yLabel: "Rate", yUnit: "µM/min" },
     phase: "chart",

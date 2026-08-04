@@ -16,9 +16,9 @@ const NLM_PMC_DOCS = {
  * runs on the server, performs the same steps as {@link fetchOpenAccessPdfBufferByIds}, and streams PDF bytes.
  *
  * Flow (see {@link NLM_PMC_DOCS}):
- * 1. **Discovery** — PMC OA Web Service XML (`oa.fcgi`); prefer `<link format="pdf" href="…">` (FTP URLs → HTTPS).
- * 2. **PMID** — optional `pmid` is converted to PMCID server-side (E-utilities `elink`; ID Converter API is the documented alternative).
- * 3. **Subset** — only PMC **Open Access Subset** articles yield URLs; otherwise import logic returns no PDF.
+ * 1. **Discovery**, PMC OA Web Service XML (`oa.fcgi`); prefer `<link format="pdf" href="…">` (FTP URLs → HTTPS).
+ * 2. **PMID**, optional `pmid` is converted to PMCID server-side (E-utilities `elink`; ID Converter API is the documented alternative).
+ * 3. **Subset**, only PMC **Open Access Subset** articles yield URLs; otherwise import logic returns no PDF.
  *
  * - `GET /api/literature/oa-pdf?pmid=…` and/or `pmc=…` (numeric or `PMC` prefix).
  * - Success: `application/pdf`. Failure: JSON `{ error, hint?, docs }`.

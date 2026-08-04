@@ -34,7 +34,7 @@ const registrationSchema = z.object({
 })
 
 // Best-effort per-IP rate limit. Public unauthenticated endpoint, so cap abuse.
-// In-memory is per-instance only — back with Redis for multi-instance prod.
+// In-memory is per-instance only, back with Redis for multi-instance prod.
 const RATE_LIMIT_MAX = 5
 const RATE_LIMIT_WINDOW_MS = 60_000
 const hits = new Map<string, number[]>()
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
 
     const { name, email, organization, updates, company } = parsed.data
 
-    // Honeypot tripped — pretend success, don't forward.
+    // Honeypot tripped, pretend success, don't forward.
     if (company.trim()) {
       return NextResponse.json({ ok: true })
     }

@@ -29,7 +29,7 @@ function clearStaleAuthStorage() {
       }
     }
   } catch {
-    // localStorage can throw in private-mode / restricted contexts — ignore.
+    // localStorage can throw in private-mode / restricted contexts, ignore.
   }
 
   try {
@@ -44,7 +44,7 @@ function clearStaleAuthStorage() {
       }
     }
   } catch {
-    // document.cookie can throw in restricted contexts — ignore.
+    // document.cookie can throw in restricted contexts, ignore.
   }
 }
 
@@ -53,7 +53,7 @@ function clearStaleAuthStorage() {
 // autoRefreshToken timer + GoTrue client. Without memoization, one stale token
 // or a transient network blip multiplies a single "Failed to fetch" into a
 // flood of identical console errors (and N× refresh traffic). We cache the
-// instance in the browser only — on the server (no window) we never cache, so
+// instance in the browser only, on the server (no window) we never cache, so
 // SSR of client components can't leak a client across requests/users.
 let browserClient: ReturnType<typeof createBrowserClient> | undefined
 
@@ -76,7 +76,7 @@ export function createClient() {
       // Wrap fetch so a dead refresh token self-heals: when the refresh endpoint
       // rejects the token, purge the stale sb-*-auth-token so the SDK stops
       // retrying (and stops throwing "Invalid Refresh Token" on every tick). The
-      // original response is always returned untouched — the SDK still clears its
+      // original response is always returned untouched, the SDK still clears its
       // in-memory session and emits SIGNED_OUT as usual.
       fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = requestUrl(input)

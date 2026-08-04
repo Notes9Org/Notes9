@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
     let orgName: string
 
     if (profile?.organization_id) {
-      // User has an auto-provisioned org — update it with the provided details
+      // User has an auto-provisioned org, update it with the provided details
       const { data: updatedOrg, error: updateError } = await admin
         .from("organizations")
         .update({
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
       orgId = updatedOrg.id
       orgName = updatedOrg.name
     } else {
-      // No existing org — create a new one
+      // No existing org, create a new one
       const { data: newOrg, error: orgError } = await admin
         .from("organizations")
         .insert({

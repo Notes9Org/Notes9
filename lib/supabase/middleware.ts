@@ -68,7 +68,7 @@ export async function updateSession(request: NextRequest) {
   )
 
   // Define public routes that don't require authentication
-  // Exact-match list — a new marketing route must be added here or a logged-out
+  // Exact-match list, a new marketing route must be added here or a logged-out
   // visitor is redirected to /auth/login.
   const publicRoutes = ["/", "/about", "/pricing", "/docs", "/platform", "/how-it-works", "/resources", "/terms", "/privacy", "/survey", "/webinar", "/auth/invite"]
   // Prefix-matched static assets. The data-analysis engine's Python source is
@@ -91,7 +91,7 @@ export async function updateSession(request: NextRequest) {
     // the refresh fails, and @supabase/ssr cannot clear the cookie because cookie
     // writes are swallowed during a Server Component render (see lib/supabase/server.ts).
     // The middleware CAN write cookies, so run getSession() here once when an auth
-    // cookie is present — that lets @supabase/ssr refresh-or-clear it via setAll —
+    // cookie is present, that lets @supabase/ssr refresh-or-clear it via setAll
     // and explicitly delete the cookie on failure. Routes with no auth cookie stay
     // fast (no auth-server call). We never redirect on public routes.
     const authCookies = request.cookies

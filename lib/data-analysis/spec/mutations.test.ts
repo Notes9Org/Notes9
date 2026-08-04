@@ -96,7 +96,7 @@ describe("applyMutation is pure", () => {
   })
 })
 
-describe("Law 5 — style never recomputes, data and analysis always do", () => {
+describe("Law 5, style never recomputes, data and analysis always do", () => {
   it("classifies style edits as no-recompute", () => {
     expect(requiresRecompute({ kind: "figure.setPalette", value: "viridis" })).toBe(false)
     expect(requiresRecompute({ kind: "figure.setTitle", value: "x" })).toBe(false)
@@ -183,7 +183,7 @@ describe("undo/redo across data, analysis and style (§6.5)", () => {
   })
 })
 
-describe("L6 — manual edits are sticky", () => {
+describe("L6, manual edits are sticky", () => {
   it("refuses an AI change that lands on a hand-edited path, and reports it", () => {
     let h = initHistory(baseSpec())
     // The user sets the Y axis label by hand.

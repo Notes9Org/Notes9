@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * UI gallery — a living showcase of the revamped design system so interactive
+ * UI gallery, a living showcase of the revamped design system so interactive
  * states are visible in one place (docs/UI_UX_REVAMP_PLAN.md §5). Navigate to
  * /ui-gallery. Hover and click the elements to see the micro-interactions.
  */
@@ -99,7 +99,7 @@ export default function UiGalleryPage() {
           </div>
         </Section>
 
-        <Section title="Interactive icon (weight-shift)" hint="The signature gesture: hover a card below — its icon shifts from regular to filled.">
+        <Section title="Interactive icon (weight-shift)" hint="The signature gesture: hover a card below, its icon shifts from regular to filled.">
           <div className="flex flex-wrap gap-3">
             {KINDS.slice(0, 4).map((k) => (
               <div key={k.name} className="group flex cursor-pointer items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm transition-shadow hover:shadow-md">
@@ -110,7 +110,7 @@ export default function UiGalleryPage() {
           </div>
         </Section>
 
-        <Section title="Cards — interactive + kind-ribbon" hint="Hover: the interactive card lifts. Each ribbon is tinted by its entity kind.">
+        <Section title="Cards, interactive + kind-ribbon" hint="Hover: the interactive card lifts. Each ribbon is tinted by its entity kind.">
           <div className="grid gap-4 sm:grid-cols-3">
             {KINDS.map((k) => (
               <Card key={k.name} variant="interactive" ribbon={k.token}>
@@ -118,7 +118,7 @@ export default function UiGalleryPage() {
                   <CardTitle className="flex items-center gap-2 text-base">
                     <Icon icon={k.icon} className="size-4" /> {k.name}
                   </CardTitle>
-                  <CardDescription>Hover me — I lift and cast a deeper shadow.</CardDescription>
+                  <CardDescription>Hover me, I lift and cast a deeper shadow.</CardDescription>
                 </CardHeader>
                 <CardContent className="text-sm text-muted-foreground">
                   Ribbon uses <span className="font-mono text-xs">{k.token}</span>.
@@ -242,7 +242,7 @@ export default function UiGalleryPage() {
               <div className="n9-composer n9-composer-ai flex flex-col gap-2 p-3">
                 <textarea
                   rows={2}
-                  placeholder="Type here — the glass solidifies while you write…"
+                  placeholder="Type here, the glass solidifies while you write…"
                   className="w-full resize-none border-0 bg-transparent px-1 text-sm text-foreground outline-none placeholder:text-muted-foreground/80"
                   aria-label="Sandglass composer demo"
                 />
@@ -254,7 +254,7 @@ export default function UiGalleryPage() {
               <div className="glass-panel n9-grain flex flex-col justify-center gap-1 rounded-2xl p-4">
                 <p className="text-sm font-medium text-foreground">Panel glass (G1)</p>
                 <p className="text-xs text-muted-foreground">
-                  glass-panel + n9-grain — rails, menus, popovers. Grain stays under 10% so it reads
+                  glass-panel + n9-grain, rails, menus, popovers. Grain stays under 10% so it reads
                   as paper tooth, never noise.
                 </p>
               </div>
@@ -262,7 +262,7 @@ export default function UiGalleryPage() {
                 <CardHeader>
                   <CardTitle className="text-base">Card variant=&quot;glass&quot;</CardTitle>
                   <CardDescription>
-                    The G1 widget surface — grained glass for cards that float on the canvas.
+                    The G1 widget surface, grained glass for cards that float on the canvas.
                     Long-form reading surfaces stay opaque (the readability contract).
                   </CardDescription>
                 </CardHeader>
@@ -310,7 +310,7 @@ export default function UiGalleryPage() {
                 {railOpen ? "Collapse rail" : "Expand rail"}
               </Button>
               <p className="text-sm text-muted-foreground">
-                The rail clips (not reflows) while animating — toggle it. Loading state below:
+                The rail clips (not reflows) while animating, toggle it. Loading state below:
               </p>
               <div className="w-56 rounded-2xl border border-[color:var(--glass-border)] bg-sidebar/80 p-2 backdrop-blur-md">
                 <SideRailSkeleton rows={3} />

@@ -48,7 +48,7 @@ function cells(rows: (string | number | null)[][]): string[] {
   return rows.flat().map((c) => (c === null ? "" : String(c)))
 }
 
-describe("buildResultsSheet — the engine error channel (B6)", () => {
+describe("buildResultsSheet, the engine error channel (B6)", () => {
   it("states the failure in its own section rather than among the warnings", () => {
     const rows = buildResultsSheet(
       spec({ test: "nonlinear-regression" }),
@@ -91,7 +91,7 @@ describe("buildResultsSheet — the engine error channel (B6)", () => {
   })
 })
 
-describe("buildResultsSheet — records the test that ran (B7)", () => {
+describe("buildResultsSheet, records the test that ran (B7)", () => {
   it("names the substituted test alongside the requested one", () => {
     const rows = buildResultsSheet(spec(), result({ testRan: "chi-square" }))
     const flat = cells(rows)

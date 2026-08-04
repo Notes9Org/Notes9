@@ -78,7 +78,7 @@ function problemBody(verdict: LimitVerdict, route: string): string {
 
 /**
  * Check the Content-Length header against BODY_BYTES_MAX.
- * Returns null if the header is absent or unparseable — we cannot check
+ * Returns null if the header is absent or unparseable, we cannot check
  * without buffering, so we do not block in that case.
  * Must be called BEFORE req.json() / req.formData().
  */
@@ -214,7 +214,7 @@ export function checkRegisterItems(items: unknown[]): LimitVerdict | null {
  * Finds the first non-null verdict, then:
  *   - mode 'off'     → null (no log, request proceeds)
  *   - mode 'shadow'  → logs structured JSON via console.warn, returns null
- *                       (request proceeds — behavior-preserving)
+ *                       (request proceeds, behavior-preserving)
  *   - mode 'enforce' → returns RFC 9457 problem+json Response
  *
  * This is the ONLY place the mode flag is evaluated, so flipping
@@ -235,7 +235,7 @@ export function enforceLimits(
   }
 
   if (mode === 'shadow') {
-    // Log without PII — only counts, codes, and the route.
+    // Log without PII, only counts, codes, and the route.
     console.warn(
       JSON.stringify({
         tag: 'limit_would_reject',

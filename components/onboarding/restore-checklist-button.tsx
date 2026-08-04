@@ -9,7 +9,7 @@ import { setChecklistDismissedAction } from "@/app/actions/onboarding"
 /**
  * Brings the dismissed Getting Started panel back to the dashboard.
  *
- * Dismissal has to be reversible somewhere the user can find later — the panel's
+ * Dismissal has to be reversible somewhere the user can find later, the panel's
  * own X is the only way to hide it, and a checklist you can permanently destroy
  * by mis-clicking is worse than no checklist.
  */

@@ -242,8 +242,8 @@ const PREVIEW_WORKBOOK = (() => {
 /**
  * The same 24 rows as a resolver Table.
  *
- * Running the live engine over this is what proves the whole chain — resolver,
- * worker, Pyodide, scipy, contract, renderer — rather than only the half of it
+ * Running the live engine over this is what proves the whole chain, resolver,
+ * worker, Pyodide, scipy, contract, renderer, rather than only the half of it
  * a fixture exercises.
  */
 const PREVIEW_TABLE: Table = {
@@ -260,7 +260,7 @@ const PREVIEW_TABLE: Table = {
  * Present so the figure layout has something real to compose: a published
  * figure's panels almost always come from different experiments, and a layout
  * demonstrated with two views of one sheet would not show the thing that
- * actually matters — that panel B can be a different chart, of a different
+ * actually matters, that panel B can be a different chart, of a different
  * design, from a different file.
  */
 const GROWTH_ROWS: { well: string; strain: string; hours: number; od: number }[] = [
@@ -501,7 +501,7 @@ export function SpecAnalysisWorkspace({
       setPipelineState((s) => {
         const current = s.pipelines.find((p) => p.id === activeId)
         // Univer persists on selection changes too, so only a genuine change of
-        // contents counts — otherwise clicking a cell would discard the result.
+        // contents counts, otherwise clicking a cell would discard the result.
         if (current && hashTable(current.table) === hashTable(table)) return s
         return pipelineReducer(s, { kind: "setTable", id: activeId, table })
       })
@@ -533,7 +533,7 @@ export function SpecAnalysisWorkspace({
     // The result rides along as a second sheet, so the analysis and the data
     // travel together: a collaborator who opens the file gets the numbers the
     // analysis produced, not only the ones it was run on. Regenerated from the
-    // engine result every time — nothing is ever read back out of it.
+    // engine result every time, nothing is ever read back out of it.
     if (active) {
       const stats = XLSX.utils.aoa_to_sheet(
         buildResultsSheet(active.spec, active.result, { analysisName: active.name })
@@ -554,7 +554,7 @@ export function SpecAnalysisWorkspace({
   const dispatch = (mutation: Parameters<typeof dispatchMutation>[1]) => {
     if (!activeId) return
     // Law 5 decides whether this reaches the engine. `requiresRecompute` is the
-    // single authority — passing a flag by hand at each call site is how a
+    // single authority, passing a flag by hand at each call site is how a
     // palette change ends up triggering a round trip.
     const needsEngine = requiresRecompute(mutation)
     setHistories((all) => {
@@ -613,7 +613,7 @@ export function SpecAnalysisWorkspace({
    *
    * Debounced, because Pyodide is a real round trip and firing one per
    * keystroke would make typing in the sheet feel like the engine is fighting
-   * you. A failed run is not retried for the same inputs — `attemptedRef` holds
+   * you. A failed run is not retried for the same inputs, `attemptedRef` holds
    * what was last tried, so an analysis the engine refuses does not spin.
    */
   const attemptedRef = useRef<string | null>(null)
@@ -890,7 +890,7 @@ export function SpecAnalysisWorkspace({
                     >
                       {TEST_LABELS[c.test] ?? c.test}
                       {c.recommended ? "  (suits this design)" : ""}
-                      {c.legal ? "" : `  — ${c.reason ?? "not available for this data"}`}
+                      {c.legal ? "" : `  - ${c.reason ?? "not available for this data"}`}
                     </option>
                   ))}
                 </select>

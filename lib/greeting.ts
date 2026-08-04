@@ -24,7 +24,7 @@ const TITLE_CASE: Record<PartOfDay, "Morning" | "Afternoon" | "Evening"> = {
   morning: "Morning",
   afternoon: "Afternoon",
   evening: "Evening",
-  // No "Night" surface label — the dashboard greeting collapses late hours
+  // No "Night" surface label, the dashboard greeting collapses late hours
   // onto "Evening" so the heading stays a clean three-way choice.
   night: "Evening",
 }

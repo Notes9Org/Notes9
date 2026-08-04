@@ -59,7 +59,7 @@ const nodeTypes = { researchEntity: ResearchEntityNode }
 /**
  * Custom edge with a label that's hidden by default and only renders on
  * hover or when the edge is selected/highlighted. Hiding labels is the fix
- * for the "tags overlapping" problem on dense graphs — color already
+ * for the "tags overlapping" problem on dense graphs, color already
  * encodes the relationship (`edgeColorForKind`), so the label is redundant
  * until the user is actively inspecting an edge.
  */
@@ -81,7 +81,7 @@ function LabelledEdge({
   // ignore Dagre's stored intermediate waypoints (data.points): those are
   // absolute coordinates captured once at layout time, so when a node is dragged
   // only the endpoints (sourceX/Y, targetX/Y) update while the frozen waypoints
-  // stay put — making the line appear to "half move". Deriving the whole path
+  // stay put, making the line appear to "half move". Deriving the whole path
   // from the current endpoints means the full line follows the node on drag.
   const points = [
     { x: sourceX, y: sourceY },
@@ -107,7 +107,7 @@ function LabelledEdge({
 
   const text = (label as string) || (data?.humanLabel as string)
   const baseStroke = (data?.baseStroke as string) || "#9ca3af"
-  // Style-driven flag — the highlight controller bumps strokeWidth on the
+  // Style-driven flag, the highlight controller bumps strokeWidth on the
   // edges it wants to surface. We treat anything ≥ 2.4px as "active" so we
   // can decide whether to render the label without re-plumbing props.
   const styleObj = (style as { strokeWidth?: number; opacity?: number } | undefined) || {}
@@ -292,7 +292,7 @@ function mergeHighlights(
 }
 
 /**
- * On edge click: light up the **entire connected chain** — every ancestor
+ * On edge click: light up the **entire connected chain**, every ancestor
  * above the source AND every descendant below the target. The researcher can
  * trace, in one click, where the relationship sits in the bigger graph.
  */
@@ -313,7 +313,7 @@ function buildEdgeAncestorHighlight(
 
 /**
  * On node click: full ancestor chain upward AND full descendant chain
- * downward from the clicked node — every ancestor, every descendant, and
+ * downward from the clicked node, every ancestor, every descendant, and
  * every edge between them. Lets a researcher see "everything this is
  * connected to" in one gesture.
  */
@@ -374,7 +374,7 @@ function mapApiToFlow(
         color: stroke,
       },
       // Soft default stroke so dense graphs don't feel like a wire bundle.
-      // The highlight controller fattens active edges to ≥2.4 — used by
+      // The highlight controller fattens active edges to ≥2.4, used by
       // LabelledEdge to decide whether to render the label chip.
       style: { stroke, strokeWidth: 1.4, opacity: 0.85 },
       data: { kind: e.kind, humanLabel: e.label, baseStroke: stroke },
@@ -585,7 +585,7 @@ function ResearchMapCanvas() {
         supabase.removeChannel(channel)
         channel = null
       }
-      // Also cancel any pending debounced refresh — no point running it
+      // Also cancel any pending debounced refresh, no point running it
       // while the map is not visible.
       if (mapRefreshDebounceRef.current) {
         clearTimeout(mapRefreshDebounceRef.current)
@@ -683,7 +683,7 @@ function ResearchMapCanvas() {
   useEffect(() => {
     // Build a cheap key from the highlight state. If nothing changed since the
     // last apply (e.g. the user double-clicks the same node), skip the full
-    // node+edge map pass — it would produce identical output and cause React to
+    // node+edge map pass, it would produce identical output and cause React to
     // schedule two unnecessary reconciliation cycles on potentially large arrays.
     const nodeKey = highlightNodes ? [...highlightNodes].sort().join(",") : ""
     const edgeKey = highlightEdges ? [...highlightEdges].sort().join(",") : ""
@@ -759,7 +759,7 @@ function ResearchMapCanvas() {
               Your research map is empty
             </div>
             <p className="mt-2 max-w-md text-sm text-muted-foreground">
-              Create a project, then add experiments, lab notes, protocols, and papers — they&apos;ll appear here connected by relationship.
+              Create a project, then add experiments, lab notes, protocols, and papers, they&apos;ll appear here connected by relationship.
             </p>
             <Button asChild variant="outline" size="sm" className="mt-4 pointer-events-auto">
               <Link href="/projects/new">Create your first project</Link>
@@ -789,7 +789,7 @@ function ResearchMapCanvas() {
           }}
         >
           <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
-          {/* Pan/zoom/fit controls — bottom-left, out of the way of node
+          {/* Pan/zoom/fit controls, bottom-left, out of the way of node
               clicks. Themed via `.react-flow__controls*` overrides in
               globals.css so the +/-/fit buttons inherit Notes9's paper
               background and foreground tokens in both light and dark mode. */}
@@ -797,14 +797,14 @@ function ResearchMapCanvas() {
             position="bottom-left"
             showInteractive={false}
           />
-          {/* Mini-map — Supabase-style. Drag the viewport lens to pan the
+          {/* Mini-map, Supabase-style. Drag the viewport lens to pan the
               main canvas, scroll on the minimap to zoom. Each dot is colored
               by node kind so the minimap doubles as a live legend. */}
           <MiniMap
             position="bottom-right"
             pannable
             zoomable
-            ariaLabel="Research map mini overview — drag to pan, scroll to zoom"
+            ariaLabel="Research map mini overview, drag to pan, scroll to zoom"
             nodeBorderRadius={3}
             nodeStrokeWidth={2}
             nodeColor={(n) => {

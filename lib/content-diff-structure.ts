@@ -185,7 +185,7 @@ export function mergeStructureHintsWithContext(
 }
 
 /**
- * Longest added/removed runs first — these best indicate *where* the edit happened.
+ * Longest added/removed runs first, these best indicate *where* the edit happened.
  * Deduped, capped, so we do not sweep every small word match across the document.
  */
 function collectPrimaryChangeSnippets(parts: Change[]): string[] {
@@ -228,7 +228,7 @@ function firstBlockMatchingSnippet(
 }
 
 /**
- * Section hints for blocks that contain the actual change text — persisted as
+ * Section hints for blocks that contain the actual change text, persisted as
  * `{ document_title, sections }` (compact, no repeated title in sections).
  */
 export function computeStructuralHints(

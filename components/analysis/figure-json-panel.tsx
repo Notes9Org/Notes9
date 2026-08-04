@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
 import type { FigureSpec } from "@/types/analysis"
 
 /**
- * CodeMirror is loaded on demand — it is a large tree and the workspace is only
+ * CodeMirror is loaded on demand, it is a large tree and the workspace is only
  * one of several analysis surfaces.
  */
 const CodeMirror = dynamic(() => import("@uiw/react-codemirror"), {
@@ -29,7 +29,7 @@ const DEBOUNCE_MS = 400
 
 /**
  * The four keys `FigureSpec.to_dict()` emits. Anything else at the top level is
- * a typo, not an extension point — reject it loudly. Keys *inside* `layout`,
+ * a typo, not an extension point, reject it loudly. Keys *inside* `layout`,
  * `data` and `config` are passed through untouched: Plotly's surface is huge
  * and mirroring it here would just go stale.
  */
@@ -41,7 +41,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 type ParseResult = { ok: true; spec: FigureSpec } | { ok: false; error: string }
 
-/** Exported for tests — the validation rules are the contract, not the UI. */
+/** Exported for tests, the validation rules are the contract, not the UI. */
 export function parseFigureSpecText(text: string, current: FigureSpec): ParseResult {
   let parsed: unknown
   try {
@@ -80,7 +80,7 @@ export function parseFigureSpecText(text: string, current: FigureSpec): ParseRes
     spec: {
       data: parsed.data,
       layout: parsed.layout,
-      // Omitting these is forgiving rather than fatal — the caption metadata is
+      // Omitting these is forgiving rather than fatal, the caption metadata is
       // not something anyone edits by hand.
       config: (parsed.config ?? current.config) as FigureSpec["config"],
       meta: (parsed.meta ?? current.meta) as FigureSpec["meta"],
@@ -104,7 +104,7 @@ export interface FigureJsonPanelProps {
  * Raw Plotly JSON for the current figure.
  *
  * THE CRITICAL BEHAVIOUR: while the editor has focus it is effectively
- * UNCONTROLLED — nothing pushes `spec` back into the document. Three writers
+ * UNCONTROLLED, nothing pushes `spec` back into the document. Three writers
  * share this store, and if a canvas relayout or a Format-panel colour change
  * re-serialised the spec into the editor, the caret would jump to the top of
  * the document mid-word. The text re-syncs on blur instead.
@@ -143,7 +143,7 @@ export function FigureJsonPanel({
 
   React.useEffect(() => () => clearTimeout(timerRef.current), [])
 
-  // Debounce lives in the handler, not an effect on `text` — an effect would
+  // Debounce lives in the handler, not an effect on `text`, an effect would
   // also fire for the blur re-sync above and commit the spec back to itself.
   const handleChange = React.useCallback(
     (value: string) => {

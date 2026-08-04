@@ -7,7 +7,7 @@ import { CatalystHttpError, CatalystUnavailableError } from "@/lib/catalyst-clie
 /**
  * Every column of `public.analyses` EXCEPT `code`.
  *
- * `code` is the generated runtime script — server-side only, and it must never
+ * `code` is the generated runtime script, server-side only, and it must never
  * reach a client. Always select with this list; never `select("*")`.
  */
 export const ANALYSIS_COLUMNS = [

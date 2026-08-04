@@ -17,7 +17,7 @@ function normalizeAppPath(pathname: string): string {
 
 // ---------------------------------------------------------------------------
 // Reusable steps for the always-present chrome buttons. These stay on the
-// current page (no navigation) — they just point out the obvious controls the
+// current page (no navigation), they just point out the obvious controls the
 // user can reach from anywhere.
 // ---------------------------------------------------------------------------
 
@@ -52,7 +52,7 @@ const createNewStep: TourStep = {
   target: tourSel(TOUR.createNew),
   side: "right",
   title: "Create anything, anywhere",
-  body: "The **Create new** button spins up a project, experiment, lab note, sample, protocol, and more — from any screen, without losing your place.",
+  body: "The **Create new** button spins up a project, experiment, lab note, sample, protocol, and more, from any screen, without losing your place.",
 }
 
 const searchStep: TourStep = {
@@ -68,14 +68,14 @@ const themeStep: TourStep = {
   target: tourSel(TOUR.themeToggle),
   side: "bottom",
   title: "Light or dark",
-  body: "Flip the whole workspace between light and dark with this toggle — whatever's easier on your eyes.",
+  body: "Flip the whole workspace between light and dark with this toggle, whatever's easier on your eyes.",
 }
 
 const navStep: TourStep = {
   target: tourSel(TOUR.sidebarNav),
   side: "right",
   title: "Your workspace, at a glance",
-  body: "Everything lives in this sidebar — **Dashboard**, **Projects**, **Literature**, **Catalyst**, and the **research map** are always one click away.",
+  body: "Everything lives in this sidebar, **Dashboard**, **Projects**, **Literature**, **Catalyst**, and the **research map** are always one click away.",
 }
 
 const helpStep: TourStep = {
@@ -102,14 +102,14 @@ function catalystStep(body: string): TourStep {
 // ---------------------------------------------------------------------------
 // Shared TipTap editor walkthrough (lab notes + protocol editor). These anchors
 // only exist while an editor is actually open, so any step whose target is
-// missing is skipped by the tour engine — the tour never hangs on them.
+// missing is skipped by the tour engine, the tour never hangs on them.
 // ---------------------------------------------------------------------------
 
 const editorToolbarStep: TourStep = {
   target: tourSel(TOUR.editorToolbar),
   side: "bottom",
   title: "A full scientific editor",
-  body: "Format text and add headings, lists, tables, images, voice dictation, math equations, and chemistry formulas — all from this toolbar.",
+  body: "Format text and add headings, lists, tables, images, voice dictation, math equations, and chemistry formulas, all from this toolbar.",
 }
 
 const editorLinkStep: TourStep = {
@@ -123,35 +123,35 @@ const editorCalculatorStep: TourStep = {
   target: tourSel(TOUR.editorCalculator),
   side: "bottom",
   title: "Scientific calculator",
-  body: "Open a built-in calculator for molarity, dilutions, and more — right beside your writing, no app-switching.",
+  body: "Open a built-in calculator for molarity, dilutions, and more, right beside your writing, no app-switching.",
 }
 
 const editorCiteStep: TourStep = {
   target: tourSel(TOUR.editorCite),
   side: "bottom",
   title: "Cite with AI",
-  body: "Select a sentence and hit **Cite** — Catalyst finds peer-reviewed papers that support it and inserts the citation for you.",
+  body: "Select a sentence and hit **Cite**, Catalyst finds peer-reviewed papers that support it and inserts the citation for you.",
 }
 
 const editorBibliographyStep: TourStep = {
   target: tourSel(TOUR.editorBibliography),
   side: "bottom",
   title: "Build a bibliography",
-  body: "Gather every citation in the document into a formatted **bibliography** — pick the style (APA, IEEE, Chicago, Harvard…) from the dropdown right beside this button.",
+  body: "Gather every citation in the document into a formatted **bibliography**, pick the style (APA, IEEE, Chicago, Harvard…) from the dropdown right beside this button.",
 }
 
 const versionHistoryStep: TourStep = {
   target: tourSel(TOUR.versionHistory),
   side: "bottom",
   title: "Version history",
-  body: "Every save is kept. Open **version history** to compare any two versions side by side and **restore** an earlier one — nothing is ever lost.",
+  body: "Every save is kept. Open **version history** to compare any two versions side by side and **restore** an earlier one, nothing is ever lost.",
 }
 
 const acceptSaveStep: TourStep = {
   target: tourSel(TOUR.acceptSave),
   side: "top",
   title: "Accept & Save",
-  body: "Your edits start as a **draft**. Review the diff, then hit **Accept & Save** to commit them — or **Discard** to roll back. For a **protocol** this publishes a **new version** (older runs keep the version they used); for a **lab note** it saves straight to the server.",
+  body: "Your edits start as a **draft**. Review the diff, then hit **Accept & Save** to commit them, or **Discard** to roll back. For a **protocol** this publishes a **new version** (older runs keep the version they used); for a **lab note** it saves straight to the server.",
 }
 
 /** The shared editor feature steps, reused by lab notes and the protocol editor.
@@ -183,7 +183,7 @@ const experimentTabsStep: TourStep = {
   target: tourSel(TOUR.experimentTabs),
   side: "bottom",
   title: "Everything about this experiment",
-  body: "These tabs hold the whole experiment — **Overview, Steps, Protocol & Assays, Samples, Data & Files, and Lab Notes**. Switch between them anytime; press **?** on any tab for a tour of it.",
+  body: "These tabs hold the whole experiment, **Overview, Steps, Protocol & Assays, Samples, Data & Files, and Lab Notes**. Switch between them anytime; press **?** on any tab for a tour of it.",
 }
 
 /** Per-tab tours for the experiment detail page (/experiments/<id>). */
@@ -193,17 +193,17 @@ function buildExperimentTabSteps(tab: string): TourStep[] {
       return [
         {
           title: "Experiment overview",
-          body: "This is a single experiment — one run of your research. The **Overview** tab is its snapshot.",
+          body: "This is a single experiment, one run of your research. The **Overview** tab is its snapshot.",
         },
         experimentTabsStep,
         {
           target: "#tab-content-overview",
           side: "top",
           title: "The snapshot",
-          body: "Status, owner, timeline, and a summary of the run live here — so anyone can see where this experiment stands at a glance.",
+          body: "Status, owner, timeline, and a summary of the run live here, so anyone can see where this experiment stands at a glance.",
         },
         catalystStep(
-          "Ask Catalyst to summarize this experiment, draft its aims, or suggest next steps — it has the run's context.",
+          "Ask Catalyst to summarize this experiment, draft its aims, or suggest next steps, it has the run's context.",
         ),
         helpStep,
       ]
@@ -233,7 +233,7 @@ function buildExperimentTabSteps(tab: string): TourStep[] {
           target: "#tab-content-protocol",
           side: "top",
           title: "Linked methods",
-          body: "The protocols and assays this experiment uses are linked here — pinned to the exact **version** they followed, so the method stays accurate even as protocols evolve.",
+          body: "The protocols and assays this experiment uses are linked here, pinned to the exact **version** they followed, so the method stays accurate even as protocols evolve.",
         },
         catalystStep(
           "Ask Catalyst to explain a protocol, adapt it for this run, or flag steps that need attention.",
@@ -251,7 +251,7 @@ function buildExperimentTabSteps(tab: string): TourStep[] {
           target: "#tab-content-samples",
           side: "top",
           title: "Materials, connected",
-          body: "Each sample used here shows its **code, type, and status**, linked back to your inventory — so you always know what went into the result.",
+          body: "Each sample used here shows its **code, type, and status**, linked back to your inventory, so you always know what went into the result.",
         },
         helpStep,
       ]
@@ -272,7 +272,7 @@ function buildExperimentTabSteps(tab: string): TourStep[] {
           target: tourSel(TOUR.dataActions),
           side: "bottom",
           title: "Add data your way",
-          body: "**Upload** existing files, or spin up a **New spreadsheet** to enter data directly in Notes9 — no need to leave the app.",
+          body: "**Upload** existing files, or spin up a **New spreadsheet** to enter data directly in Notes9, no need to leave the app.",
         },
         {
           title: "Preview, edit & tidy up",
@@ -288,12 +288,12 @@ function buildExperimentTabSteps(tab: string): TourStep[] {
       return [
         {
           title: "Lab notes",
-          body: "The **Lab Notes** tab is your daily record for this experiment — every observation, method, and result, written in a full scientific editor.",
+          body: "The **Lab Notes** tab is your daily record for this experiment, every observation, method, and result, written in a full scientific editor.",
         },
         experimentTabsStep,
         {
           title: "Your notes for this run",
-          body: "Notes linked to this experiment are listed on the side — pick one to open it, or start a new note. Everything you write here stays tied to this experiment.",
+          body: "Notes linked to this experiment are listed on the side, pick one to open it, or start a new note. Everything you write here stays tied to this experiment.",
         },
         ...editorFeatureSteps(),
         catalystStep(
@@ -308,7 +308,7 @@ const sampleTabsStep: TourStep = {
   target: tourSel(TOUR.sampleTabs),
   side: "bottom",
   title: "Everything about this sample",
-  body: "These tabs hold the full record — **Overview, Molecular Files, Links, Storage, History, and QC**. Switch between them anytime; press **?** on any tab for a tour of it.",
+  body: "These tabs hold the full record, **Overview, Molecular Files, Links, Storage, History, and QC**. Switch between them anytime; press **?** on any tab for a tour of it.",
 }
 
 /** Per-tab tours for the sample detail page (/samples/<id>). */
@@ -325,13 +325,13 @@ function buildSampleTabSteps(tab: string): TourStep[] {
           target: tourSel(TOUR.molecularUpload),
           side: "bottom",
           title: "Upload sequences & structures",
-          body: "Add **plasmids, sequence files, and PDB/CIF protein structures** for this sample — Notes9 recognizes the format automatically.",
+          body: "Add **plasmids, sequence files, and PDB/CIF protein structures** for this sample, Notes9 recognizes the format automatically.",
         },
         {
           target: tourSel(TOUR.molecularViewer),
           side: "left",
           title: "Visualize in-app",
-          body: "Pick a file and it renders right here — **plasmid maps** (circular & linear) for DNA and sequences, and an interactive **3D viewer** for protein structures. No external tools needed.",
+          body: "Pick a file and it renders right here, **plasmid maps** (circular & linear) for DNA and sequences, and an interactive **3D viewer** for protein structures. No external tools needed.",
         },
         helpStep,
       ]
@@ -344,7 +344,7 @@ function buildSampleTabSteps(tab: string): TourStep[] {
         sampleTabsStep,
         {
           title: "Connected context",
-          body: "See every **project, experiment, and lab note** this sample is tied to — so you can follow exactly where it's been used.",
+          body: "See every **project, experiment, and lab note** this sample is tied to, so you can follow exactly where it's been used.",
         },
         helpStep,
       ]
@@ -357,7 +357,7 @@ function buildSampleTabSteps(tab: string): TourStep[] {
         sampleTabsStep,
         {
           title: "Know exactly where it is",
-          body: "Location, condition, container type, box position, **quantity and concentration**, collection and expiry dates, plus safety notes — all in one place.",
+          body: "Location, condition, container type, box position, **quantity and concentration**, collection and expiry dates, plus safety notes, all in one place.",
         },
         helpStep,
       ]
@@ -370,7 +370,7 @@ function buildSampleTabSteps(tab: string): TourStep[] {
         sampleTabsStep,
         {
           title: "Every movement, logged",
-          body: "A complete **transfer log** — each move, quantity change, who did it, and when. Add a transfer to keep the record accurate as the sample is used up or relocated.",
+          body: "A complete **transfer log**, each move, quantity change, who did it, and when. Add a transfer to keep the record accurate as the sample is used up or relocated.",
         },
         helpStep,
       ]
@@ -383,7 +383,7 @@ function buildSampleTabSteps(tab: string): TourStep[] {
         sampleTabsStep,
         {
           title: "QC records",
-          body: "Log **quality-control checks** — QC type, pass/fail result, measured value, who ran it, and the date. Add a record each time the sample is verified.",
+          body: "Log **quality-control checks**, QC type, pass/fail result, measured value, who ran it, and the date. Add a record each time the sample is verified.",
         },
         helpStep,
       ]
@@ -392,24 +392,24 @@ function buildSampleTabSteps(tab: string): TourStep[] {
       return [
         {
           title: "Sample overview",
-          body: "This is one sample — a single material in your inventory. Let's walk through its record.",
+          body: "This is one sample, a single material in your inventory. Let's walk through its record.",
         },
         {
           target: tourSel(TOUR.sampleQuickInfo),
           side: "bottom",
           title: "The vitals, up top",
-          body: "Location, storage condition, quantity, and collection date sit right here — the at-a-glance status of this material.",
+          body: "Location, storage condition, quantity, and collection date sit right here, the at-a-glance status of this material.",
         },
         {
           target: tourSel(TOUR.sampleActions),
           side: "bottom",
           title: "Edit, restatus, or remove",
-          body: "**Edit** the sample's details or change its **status** (available, in use, depleted, disposed) here — or delete it if it's no longer needed.",
+          body: "**Edit** the sample's details or change its **status** (available, in use, depleted, disposed) here, or delete it if it's no longer needed.",
         },
         sampleTabsStep,
         {
           title: "The full identity",
-          body: "The Overview tab holds the complete record — **code, type, status, barcode, organism, strain, genotype** — and the **experiments** that use this sample.",
+          body: "The Overview tab holds the complete record, **code, type, status, barcode, organism, strain, genotype**, and the **experiments** that use this sample.",
         },
         helpStep,
       ]
@@ -419,7 +419,7 @@ function buildSampleTabSteps(tab: string): TourStep[] {
 /**
  * Short, page-specific help tours triggered by the header "?" button.
  *
- * Each page walks through its own obvious buttons in order — the primary action
+ * Each page walks through its own obvious buttons in order, the primary action
  * first, then the shared controls (view toggle, create, search, Catalyst, help).
  * Tours stay on the current page; nothing here navigates the user away. Targets
  * only use anchors known to exist on that page, and anything missing (e.g. a
@@ -428,21 +428,21 @@ function buildSampleTabSteps(tab: string): TourStep[] {
 export function buildContextualSteps(pathname: string): TourStep[] {
   const path = normalizeAppPath(pathname)
 
-  // Experiment detail page (/experiments/<id>) — a separate tour per tab. Tabs
+  // Experiment detail page (/experiments/<id>), a separate tour per tab. Tabs
   // live in the URL as ?tab=<value>, forwarded by the header help button.
   const expDetail = path.match(/^\/experiments\/([^/]+)$/)
   if (expDetail && expDetail[1] !== "new") {
     return buildExperimentTabSteps(getTabParam(pathname) ?? "notes")
   }
 
-  // Sample detail page (/samples/<id>) — a separate tour per tab. Tabs live in
+  // Sample detail page (/samples/<id>), a separate tour per tab. Tabs live in
   // the URL as ?tab=<value> (default "overview"), forwarded by the help button.
   const sampleDetail = path.match(/^\/samples\/([^/]+)$/)
   if (sampleDetail && sampleDetail[1] !== "new") {
     return buildSampleTabSteps(getTabParam(pathname) ?? "overview")
   }
 
-  // Protocol editor (/protocols/new and /protocols/<id>) — the TipTap editor
+  // Protocol editor (/protocols/new and /protocols/<id>), the TipTap editor
   // walkthrough, distinct from the /protocols list tour below.
   if (/^\/protocols\/[^/]+$/.test(path)) {
     return [
@@ -455,21 +455,21 @@ export function buildContextualSteps(pathname: string): TourStep[] {
     ]
   }
 
-  // Writing editor (/papers/new and /papers/<id>) — a custom tour for the paper
+  // Writing editor (/papers/new and /papers/<id>), a custom tour for the paper
   // editor. Reuses the shared TipTap toolbar/cite/bibliography anchors plus
   // paper-specific import/export/status controls. (No scientific calculator and
-  // no draft-approval bar here — papers autosave and support live collaboration.)
+  // no draft-approval bar here, papers autosave and support live collaboration.)
   if (/^\/papers\/[^/]+$/.test(path)) {
     return [
       {
         title: "The writing editor",
-        body: "This is a full word processor tuned for **scientific papers** — write your manuscript, cite as you go, and export it ready to submit.",
+        body: "This is a full word processor tuned for **scientific papers**, write your manuscript, cite as you go, and export it ready to submit.",
       },
       {
         target: tourSel(TOUR.paperTitle),
         side: "bottom",
         title: "Name your paper",
-        body: "Set the title here — it saves automatically as you type, just like everything else in the document.",
+        body: "Set the title here, it saves automatically as you type, just like everything else in the document.",
       },
       editorToolbarStep,
       editorCiteStep,
@@ -478,7 +478,7 @@ export function buildContextualSteps(pathname: string): TourStep[] {
         target: tourSel(TOUR.paperImport),
         side: "bottom",
         title: "Import existing work",
-        body: "Bring in a manuscript from **LaTeX (.tex)**, or pull a reference list in from **BibTeX (.bib)** — you can also just drag a .tex or .bib file onto the page.",
+        body: "Bring in a manuscript from **LaTeX (.tex)**, or pull a reference list in from **BibTeX (.bib)**, you can also just drag a .tex or .bib file onto the page.",
       },
       {
         target: tourSel(TOUR.paperExport),
@@ -490,14 +490,14 @@ export function buildContextualSteps(pathname: string): TourStep[] {
         target: tourSel(TOUR.paperStatus),
         side: "bottom",
         title: "Track its status",
-        body: "Move the paper through **Draft → In Review → Published** as it progresses — or delete it — from this menu.",
+        body: "Move the paper through **Draft → In Review → Published** as it progresses, or delete it, from this menu.",
       },
       {
         title: "Write together",
-        body: "Papers support **real-time collaboration** — invite co-authors and you'll see each other's cursors and edits live, with everyone's avatar up top.",
+        body: "Papers support **real-time collaboration**, invite co-authors and you'll see each other's cursors and edits live, with everyone's avatar up top.",
       },
       catalystStep(
-        "Ask Catalyst to draft a section, outline the paper, summarize your results, or polish a paragraph — your work is already in context.",
+        "Ask Catalyst to draft a section, outline the paper, summarize your results, or polish a paragraph, your work is already in context.",
       ),
       helpStep,
     ]
@@ -507,7 +507,7 @@ export function buildContextualSteps(pathname: string): TourStep[] {
     return [
       {
         title: "Projects",
-        body: "Projects are home base — each one groups the experiments, lab notes, protocols, samples, and literature for a single line of research.",
+        body: "Projects are home base, each one groups the experiments, lab notes, protocols, samples, and literature for a single line of research.",
       },
       actionStep(
         "#tour-create-project, " + tourSel(TOUR.createProject),
@@ -517,7 +517,7 @@ export function buildContextualSteps(pathname: string): TourStep[] {
       ),
       {
         title: "What's inside a project",
-        body: "Open any project to find its workspace — **experiments, protocols, samples, lab notes, and literature** all grouped together, with status, priority, and team members at a glance.",
+        body: "Open any project to find its workspace, **experiments, protocols, samples, lab notes, and literature** all grouped together, with status, priority, and team members at a glance.",
       },
       filtersStep(
         "Got a lot of projects? Filter by **status** (planning, active, on hold, completed) and **priority** to surface just the ones you care about.",
@@ -535,7 +535,7 @@ export function buildContextualSteps(pathname: string): TourStep[] {
     return [
       {
         title: "Experiments",
-        body: "Experiments are the individual runs inside a project — each ties together the protocol you followed, the samples you used, and the results you recorded.",
+        body: "Experiments are the individual runs inside a project, each ties together the protocol you followed, the samples you used, and the results you recorded.",
       },
       actionStep(
         "#tour-create-experiment, " + tourSel(TOUR.createExperiment),
@@ -545,7 +545,7 @@ export function buildContextualSteps(pathname: string): TourStep[] {
       ),
       {
         title: "What an experiment holds",
-        body: "Each experiment carries a **status**, an assigned owner, and start date — and links out to the **protocols, samples, and lab notes** it used, so the full story of a run stays connected.",
+        body: "Each experiment carries a **status**, an assigned owner, and start date, and links out to the **protocols, samples, and lab notes** it used, so the full story of a run stays connected.",
       },
       filtersStep(
         "Filter experiments by **project** and **status** (planned, in progress, completed, failed, paused) to focus on what's active right now.",
@@ -562,7 +562,7 @@ export function buildContextualSteps(pathname: string): TourStep[] {
     return [
       {
         title: "Lab notes",
-        body: "Lab notes are your daily record — observations, methods, and results, with comments and linked materials right alongside.",
+        body: "Lab notes are your daily record, observations, methods, and results, with comments and linked materials right alongside.",
       },
       actionStep(
         tourSel(TOUR.createLabNote),
@@ -572,7 +572,7 @@ export function buildContextualSteps(pathname: string): TourStep[] {
       ),
       {
         title: "Open a note to edit it",
-        body: "This page lists every note across your experiments. **Open one** and it lands in its experiment's **Lab Notes** tab — that's the full editor, with the scientific calculator, @-linking, AI citations, **version history**, and **Accept & Save**.",
+        body: "This page lists every note across your experiments. **Open one** and it lands in its experiment's **Lab Notes** tab, that's the full editor, with the scientific calculator, @-linking, AI citations, **version history**, and **Accept & Save**.",
       },
       filtersStep(
         "Filter by **project**, then by **experiment** within it, to jump straight to the notes for the run you're working on.",
@@ -589,7 +589,7 @@ export function buildContextualSteps(pathname: string): TourStep[] {
     return [
       {
         title: "Protocols",
-        body: "Protocols store your repeatable, versioned procedures — so experiments stay consistent instead of rewriting the same steps each time.",
+        body: "Protocols store your repeatable, versioned procedures, so experiments stay consistent instead of rewriting the same steps each time.",
       },
       actionStep(
         tourSel(TOUR.createProtocol),
@@ -599,7 +599,7 @@ export function buildContextualSteps(pathname: string): TourStep[] {
       ),
       {
         title: "Versioned & reusable",
-        body: "Each protocol tracks its **version** and shows how many experiments use it — so when you refine a method, every run still points to the exact version it followed.",
+        body: "Each protocol tracks its **version** and shows how many experiments use it, so when you refine a method, every run still points to the exact version it followed.",
       },
       filtersStep(
         "Filter by **category**, **version**, or **usage** (used in experiments vs. not linked yet) to find the right procedure fast.",
@@ -612,18 +612,18 @@ export function buildContextualSteps(pathname: string): TourStep[] {
     ]
   }
 
-  // Writing list (/papers) — the manuscripts workspace. The editor at
+  // Writing list (/papers), the manuscripts workspace. The editor at
   // /papers/<id> is handled separately above.
   if (path.startsWith("/papers")) {
     return [
       {
         title: "Writing",
-        body: "This is where you draft and export **research papers** — manuscripts, reports, anything you're writing up to publish.",
+        body: "This is where you draft and export **research papers**, manuscripts, reports, anything you're writing up to publish.",
       },
       actionStep(
         tourSel(TOUR.createPaper),
         "Start a paper",
-        "The **New Paper** button opens a fresh manuscript in the writing editor — title it and start drafting.",
+        "The **New Paper** button opens a fresh manuscript in the writing editor, title it and start drafting.",
         "Click to start writing",
       ),
       filtersStep(
@@ -632,7 +632,7 @@ export function buildContextualSteps(pathname: string): TourStep[] {
       viewModeStep,
       {
         title: "Open a paper to write",
-        body: "Click any paper to open it in the **writing editor** — a full word processor with citations, math, import/export, and live collaboration.",
+        body: "Click any paper to open it in the **writing editor**, a full word processor with citations, math, import/export, and live collaboration.",
       },
       catalystStep(
         "Ask Catalyst to outline a new paper, draft a section, or turn your experiment results into prose.",
@@ -645,25 +645,25 @@ export function buildContextualSteps(pathname: string): TourStep[] {
     return [
       {
         title: "Literature",
-        body: "This is your reading room — search for papers, read and annotate them in Notes9, and ask Catalyst about anything you've saved. Let's go through it.",
+        body: "This is your reading room, search for papers, read and annotate them in Notes9, and ask Catalyst about anything you've saved. Let's go through it.",
       },
       actionStep(
         tourSel(TOUR.addLiterature) + ", " + tourSel(TOUR.createPaper),
         "Search & save papers",
-        "Search **PubMed, Europe PMC, and OpenAlex** for papers right here, then save the ones worth keeping into your library — or add a reference manually.",
+        "Search **PubMed, Europe PMC, and OpenAlex** for papers right here, then save the ones worth keeping into your library, or add a reference manually.",
         "Click to add a reference",
       ),
       {
         target: tourSel(TOUR.litTabs),
         side: "bottom",
         title: "Stage papers as tabs",
-        body: "Your search results, saved papers, and every open PDF stack up as **tabs** here — line several papers up side by side and switch between them without losing your place.",
+        body: "Your search results, saved papers, and every open PDF stack up as **tabs** here, line several papers up side by side and switch between them without losing your place.",
       },
       {
         target: tourSel(TOUR.uploadPdf),
         side: "bottom",
         title: "Read PDFs in-app",
-        body: "Open-access papers render as a **readable PDF right inside Notes9** — no downloads. When a paper isn't freely available, use **Upload** to add your own copy and read it here too.",
+        body: "Open-access papers render as a **readable PDF right inside Notes9**, no downloads. When a paper isn't freely available, use **Upload** to add your own copy and read it here too.",
       },
       {
         title: "Annotate & comment",
@@ -671,7 +671,7 @@ export function buildContextualSteps(pathname: string): TourStep[] {
       },
       {
         title: "Drag a paper into Catalyst",
-        body: "**Drag any saved paper** from your library into the Catalyst AI sidebar to ask questions about it — summaries, methods, or comparisons, grounded in that exact paper.",
+        body: "**Drag any saved paper** from your library into the Catalyst AI sidebar to ask questions about it, summaries, methods, or comparisons, grounded in that exact paper.",
       },
       catalystStep(
         "Ask Catalyst to summarize a paper, extract its methods, or compare studies side by side. Type **@** to reference a specific paper.",
@@ -684,7 +684,7 @@ export function buildContextualSteps(pathname: string): TourStep[] {
     return [
       {
         title: "Samples",
-        body: "Track reagents, cells, constructs, and other materials — with codes, storage locations, and links to the experiments that use them.",
+        body: "Track reagents, cells, constructs, and other materials, with codes, storage locations, and links to the experiments that use them.",
       },
       actionStep(
         tourSel(TOUR.createSample),
@@ -696,11 +696,11 @@ export function buildContextualSteps(pathname: string): TourStep[] {
         target: tourSel(TOUR.sampleStats),
         side: "bottom",
         title: "Stock at a glance",
-        body: "These cards tally your inventory by status — **Available, In use, Depleted, Disposed** — so low stock and used-up materials are obvious immediately.",
+        body: "These cards tally your inventory by status, **Available, In use, Depleted, Disposed**, so low stock and used-up materials are obvious immediately.",
       },
       {
         title: "More than a label",
-        body: "Each sample tracks **quantity, concentration, and storage location** — and for DNA or proteins you can attach files to view **plasmid maps and 3D structures**.",
+        body: "Each sample tracks **quantity, concentration, and storage location**, and for DNA or proteins you can attach files to view **plasmid maps and 3D structures**.",
       },
       filtersStep(
         "Filter by **project**, **experiment**, **status**, or **type** to pin down exactly the materials you need.",
@@ -719,18 +719,18 @@ export function buildContextualSteps(pathname: string): TourStep[] {
       actionStep(
         tourSel(TOUR.createEquipment),
         "Add equipment",
-        "This **＋** button registers an instrument — record its location and maintenance so the whole lab can find and rely on it.",
+        "This **＋** button registers an instrument, record its location and maintenance so the whole lab can find and rely on it.",
         "Click to add equipment",
       ),
       {
         target: tourSel(TOUR.equipmentStats),
         side: "bottom",
         title: "Availability at a glance",
-        body: "These cards summarize the lab's instruments by status — **Available, In use, Maintenance, Offline** — so you can see what's free before you walk over.",
+        body: "These cards summarize the lab's instruments by status, **Available, In use, Maintenance, Offline**, so you can see what's free before you walk over.",
       },
       {
         title: "What each instrument tracks",
-        body: "Equipment records hold the **model, manufacturer, location, and next maintenance date** — keeping servicing on schedule and downtime visible to everyone.",
+        body: "Equipment records hold the **model, manufacturer, location, and next maintenance date**, keeping servicing on schedule and downtime visible to everyone.",
       },
       filtersStep(
         "Filter by **status**, **category**, or **location** to find an available instrument or everything due for maintenance.",
@@ -744,17 +744,17 @@ export function buildContextualSteps(pathname: string): TourStep[] {
     return [
       {
         title: "Research map",
-        body: "This map visualizes how everything in your lab connects — projects, experiments, protocols, samples, lab notes, literature, papers, and reports — so the big picture stays clear as the work grows.",
+        body: "This map visualizes how everything in your lab connects, projects, experiments, protocols, samples, lab notes, literature, papers, and reports, so the big picture stays clear as the work grows.",
       },
       {
         target: tourSel(TOUR.mapControls),
         side: "bottom",
         title: "Scope & filter the map",
-        body: "Use this control bar to **scope to a project or experiment**, toggle which **entity types** appear, and **filter nodes by name** — so you can zoom in on exactly the slice you care about.",
+        body: "Use this control bar to **scope to a project or experiment**, toggle which **entity types** appear, and **filter nodes by name**, so you can zoom in on exactly the slice you care about.",
       },
       {
         title: "Follow the connections",
-        body: "**Click any node** to light up its full chain — everything it came from and everything that depends on it. Colors encode the type of item and the kind of relationship between them.",
+        body: "**Click any node** to light up its full chain, everything it came from and everything that depends on it. Colors encode the type of item and the kind of relationship between them.",
       },
       {
         title: "Pan, zoom & overview",
@@ -776,12 +776,12 @@ export function buildContextualSteps(pathname: string): TourStep[] {
       actionStep(
         tourSel(TOUR.generateReport),
         "Generate a report",
-        "The **Generate AI report** button opens a dialog where you pick a **project, experiment, and the data files** to analyze, then describe what you want — Catalyst assembles the report from there.",
+        "The **Generate AI report** button opens a dialog where you pick a **project, experiment, and the data files** to analyze, then describe what you want, Catalyst assembles the report from there.",
         "Click to generate one",
       ),
       {
         title: "Review, edit, export",
-        body: "Each report is built from your **experiment data, lab notes, and files** — open one to review and refine it, then export when it's ready to share.",
+        body: "Each report is built from your **experiment data, lab notes, and files**, open one to review and refine it, then export when it's ready to share.",
       },
       filtersStep(
         "Filter the list by **project** and **experiment** to find a past report. Select rows with the checkboxes to **delete in bulk**.",
@@ -797,23 +797,23 @@ export function buildContextualSteps(pathname: string): TourStep[] {
     return [
       {
         title: "Catalyst",
-        body: "Catalyst is your AI research partner — built for the lab. Ask questions, draft notes, and reason over your own data with full context.",
+        body: "Catalyst is your AI research partner, built for the lab. Ask questions, draft notes, and reason over your own data with full context.",
       },
       {
         target: "#tour-ai-chat",
         side: "top",
         title: "Ask anything",
-        body: "Type a question here — draft a lab note, summarize a paper, or plan an experiment. Type **@** to tag a specific note, experiment, or paper.",
+        body: "Type a question here, draft a lab note, summarize a paper, or plan an experiment. Type **@** to tag a specific note, experiment, or paper.",
         interactive: true,
         cta: "Try asking something",
       },
       {
         title: "Biology-first by design",
-        body: "Catalyst is tuned for the life sciences. **Biology questions get biology-specific answers** — that's our priority, and it's where Catalyst's accuracy is strongest.",
+        body: "Catalyst is tuned for the life sciences. **Biology questions get biology-specific answers**, that's our priority, and it's where Catalyst's accuracy is strongest.",
       },
       {
         title: "Sources you can check",
-        body: "Every answer lists its **citations at the bottom** — both your internal documents and any web results. So you can verify where each claim came from in one click, and trust the answer isn't hallucinated.",
+        body: "Every answer lists its **citations at the bottom**, both your internal documents and any web results. So you can verify where each claim came from in one click, and trust the answer isn't hallucinated.",
       },
       {
         title: "Bring your papers in",
@@ -827,7 +827,7 @@ export function buildContextualSteps(pathname: string): TourStep[] {
     return [
       {
         title: "Settings",
-        body: "Manage your profile, security, and preferences — each grouped under its own tab.",
+        body: "Manage your profile, security, and preferences, each grouped under its own tab.",
       },
       {
         target: tourSel(TOUR.settingsTabs),
@@ -837,7 +837,7 @@ export function buildContextualSteps(pathname: string): TourStep[] {
       },
       {
         title: "Make it yours",
-        body: "Upload an **avatar**, set your **role** (admin, researcher, technician, analyst, viewer), and pick a **theme** — Light, Dark, or System — to match how you like to work.",
+        body: "Upload an **avatar**, set your **role** (admin, researcher, technician, analyst, viewer), and pick a **theme**, Light, Dark, or System, to match how you like to work.",
       },
       themeStep,
       helpStep,
@@ -848,19 +848,19 @@ export function buildContextualSteps(pathname: string): TourStep[] {
     return [
       {
         title: "Your dashboard",
-        body: "This is mission control — everything you need to pick up where you left off lives on this one screen. Let's walk through it.",
+        body: "This is mission control, everything you need to pick up where you left off lives on this one screen. Let's walk through it.",
       },
       {
         target: tourSel(TOUR.dashSchedule),
         side: "right",
         title: "Schedule & tasks",
-        body: "Your **Schedule** and **Tasks** sit here — see what's planned for today and tick off to-dos without leaving the dashboard. Switch between them with the tabs up top.",
+        body: "Your **Schedule** and **Tasks** sit here, see what's planned for today and tick off to-dos without leaving the dashboard. Switch between them with the tabs up top.",
       },
       {
         target: tourSel(TOUR.dashRecentWork),
         side: "left",
         title: "Recent projects & experiments",
-        body: "Jump straight back into the **projects and experiments** you've touched most recently — no digging through menus.",
+        body: "Jump straight back into the **projects and experiments** you've touched most recently, no digging through menus.",
       },
       {
         target: tourSel(TOUR.dashWhiteboard),
@@ -872,13 +872,13 @@ export function buildContextualSteps(pathname: string): TourStep[] {
         target: tourSel(TOUR.dashRecentlyEdited),
         side: "left",
         title: "Recently edited",
-        body: "A running list of the **notes, papers, and items** you edited last — one click takes you right back to them.",
+        body: "A running list of the **notes, papers, and items** you edited last, one click takes you right back to them.",
       },
       {
         target: tourSel(TOUR.dashMyLab),
         side: "top",
         title: "About my lab",
-        body: "This is your **lab space** — members, invites, and shared settings. It's still in development, so expect more lab collaboration features to land here soon.",
+        body: "This is your **lab space**, members, invites, and shared settings. It's still in development, so expect more lab collaboration features to land here soon.",
       },
       catalystStep(
         "Open Catalyst anytime to ask questions, draft notes, or reason over your lab data. It already knows your projects and experiments.",
@@ -896,7 +896,7 @@ export function buildContextualSteps(pathname: string): TourStep[] {
     createNewStep,
     searchStep,
     catalystStep(
-      "Catalyst is your AI partner — ask it questions and let it work over your lab data, from any page.",
+      "Catalyst is your AI partner, ask it questions and let it work over your lab data, from any page.",
     ),
     helpStep,
   ]

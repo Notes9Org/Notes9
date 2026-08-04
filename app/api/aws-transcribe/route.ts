@@ -29,7 +29,7 @@ function presignTranscribeUrl(opts: {
 
   const host = `transcribestreaming.${opts.region}.amazonaws.com`;
   // Port 8443 is non-standard, so it must be included in the Host header
-  // value used during signing — AWS validates the host header with port.
+  // value used during signing, AWS validates the host header with port.
   const hostHeader = `${host}:8443`;
   const path = "/stream-transcription-websocket";
   const credentialScope = `${dateStamp}/${opts.region}/transcribe/aws4_request`;
@@ -47,7 +47,7 @@ function presignTranscribeUrl(opts: {
     ...(opts.sessionToken ? { "X-Amz-Security-Token": opts.sessionToken } : {}),
   };
 
-  // Canonical query string — sorted, URI-encoded, no X-Amz-Signature yet
+  // Canonical query string, sorted, URI-encoded, no X-Amz-Signature yet
   const canonicalQueryString = Object.keys(params)
     .sort()
     .map((k) => `${encodeURIComponent(k)}=${encodeURIComponent(params[k])}`)

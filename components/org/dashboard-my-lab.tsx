@@ -48,8 +48,8 @@ export function DashboardMyLab({ lab }: { lab: DashboardLabSummary }) {
       title="My Lab"
       description={
         collab
-          ? "Your research group lives here — invite teammates, assign roles, and manage lab settings without leaving the dashboard."
-          : "Your research group lives here — manage your lab settings without leaving the dashboard."
+          ? "Your research group lives here, invite teammates, assign roles, and manage lab settings without leaving the dashboard."
+          : "Your research group lives here, manage your lab settings without leaving the dashboard."
       }
     >
       <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">

@@ -11,7 +11,7 @@ import {
 } from "@/lib/data-analysis/engine/contract"
 
 /**
- * The saved analysis (§3A) — persistence, revisions, and reopening.
+ * The saved analysis (§3A), persistence, revisions, and reopening.
  *
  * The document frames this as an architectural test: "if saving turns out to be
  * hard to build, the spec layer has been implemented wrongly." It is not hard,
@@ -352,7 +352,7 @@ export async function freezeRevision(revisionId: string): Promise<AnalysisRevisi
 }
 
 /**
- * Editing a frozen revision does not modify it — it forks a new working
+ * Editing a frozen revision does not modify it, it forks a new working
  * revision that records what it came from. Callers should route every edit
  * attempt on a frozen revision through this rather than blocking the edit.
  */

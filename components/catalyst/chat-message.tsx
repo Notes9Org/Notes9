@@ -105,7 +105,7 @@ function ChatMessageInner({
       )}
 
       <div className={cn('flex flex-col gap-1.5 min-w-0', isUser ? 'max-w-[85%]' : 'max-w-full flex-1 w-full')}>
-        {/* Thinking panel — collapsible */}
+        {/* Thinking panel, collapsible */}
         {!isUser && thinking && (
           <button
             className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors self-start"
@@ -123,7 +123,7 @@ function ChatMessageInner({
           </div>
         )}
 
-        {/* Tool calls — Cursor/Claude-style inline transcript. While running,
+        {/* Tool calls, Cursor/Claude-style inline transcript. While running,
             every card is visible (collapsible=false) so the user can see what
             the agent is doing right now. Once settled, the stack collapses
             behind a single "Used N tools" affordance to keep the bubble tight. */}
@@ -135,7 +135,7 @@ function ChatMessageInner({
           />
         )}
 
-        {/* Attachments — shown above the bubble for user messages */}
+        {/* Attachments, shown above the bubble for user messages */}
         {isUser && attachments.length > 0 && (
           <div className="flex flex-wrap gap-2 justify-end mb-1">
             {attachments.map((att, i) => {
@@ -173,7 +173,7 @@ function ChatMessageInner({
           </div>
         )}
 
-        {/* Message Bubble — suppressed when the assistant has only tool cards
+        {/* Message Bubble, suppressed when the assistant has only tool cards
             and no answer text yet (avoids an empty grey block while tools run). */}
         {(isUser || content || !isStreaming) && (() => {
           let effectiveManifest = citationsManifest;
@@ -229,13 +229,13 @@ function ChatMessageInner({
           );
         })()}
 
-        {/* Sources list removed — the per-citation hover card is now the single
+        {/* Sources list removed, the per-citation hover card is now the single
             source surface (avoids duplicating title/excerpt/open-link). */}
 
         {/* Actions (visible on hover for completed assistant messages) */}
         {!isUser && content && !isStreaming && (
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            {/* Hover tooltips removed (glitchy — user request); labels live on
+            {/* Hover tooltips removed (glitchy, user request); labels live on
                 as aria-labels. */}
             <Button
               variant="ghost"

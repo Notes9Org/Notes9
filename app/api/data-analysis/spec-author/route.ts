@@ -79,7 +79,7 @@ function numericSummary(values: (number | string | null)[]): ColumnProfile["summ
 }
 
 /**
- * Reuses `profileTable` — the same profiler the semantic layer infers from — so
+ * Reuses `profileTable`, the same profiler the semantic layer infers from, so
  * the assistant sees exactly the shape the app itself reasons about.
  */
 function toDataProfile(spec: AnalysisSpec, table: Table): DataProfile {
@@ -166,7 +166,7 @@ export async function POST(req: NextRequest) {
     }
     const spec = parsed.spec
 
-    // (c) Screened requests never reach the model — a refusal that still costs a
+    // (c) Screened requests never reach the model, a refusal that still costs a
     // model call is a refusal the caller can afford to retry in a loop.
     const screen = screenRequest(prompt)
     if (!screen.allowed) {
@@ -184,7 +184,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Computed once, used twice: to tell the model which tests are legal for
-    // this data shape, and — after the reply comes back — to enforce it. Same
+    // this data shape, and, after the reply comes back, to enforce it. Same
     // whitelist the UI's test menu uses, so the model can't see a wider set
     // than the researcher would.
     const legalTests = offerableTests(spec, table)
@@ -196,7 +196,7 @@ export async function POST(req: NextRequest) {
     // has no producer for a notes9 project record, an edit-history feed, or a
     // live engine result at this call site (confirmed against
     // spec-author-client.ts, whose wire contract is just { prompt, spec, table
-    // }) — inventing one here would be a new data source, not a bundle fix.
+    // }), inventing one here would be a new data source, not a bundle fix.
     const bundle = buildContextBundle({
       prompt,
       spec,
@@ -217,7 +217,7 @@ export async function POST(req: NextRequest) {
       // here; the workspace keeps computing without the assistant.
       const reason =
         err instanceof CatalystUnavailableError
-          ? "The analysis assistant is not configured on this deployment. Everything else still works — the spec you edit by hand is computed the same way."
+          ? "The analysis assistant is not configured on this deployment. Everything else still works, the spec you edit by hand is computed the same way."
           : "The analysis assistant is unreachable right now. Your analysis is unaffected; try the request again shortly."
       console.error("[spec-author] catalyst call failed:", err)
       return NextResponse.json({ outcome: "unavailable", reason }, { status: 503 })

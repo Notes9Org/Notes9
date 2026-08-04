@@ -28,7 +28,7 @@ interface LiteraturePdfPanelProps {
   /** If set, the viewer will search for this text and temporarily highlight the match. */
   highlightExcerpt?: string | null
   highlightPageNumber?: number | null
-  /** Per-click nonce (see `hooks/use-source-navigation.ts`) — makes a repeat
+  /** Per-click nonce (see `hooks/use-source-navigation.ts`), makes a repeat
    * click on the SAME citation (identical excerpt) re-fire the highlight
    * instead of being deduped by the fired-ref below. */
   highlightNonce?: number | null
@@ -94,7 +94,7 @@ export function LiteraturePdfPanel({
   // Trigger excerpt highlight when the prop is set (e.g. from a reference click).
   // Retries until the PDF viewer is loaded and the excerpt is found.
   // Keyed on excerpt + nonce (not excerpt alone) so a repeat click on the SAME
-  // citation — identical excerpt, new nonce — re-applies instead of being
+  // citation, identical excerpt, new nonce, re-applies instead of being
   // deduped by content.
   const highlightExcerptFiredRef = useRef<string | null>(null)
   const highlightFiredKey = highlightExcerpt != null ? `${highlightExcerpt}|${highlightNonce ?? ''}` : null

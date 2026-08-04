@@ -28,7 +28,7 @@ export function useMentionEntities() {
   useEffect(() => {
     let cancelled = false
     const fetchEntities = async () => {
-      // Samples have no `name` column — sample_code is the display label
+      // Samples have no `name` column, sample_code is the display label
       // everywhere in the UI, so it doubles as the mention name here.
       const [protocolsRes, samplesRes] = await Promise.all([
         supabase.from("protocols").select("id, name, version").order("name"),

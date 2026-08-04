@@ -4,7 +4,7 @@
  * The Chart phase grew up holding its settings in React state and drawing
  * straight from them. That works, but a figure described only by component
  * state cannot be saved, reopened, reproduced, put in a figure panel, or
- * checked against the data version it was computed from — Law 1 requires the
+ * checked against the data version it was computed from, Law 1 requires the
  * spec to be the only description of a figure.
  *
  * Rather than rewire every control to dispatch a spec mutation (hundreds of
@@ -116,7 +116,7 @@ export interface ChartState {
    * The data pipeline. Absent, like the statistics slice above, keeps
    * deriving an empty pipeline exactly as before. These are the fields the AI
    * patches through `data.setFilters` / `data.addTransform` / `data.excludeRow`
-   * — without a home on `ChartState` they land in the spec and vanish on the
+   * without a home on `ChartState` they land in the spec and vanish on the
    * next `derivedSpec` recompute, because nothing carries them back into the
    * rail's own state.
    */
@@ -259,7 +259,7 @@ export function specFromChartState(
   }
 
   const capabilities = legalTests(draft.spec, table)
-  // A deliberate choice beats the chart-derived default — that is the same
+  // A deliberate choice beats the chart-derived default, that is the same
   // sticky-manual-edit rule the column mapping already follows. Except when the
   // named test is not legal for this data: the resolver would reject it, so a
   // spec that cannot run must not be reachable from here, and we fall back to
@@ -297,7 +297,7 @@ export function specFromChartState(
 export class SpecDerivationError extends Error {}
 
 /**
- * Drive the rail from a spec — the direction a saved analysis or an AI-proposed
+ * Drive the rail from a spec, the direction a saved analysis or an AI-proposed
  * patch arrives in.
  *
  * Partial, because the spec is not the whole rail: the caller merges this into
@@ -309,8 +309,8 @@ export class SpecDerivationError extends Error {}
  * pointing the chart at a column that does not exist draws nothing. The rail's
  * own mapping stands in that case.
  *
- * Everything the spec holds that the rail has no control for — the second axis,
- * brackets and annotations — is deliberately absent rather than undefined:
+ * Everything the spec holds that the rail has no control for, the second axis,
+ * brackets and annotations, is deliberately absent rather than undefined:
  * those live on the spec, and the caller keeps them there.
  *
  * The statistics slice does come back, because it has to: the derivation the
@@ -350,7 +350,7 @@ export function chartStateFromSpec(spec: AnalysisSpec, table: Table): Partial<Ch
     transforms: spec.transforms,
     exclusions: spec.exclusions,
     // The statistics the panel owns. A parsed spec always has all five, so
-    // reading them back is a plain copy — and null on the reference level is a
+    // reading them back is a plain copy, and null on the reference level is a
     // value ("no reference"), the same as on the caption above.
     test: analysis.test,
     postHoc: analysis.postHoc,
@@ -386,7 +386,7 @@ export function chartStateFromSpec(spec: AnalysisSpec, table: Table): Partial<Ch
   // silent on one leaves the user's own value standing.
   //
   // The chart type is the same case for a different reason: the map is total
-  // out of the rail but not back into it — dose-response and grouped-bar are
+  // out of the rail but not back into it, dose-response and grouped-bar are
   // spec kinds with no control to select them. Guessing the nearest chart would
   // quietly redraw the figure as a different one.
   const chartType = FIGURE_KIND_TO_CHART_TYPE[figure.kind]
@@ -402,9 +402,9 @@ export function chartStateFromSpec(spec: AnalysisSpec, table: Table): Partial<Ch
 
 /**
  * The signature `derivedSpec`'s recompute effect watches. Mirrors
- * `requiresRecompute` (`lib/data-analysis/spec/mutations.ts`) — the codebase's
+ * `requiresRecompute` (`lib/data-analysis/spec/mutations.ts`), the codebase's
  * own statement of Law 5, "style edits never recompute; data and analysis
- * edits always do" — plus `figure.errorBars`, which that rule already marks
+ * edits always do", plus `figure.errorBars`, which that rule already marks
  * recompute-worthy but which nothing here previously watched: a real
  * pre-existing miss, not a deliberate omission.
  *
@@ -413,7 +413,7 @@ export function chartStateFromSpec(spec: AnalysisSpec, table: Table): Partial<Ch
  * chart-type change already flows through `testForChart` into
  * `analysis.test`; watching the kind directly would add a ~2s Pyodide round
  * trip to every chart-type click for analysis the signature already covers).
- * Do not "fix" that omission — it is the point.
+ * Do not "fix" that omission, it is the point.
  */
 export function recomputeSignature(spec: AnalysisSpec): string {
   return JSON.stringify([

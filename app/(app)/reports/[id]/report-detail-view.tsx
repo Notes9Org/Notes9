@@ -46,7 +46,7 @@ function buildChartUrl(chartJson: string): string | null {
   }
 }
 
-/** Extract chart blocks from markdown/mixed content — used for export alt text. */
+/** Extract chart blocks from markdown/mixed content, used for export alt text. */
 function extractChartAltTexts(content: string): string[] {
   const alts: string[] = []
   const regex = /```chart\s*\n([\s\S]*?)```/g
@@ -197,7 +197,7 @@ export function ReportDetailView({ report, leftControls, sidebar }: ReportDetail
     enabled: true,
   })
 
-  // Refresh/close with a pending debounce would drop the last ~2s of typing —
+  // Refresh/close with a pending debounce would drop the last ~2s of typing
   // flush when the tab is hidden or torn down (same net as papers/lab notes).
   useEffect(() => {
     const flush = () => {
@@ -214,7 +214,7 @@ export function ReportDetailView({ report, leftControls, sidebar }: ReportDetail
     }
   }, [forceSave])
 
-  // Org-wide @-mention candidates — same data the lab-notes/protocol editors get.
+  // Org-wide @-mention candidates, same data the lab-notes/protocol editors get.
   const { protocols: mentionProtocols, samples: mentionSamples } = useMentionEntities()
 
   const handleContentChange = useCallback(
@@ -225,7 +225,7 @@ export function ReportDetailView({ report, leftControls, sidebar }: ReportDetail
     [debouncedSave]
   )
 
-  // Inline-editable title — same widget and commit pattern as the other
+  // Inline-editable title, same widget and commit pattern as the other
   // editor surfaces (lab notes / protocols / papers).
   const [titleInput, setTitleInput] = useState(report.title || "")
   useEffect(() => {
@@ -325,7 +325,7 @@ export function ReportDetailView({ report, leftControls, sidebar }: ReportDetail
               ref={reportWorkspaceRef}
               className="flex min-h-0 min-w-0 flex-1 flex-row gap-4 overflow-hidden bg-background"
             >
-            {/* Rail column — no Card chrome: the glass SideRail is its own
+            {/* Rail column, no Card chrome: the glass SideRail is its own
                 floating surface (matches papers/protocols/lab notes). It must
                 stretch to the full row height, not wrap its list content. */}
             {sidebar && (
@@ -337,7 +337,7 @@ export function ReportDetailView({ report, leftControls, sidebar }: ReportDetail
               {/* Same flex-fill skeleton as lab notes / protocol design: the
                   editor body owns the scroll, so the toolbar stays pinned. */}
               <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-4 sm:px-6">
-                {/* Always mount the editor — an empty report must still be writable
+                {/* Always mount the editor, an empty report must still be writable
                     (the editor shows its own placeholder). The old conditional hid
                     the editor whenever content was empty, so new/empty reports had
                     nothing to type into and therefore nothing to save. */}

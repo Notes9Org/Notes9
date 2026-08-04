@@ -1,5 +1,5 @@
 /**
- * /api/data-analysis/spec-author — the AI seam contract.
+ * /api/data-analysis/spec-author, the AI seam contract.
  *
  * These tests exist to fail loudly if a guarantee breaks, so they assert the
  * three things the route is FOR rather than its happy path:
@@ -149,7 +149,7 @@ describe("no number the model invented survives", () => {
   })
 })
 
-/* ── Guarantee ii: no table, no answer — enforced at the route ─────────────*/
+/* ── Guarantee ii: no table, no answer, enforced at the route ─────────────*/
 
 describe("the no-table constraint lives at the route", () => {
   it("refuses with 400 when the table is missing", async () => {

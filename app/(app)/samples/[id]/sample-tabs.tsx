@@ -37,7 +37,7 @@ export function SampleTabs({
 
   // Local state is the source of truth so a tab click switches INSTANTLY.
   // The previous version derived `active` straight from `searchParams` and only
-  // called router.replace() — but on a dynamic server page (with loading.tsx)
+  // called router.replace(), but on a dynamic server page (with loading.tsx)
   // that re-runs every DB query in page.tsx, so the navigation stays pending and
   // `searchParams` never updates → the tab appeared to do nothing. We keep local
   // state and sync the URL via history.replaceState (no server round-trip), which

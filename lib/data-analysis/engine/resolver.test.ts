@@ -139,7 +139,7 @@ describe("shaping", () => {
   })
 })
 
-describe("guards — the resolver fails closed", () => {
+describe("guards, the resolver fails closed", () => {
   it("asks rather than picking two of four groups for a t-test", () => {
     // A t-test on four groups is the canonical wrong-test error. Silently
     // choosing a pair would be worse than refusing.
@@ -368,7 +368,7 @@ describe("transforms and exclusions", () => {
     //
     // "leave" so the assertion is about the transform. Under the default
     // listwise strategy the null row is now dropped from the computation
-    // outright — that is what listwise means, and it is only visible here
+    // outright, that is what listwise means, and it is only visible here
     // because the strategy stopped being decorative.
     const t = table([
       { plate: "P1", cond: "Vehicle", v: 100 },
@@ -441,7 +441,7 @@ describe("an analysis with no test chosen still resolves", () => {
 })
 
 describe("a named level is a level, not a column", () => {
-  // A blank group and a fold-change baseline name a LEVEL — "Blank", "Ctrl" —
+  // A blank group and a fold-change baseline name a LEVEL, "Blank", "Ctrl"
   // and the column that holds it is resolved from the spec. Reading the level as
   // a column name matches every row, which silently averages the whole table and
   // returns a grand mean wearing a baseline's name.
@@ -481,7 +481,7 @@ describe("a named level is a level, not a column", () => {
     expect(out.ok).toBe(true)
     if (!out.ok || out.payload.shape !== "columns") return
     // Control mean 10. Against the grand mean of 25 the drug rows read 1.2 and
-    // 2.0 — an effect divided into itself, and plausible enough to publish.
+    // 2.0, an effect divided into itself, and plausible enough to publish.
     expect(out.payload.columns.v).toEqual([1, 1, 3, 5])
   })
 
@@ -502,7 +502,7 @@ describe("a named level is a level, not a column", () => {
   })
 
   it("blocks rather than falling back to a table-wide mean", () => {
-    // "treatment" is a column name here, not a level — exactly the mistake the
+    // "treatment" is a column name here, not a level, exactly the mistake the
     // old code accepted and answered with the grand mean of all 24 rows.
     const out = resolvePayload(
       spec(
@@ -595,7 +595,7 @@ describe("the declared missing-value strategy is the one that runs", () => {
     )
     expect(out.ok).toBe(true)
     if (!out.ok || out.payload.shape !== "columns") return
-    // Median of 1, 2, 9 is 2 — the mean would be 4 and would drag the centre
+    // Median of 1, 2, 9 is 2, the mean would be 4 and would drag the centre
     // toward the outlier, which is the reason to pick this strategy at all.
     expect(out.payload.columns.v).toEqual([1, 2, 9, 2])
   })

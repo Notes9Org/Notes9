@@ -4,7 +4,7 @@ import { tryCatalystBaseUrl } from '@/lib/catalyst-client';
 // Returns the recipe (matplotlib code or tool-input spec) + version chain behind
 // an artifact, powering the card's "View code" / "Edit" affordances. The backend
 // scopes the source to the owning user (and, for committed artifacts, the owning
-// experiment) — the data_id alone never authorizes. Node runtime: a tiny JSON
+// experiment), the data_id alone never authorizes. Node runtime: a tiny JSON
 // round-trip, no streaming.
 export const runtime = 'nodejs';
 

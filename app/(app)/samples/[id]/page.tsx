@@ -118,7 +118,7 @@ export default async function SampleDetailPage({
 
   if (error) {
     // Junction tables (sample_projects, sample_experiments, sample_lab_notes) may not
-    // exist on older DB instances — retry without them. Preserve sample_files(*) so the
+    // exist on older DB instances, retry without them. Preserve sample_files(*) so the
     // Molecular Files tab always gets its initial data.
     const fallback = await supabase
       .from("samples")
@@ -142,7 +142,7 @@ export default async function SampleDetailPage({
       sample = fallback.data
       error = null
     } else {
-      // sample_files table also missing — bare minimum query
+      // sample_files table also missing, bare minimum query
       const bare = await supabase
         .from("samples")
         .select(`
@@ -193,7 +193,7 @@ export default async function SampleDetailPage({
 
   // Edit-dialog context-picker options (all projects/experiments/lab notes) are
   // now loaded lazily inside EditSampleDialog when the dialog opens, instead of
-  // on every detail page render — this was the bulk of the page's render latency.
+  // on every detail page render, this was the bulk of the page's render latency.
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -211,7 +211,7 @@ export default async function SampleDetailPage({
   }
 
   const formatDate = (date: string | null) => {
-    if (!date) return "—"
+    if (!date) return "-"
     return new Date(date).toLocaleDateString()
   }
 

@@ -73,7 +73,7 @@ export default async function ProjectDetailPage({
         .in("experiment_id", experimentIds)
     : Promise.resolve({ data: [] as any[] })
 
-  // Lab notes — include rows tied to this project directly (lab_notes.project_id)
+  // Lab notes, include rows tied to this project directly (lab_notes.project_id)
   // and rows tied via an experiment (lab_notes.experiment_id ∈ this project's experiments).
   const labNotesPromise = experimentIds.length
     ? supabase
@@ -177,17 +177,17 @@ export default async function ProjectDetailPage({
     [project.created_by?.first_name, project.created_by?.last_name]
       .filter(Boolean)
       .join(" ")
-      .trim() || "—"
+      .trim() || "-"
   const startedLabel = project.start_date || project.created_at
     ? new Date(project.start_date || project.created_at).toLocaleDateString(undefined, {
         month: "short",
         year: "numeric",
       })
-    : "—"
+    : "-"
   const membersCount = project.project_members?.length ?? 0
   const lastActivityLabel = (() => {
     const iso = project.updated_at || project.created_at
-    if (!iso) return "—"
+    if (!iso) return "-"
     const diff = Date.now() - new Date(iso).getTime()
     const m = Math.floor(diff / 60000)
     if (m < 1) return "just now"
@@ -214,7 +214,7 @@ export default async function ProjectDetailPage({
             projects={orgProjects}
           />
           {/* Status / priority badges relocated to the "About this project"
-              card below — the header keeps only the action icons. */}
+              card below, the header keeps only the action icons. */}
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
             <ProjectActions
               project={{

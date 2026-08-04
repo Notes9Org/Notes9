@@ -97,10 +97,10 @@ export function BeerLambertPanel({ onResultChange }: { onResultChange: Calculato
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="z-[280]">
-            <SelectItem value="A">A — absorbance</SelectItem>
-            <SelectItem value="epsilon">ε — molar absorptivity</SelectItem>
-            <SelectItem value="l">l — path length (cm)</SelectItem>
-            <SelectItem value="c">c — concentration (M)</SelectItem>
+            <SelectItem value="A">A, absorbance</SelectItem>
+            <SelectItem value="epsilon">ε, molar absorptivity</SelectItem>
+            <SelectItem value="l">l, path length (cm)</SelectItem>
+            <SelectItem value="c">c, concentration (M)</SelectItem>
           </SelectContent>
         </Select>
       </div>

@@ -32,7 +32,7 @@ import { recordRumEvent } from "@/lib/rum"
 import { AnalyticsEvent } from "@/lib/analytics/events"
 import { cn } from "@/lib/utils"
 
-/** House easing — matches `--n9-ease`. */
+/** House easing, matches `--n9-ease`. */
 const EASE = [0.22, 1, 0.36, 1] as const
 
 const TASK_ICONS: Record<ChecklistTaskId, PhosphorIcon> = {
@@ -46,8 +46,8 @@ const TASK_ICONS: Record<ChecklistTaskId, PhosphorIcon> = {
 /**
  * The persistent Getting Started panel on the dashboard.
  *
- * This is the single recovery path for onboarding: whatever a user skips — the
- * wizard, the tour, a step in either — ends up here, and it stays available
+ * This is the single recovery path for onboarding: whatever a user skips, the
+ * wizard, the tour, a step in either, ends up here, and it stays available
  * until they finish or dismiss it. Progress is measured from real workspace rows
  * on the server (see lib/onboarding/measure-checklist.ts), so it also credits
  * work the user did before ever noticing the list.
@@ -81,7 +81,7 @@ export function GettingStarted({
       completedCount: checklist.completedCount,
       totalCount: checklist.totalCount,
     })
-    // Hide optimistically — waiting on the round-trip makes the X feel broken.
+    // Hide optimistically, waiting on the round-trip makes the X feel broken.
     setHidden(true)
     startTransition(async () => {
       await setChecklistDismissedAction(true)
@@ -203,7 +203,7 @@ function TaskRow({
       </div>
 
       {task.completed ? (
-        // Only offer "Undo" where the user set the state by hand — undoing a real
+        // Only offer "Undo" where the user set the state by hand, undoing a real
         // signal would be a lie the next page load would immediately overwrite.
         task.manuallyCompleted ? (
           <button

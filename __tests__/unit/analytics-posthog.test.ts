@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // ---------------------------------------------------------------------------
-// lib/rum.ts — recordRumEvent forwards to posthog.capture (compat shim)
+// lib/rum.ts, recordRumEvent forwards to posthog.capture (compat shim)
 // ---------------------------------------------------------------------------
 
 const captureMock = vi.fn()
@@ -59,7 +59,7 @@ describe('lib/rum recordRumEvent (PostHog shim)', () => {
 })
 
 // ---------------------------------------------------------------------------
-// lib/analytics/posthog.ts — config resolution
+// lib/analytics/posthog.ts, config resolution
 // ---------------------------------------------------------------------------
 
 describe('lib/analytics/posthog config', () => {

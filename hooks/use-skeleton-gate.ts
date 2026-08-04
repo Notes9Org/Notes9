@@ -3,15 +3,15 @@
 import { useEffect, useRef, useState } from "react"
 
 /**
- * Anti-flicker gate for skeletons and loading states — the fix for the
+ * Anti-flicker gate for skeletons and loading states, the fix for the
  * "hollow effect doesn't match the page load" glitch (see
  * docs/GLASS_REVAMP_PLAN.md §5).
  *
  * Two failure modes it removes:
- * 1. **Skeleton flash** — data resolves in <150ms but the skeleton still
+ * 1. **Skeleton flash**, data resolves in <150ms but the skeleton still
  *    painted for a frame or two, so the page "blinks hollow". The gate holds
  *    the skeleton back for `appearDelay` ms; fast loads never show one.
- * 2. **Skeleton snap** — the skeleton appeared and was immediately replaced,
+ * 2. **Skeleton snap**, the skeleton appeared and was immediately replaced,
  *    a jarring one-frame swap. Once shown, the gate keeps it visible for at
  *    least `minVisible` ms so the shimmer completes a believable beat and the
  *    content swap lands on a settled frame.

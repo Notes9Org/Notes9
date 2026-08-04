@@ -9,7 +9,7 @@ export type LiteratureLiveStreamPreview =
 /**
  * Models often wrap paper-analyzer JSON in markdown fences (` ```json ... ``` `).
  * That is still plain text in `token` events, so it does not start with `{` until
- * after stripping — without this, MarkdownRenderer shows a dark code block.
+ * after stripping, without this, MarkdownRenderer shows a dark code block.
  */
 function stripOptionalMarkdownJsonFence(raw: string): { core: string; hadOpeningFence: boolean } {
   let s = raw.trimStart();

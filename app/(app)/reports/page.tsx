@@ -9,7 +9,7 @@ import { CatalystSectionHero } from "@/components/catalyst/catalyst-section-hero
 export default async function ReportsPage() {
   const user = await requireUser()
   const supabase = await createClient()
-  // `reports` and `profile` don't depend on each other — fan them out in
+  // `reports` and `profile` don't depend on each other, fan them out in
   // parallel to cut one roundtrip off every reports-page load.
   const [reportsRes, profileRes] = await Promise.all([
     supabase

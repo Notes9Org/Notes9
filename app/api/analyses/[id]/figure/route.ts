@@ -5,7 +5,7 @@ import { requireSession } from "../../_shared"
 type Ctx = { params: Promise<{ id: string }> }
 
 /**
- * PATCH /api/analyses/[id]/figure — persist `figure_spec` only.
+ * PATCH /api/analyses/[id]/figure, persist `figure_spec` only.
  *
  * The debounced autosave target for the figure editor: it fires often, so it
  * writes one column and returns the id rather than the whole row.

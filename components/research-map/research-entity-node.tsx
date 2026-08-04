@@ -17,7 +17,7 @@ export type ResearchEntityNodeData = {
 type ResearchEntityRFNode = Node<ResearchEntityNodeData, "researchEntity">
 
 /**
- * Compact rectangular node — colored left ribbon + uppercase kind tag + title.
+ * Compact rectangular node, colored left ribbon + uppercase kind tag + title.
  * The kind tag survives even when the canvas zooms out, which is the bug we
  * saw in the screenshot where nodes became unreadable slivers. Hover gives a
  * subtle elevation; selection / ancestor-highlight ring uses the brand
@@ -45,7 +45,7 @@ export function ResearchEntityNode({
         (selected || ring) && "ring-2 ring-primary ring-offset-2 ring-offset-background",
       )}
       title={
-        href ? `${displayLabel} — Double-click to open` : displayLabel
+        href ? `${displayLabel}, Double-click to open` : displayLabel
       }
     >
       {/* Kind tint, painted over the opaque base but behind the content. */}
@@ -60,7 +60,7 @@ export function ResearchEntityNode({
         className="!size-2 !border !bg-background !border-border"
       />
 
-      {/* Kind ribbon — tiny chip that keeps the type readable even when the
+      {/* Kind ribbon, tiny chip that keeps the type readable even when the
           map is zoomed out. Mirrors the dot legend in the filter panel so a
           user can map the two views together. */}
       <div className="flex items-center gap-1.5 px-2 pt-1.5">

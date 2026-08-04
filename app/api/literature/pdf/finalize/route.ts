@@ -205,7 +205,7 @@ export async function POST(request: Request) {
       pdfByteLength = downloaded.size
     }
 
-    // Bucket is private — store the storage path; readers (viewer-pdf route,
+    // Bucket is private, store the storage path; readers (viewer-pdf route,
     // literature-pdf-viewer component) generate signed URLs on demand.
     const metadata = payload.extractedMetadata ?? null
     const matchSource = resolveMatchSource(payload.action, payload.saveMode)

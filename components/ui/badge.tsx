@@ -18,7 +18,7 @@ const badgeVariants = cva(
         outline:
           'text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground',
         success: 'border-transparent bg-success text-success-foreground [a&]:hover:bg-success/90',
-        // Tonal (soft) variants — the modern default for status chips: tinted fill + colored text.
+        // Tonal (soft) variants, the modern default for status chips: tinted fill + colored text.
         soft: 'border-transparent bg-primary/12 text-primary [a&]:hover:bg-primary/20',
         'soft-success': 'border-transparent bg-success/15 text-success [a&]:hover:bg-success/25',
         'soft-warning': 'border-transparent bg-warning/15 text-warning [a&]:hover:bg-warning/25',

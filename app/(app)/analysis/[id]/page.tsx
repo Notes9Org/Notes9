@@ -11,7 +11,7 @@ import type { DatasetFile } from "@/components/analysis/data/dataset-picker"
  * interactive (the Analysis | Data segmented control, role assignment, the
  * drawer) lives in the client shell.
  *
- * The select list is explicit and omits `analyses.code` — that column is
+ * The select list is explicit and omits `analyses.code`, that column is
  * server-side only (see scripts/106_analyses.sql).
  */
 export default async function AnalysisDetailPage({
@@ -53,7 +53,7 @@ export default async function AnalysisDetailPage({
     : analysis.experiment
   const project = Array.isArray(analysis.project) ? analysis.project[0] : analysis.project
 
-  // Source candidates for the Data section's picker — same experiment only.
+  // Source candidates for the Data section's picker, same experiment only.
   const { data: fileRows } = await supabase
     .from("experiment_data")
     .select("id, file_name, file_type, tabular_format")

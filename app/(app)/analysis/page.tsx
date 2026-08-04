@@ -10,7 +10,7 @@ import { AnalysisListClient, type AnalysisRow } from "./analysis-list-client"
  * prefill from the sidebar context via `?project=`/`?experiment=` but stay
  * editable, so analyses from OTHER projects stay one filter change away.
  *
- * NOTE the select list is explicit and deliberately omits `analyses.code` —
+ * NOTE the select list is explicit and deliberately omits `analyses.code`
  * that column is server-side only (see scripts/106_analyses.sql).
  */
 export default async function AnalysisPage({
@@ -22,7 +22,7 @@ export default async function AnalysisPage({
   const supabase = await createClient()
 
   // RLS scopes all three queries to the caller (analyses are owner-only).
-  // Capped at the 500 most recent — plenty for browsing.
+  // Capped at the 500 most recent, plenty for browsing.
   const [analysesRes, projectsRes, experimentsRes] = await Promise.all([
     supabase
       .from("analyses")
@@ -76,7 +76,7 @@ export default async function AnalysisPage({
     <div className="space-y-6">
       <SetPageBreadcrumb segments={[]} />
       {/* Same layout grammar as Data & Files: AI composer on top, list below.
-          "experiments" scope — analyses read an experiment's data. */}
+          "experiments" scope, analyses read an experiment's data. */}
       <CatalystSectionHero size="sm" scope="experiments" shrinkOnScroll />
       <AnalysisListClient
         analyses={analyses}

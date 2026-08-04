@@ -11,7 +11,7 @@ import { buildProvenanceCard, type ProvenanceEntry } from "@/lib/data-analysis/p
 import { EASE_OUT, SlideOver } from "./motion"
 
 /**
- * The provenance card (§10.5): "always one click away from any figure — source,
+ * The provenance card (§10.5): "always one click away from any figure, source,
  * version, exclusions with reasons, transforms, test and options, engine
  * version, edit history."
  *

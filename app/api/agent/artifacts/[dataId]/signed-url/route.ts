@@ -3,7 +3,7 @@ import { verifyBearerToken } from '@/lib/verify-bearer-token';
 // Re-signs a persisted draft artifact's URL. Persisted chat artifacts keep their
 // metadata but not the ~1h signed URL, so the artifact card calls this by data_id
 // on load / before download to get a fresh live URL. The backend scopes the draft
-// to the owning user — the data_id alone never authorizes. Node runtime: a tiny
+// to the owning user, the data_id alone never authorizes. Node runtime: a tiny
 // JSON round-trip, no streaming.
 export const runtime = 'nodejs';
 

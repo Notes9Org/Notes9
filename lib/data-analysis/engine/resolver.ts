@@ -4,7 +4,7 @@ import type { AnalysisSpec, Transform } from "@/lib/data-analysis/spec/analysis-
  * The resolver: AnalysisSpec + snapshot table → EnginePayload.
  *
  * This is the boundary the whole architecture rests on. Above it, a language
- * model chooses SEMANTICS — which column is the response, whether the design is
+ * model chooses SEMANTICS, which column is the response, whether the design is
  * paired, which test answers the question. Below it, nothing is model-authored:
  * this file shapes the arrays, and Python computes the numbers.
  *
@@ -39,7 +39,7 @@ interface PayloadBase {
   tails: "two" | "greater" | "less"
   /** Row ids in emission order, so results can be hit-tested back to the sheet. */
   rowIds: string[]
-  /** Every row post-transform, for the figure — including excluded ones. */
+  /** Every row post-transform, for the figure, including excluded ones. */
   plotRows: { rowId: string; values: Record<string, number | string | null>; excluded: boolean }[]
 }
 
@@ -86,7 +86,7 @@ function toNumber(v: unknown): number | null {
 }
 
 function toLabel(v: unknown): string {
-  if (v === null || v === undefined || v === "") return "—"
+  if (v === null || v === undefined || v === "") return "-"
   return String(v)
 }
 
@@ -118,8 +118,8 @@ function median(sorted: number[]): number {
 /**
  * The mean of `column` over the rows belonging to a named LEVEL.
  *
- * Two transforms reference a level rather than a column — `foldChange.baseline`
- * and `baselineSubtract.blankGroup` — and, unlike `normaliseToControl`, neither
+ * Two transforms reference a level rather than a column, `foldChange.baseline`
+ * and `baselineSubtract.blankGroup`, and, unlike `normaliseToControl`, neither
  * carries the column that level lives in. So the column is resolved from the
  * spec, in declaration order, and never guessed:
  *
@@ -127,7 +127,7 @@ function median(sorted: number[]): number {
  *   2. a column the semantic layer (L2) tagged `group` or `treatment`;
  *   3. failing both, the one and only column in which the level appears.
  *
- * If no column holds the level — or several do and none was declared — this
+ * If no column holds the level, or several do and none was declared, this
  * blocks. Averaging every row instead produces a grand mean and presents it as
  * a baseline: a number wrong by exactly the treatment effect, and one that
  * looks entirely plausible on the way out.
@@ -193,15 +193,15 @@ function resolveReference(
  *
  * The provenance card and the exported results sheet both print this setting as
  * though it governed the computation, so it has to. It bites only on the numeric
- * columns the chosen test consumes — a categorical exposure has no missing
- * *value* to impute — and every strategy states what it did, because a filled
+ * columns the chosen test consumes, a categorical exposure has no missing
+ * *value* to impute, and every strategy states what it did, because a filled
  * hole a reader cannot see is the same failure as a wrong baseline:
  *
  *   listwise  drop the whole row when any consumed column is missing, so a
  *             column that WAS present is dropped along with it. This was the
  *             de-facto behaviour before, unstated and uncounted.
  *   pairwise  keep every row; each statistic uses the rows where its own
- *             variables are present — what the shaping below already does.
+ *             variables are present, what the shaping below already does.
  *   *-impute  fill the holes with the column's mean/median over the rows that
  *             have one.
  *   leave     touch nothing; the engine omits non-finite values, because there
@@ -255,7 +255,7 @@ function applyMissingValues(rows: TableRow[], spec: AnalysisSpec, warnings: stri
 }
 
 /**
- * Transforms applied in array order — blank-subtract-then-log ≠ log-then-blank-subtract.
+ * Transforms applied in array order, blank-subtract-then-log ≠ log-then-blank-subtract.
  *
  * `reference` is the level mean the caller resolved for the two transforms that
  * name a level (see `resolveReference`); null for every other kind.
@@ -292,7 +292,7 @@ function applyTransform(rows: TableRow[], t: Transform, reference: number | null
     case "foldChange": {
       // `t.baseline` is a LEVEL, not a column: the divisor is the mean of the
       // baseline group, resolved by the caller against the condition column. A
-      // fold-change taken against the whole table's mean is not a fold-change —
+      // fold-change taken against the whole table's mean is not a fold-change
       // it divides the effect into itself and lands everything near 1.
       // A baseline that read zero yields null, not Infinity.
       return rows.map((r) => {
@@ -331,7 +331,7 @@ function applyTransform(rows: TableRow[], t: Transform, reference: number | null
         const ctrl = controls.get(bucketOf(r))
         const mean = ctrl?.length ? ctrl.reduce((a, b) => a + b, 0) / ctrl.length : null
         const v = num(r, t.column)
-        // A bucket with no control — or a control that read zero — yields null,
+        // A bucket with no control, or a control that read zero, yields null,
         // not a number. A missing reference is not a reference of zero, and a
         // plate quietly normalised against nothing is the error worth blocking.
         const scaled = v !== null && mean !== null && mean !== 0 ? (v / mean) * scale : null
@@ -356,8 +356,8 @@ function applyTransform(rows: TableRow[], t: Transform, reference: number | null
       )
     }
     case "baselineSubtract": {
-      // An explicit `blankValue` wins. Otherwise `t.blankGroup` is a LEVEL —
-      // the wells labelled "Blank" — and the subtrahend is that level's mean,
+      // An explicit `blankValue` wins. Otherwise `t.blankGroup` is a LEVEL
+      // the wells labelled "Blank", and the subtrahend is that level's mean,
       // resolved by the caller. Neither present means there is nothing to
       // subtract, which is a no-op rather than a subtraction of the whole plate.
       const b = t.blankValue ?? reference ?? 0
@@ -388,8 +388,8 @@ function applyTransform(rows: TableRow[], t: Transform, reference: number | null
           values[c] =
             t.statistic === "median"
               ? // The shared helper, not an inline pick of the upper-middle value:
-                // on an even count — two technical replicates being the common
-                // case — picking sorted[n/2] returns the larger reading rather
+                // on an even count, two technical replicates being the common
+                // case, picking sorted[n/2] returns the larger reading rather
                 // than the midpoint, biasing every collapsed row upward.
                 median([...vals].sort((a, b) => a - b))
               : vals.reduce((a, b) => a + b, 0) / vals.length
@@ -412,14 +412,14 @@ export function resolvePayload(spec: AnalysisSpec, table: Table): ResolveOutcome
   const blocked: PreconditionFailure[] = []
   const test = spec.analysis.test
 
-  /* 1 — filter */
+  /* 1, filter */
   let rows = table.rows.filter((r) =>
     spec.filters.every((f) => matches(r.values[f.column], f.op, f.value))
   )
   const filteredOut = table.rows.length - rows.length
   if (filteredOut > 0) warnings.push(`${filteredOut} row${filteredOut === 1 ? "" : "s"} removed by filters.`)
 
-  /* 2 — transform, in order. Two kinds reference a named level, which has to be
+  /* 2, transform, in order. Two kinds reference a named level, which has to be
         resolved against a column before the transform can run; that happens
         here, where failing to find it can block rather than quietly widen into
         a table-wide mean. */
@@ -437,7 +437,7 @@ export function resolvePayload(spec: AnalysisSpec, table: Table): ResolveOutcome
     rows = applyTransform(rows, t, reference)
   }
 
-  /* 3 — exclusions: partitioned, never dropped. Both sides are kept so the
+  /* 3, exclusions: partitioned, never dropped. Both sides are kept so the
         with/without comparison (§8.1) is always computable. */
   const excludedIds = new Set(spec.exclusions.map((e) => e.rowId))
   const plotRows = rows.map((r) => ({
@@ -460,12 +460,12 @@ export function resolvePayload(spec: AnalysisSpec, table: Table): ResolveOutcome
   if (orphaned > 0) {
     warnings.push(
       `${orphaned} exclusion${orphaned === 1 ? " was" : "s were"} NOT applied: ` +
-        `the row${orphaned === 1 ? " it names no longer exists" : "s they name no longer exist"} after a reshape — ` +
+        `the row${orphaned === 1 ? " it names no longer exists" : "s they name no longer exist"} after a reshape, ` +
         `collapsing replicates or folding wide columns rewrites row ids. Re-exclude those points on the current table.`
     )
   }
 
-  /* 3b — missing values, per the declared strategy. */
+  /* 3b, missing values, per the declared strategy. */
   const included = applyMissingValues(kept, spec, warnings)
 
   if (included.length === 0) {
@@ -498,14 +498,14 @@ export function resolvePayload(spec: AnalysisSpec, table: Table): ResolveOutcome
     return groups
   }
 
-  /* 4 — shape for the test */
+  /* 4, shape for the test */
   switch (test) {
     /**
      * No test chosen.
      *
      * Not a refusal. A timecourse, a plate map or an exploratory scatter is a
      * perfectly good analysis with nothing to test yet, and blocking it would
-     * mean the figure cannot be drawn until a p-value is demanded — which is
+     * mean the figure cannot be drawn until a p-value is demanded, which is
      * the pressure toward testing-first that §8 exists to resist. The engine
      * gets the same columns `descriptives` would, so the chart has its rows and
      * the summary panel has its means, and no test is reported.
@@ -513,7 +513,7 @@ export function resolvePayload(spec: AnalysisSpec, table: Table): ResolveOutcome
     case "none":
     case "descriptives":
     case "normality": {
-      // Declared columns first, then anything a transform introduced — a
+      // Declared columns first, then anything a transform introduced, a
       // pivotLonger's value column exists only after step 2, and summarising the
       // pre-transform column list would report "nothing numeric" about a table
       // that is entirely numeric.
@@ -572,7 +572,7 @@ export function resolvePayload(spec: AnalysisSpec, table: Table): ResolveOutcome
         return {
           ok: false,
           question: {
-            question: `"${groupCol}" has ${levels.length} groups. A two-group test can only compare two of them — which pair, or should this be an ANOVA?`,
+            question: `"${groupCol}" has ${levels.length} groups. A two-group test can only compare two of them, which pair, or should this be an ANOVA?`,
             options: [...levels],
           },
         }
@@ -832,7 +832,7 @@ export function resolvePayload(spec: AnalysisSpec, table: Table): ResolveOutcome
         blocked.push({ code: "too-few-points", message: `A ${nl.model.toUpperCase()} fit needs at least ${minPoints} points; ${x.length} available.` })
         break
       }
-      // Points are not the constraint — DISTINCT concentrations are. Replicates
+      // Points are not the constraint, DISTINCT concentrations are. Replicates
       // at one dose buy precision, not identifiability: a model with `minPoints`
       // free parameters fitted through two doses is under-determined, and the
       // optimiser reports that as an OverflowError from deep inside the solver
@@ -842,7 +842,7 @@ export function resolvePayload(spec: AnalysisSpec, table: Table): ResolveOutcome
         blocked.push({
           code: "too-few-concentrations",
           message: `A ${nl.model.toUpperCase()} fit estimates ${minPoints} parameters and needs at least ${minPoints} different concentrations; these ${x.length} points cover only ${levels}.`,
-          fix: "Add more concentration levels — extra replicates at the same concentration do not constrain the curve.",
+          fix: "Add more concentration levels, extra replicates at the same concentration do not constrain the curve.",
         })
         break
       }

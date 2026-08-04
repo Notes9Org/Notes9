@@ -20,13 +20,13 @@ import type { Results } from "@/types/analysis"
  * cell it came from.
  *
  * "Plotted" holds only values that map 1:1 to something drawn (group, n, mean,
- * SEM, CI — straight off `Results.groups`), so what you read is what you see.
+ * SEM, CI, straight off `Results.groups`), so what you read is what you see.
  * "Source rows" is the raw grid with A1-style cell refs, where a row can be
  * excluded from the run; exclusions are row INDICES, matching
  * `AnalysisParams.excluded_rows` (types/analysis.ts).
  */
 
-/** ponytail: hard cap instead of virtualising — raises to a windowed list only
+/** ponytail: hard cap instead of virtualising, raises to a windowed list only
  * if real analyses start running on sheets this size. */
 const MAX_SOURCE_ROWS = 500
 
@@ -40,9 +40,9 @@ function columnLetter(index: number): string {
   return out
 }
 
-/** Four significant digits — enough to read, short enough to scan. */
+/** Four significant digits, enough to read, short enough to scan. */
 function num(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return "—"
+  if (value == null || !Number.isFinite(value)) return "-"
   return Number(value.toPrecision(4)).toString()
 }
 
@@ -87,7 +87,7 @@ export function DataDrawer({
         <TabsContent value="plotted" className="m-0">
           {groups.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-muted-foreground">
-              Nothing plotted yet — run the analysis and the values behind each mark
+              Nothing plotted yet, run the analysis and the values behind each mark
               appear here.
             </p>
           ) : (
@@ -131,7 +131,7 @@ export function DataDrawer({
         <TabsContent value="source" className="m-0">
           {visibleRows.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-muted-foreground">
-              No source rows — pick a data file and sheet to load the grid.
+              No source rows, pick a data file and sheet to load the grid.
             </p>
           ) : (
             <>

@@ -30,7 +30,7 @@ export function BrowserFrame({
       </div>
       {/* Screenshot.
           Decoded eagerly on purpose. These sit behind a disclosure, and a lazy
-          image starts loading only as the row opens — so `height: auto` is
+          image starts loading only as the row opens, so `height: auto` is
           measured against a zero-height image and then jumps when it arrives,
           mid-animation. There are a handful of them and they are already on the
           page, so eager decoding costs little and removes the reflow. */}

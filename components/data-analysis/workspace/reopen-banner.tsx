@@ -11,14 +11,14 @@ import { EASE_OUT } from "./motion"
  * The reopen moment (§10.8).
  *
  * "The integrity check is a first-class screen, not a toast: what was stored,
- * what has changed since, and two clear choices — keep the stored result, or
+ * what has changed since, and two clear choices, keep the stored result, or
  * re-run into a new revision."
  *
  * A toast would be wrong here for a specific reason: toasts are dismissible and
  * time out, and this decision has consequences for a number that may already be
  * in a submitted paper. So the banner sits above the figure, does not
  * auto-dismiss, and does not let the analysis be edited until the researcher
- * has chosen — which is why there is no close button.
+ * has chosen, which is why there is no close button.
  *
  * Motion is a single 6px settle. Nothing about this should feel like an alert
  * that can be swiped away.

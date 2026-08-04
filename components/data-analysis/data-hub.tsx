@@ -17,7 +17,7 @@ type ExperimentOption = Option & { project_id: string | null }
 /**
  * Top-level Data hub: two sections behind one glass-pill toggle.
  *
- *   Analysis    the single analysis surface — charts, statistics, standard
+ *   Analysis    the single analysis surface, charts, statistics, standard
  *               curve, plate map, and the spec-driven workspace with its
  *               multi-panel figure layouts, all over one spreadsheet;
  *   Data files  every file across the user's experiments.

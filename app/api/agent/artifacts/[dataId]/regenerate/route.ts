@@ -3,7 +3,7 @@ import { tryCatalystBaseUrl } from '@/lib/catalyst-client';
 
 // Regenerate an artifact into a new draft version. The backend may do an LLM
 // patch call plus a sandbox render (and one auto-repair round), so this can take
-// up to ~60s — give the route headroom.
+// up to ~60s, give the route headroom.
 export const runtime = 'nodejs';
 export const maxDuration = 90;
 

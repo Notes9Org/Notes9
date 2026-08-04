@@ -22,7 +22,7 @@ function navigateTo(path: string) {
  * Targets are persistent app chrome (sidebar + header) mounted on every
  * authenticated route, so the tour runs from anywhere and never depends on a
  * route-specific element that may not exist for a brand-new user. A few steps
- * are interactive — the user clicks the highlighted element to navigate and the
+ * are interactive, the user clicks the highlighted element to navigate and the
  * tour follows them into the page. Steps whose anchor is absent are skipped by
  * the engine rather than hanging.
  */
@@ -30,19 +30,19 @@ export function buildOnboardingSteps(): TourStep[] {
   return [
     {
       title: "Welcome to your workspace",
-      body: "Let's take a quick, hands-on tour. I'll highlight things as we go — you can click around to explore, and reopen this anytime from the **?** button.",
+      body: "Let's take a quick, hands-on tour. I'll highlight things as we go, you can click around to explore, and reopen this anytime from the **?** button.",
     },
     {
       target: tourSel(TOUR.sidebarNav),
       side: "right",
       title: "Everything in one place",
-      body: "Your whole workspace lives in this sidebar — Projects, Literature, Catalyst AI, and the research map are always a click away.",
+      body: "Your whole workspace lives in this sidebar, Projects, Literature, Catalyst AI, and the research map are always a click away.",
     },
     {
       target: tourSel(TOUR.navProjects),
       side: "right",
       title: "Projects come first",
-      body: "**Projects** are the home for your research. Every experiment, lab note, and protocol lives inside one — so this is where you start.",
+      body: "**Projects** are the home for your research. Every experiment, lab note, and protocol lives inside one, so this is where you start.",
       interactive: true,
       advanceOnClick: true,
       cta: "Click Projects to open your list",
@@ -51,7 +51,7 @@ export function buildOnboardingSteps(): TourStep[] {
       target: "#tour-create-project, " + tourSel(TOUR.createProject),
       side: "bottom",
       title: "Create your first project",
-      body: "This button starts a new project. Once it exists, you can attach experiments, protocols, samples, and lab notes — all grouped together.",
+      body: "This button starts a new project. Once it exists, you can attach experiments, protocols, samples, and lab notes, all grouped together.",
       onBeforeStep: () => navigateTo("/projects"),
       interactive: true,
       cta: "Try it, or hit Next to keep going",
@@ -60,7 +60,7 @@ export function buildOnboardingSteps(): TourStep[] {
       target: tourSel(TOUR.createNew),
       side: "right",
       title: "Create anything, instantly",
-      body: "**Create new** is your shortcut for projects, experiments, lab notes, samples, and more — from any screen, without losing your place.",
+      body: "**Create new** is your shortcut for projects, experiments, lab notes, samples, and more, from any screen, without losing your place.",
     },
     {
       target: tourSel(TOUR.navLiterature),
@@ -94,14 +94,14 @@ export function buildOnboardingSteps(): TourStep[] {
       target: "#tour-ai-web-search",
       side: "top",
       title: "Reach beyond your lab",
-      body: "Flip on **Web** and Catalyst can search the internet alongside your own data — perfect for fresh literature or protocols.",
+      body: "Flip on **Web** and Catalyst can search the internet alongside your own data, perfect for fresh literature or protocols.",
       onBeforeStep: openAiSidebar,
     },
     {
       target: tourSel(TOUR.sidebarSearch),
       side: "right",
       title: "Find anything in seconds",
-      body: "Search across projects, experiments, notes, and inventory from here — no matter where you are.",
+      body: "Search across projects, experiments, notes, and inventory from here, no matter where you are.",
       interactive: true,
       cta: "Give it a try",
     },
@@ -113,7 +113,7 @@ export function buildOnboardingSteps(): TourStep[] {
     },
     {
       title: "You're ready to go 🚀",
-      body: "That's the tour! Create your first **project** to get rolling — and remember, Catalyst is right there whenever you need a hand.",
+      body: "That's the tour! Create your first **project** to get rolling, and remember, Catalyst is right there whenever you need a hand.",
     },
   ]
 }

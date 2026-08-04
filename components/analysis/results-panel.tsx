@@ -5,23 +5,23 @@ import type { Results } from "@/types/analysis"
 /**
  * The Analysis section's left rail: the analytical record.
  *
- * Design doc §03 — "the analytical record: prompt, plan, statistics, assumption
+ * Design doc §03, "the analytical record: prompt, plan, statistics, assumption
  * checks, interpretation". The prompt and plan cards arrive with propose mode
  * (§06); this renders the three that exist today from `results` alone.
  *
- * Everything here is read from the stored Results — nothing is recomputed in
+ * Everything here is read from the stored Results, nothing is recomputed in
  * the browser, so what you read is what the engine wrote.
  */
 
 /** Journals want "< 0.0001", not "0.00000003". */
 function formatP(p: number): string {
-  if (!Number.isFinite(p)) return "—"
+  if (!Number.isFinite(p)) return "-"
   if (p < 0.0001) return "< 0.0001"
   return p.toFixed(4)
 }
 
 function formatNum(n: number, digits = 3): string {
-  if (!Number.isFinite(n)) return "—"
+  if (!Number.isFinite(n)) return "-"
   return Number(n.toPrecision(digits)).toString()
 }
 

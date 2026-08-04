@@ -4,7 +4,7 @@ declare module "pdfjs-dist/legacy/build/pdf.mjs";
 declare module "pdfjs-dist/build/pdf.worker.min.mjs";
 
 declare module "utif" {
-  /** An IFD (Image File Directory) — one page in a TIFF document. */
+  /** An IFD (Image File Directory), one page in a TIFF document. */
   export interface IFD {
     width: number
     height: number

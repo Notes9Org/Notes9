@@ -81,7 +81,7 @@ function fromRow(r: Row): CalendarEvent {
 
 async function authedClient() {
   const supabase = createClient()
-  // Use getSession() instead of getUser() — local cookie/storage read, no
+  // Use getSession() instead of getUser(), local cookie/storage read, no
   // /auth/v1/user round-trip. RLS still enforces authorization server-side
   // via the JWT cookie that PostgREST receives on every query.
   const { data: { session } } = await supabase.auth.getSession()
@@ -156,7 +156,7 @@ export async function updateCalendarEvent(raw: unknown): Promise<CalendarEvent> 
 
 /**
  * Set the calendar event's `done` to a specific desired value. The caller
- * passes the value it just optimistically flipped to in the UI — single round-
+ * passes the value it just optimistically flipped to in the UI, single round-
  * trip, race-free under two-tab toggle storms.
  */
 export async function setCalendarEventDone(id: string, done: boolean): Promise<CalendarEvent> {

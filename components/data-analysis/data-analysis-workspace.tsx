@@ -200,7 +200,7 @@ function aggregateByX(
  * The half-length of one error bar.
  *
  * Confidence intervals come from `describeStats`, which computes them from the
- * t distribution — at bench n the normal approximation is materially too
+ * t distribution, at bench n the normal approximation is materially too
  * narrow, so a "95% CI" drawn at 1.96·SEM would understate the interval it
  * claims to be.
  */
@@ -499,7 +499,7 @@ const DATA_W = 400
 const SET_W = 344
 const SESSION_KEY = "n9-data-analysis-session"
 
-/** Matches at ≥1280px — the width where the 3-pane side rails make sense. */
+/** Matches at ≥1280px, the width where the 3-pane side rails make sense. */
 function useIsWide() {
   const [wide, setWide] = useState(true)
   useEffect(() => {
@@ -516,10 +516,10 @@ function useIsWide() {
    The sheet stays mounted for the whole session (it lives in the left rail,
    present on every tab), so it never remounts on tab or panel changes. Collapse
    is done by animating the RAIL's outer width while this host keeps a CONSTANT
-   inner width — Univer's canvas width never changes, so it can't blank or
+   inner width, Univer's canvas width never changes, so it can't blank or
    re-init. Edits report out via onPersistSnapshot only (never fed back to the
    prop), so live editing never triggers a remount either. `mountKey` bumps on
-   import — the one time a fresh workbook must replace the instance. */
+   import, the one time a fresh workbook must replace the instance. */
 function SheetHost({
   mountSnapshot,
   mountKey,
@@ -611,7 +611,7 @@ export function DataAnalysisWorkspace({
 
   const numericCols = useMemo(() => table.columns.filter((c) => table.rows.some((r) => typeof r[c] === "number")), [table])
 
-  // Raw sheet grid (header row included) — the plate mirrors this 1:1, live.
+  // Raw sheet grid (header row included), the plate mirrors this 1:1, live.
   const grid = useMemo<(string | number)[][]>(() => {
     try {
       const wb = snapshotToXlsxWorkbook(liveSnapshot)
@@ -674,8 +674,8 @@ export function DataAnalysisWorkspace({
    *
    * Undefined is the state this rail has always been in: the test comes from
    * the chart type and the rest from the schema's defaults. They exist as state
-   * because a spec can now arrive with a deliberate choice in it — from a
-   * template, a reopened analysis, or the assistant — and a choice that is not
+   * because a spec can now arrive with a deliberate choice in it, from a
+   * template, a reopened analysis, or the assistant, and a choice that is not
    * held anywhere is recomputed away on the next derivation.
    */
   const [statTest, setStatTest] = useState<ChartState["test"]>(undefined)
@@ -684,7 +684,7 @@ export function DataAnalysisWorkspace({
   const [statTails, setStatTails] = useState<ChartState["tails"]>(undefined)
   const [statReferenceLevel, setStatReferenceLevel] = useState<string | null | undefined>(undefined)
   // The data pipeline: filters, transforms and exclusions. Same reasoning as
-  // the statistics slice above — a spec-authored patch (`data.setFilters`,
+  // the statistics slice above, a spec-authored patch (`data.setFilters`,
   // `data.addTransform`, `data.excludeRow`) is a deliberate choice that has to
   // be held somewhere, or the next `derivedSpec` recompute drops it back to
   // empty. Defaulting to `[]` keeps today's behaviour when nothing has set it.
@@ -758,9 +758,9 @@ export function DataAnalysisWorkspace({
   const visiblePhases = useMemo(
     () =>
       PHASES.filter((p) => {
-        // The plate map is hidden for now. The model behind it still runs — the
+        // The plate map is hidden for now. The model behind it still runs, the
         // standard curve reads the plate layout to know which wells are
-        // standards — so this hides the tab, it does not remove the feature.
+        // standards, so this hides the tab, it does not remove the feature.
         if (p.id === "plate") return false
         /**
          * Standard curve is the one phase with a structural precondition: it
@@ -768,11 +768,11 @@ export function DataAnalysisWorkspace({
          * can fit anything, so offering it on a sheet that has none is offering
          * a dead end. Three independent signals earn it:
          *
-         *   structure — a concentration-like column beside a signal column, or
+         *   structure, a concentration-like column beside a signal column, or
          *               a numeric column whose ratios form a serial dilution;
-         *   intent    — the chart or the test already asks for a fit, so the
+         *   intent    - the chart or the test already asks for a fit, so the
          *               panel that performs it should be reachable;
-         *   memory    — pinned, and pinning sticks (§Tier 1.3).
+         *   memory    - pinned, and pinning sticks (§Tier 1.3).
          */
         if (p.id === "curve") {
           return (
@@ -940,7 +940,7 @@ export function DataAnalysisWorkspace({
       const roc = rocCurve(table.rows.map((r) => Number(r[truthCol])), table.rows.map((r) => Number(r[scoreCol])))
       if (!roc.fpr.length) return []
       return [
-        { type: "scatter", mode: "lines", x: roc.fpr, y: roc.tpr, name: `ROC (AUC = ${isFinite(roc.auc) ? roc.auc.toFixed(3) : "—"})`, line: { color: palette[0], width: 2.5, shape: "hv" }, fill: "tozeroy", fillcolor: "rgba(0,114,178,0.12)" },
+        { type: "scatter", mode: "lines", x: roc.fpr, y: roc.tpr, name: `ROC (AUC = ${isFinite(roc.auc) ? roc.auc.toFixed(3) : "-"})`, line: { color: palette[0], width: 2.5, shape: "hv" }, fill: "tozeroy", fillcolor: "rgba(0,114,178,0.12)" },
         { type: "scatter", mode: "lines", x: [0, 1], y: [0, 1], line: { dash: "dash", color: "#999", width: 1 }, showlegend: false, hoverinfo: "skip" },
       ]
     }
@@ -989,7 +989,7 @@ export function DataAnalysisWorkspace({
       const st = seriesStyles[yk] ?? {}
       return [{ type: "scatter3d", mode: "markers", x: x3, y: y3, z: z3, name: yk, marker: { size: st.size ?? 4, color: st.color ?? z3, colorscale: st.color ? undefined : "Viridis", showscale: !st.color } }]
     }
-    // 2D charts — optionally aggregate replicates by X into mean ± error, with
+    // 2D charts, optionally aggregate replicates by X into mean ± error, with
     // an overlay of the individual points (the Prism bar/scatter idiom).
     const traces: Record<string, unknown>[] = []
     const canAggregate = errorMode !== "none" && ["line", "scatter", "bar", "barStacked", "barH", "area"].includes(chartType)
@@ -1142,7 +1142,7 @@ export function DataAnalysisWorkspace({
    *
    * Titles and typography are both "text on the figure"; palette and per-series
    * styling are both "colour". Splitting them made two jump-bar entries for one
-   * decision. They keep their own blocks and headings — this only makes them
+   * decision. They keep their own blocks and headings, this only makes them
    * filter together, so choosing Text shows both, adjacent, with everything
    * between hidden.
    */
@@ -1188,7 +1188,7 @@ export function DataAnalysisWorkspace({
         .slice(0, 12)
         .map((r) => table.columns.map((c) => r[c]).join("\t"))
         .join("\n")
-      const context = `Data columns: ${cols}. ${table.rows.length} rows. Current chart: ${chartType} of ${activeY.join(", ") || "—"} vs ${xKey}, titled "${title}".\n\nFirst rows (tab-separated):\n${cols}\n${preview}`
+      const context = `Data columns: ${cols}. ${table.rows.length} rows. Current chart: ${chartType} of ${activeY.join(", ") || "-"} vs ${xKey}, titled "${title}".\n\nFirst rows (tab-separated):\n${cols}\n${preview}`
       const ask =
         kind === "explain" ? "Explain what this chart shows and the main trend or result."
         : kind === "improve" ? "Suggest the most appropriate chart type and any transformations for this data, and why."
@@ -1292,7 +1292,7 @@ export function DataAnalysisWorkspace({
 
   /* ── Analyses (tabs) ──────────────────────────────────────────────────────
      Several analyses of the same sheet, open at once. Each is a saved chart
-     configuration — the very object `.n9a` export already serialises — so a tab
+     configuration, the very object `.n9a` export already serialises, so a tab
      costs nothing new to persist and everything the rail can express travels
      with it. Switching tabs stores the configuration you are leaving and
      applies the one you are entering. */
@@ -1307,7 +1307,7 @@ export function DataAnalysisWorkspace({
    *
    * `applyConfig` is thirty `setState` calls. Running it inside an updater
    * makes it a side effect of computing state, which React may invoke twice and
-   * may discard — which is exactly how switching tabs left the previous tab's
+   * may discard, which is exactly how switching tabs left the previous tab's
    * settings on screen.
    */
   const analysesRef = useRef(analyses)
@@ -1411,7 +1411,7 @@ export function DataAnalysisWorkspace({
    * Every open analysis, as a figure-layout panel source.
    *
    * Each tab's stored configuration derives its own spec, so a panel can draw
-   * any of them — which is the point of layouts: a published figure's panels
+   * any of them, which is the point of layouts: a published figure's panels
    * come from different analyses, not different views of one.
    */
   const layoutPipelines = useMemo<AnalysisPipeline[]>(() => {
@@ -1533,7 +1533,7 @@ export function DataAnalysisWorkspace({
      the spec, so what arrives here moves the rail the user is looking at rather
      than opening a conversation about it. That is the difference from the
      Catalyst composer at the top of the page, which answers questions and
-     changes nothing — and the reason this is a second, narrower entry point
+     changes nothing, and the reason this is a second, narrower entry point
      rather than a second use of that one.
 
      Nothing below is load-bearing for the deterministic path. If the assistant
@@ -1546,11 +1546,11 @@ export function DataAnalysisWorkspace({
   /** The hard precondition, mirrored from the route: no resolved rows, no ask. */
   const aiReady = derivedSpec !== null && specTable.rows.length > 0
 
-  /* P3 — propose then execute. The model's reply is a PLAN, not an action: the
+  /* P3, propose then execute. The model's reply is a PLAN, not an action: the
      spec it would produce, computed and held here, is not handed to
      `applyConfig` until the researcher reads the rationale and presses
      Execute. `patchedSpec` is exactly what `executeProposal` needs to derive
-     the rail edits — nothing else, so a stale proposal cannot smuggle in a
+     the rail edits, nothing else, so a stale proposal cannot smuggle in a
      spec field discardProposal never touched. */
   interface AiProposal {
     patchedSpec: AnalysisSpec
@@ -1587,8 +1587,8 @@ export function DataAnalysisWorkspace({
         // `applyAiPatch` so the spec and the sentences describing it come from
         // the one code path the rest of L6 uses.
         //
-        // This only COMPUTES the patch — `applyMutation` underneath is pure
-        // and never touches `derivedSpec` — and stops. Nothing is applied
+        // This only COMPUTES the patch, `applyMutation` underneath is pure
+        // and never touches `derivedSpec`, and stops. Nothing is applied
         // until the researcher presses Execute (`executeProposal`, below).
         const patched = applyAiPatch(initHistory(derivedSpec), outcome.mutations)
         applied = patched.applied.map(describeMutation)
@@ -1606,7 +1606,7 @@ export function DataAnalysisWorkspace({
       // make them type it again.
       if (outcome.outcome === "patch" && !outcome.clarificationNeeded) setAiPrompt("")
     } finally {
-      // A superseded request no longer owns the busy flag — the one that
+      // A superseded request no longer owns the busy flag, the one that
       // replaced it does.
       if (aiAbortRef.current === controller) {
         aiAbortRef.current = null
@@ -1617,7 +1617,7 @@ export function DataAnalysisWorkspace({
 
   /** What a clicked rail control already does: turn a spec change into rail
       edits and hand them to `applyConfig`. Moved verbatim out of `askForChange`
-      — the only thing that changed is who calls it and when. */
+      - the only thing that changed is who calls it and when. */
   const executeProposal = useCallback(() => {
     if (!aiProposal || !derivedSpec) return
     const edits = railEditsFromSpec(derivedSpec, aiProposal.patchedSpec, specTable)
@@ -1630,7 +1630,7 @@ export function DataAnalysisWorkspace({
     setAiProposal(null)
   }, [aiProposal, derivedSpec, specTable])
 
-  /** Never touches the spec — clearing the pending proposal is the entire
+  /** Never touches the spec, clearing the pending proposal is the entire
       effect, which is what makes "byte-identical afterwards" true by
       construction rather than by careful bookkeeping. */
   const discardProposal = useCallback(() => {
@@ -1744,7 +1744,7 @@ export function DataAnalysisWorkspace({
       try {
         localStorage.setItem(SESSION_KEY, JSON.stringify({ savedAt: new Date().toISOString(), workbook: liveSnapshot, config: JSON.parse(configJson) }))
       } catch {
-        /* quota / serialize failure — non-fatal */
+        /* quota / serialize failure, non-fatal */
       }
     }, 800)
     return () => clearTimeout(t)
@@ -1916,7 +1916,7 @@ export function DataAnalysisWorkspace({
           </motion.div>
         )}
       </AnimatePresence>
-      <Field label={`Columns — assign axes${is3D(chartType) ? " (X · Y · Z)" : ""}`}>
+      <Field label={`Columns, assign axes${is3D(chartType) ? " (X · Y · Z)" : ""}`}>
         <div className="space-y-1 rounded-md border border-input bg-background p-1.5">
           {table.columns.map((c) => {
             const numeric = numericCols.includes(c)
@@ -1997,8 +1997,8 @@ export function DataAnalysisWorkspace({
         </Field>
         {errorMode !== "none" && <Toggle label="Overlay individual points" checked={showPoints} onChange={setShowPoints} />}
         <div className="grid grid-cols-2 gap-2">
-          <Field label="Reference line — Y"><Input className="h-9" value={hlines} onChange={(e) => setHlines(e.target.value)} placeholder="e.g. 0, 1.5" /></Field>
-          <Field label="Reference line — X"><Input className="h-9" value={vlines} onChange={(e) => setVlines(e.target.value)} placeholder="e.g. 10" /></Field>
+          <Field label="Reference line, Y"><Input className="h-9" value={hlines} onChange={(e) => setHlines(e.target.value)} placeholder="e.g. 0, 1.5" /></Field>
+          <Field label="Reference line, X"><Input className="h-9" value={vlines} onChange={(e) => setVlines(e.target.value)} placeholder="e.g. 10" /></Field>
         </div>
         <RangeRow label="Canvas height" value={chartH} min={320} max={820} step={20} onChange={setChartH} />
       </div>
@@ -2082,7 +2082,7 @@ export function DataAnalysisWorkspace({
         </div>
       </div>
 
-      {/* Publication export — same advanced menu as the chart header */}
+      {/* Publication export, same advanced menu as the chart header */}
       <div id="cs-export" className={cn(!showRail("cs-export") && "!hidden", "scroll-mt-3 border-t border-border pt-3 transition-shadow", flashId === "cs-export" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
         <SectionLabel><DownloadSimple className="h-3.5 w-3.5" /> Export figure</SectionLabel>
         {/* Inline, not a button that opens a panel: this section IS the export
@@ -2246,7 +2246,7 @@ export function DataAnalysisWorkspace({
           aria-label="Describe the change you want"
           placeholder={
             aiReady
-              ? "Describe a change — “log the Y axis”, “colour-blind-safe palette”, “compare the groups with a Mann-Whitney”"
+              ? "Describe a change, “log the Y axis”, “colour-blind-safe palette”, “compare the groups with a Mann-Whitney”"
               : "Import or type some data, then describe a change"
           }
           className="h-8 min-w-0 flex-1 border-0 bg-transparent px-0 text-[13px] shadow-none focus-visible:ring-0"
@@ -2273,7 +2273,7 @@ export function DataAnalysisWorkspace({
                   ))}
                 </ul>
               ) : aiReply.outcome.clarificationNeeded ? null : (
-                <p className="text-muted-foreground">Nothing needed changing — the figure already matches.</p>
+                <p className="text-muted-foreground">Nothing needed changing, the figure already matches.</p>
               )}
               {aiReply.outcome.clarificationNeeded && (
                 // A question, not an error. Whatever was applied still stands;
@@ -2295,7 +2295,7 @@ export function DataAnalysisWorkspace({
                 </div>
               )}
               {aiProposal && (
-                // P3 — the plan sits here, read before it runs. Execute is
+                // P3, the plan sits here, read before it runs. Execute is
                 // withheld for a bare clarifying question: there is nothing
                 // to run yet, only something to answer.
                 <div className="flex items-center gap-2 pt-1">
@@ -2346,7 +2346,19 @@ export function DataAnalysisWorkspace({
       )}
     >
       {!fullscreen && (
-        <CatalystSectionHero scope="lab" placeholder="Ask Catalyst to analyze your data, pick a chart, or explain a result…" />
+        <CatalystSectionHero
+          scope="lab"
+          placeholder="Ask Catalyst to analyze your data, pick a chart, or explain a result…"
+          // Same requirement the spec prompt below already enforces, applied to
+          // the composer a researcher actually reaches first. `aiReady` is the
+          // single source of truth for "there is something to analyse", so the
+          // two inputs cannot disagree about whether this page is usable.
+          requiresDataReason={
+            aiReady
+              ? null
+              : "Import a data file or type some data first — a statistical analysis needs at least one dataset."
+          }
+        />
       )}
 
       {/* Analyses. Several views of one sheet: the dose-response beside the
@@ -2382,7 +2394,7 @@ export function DataAnalysisWorkspace({
             <AnimatePresence initial={false} mode="popLayout">
               {visiblePhases.map((p) => {
                 // A specialized tab (curve/plate) surfaced because the data
-                // matched gets a subtle accent dot — no pill, no chip.
+                // matched gets a subtle accent dot, no pill, no chip.
                 const auto =
                   (p.id === "curve" && detected.standardCurve) || (p.id === "plate" && detected.plate)
                 return (
@@ -2470,7 +2482,7 @@ export function DataAnalysisWorkspace({
         <span className="ml-auto text-xs text-muted-foreground">{table.rows.length} rows · {table.columns.length} cols</span>
       </div>
 
-      {/* Maximized data editor — full ribbon, full width, for heavy editing */}
+      {/* Maximized data editor, full ribbon, full width, for heavy editing */}
       {dataMax && (
         <div className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card/80 shadow-sm backdrop-blur-sm">
           <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
@@ -2562,7 +2574,7 @@ export function DataAnalysisWorkspace({
           </div>
         )}
 
-        {/* Canvas — always visible */}
+        {/* Canvas, always visible */}
         <div className="min-w-0 flex-1">
           <motion.div key={phase} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
             {canvasForPhase}
@@ -2629,7 +2641,7 @@ export function DataAnalysisWorkspace({
                   <TableIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium">{f.file_name}</div>
-                    <div className="truncate text-xs text-muted-foreground">{f.experiment_name ?? "—"}{f.project_name ? ` · ${f.project_name}` : ""}</div>
+                    <div className="truncate text-xs text-muted-foreground">{f.experiment_name ?? "-"}{f.project_name ? ` · ${f.project_name}` : ""}</div>
                   </div>
                   <span className="shrink-0 text-xs font-medium text-[var(--n9-accent,#965034)]">{loadingFileId === f.id ? "Loading…" : "Load"}</span>
                 </button>
@@ -2677,8 +2689,8 @@ function PaneHeader({ Icon, title, children }: { Icon: React.ComponentType<{ cla
 const RAIL_SECTIONS: { id: string; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "cs-type", label: "Chart type", Icon: FnIcon },
   { id: "cs-data", label: "Data and axes assignment", Icon: TableIcon },
-  { id: "cs-title", label: "Text — titles, labels and typography", Icon: TextAa },
-  { id: "cs-palette", label: "Colour — palette and series style", Icon: Palette },
+  { id: "cs-title", label: "Text, titles, labels and typography", Icon: TextAa },
+  { id: "cs-palette", label: "Colour, palette and series style", Icon: Palette },
   { id: "cs-toggles", label: "Display", Icon: SlidersHorizontal },
   { id: "cs-error", label: "Error bars and annotations", Icon: TrendUp },
   { id: "cs-axes", label: "Axes", Icon: Ruler },
@@ -2745,7 +2757,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     </div>
   )
 }
-/** Native <select> styled to look modern, with a Phosphor chevron — no shadcn. */
+/** Native <select> styled to look modern, with a Phosphor chevron, no shadcn. */
 function NativeSelect({ value, onChange, className, children }: { value: string; onChange: (v: string) => void; className?: string; children: React.ReactNode }) {
   return (
     <div className="relative">

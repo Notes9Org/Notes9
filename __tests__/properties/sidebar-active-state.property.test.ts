@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest"
 import * as fc from "fast-check"
 
 /**
- * Sidebar navigation items — mirrors the `navigation` array in app-sidebar.tsx
+ * Sidebar navigation items, mirrors the `navigation` array in app-sidebar.tsx
  */
 const navigation = [
   { name: "Dashboard", href: "/dashboard" },
@@ -83,7 +83,7 @@ describe("Property 19: Sidebar active state matches current pathname", () => {
     )
   })
 
-  it("before mount (mounted=false), no item is ever active — prevents hydration mismatch", () => {
+  it("before mount (mounted=false), no item is ever active, prevents hydration mismatch", () => {
     fc.assert(
       fc.property(navItemArb, (item) => {
         const isActive = computeIsActive(item.href, item.href, false)

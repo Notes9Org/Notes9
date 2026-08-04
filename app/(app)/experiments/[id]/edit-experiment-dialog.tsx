@@ -98,7 +98,7 @@ export function EditExperimentDialog({
   const nameError = submitAttempted && !trimmedName ? "Experiment name is required." : null
   const descError =
     descWordCount > 1000
-      ? `Description is ${descWordCount} words — keep it under 1000.`
+      ? `Description is ${descWordCount} words, keep it under 1000.`
       : null
   const dateOrderError = hasInvalidDateOrder
     ? `${DATE_ORDER_ERROR} Pick a date later than the start date.`
@@ -122,7 +122,7 @@ export function EditExperimentDialog({
 
   const handleSave = async () => {
     setSubmitAttempted(true)
-    // Inline errors are the authoritative validation UI now — short-circuit
+    // Inline errors are the authoritative validation UI now, short-circuit
     // silently if any field error is present rather than ALSO toasting the
     // same message, which made every failed save shout in two places.
     if (!trimmedName || descError || dateOrderError) return

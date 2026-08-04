@@ -2,7 +2,7 @@
  * Thin HTTP client for the catalyst FastAPI service (AI/catalyst/), and the
  * SINGLE place that resolves every AI-backend base URL for the app.
  *
- * Catalyst is the same FastAPI app that already serves /chat and /biomni —
+ * Catalyst is the same FastAPI app that already serves /chat and /biomni
  * `/literature/*` routes are mounted on it. We resolve the base URL from
  * `CATALYST_URL` (preferred, for forward-compat if catalyst ever splits off)
  * and fall back to the existing `CHAT_API_URL` so no new env var is needed.
@@ -24,7 +24,7 @@
 // The primary literature path is now a Claude web-search agent: live web search
 // (several server-side fetches) + canonical grounding. That can run 40–110 s on
 // a cold/loaded catalyst; the baseline DB fan-out is < 10 s. Cap at 150 s so the
-// web agent's results actually reach the user — aborting earlier silently serves
+// web agent's results actually reach the user, aborting earlier silently serves
 // the stale legacy in-process DB search, which is exactly what we replaced.
 const DEFAULT_TIMEOUT_MS = 150_000
 const RETRY_STATUS = new Set([502, 503])
@@ -90,7 +90,7 @@ export function aiServiceBaseUrl(): string {
   return firstConfigured(process.env.AI_SERVICE_URL)
 }
 
-/** Biomni literature research-design agent — a separate Lambda, not the main catalyst backend. */
+/** Biomni literature research-design agent, a separate Lambda, not the main catalyst backend. */
 export function biomniAgentJsonUrl(): string {
   const explicit = firstConfigured(process.env.LITERATURE_BIOMNI_AGENT_URL)
   if (explicit) return explicit

@@ -9,13 +9,13 @@ import type { AiSearchLimitInfo } from '@/lib/literature-search-engine'
 export type { AiSearchLimitInfo }
 
 /**
- * AI literature search — backed by the DEDICATED catalyst orchestrator via
+ * AI literature search, backed by the DEDICATED catalyst orchestrator via
  * `POST /api/literature/ai-search` (NOT the general `/api/chat` stream).
  *
  * This hook is a thin `useSyncExternalStore` subscriber over the module-level
  * `literature-search-engine`, which owns the actual fetch/SSE/cache lifecycle.
  * That's what lets a search survive this component unmounting (tab switch,
- * SPA navigation) — on unmount we only unsubscribe, we never abort. Manual
+ * SPA navigation), on unmount we only unsubscribe, we never abort. Manual
  * Stop (returned below) still really aborts, via engine.stop().
  */
 
@@ -39,7 +39,7 @@ function toResult(p: SearchPaper, index: number, isStreaming: boolean): AiSearch
     dedupeKey: p.id || p.doi || p.pmid || p.title || String(index),
     lookupTerm: null,
     lookupById: false,
-    // The backend already enriched abstracts/PDFs/citations — nothing to fetch.
+    // The backend already enriched abstracts/PDFs/citations, nothing to fetch.
     abstractPending: false,
     aiSummary: p.aiSummary ?? null,
     // Pending until the per-paper summary streams in (set false once the
@@ -72,7 +72,7 @@ export function useAiLiteratureSearch({
 
   return {
     run,
-    /** Overall AI synthesis (streamed) — rendered in the Catalyst sidebar. */
+    /** Overall AI synthesis (streamed), rendered in the Catalyst sidebar. */
     summary: inSync ? snapshot.summary : '',
     /** Server-authoritative citation manifest (null until emitted / on stale). */
     manifest: inSync ? snapshot.manifest : null,
@@ -87,7 +87,7 @@ export function useAiLiteratureSearch({
     /** Accumulated pipeline phases for a live progress timeline. */
     phases: inSync ? snapshot.phases : [],
     error: inSync ? snapshot.error : null,
-    /** Free-tier quota notice (429) — a fact with a reset date, not an error. */
+    /** Free-tier quota notice (429), a fact with a reset date, not an error. */
     limitInfo: snapshot.limitInfo,
     activeQuery: snapshot.activeQuery,
     stop,

@@ -3,7 +3,7 @@ import { Notes9ChatLoader } from './notes9-chat-loader';
 import { getThinkingContext } from '@/lib/catalyst-thinking-context';
 
 interface Notes9ThinkingIndicatorProps {
-  /** The user's latest query — drives the contextual icon, title, and fact. */
+  /** The user's latest query, drives the contextual icon, title, and fact. */
   query?: string;
   /** Pixel size of the rotating logo loader. */
   size?: number;
@@ -19,7 +19,7 @@ interface Notes9ThinkingIndicatorProps {
  * Context-aware "thinking" state shown while the agent generates a reply:
  * the branded rotating-logo loader (with an optional progress ring), a
  * task-specific icon + shimmering title inferred from the query, and either a
- * live work caption or — occasionally — a little AI-in-biotech fact.
+ * live work caption or, occasionally, a little AI-in-biotech fact.
  * Purely presentational.
  */
 export function Notes9ThinkingIndicator({

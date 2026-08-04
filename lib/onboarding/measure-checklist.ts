@@ -11,7 +11,7 @@ import {
 export type ChecklistMeasurement = {
   /**
    * False when the measurement could not be taken at all. Callers MUST NOT gate
-   * anything on the counts in that case — `ownProjectCount: 0` on a failed read
+   * anything on the counts in that case, `ownProjectCount: 0` on a failed read
    * is "we don't know", not "this user has no projects", and treating the two
    * the same would trap established users behind the first-run screen.
    */
@@ -78,7 +78,7 @@ async function readProfileBits(
 
   return {
     welcomeSeen: Boolean(minimal.data?.notes9_welcome_seen_at),
-    // No column to persist overrides in yet — treat as dismissed so we don't
+    // No column to persist overrides in yet, treat as dismissed so we don't
     // render a checklist whose "Mark as done" silently fails.
     state: { done: [], dismissed: true },
     primaryGoal: null,
@@ -88,7 +88,7 @@ async function readProfileBits(
 /**
  * Measures Getting Started progress against the real workspace.
  *
- * Seeded demo content is excluded throughout — a user who has only the starter
+ * Seeded demo content is excluded throughout, a user who has only the starter
  * project has not "created a project", and the two seeded reference papers are
  * not a literature search they ran. Counting them would mark the checklist half
  * done before the user did anything, which is exactly the failure mode that
@@ -171,7 +171,7 @@ export async function measureChecklist(
       primaryGoal: profileBits.primaryGoal,
     }
   } catch (err) {
-    // The checklist is an enhancement — never let it take the dashboard down.
+    // The checklist is an enhancement, never let it take the dashboard down.
     console.error("[onboarding] checklist measurement failed", err)
     return UNMEASURED
   }

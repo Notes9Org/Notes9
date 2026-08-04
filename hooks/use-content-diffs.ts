@@ -35,7 +35,7 @@ export interface RecordDiffInput {
   recordId: string
   previousContent: string
   newContent: string
-  /** Protocol / note display name — fills or prefixes structure hints when HTML trails are sparse. */
+  /** Protocol / note display name, fills or prefixes structure hints when HTML trails are sparse. */
   documentTitle?: string | null
 }
 
@@ -53,7 +53,7 @@ export function useContentDiffs(
     return supabaseRef.current
   }
 
-  // Reset cached history when the record we're tracking changes — otherwise
+  // Reset cached history when the record we're tracking changes, otherwise
   // switching from note A to note B briefly shows A's history in the History
   // dialog until the new fetch lands.
   useEffect(() => {

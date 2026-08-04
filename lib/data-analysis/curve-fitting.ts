@@ -7,7 +7,7 @@
  * Menten, binding, Gaussian, Boltzmann) use Levenberg–Marquardt with a numeric
  * Jacobian. Every fit reports parameter standard errors and 95% confidence
  * intervals (from the covariance matrix s²·(JᵀWJ)⁻¹), R²/adjusted R², Sy.x,
- * and AICc for model comparison — matching what GraphPad Prism reports. Fits
+ * and AICc for model comparison, matching what GraphPad Prism reports. Fits
  * expose `predict` (x→y), `interpolate` (y→x where invertible) and `predictSE`
  * (for confidence/prediction bands).
  */
@@ -54,7 +54,7 @@ export type CurveFit = {
   predict: (x: number) => number
   /** Back-calculate x from a y signal (NaN if outside the invertible range). */
   interpolate: (y: number) => number
-  /** SE of the mean prediction at x — the basis of the confidence band. */
+  /** SE of the mean prediction at x, the basis of the confidence band. */
   predictSE: (x: number) => number
   /** Half-maximal effective concentration / dissociation constant, where defined. */
   ec50?: number

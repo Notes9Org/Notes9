@@ -26,7 +26,7 @@ import { Collapse, EASE_OUT } from "./motion"
  * times. History is a readable list of what changed, not a list of timestamps."
  *
  * Both halves of that sentence are load-bearing. The save state is always
- * rendered — never a transient toast — because the anxiety it removes ("did that
+ * rendered, never a transient toast, because the anxiety it removes ("did that
  * save?") is precisely what Prism users live with. And the history list shows
  * `describeMutation` output, so a row reads "Error bars changed to SD" rather
  * than "14:32:07".
@@ -116,7 +116,7 @@ export function AnalysisHeader({
   return (
     <div className={cn("bg-transparent", className)}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 pt-4">
-        {/* Name — inline editable, as the document's other document surfaces are. */}
+        {/* Name, inline editable, as the document's other document surfaces are. */}
         {editing ? (
           <input
             autoFocus

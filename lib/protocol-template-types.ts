@@ -29,4 +29,4 @@ export const PROTOCOL_TEMPLATE_ALLOWED_MIME = new Set([
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ])
 
-/** @see getProtocolTemplatesStorageBucket in lib/protocol-templates-storage.ts — uses shared `user` bucket */
+/** @see getProtocolTemplatesStorageBucket in lib/protocol-templates-storage.ts, uses shared `user` bucket */

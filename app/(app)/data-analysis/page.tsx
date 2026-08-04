@@ -65,7 +65,7 @@ export default async function DataAnalysisPage() {
       <div>
         <PageHeading>Data</PageHeading>
         <p className="text-muted-foreground mt-1 text-sm">
-          Analyze data in a live spreadsheet — charts, statistics, standard curves and plate maps — or browse every data file across your experiments.
+          Analyze data in a live spreadsheet, charts, statistics, standard curves and plate maps, or browse every data file across your experiments.
         </p>
       </div>
       <DataHub files={files} projects={projects} experiments={experiments} />

@@ -290,7 +290,7 @@ describe("capability matrix", () => {
 
 describe("wide-format sheets", () => {
   // One column per series and one reading per timepoint. Every "group" has a
-  // single value, so no group comparison can describe it — and the matrix must
+  // single value, so no group comparison can describe it, and the matrix must
   // say so rather than offering a test the resolver will then refuse.
   const WIDE = table(
     ["Time (h)", "Control OD600", "Treated OD600"],

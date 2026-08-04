@@ -25,7 +25,7 @@ interface ToolOutput {
 
 interface AgentStreamReplyProps {
   thinkingSteps: ThinkingPayload[];
-  /** Current stage from latest thinking event — still used to gate the
+  /** Current stage from latest thinking event, still used to gate the
    * legacy thinking-step fallback. The stage stepper UI has been removed. */
   currentStage?: ThinkingStage | null;
   currentThinkingMessage?: string | null;
@@ -34,9 +34,9 @@ interface AgentStreamReplyProps {
   toolCards?: ToolCard[];
   /** Files the agent generated this turn (from `artifact` events). */
   artifacts?: AgentArtifact[];
-  /** Relationship graphs from `graph` events — rendered as native dagre layouts. */
+  /** Relationship graphs from `graph` events, rendered as native dagre layouts. */
   graphs?: AgentGraph[];
-  /** Accumulated reasoning from `thinking_token` events — shown in a collapsible
+  /** Accumulated reasoning from `thinking_token` events, shown in a collapsible
    * "Thinking" panel, kept out of the answer bubble. */
   reasoning?: string;
   /** Biomni-style synthesis checklist (synthesis_plan / synthesis_step) */
@@ -56,7 +56,7 @@ interface AgentStreamReplyProps {
    * When false, all collected steps are listed (after the stream finishes).
    */
   isThinkingStreaming?: boolean;
-  /** Running count of resolved sources from `citations_update` — drives the
+  /** Running count of resolved sources from `citations_update`, drives the
    * live "Gathering sources… N" ticker while the turn is in flight. */
   liveCitationCount?: number;
   /** Server-side cancel handle from `run_started` (HITL only). When present
@@ -70,7 +70,7 @@ interface AgentStreamReplyProps {
 }
 
 // Display labels only. Unknown keys fall through to the raw value via the
-// `?? donePayload.tool_used` guard at the usage site — no schema lock-in.
+// `?? donePayload.tool_used` guard at the usage site, no schema lock-in.
 const TOOL_LABELS: Record<string, string> = {
   sql: 'From your records',
   rag: 'From your documents',
@@ -102,7 +102,7 @@ export function AgentStreamReply({
   onRetry,
 }: AgentStreamReplyProps) {
   // Prefer the done payload, but fall back to the streamed tokens when the
-  // payload's text is EMPTY (not just null) — an empty-string `content`/`answer`
+  // payload's text is EMPTY (not just null), an empty-string `content`/`answer`
   // must not blank out an answer the user already watched stream in. `??` alone
   // would keep the empty string, so treat blank/whitespace as absent.
   const displayAnswer =
@@ -117,7 +117,7 @@ export function AgentStreamReply({
   // Only surface resources whose marker is actually present in the answer
   // text. Key the presence check on each resource's cite_label (now reliably
   // on the wire) and fall back to the array position for legacy payloads. The
-  // previous position-based negation heuristic was removed — it could drop
+  // previous position-based negation heuristic was removed, it could drop
   // valid citations whenever the agent mentioned a source near a negating
   // phrase, and the manifest is now authoritative for what's cited.
   const isStreaming = isThinkingStreaming;
@@ -147,11 +147,11 @@ export function AgentStreamReply({
   return (
     <div className={cn('flex flex-col gap-2.5', compact && 'gap-2')}>
 
-      {/* ── Thinking panel — the agent's live reasoning (thinking_token stream),
+      {/* ── Thinking panel, the agent's live reasoning (thinking_token stream),
             kept OUT of the answer bubble. Collapses once the turn settles. ── */}
       <AgentReasoningPanel reasoning={reasoning} streaming={isStreaming} />
 
-      {/* ── Tool calls — single vertical stack. Every call rendered as a
+      {/* ── Tool calls, single vertical stack. Every call rendered as a
             Cursor/Claude-style bordered block with status, args preview, and
             expandable result. Always-visible while streaming so the user can
             watch each tool run; collapses to "Used N tools" once settled to
@@ -177,7 +177,7 @@ export function AgentStreamReply({
         </div>
       )}
 
-      {/* ── Synthesis checklist — Biomni-style "here's my plan, ticking it off"
+      {/* ── Synthesis checklist, Biomni-style "here's my plan, ticking it off"
             view. Each step shows a spinner while active and a check when done,
             so a long protocol design reads as visible progress. ── */}
       {synthesisPlan && synthesisPlan.steps.length > 0 && (
@@ -271,7 +271,7 @@ export function AgentStreamReply({
         </div>
       )}
 
-      {/* ── Answer bubble — no inner scroll. The message grows naturally and
+      {/* ── Answer bubble, no inner scroll. The message grows naturally and
             the parent scroll container handles overflow. The old `max-h-[60vh]
             overflow-auto` created a second scrollbar inside each reply, which
             fought the outer chat scroll and felt broken. Code blocks keep
@@ -306,7 +306,7 @@ export function AgentStreamReply({
                   citationsManifest={effectiveManifest}
                 />
               ) : (
-                /* No content yet — standalone cursor */
+                /* No content yet, standalone cursor */
                 <span
                   className="inline-block h-4 w-1 bg-foreground/70 rounded-sm animate-cursor-blink translate-y-[2px]"
                   aria-hidden
@@ -363,7 +363,7 @@ export function AgentStreamReply({
       {graphs.length > 0 && <AgentGraphList graphs={graphs} />}
       {artifacts.length > 0 && <AgentArtifactList artifacts={artifacts} />}
 
-      {/* Citations panel removed — the per-citation hover card is now the
+      {/* Citations panel removed, the per-citation hover card is now the
           single source surface. */}
     </div>
   );

@@ -4,7 +4,7 @@ import { callCatalyst } from "@/lib/catalyst-client"
 import type { FigureSpec, Results } from "@/types/analysis"
 import { ANALYSIS_COLUMNS, catalystErrorResponse, requireSession } from "./_shared"
 
-/** GET /api/analyses?experiment_id=&project_id= — the caller's analyses, newest first. */
+/** GET /api/analyses?experiment_id=&project_id=, the caller's analyses, newest first. */
 export async function GET(request: Request) {
   try {
     const s = await requireSession()
@@ -35,7 +35,7 @@ export async function GET(request: Request) {
 }
 
 /**
- * POST /api/analyses — run a spec on the catalyst backend and store the result.
+ * POST /api/analyses, run a spec on the catalyst backend and store the result.
  *
  * ponytail: one row is written, after the run succeeds. The `running`/`failed`
  * statuses exist for a future async runner; a failed synchronous run returns

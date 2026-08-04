@@ -7,14 +7,14 @@ import { NewAnalysisClient } from "./new-analysis-client"
  * Analysis → New: the workspace in its UNRUN state.
  *
  * The design doc flags this as a loose end of making Analysis workspace-level:
- * "an analysis still belongs to an experiment — experiment_id stays not null.
+ * "an analysis still belongs to an experiment, experiment_id stays not null.
  * Creating one from the workspace list therefore needs an experiment picker,
  * pre-filled from the active project scope when there is one."
  *
  * This is that picker plus the Data setup, ending at the Run gate. Nothing is
  * persisted here: POST /api/analyses runs the analysis BEFORE inserting, so a
  * failed run leaves no dead row. The spec is therefore held client-side until
- * Run succeeds, then we redirect to /analysis/<id> — the same workspace, run.
+ * Run succeeds, then we redirect to /analysis/<id>, the same workspace, run.
  *
  * NOTE: a static segment beats the dynamic one, so /analysis/new never hits
  * /analysis/[id].
@@ -29,7 +29,7 @@ export default async function NewAnalysisPage({
   const params = (await searchParams) ?? {}
 
   // RLS scopes every query to the caller. Files are capped at the 500 most
-  // recent — the picker filters to the chosen experiment client-side.
+  // recent, the picker filters to the chosen experiment client-side.
   const [projectsRes, experimentsRes, filesRes] = await Promise.all([
     supabase.from("projects").select("id, name").order("name"),
     supabase.from("experiments").select("id, name, project_id").order("name"),

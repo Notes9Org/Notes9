@@ -9,18 +9,18 @@ import {
 } from "@/lib/data-analysis/workspace/pipeline-chips"
 
 /**
- * P5 — the pipeline bar.
+ * P5, the pipeline bar.
  *
  * A row of chips for what is currently filtered, transformed away or
- * excluded — the AI-authored pipeline (P3) surfaced where a researcher can see
+ * excluded, the AI-authored pipeline (P3) surfaced where a researcher can see
  * it and undo it, one chip at a time. Show-and-remove only: there is no
  * add-a-filter form here, because adding is what the natural-language prompt
  * is for.
  *
  * Props in, callbacks out, no internal state. Every removal is the caller's
  * job to route through the existing mutation appliers
- * (`lib/data-analysis/spec/mutations.ts`) — the same code path a typed patch
- * or a dragged control uses — so there is exactly one meaning for "remove
+ * (`lib/data-analysis/spec/mutations.ts`), the same code path a typed patch
+ * or a dragged control uses, so there is exactly one meaning for "remove
  * this," not a second one spliced together in here.
  */
 
@@ -48,7 +48,7 @@ export function PipelineBar({
   onRestoreRow,
 }: PipelineBarProps) {
   // Visually unchanged until the AI (or a manual edit) puts something in the
-  // pipeline — an empty bar would just be a strip of dead space.
+  // pipeline, an empty bar would just be a strip of dead space.
   if (filters.length === 0 && transforms.length === 0 && exclusions.length === 0) return null
 
   return (

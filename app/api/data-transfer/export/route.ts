@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
   const experimentIds = experiments.map((experiment) => experiment.id)
 
   // Every remaining table read depends only on already-known ids (projectIds,
-  // experimentIds, organization_id) — issue them concurrently instead of as
+  // experimentIds, organization_id), issue them concurrently instead of as
   // eight sequential round-trips.
   const [
     labNotes,

@@ -25,7 +25,7 @@ export interface ChatMessage {
   metadata?: Record<string, unknown>;
 }
 
-/** Stored in `content_diffs.diff_segments` — word-level fragments plus `_` skips for unchanged runs (no full-body snapshots). */
+/** Stored in `content_diffs.diff_segments`, word-level fragments plus `_` skips for unchanged runs (no full-body snapshots). */
 export type ContentDiffSegment =
   | { k: '+'; v: string }
   | { k: '-'; v: string }
@@ -34,7 +34,7 @@ export type ContentDiffSegment =
 
 /**
  * Stored in `content_diffs.structure_hints` JSON (compact: title once, sections without repeated title).
- * Legacy rows may still use `{ section_trails: string[] }` only — normalize when reading.
+ * Legacy rows may still use `{ section_trails: string[] }` only, normalize when reading.
  */
 export interface ContentDiffStructureHints {
   document_title: string | null;
@@ -52,7 +52,7 @@ export interface ContentDiff {
   /** Heading trails (document title + sections) for audit context. */
   structure_hints?: ContentDiffStructureHints | null;
   /**
-   * Legacy columns — removed in migration `042_content_diffs_diff_segments.sql`; may still be
+   * Legacy columns, removed in migration `042_content_diffs_diff_segments.sql`; may still be
    * present when reading old API responses.
    */
   previous_content?: string | null;
@@ -60,7 +60,7 @@ export interface ContentDiff {
   words_added: number;
   words_removed: number;
   created_at: string;
-  /** Joined from profiles — available when fetched with user select */
+  /** Joined from profiles, available when fetched with user select */
   user?: {
     first_name: string;
     last_name: string;

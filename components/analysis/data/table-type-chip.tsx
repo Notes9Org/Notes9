@@ -6,7 +6,7 @@ import type { ColumnAssignment, ColumnRole } from "./column-role-grid"
 
 /**
  * The table type is DERIVED from the column roles by rule, never picked from a
- * menu — Prism makes you choose the table first and then fight it; here the
+ * menu, Prism makes you choose the table first and then fight it; here the
  * roles you assign decide the shape, and this chip just tells you what came out.
  */
 
@@ -73,7 +73,7 @@ export function TableTypeChip({
     <Badge
       variant="secondary"
       className={className}
-      title={`${TABLE_TYPE_LABELS[tableType]} table — ${TABLE_TYPE_REASONS[tableType]}`}
+      title={`${TABLE_TYPE_LABELS[tableType]} table, ${TABLE_TYPE_REASONS[tableType]}`}
     >
       {TABLE_TYPE_LABELS[tableType]} table
     </Badge>

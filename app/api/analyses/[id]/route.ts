@@ -5,8 +5,8 @@ import { ANALYSIS_COLUMNS, requireSession } from "../_shared"
 type Ctx = { params: Promise<{ id: string }> }
 
 /**
- * Fields a client may write. Everything else — `user_id`, `code`, `results`,
- * provenance — is the server's. `figure_spec` has its own autosave route.
+ * Fields a client may write. Everything else, `user_id`, `code`, `results`,
+ * provenance, is the server's. `figure_spec` has its own autosave route.
  */
 const PATCHABLE = new Set(["title", "analysis_spec", "status"])
 

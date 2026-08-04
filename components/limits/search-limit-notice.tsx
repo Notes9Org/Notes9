@@ -4,7 +4,7 @@
  * Free-tier quota notice for AI surfaces (literature search, chat).
  *
  * Rendered when a request returns 429 with a quota limit_code. Presents the
- * limit as a plain fact with the reset date — calm styling, no red, no error
+ * limit as a plain fact with the reset date, calm styling, no red, no error
  * iconography ("a limit is a fact, not a failure").
  */
 

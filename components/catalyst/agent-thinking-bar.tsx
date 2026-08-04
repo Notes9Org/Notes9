@@ -60,7 +60,7 @@ interface AgentThinkingBarProps {
   isStreaming?: boolean;
   /** Fractional progress 0–1 for the active long-running stage (Cat-Bio). */
   progress?: number | null;
-  /** Elapsed seconds for the active stage — shown so long runs feel alive. */
+  /** Elapsed seconds for the active stage, shown so long runs feel alive. */
   elapsedS?: number | null;
   className?: string;
 }

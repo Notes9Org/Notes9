@@ -21,7 +21,7 @@ import { Collapse, ComputeBar, Reveal, ValueSwap } from "./motion"
  * The results panel (§10.4).
  *
  * "The statistic, the assumptions checked, the effect size, and the exact
- * wording that will appear in the legend — not a wall of output."
+ * wording that will appear in the legend, not a wall of output."
  *
  * So the card is four things and a disclosure. The full pairwise table is real
  * and reachable, but it is not what a bench scientist reads first: they read
@@ -29,12 +29,12 @@ import { Collapse, ComputeBar, Reveal, ValueSwap } from "./motion"
  * what they can paste into the paper.
  *
  * Every number rendered here comes from `result`, which came from the engine.
- * Nothing on this card is computed in the component — that would put a statistic
+ * Nothing on this card is computed in the component, that would put a statistic
  * back on the client and break Law 2 at the last possible moment.
  */
 
 function formatP(p: number | null): string {
-  if (p === null || !Number.isFinite(p)) return "—"
+  if (p === null || !Number.isFinite(p)) return "-"
   return p < 0.0001 ? "< 0.0001" : p.toFixed(4)
 }
 
@@ -139,7 +139,7 @@ export function ResultsCard({
     >
       <ComputeBar active={Boolean(computing)} />
 
-      {/* 1 — the verdict, in the engine's own words. */}
+      {/* 1, the verdict, in the engine's own words. */}
       <div className="flex items-start justify-between gap-3 px-5 pt-4">
         <div className="min-w-0">
           <p className="text-[15px] leading-[1.6] text-foreground">
@@ -161,14 +161,14 @@ export function ResultsCard({
         )}
       </div>
 
-      {/* 2 — headline numbers, animated only by a brief opacity dip. */}
+      {/* 2, headline numbers, animated only by a brief opacity dip. */}
       <div className="mt-4 grid grid-cols-2 gap-x-8 gap-y-4 px-5 sm:grid-cols-4">
         {test && (
           <>
             <Stat label="p-value" value={formatP(test.pValue)} emphasis />
             <Stat
-              label={test.statistic !== null ? "Statistic" : "—"}
-              value={test.statistic !== null ? test.statistic.toFixed(3) : "—"}
+              label={test.statistic !== null ? "Statistic" : "-"}
+              value={test.statistic !== null ? test.statistic.toFixed(3) : "-"}
               sub={test.df !== null ? `df ${test.df}` : undefined}
             />
             {test.effectSizes[0] && (
@@ -187,7 +187,7 @@ export function ResultsCard({
             )}
             <Stat
               label="n"
-              value={Object.values(test.groupSizes).reduce((a, b) => a + b, 0) || "—"}
+              value={Object.values(test.groupSizes).reduce((a, b) => a + b, 0) || "-"}
               sub={
                 Object.keys(test.groupSizes).length > 1
                   ? `${Object.keys(test.groupSizes).length} groups`
@@ -198,7 +198,7 @@ export function ResultsCard({
         )}
         {!test && fit && (
           <>
-            <Stat label="EC50" value={fit.ec50 !== null ? fit.ec50.toPrecision(4) : "—"} emphasis />
+            <Stat label="EC50" value={fit.ec50 !== null ? fit.ec50.toPrecision(4) : "-"} emphasis />
             <Stat label="R²" value={fit.rSquared.toFixed(4)} />
             <Stat label="Sy.x" value={fit.syx.toPrecision(3)} />
             <Stat label="Model" value={fit.model} />
@@ -206,7 +206,7 @@ export function ResultsCard({
         )}
       </div>
 
-      {/* 3 — assumptions, surfaced rather than buried (§2 Tier 1.4). */}
+      {/* 3, assumptions, surfaced rather than buried (§2 Tier 1.4). */}
       {test && test.assumptions.length > 0 && (
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-5 pt-4">
           {test.assumptions.map((a) => (
@@ -246,18 +246,18 @@ export function ResultsCard({
                   <td className="py-1.5 pr-3 text-foreground/85">{t.term}</td>
                   {test.terms.some((x) => x.estimate !== null) && (
                     <td className="py-1.5 pr-3 tabular-nums">
-                      {t.estimate !== null ? t.estimate.toPrecision(4) : "—"}
+                      {t.estimate !== null ? t.estimate.toPrecision(4) : "-"}
                     </td>
                   )}
                   {test.terms.some((x) => x.ciLow !== null) && (
                     <td className="py-1.5 pr-3 tabular-nums text-muted-foreground">
                       {t.ciLow !== null && t.ciHigh !== null
                         ? `${t.ciLow.toPrecision(3)} to ${t.ciHigh.toPrecision(3)}`
-                        : "—"}
+                        : "-"}
                     </td>
                   )}
                   <td className="py-1.5 pr-3 tabular-nums text-muted-foreground">
-                    {t.statistic !== null ? t.statistic.toFixed(3) : "—"}
+                    {t.statistic !== null ? t.statistic.toFixed(3) : "-"}
                     {t.df !== null && (
                       <span className="ml-1 text-muted-foreground/70">({t.df})</span>
                     )}
@@ -279,7 +279,7 @@ export function ResultsCard({
         </div>
       )}
 
-      {/* 4 — the legend, ready to paste. This is the last mile to the paper,
+      {/* 4, the legend, ready to paste. This is the last mile to the paper,
              so it is fully editable: the generated wording is a starting point,
              not the product's opinion about how the author should write. Once
              edited it is stored on the spec and never regenerated over. */}
@@ -371,7 +371,7 @@ export function ResultsCard({
                       <td className="py-1.5 pr-3 tabular-nums text-muted-foreground">
                         {p.ciLow !== null && p.ciHigh !== null
                           ? `${p.ciLow.toFixed(2)} to ${p.ciHigh.toFixed(2)}`
-                          : "—"}
+                          : "-"}
                       </td>
                       <td
                         className={cn(

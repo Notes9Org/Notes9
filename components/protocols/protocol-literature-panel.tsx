@@ -25,7 +25,7 @@ import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { ClipboardInfoIcon } from "@/components/ui/clipboard-info-icon"
 
-/** Drag payload MIME — same string used in Protocol AI drop targets. */
+/** Drag payload MIME, same string used in Protocol AI drop targets. */
 export const LITERATURE_PAPER_DRAG_MIME = "application/literature-paper" as const
 
 export interface LiteraturePaperItem {
@@ -47,8 +47,8 @@ interface ProtocolLiteraturePanelProps {
   onInsertPapers?: (papers: LiteraturePaperItem[]) => void
   onDragStart?: (paper: LiteraturePaperItem, e: React.DragEvent) => void
   /**
-   * `citations` — drag / Insert add @-citations into the protocol draft.
-   * `aiContext` — selections go to the Biomni AI panel only (no draft insertion).
+   * `citations`, drag / Insert add @-citations into the protocol draft.
+   * `aiContext`, selections go to the Biomni AI panel only (no draft insertion).
    */
   variant?: "citations" | "aiContext"
   /** Add selected papers to the AI assistant context (variant `aiContext`). */
@@ -132,7 +132,7 @@ export function ProtocolLiteraturePanel({
   }, [showFilters])
 
   // Load experiments when internal project changes.
-  // Do not call setInternalExperimentId here when project is empty — that fought the prop-sync
+  // Do not call setInternalExperimentId here when project is empty, that fought the prop-sync
   // effect on mount and could loop parent setState → Radix Select updates.
   useEffect(() => {
     if (!showFilters || !internalProjectId) {
@@ -153,7 +153,7 @@ export function ProtocolLiteraturePanel({
   }, [showFilters, internalProjectId])
 
   // Keep a ref to onContextChange so the bubble effect below never has it in
-  // its dependency array — an unstable callback would otherwise cause an
+  // its dependency array, an unstable callback would otherwise cause an
   // infinite setState → re-render → new function ref → effect loop.
   const onContextChangeRef = useRef(onContextChange)
   useEffect(() => { onContextChangeRef.current = onContextChange })
@@ -247,7 +247,7 @@ export function ProtocolLiteraturePanel({
             <SelectValue placeholder="Select project…" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="_none_">— No project —</SelectItem>
+            <SelectItem value="_none_">- No project -</SelectItem>
             {internalProjectId &&
               !filterProjects.some((x) => x.id === internalProjectId) && (
                 <SelectItem value={internalProjectId}>Linked project</SelectItem>
@@ -272,7 +272,7 @@ export function ProtocolLiteraturePanel({
             } />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="_none_">— No experiment —</SelectItem>
+            <SelectItem value="_none_">- No experiment -</SelectItem>
             {internalExperimentId &&
               !filterExperiments.some((x) => x.id === internalExperimentId) && (
                 <SelectItem value={internalExperimentId}>Linked experiment</SelectItem>
@@ -429,7 +429,7 @@ export function ProtocolLiteraturePanel({
                 </TooltipTrigger>
                 {aiMode && (
                   <TooltipContent side="right" className="max-w-[220px] text-xs">
-                    Sends selected papers as context to the Cat-Bio panel — not added to the draft.
+                    Sends selected papers as context to the Cat-Bio panel, not added to the draft.
                   </TooltipContent>
                 )}
               </Tooltip>

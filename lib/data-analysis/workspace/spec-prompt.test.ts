@@ -47,7 +47,7 @@ describe("railEditsFromSpec", () => {
     expect(railEditsFromSpec(base, base, table)).toEqual({})
   })
 
-  // P4 — the bridge: `data.setFilters` / `data.addTransform` land on the spec
+  // P4, the bridge: `data.setFilters` / `data.addTransform` land on the spec
   // (the resolver already implements every op), but `ChartState` had no field
   // to carry them, so `chartStateFromSpec` dropped them and the diff below
   // came back empty. The reply card said "Filters updated" while nothing

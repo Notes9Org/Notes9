@@ -10,7 +10,7 @@
  * It is a REPORT, not an input. Nothing reads these cells back: they are
  * regenerated from the engine result every time, so editing them changes
  * nothing and cannot feed a number back into the analysis. That one-way flow is
- * what keeps Law 2 intact — the sheet is a rendering of the result, exactly as
+ * what keeps Law 2 intact, the sheet is a rendering of the result, exactly as
  * the figure is.
  */
 
@@ -73,7 +73,7 @@ export function buildResultsSheet(
     if (t.df !== null) rows.push(["df", typeof t.df === "number" ? t.df : String(t.df)])
     rows.push(["p-value", p(t.pValue)])
     rows.push(["alpha", spec.analysis.alpha])
-    rows.push(["Significant at alpha", t.pValue !== null ? (t.pValue < spec.analysis.alpha ? "yes" : "no") : "—"])
+    rows.push(["Significant at alpha", t.pValue !== null ? (t.pValue < spec.analysis.alpha ? "yes" : "no") : "-"])
     rows.push(["Reported as", t.reportSentence])
 
     if (t.effectSizes.length > 0) {

@@ -196,7 +196,7 @@ export function chiSquareUpperP(x: number, df: number): number {
 }
 
 /**
- * Inverse standard normal CDF (Acklam's algorithm) — used for Shapiro-Wilk
+ * Inverse standard normal CDF (Acklam's algorithm), used for Shapiro-Wilk
  * coefficients and normal quantiles.
  */
 export function normalInv(p: number): number {
@@ -376,7 +376,7 @@ export function studentizedRangeUpperP(q: number, k: number, df: number): number
   return 1 - studentizedRangeCdf(q, k, df)
 }
 
-/** Critical studentized range value q(1−alpha, k, df) — inverse of the CDF. */
+/** Critical studentized range value q(1−alpha, k, df), inverse of the CDF. */
 export function studentizedRangeCritical(alpha: number, k: number, df: number): number {
   const p = 1 - alpha
   return quantileBisect((q) => studentizedRangeCdf(q, k, df), p, 0, 100)

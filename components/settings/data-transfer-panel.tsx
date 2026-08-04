@@ -724,7 +724,7 @@ export function DataTransferPanel() {
             </Button>
 
             {isImporting && (
-              // No real per-file progress is plumbed through yet — render an
+              // No real per-file progress is plumbed through yet, render an
               // indeterminate bar (animated stripe) instead of a fake 72%.
               <Progress className="animate-pulse" />
             )}

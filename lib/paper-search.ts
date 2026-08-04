@@ -10,11 +10,11 @@
  * - Bounded second OpenAlex pass when PubMed is thin.
  * - Relevance sort: BM25 on title+abstract plus citation and source signals (`paper-search-bm25`); second PubMed pass from DOIs/titles when the first pass is thin.
  * - Europe PMC: journal/year/authors from journalInfo, firstPublicationDate, authorList.
- * - Sort modes: relevance (“best match” — re-ranks the **full merged** pool, no extra cap), recent (year descending), cited.
+ * - Sort modes: relevance (“best match”, re-ranks the **full merged** pool, no extra cap), recent (year descending), cited.
  * - Queries with recency wording ("recent papers", …) add a publication-year floor in relevance mode.
  *
- * Optional env: `NCBI_API_KEY`, `OPENALEX_CONTACT_EMAIL`, `UNPAYWALL_EMAIL` (Unpaywall — use a real address; see https://unpaywall.org/products/api ).
- * Crossref (no key) adds stable `application/pdf` links only — not ScienceDirect `pdfft` (those URLs require short-lived session tokens).
+ * Optional env: `NCBI_API_KEY`, `OPENALEX_CONTACT_EMAIL`, `UNPAYWALL_EMAIL` (Unpaywall, use a real address; see https://unpaywall.org/products/api ).
+ * Crossref (no key) adds stable `application/pdf` links only, not ScienceDirect `pdfft` (those URLs require short-lived session tokens).
  * For Elsevier `10.1016/` DOIs we set `articlePageUrl` (PII article page) so "View source" opens the publisher page where PDF download works in-browser.
  */
 import type { PaperSearchOptions, PaperSearchSortMode, SearchPaper } from "@/types/paper-search"
@@ -87,7 +87,7 @@ function ncbiApiKeyParam(): string {
   return key ? `&api_key=${encodeURIComponent(key)}` : ""
 }
 
-/** Delegates to the canonical DOI normalizer (`lib/literature-pdf-storage.ts`) — the shape actually persisted to `literature_reviews`. */
+/** Delegates to the canonical DOI normalizer (`lib/literature-pdf-storage.ts`), the shape actually persisted to `literature_reviews`. */
 function normalizeDoiKey(doi?: string): string | undefined {
   return normalizeDoi(doi ?? null) || undefined
 }
@@ -397,7 +397,7 @@ function extractPdfFromUnpaywallPayload(data: {
 }
 
 /**
- * Unpaywall — requires real `UNPAYWALL_EMAIL` (Unpaywall rejects placeholder emails).
+ * Unpaywall, requires real `UNPAYWALL_EMAIL` (Unpaywall rejects placeholder emails).
  */
 async function enrichPapersPdfFromUnpaywall(papers: SearchPaper[]): Promise<SearchPaper[]> {
   const email = process.env.UNPAYWALL_EMAIL?.trim()
@@ -455,7 +455,7 @@ async function enrichPapersPdfFromUnpaywall(papers: SearchPaper[]): Promise<Sear
 }
 
 /**
- * Crossref: stable `application/pdf` URLs only; Elsevier `10.1016/` + PII → public **article** page (not pdfft —
+ * Crossref: stable `application/pdf` URLs only; Elsevier `10.1016/` + PII → public **article** page (not pdfft
  * pdfft links need per-session Cloudflare/publisher tokens and break when copied or fetched server-side).
  */
 async function fetchCrossrefEnrichment(doi: string): Promise<{
@@ -1219,7 +1219,7 @@ export async function searchPapersWithMeta(
       }
     }
 
-    // Order only — never slice by sort mode; pool size is controlled by per-source limits above.
+    // Order only, never slice by sort mode; pool size is controlled by per-source limits above.
     let ranked = applyResultOrdering(merged, trimmed, sort, yearFloor)
     ranked = await enrichPapersMissingPdf(ranked)
     if (openAccessOnly) {

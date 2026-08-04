@@ -38,7 +38,7 @@ export default async function LiteratureReviewsPage({
 
   const user = await requireUser()
   const supabase = await createClient()
-  // `literatureReviews` and `profile` are independent — parallelize.
+  // `literatureReviews` and `profile` are independent, parallelize.
   const [literatureReviewsRes, profileRes] = await Promise.all([
     supabase
       .from("literature_reviews")

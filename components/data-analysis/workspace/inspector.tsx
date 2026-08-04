@@ -16,8 +16,8 @@ import { Collapse, EASE_OUT, TabPill } from "./motion"
  * the left tab thinks and the right tab doesn't, they stop wondering why some
  * edits pause and others don't.
  *
- * Nearly every chart editor worth copying already separates these — Rows, Hex,
- * Confluence, Canva, Mixpanel — but for them it is organisation. Here it is a
+ * Nearly every chart editor worth copying already separates these, Rows, Hex,
+ * Confluence, Canva, Mixpanel, but for them it is organisation. Here it is a
  * property of the architecture that happens to be legible.
  */
 

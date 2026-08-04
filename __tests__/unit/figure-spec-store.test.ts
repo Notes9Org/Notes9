@@ -96,7 +96,7 @@ describe("figureSpecReducer", () => {
     })
     expect(edited.past).toHaveLength(1)
 
-    // Removing a key that isn't there changes nothing — no undo entry.
+    // Removing a key that isn't there changes nothing, no undo entry.
     const noop = figureSpecReducer(edited, {
       type: "APPLY_PATCH",
       ops: [{ op: "remove", path: "/layout/nope" }],

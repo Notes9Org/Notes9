@@ -6,14 +6,14 @@ import type { AppliedMutation } from "@/lib/data-analysis/spec/mutations"
  * Provenance (§6.7) and the auto-drafted figure legend (§2 Output).
  *
  * Both are pure functions of (spec, engine result). That is not an
- * implementation convenience — it is Law 2 made operational. The legend states
+ * implementation convenience, it is Law 2 made operational. The legend states
  * n, the test, the correction, the effect size and p; every one of those values
  * is READ from the engine result and inserted by template. Nothing here
  * generates a number, and nothing here may be replaced by a model writing prose,
  * because the moment a language model composes the sentence, the numbers in it
  * stop being guaranteed.
  *
- * The assistant is welcome to rephrase a legend for a journal's house style —
+ * The assistant is welcome to rephrase a legend for a journal's house style
  * but it must start from this string, and the values in it must survive.
  */
 
@@ -110,7 +110,7 @@ export function buildProvenanceCard(
   if (options.sourceDetached) {
     source.push({
       label: "Status",
-      value: "Detached from source — opened from the stored snapshot",
+      value: "Detached from source, opened from the stored snapshot",
       emphasis: true,
     })
   }
@@ -250,7 +250,7 @@ export const EFFECT_LABEL: Record<string, string> = {
  *
  * Contains, by construction, every element §2 requires: exact n, the test used,
  * the correction applied, the effect size, and p. Exclusions are stated too,
- * because §8.1 requires exported legends to disclose them — a figure that hides
+ * because §8.1 requires exported legends to disclose them, a figure that hides
  * its exclusions is the exact failure mode the governance exists to prevent.
  */
 export function draftFigureLegend(

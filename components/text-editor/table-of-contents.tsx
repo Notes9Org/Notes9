@@ -140,14 +140,14 @@ export function TableOfContents({ editor, className }: TableOfContentsProps) {
             {/* w-0 anchor on the right; child w-max grows left. Scroll on outer wrapper avoids overflow-x clipping with overflow-y */}
             <div
                 className={cn(
-                    /* Panel chrome uses `hover:` on this node (not group-hover). Idle: zero border/pad/shadow — no rectangle; scrollbar only while hovered */
+                    /* Panel chrome uses `hover:` on this node (not group-hover). Idle: zero border/pad/shadow, no rectangle; scrollbar only while hovered */
                     "group pointer-events-auto max-h-[min(70vh,calc(100%-1rem))] min-h-0 w-max max-w-[min(280px,calc(100vw-1.5rem))]",
-                    /* x always clipped — stops brief horizontal scrollbar when inner width collapses; don’t transition overflow (browser scrollbar flicker) */
+                    /* x always clipped, stops brief horizontal scrollbar when inner width collapses; don’t transition overflow (browser scrollbar flicker) */
                     "overflow-x-hidden overflow-y-hidden overscroll-y-contain",
                     "rounded-none border-0 bg-transparent p-0 shadow-none",
-                    /* Quick, even in/out — the old 500ms ease-out made collapse feel sticky. */
+                    /* Quick, even in/out, the old 500ms ease-out made collapse feel sticky. */
                     "transition-[background-color,border-color,box-shadow,border-radius,padding,backdrop-filter] duration-200 ease-out",
-                    /* Expanded: the left sidebar's nav-strip material — glass fill, glass border, p-1, rounded-xl. */
+                    /* Expanded: the left sidebar's nav-strip material, glass fill, glass border, p-1, rounded-xl. */
                     "hover:overflow-y-auto hover:rounded-xl hover:border hover:border-[color:var(--glass-border)] hover:p-1.5",
                     "hover:bg-[color:var(--glass-bg)] hover:backdrop-blur-md",
                     "hover:shadow-lg hover:shadow-black/5 dark:hover:shadow-black/30"

@@ -1,5 +1,5 @@
 /**
- * Page layout — the Word-like "Page view" configuration for the TipTap editor:
+ * Page layout, the Word-like "Page view" configuration for the TipTap editor:
  * margins, orientation, header/footer text + alignment, and page-number
  * placement. This is the single source of truth shared by:
  *   - the editor (local state ⇄ persisted layout),
@@ -73,7 +73,7 @@ export function marginsPxToMm(m: PageMargins): MarginsMm {
 
 // ── Persistence: tolerant parse + normalize ────────────────────────────────
 // Layout is stored as plain JSON in a JSONB column. Parsing is defensive so an
-// older/partial/garbage blob can never break the editor — anything missing or
+// older/partial/garbage blob can never break the editor, anything missing or
 // malformed falls back to the default.
 
 function clampMargin(n: unknown, fallback: number): number {
@@ -213,7 +213,7 @@ function escapeHtml(s: string): string {
  * Build the `[data-type="docHeader"]` / `[data-type="docFooter"]` elements the
  * exporters consume (print's `splitHeaderFooter`, the DOCX header/footer parser).
  * Injecting these into the export body means a header/footer that lives only in
- * editor state still shows up — repeated on every page — in the output. Text
+ * editor state still shows up, repeated on every page, in the output. Text
  * only: live page numbers are added per-format (CSS counters for print, fields
  * for DOCX), driven separately by `layout.pageNumbers`.
  */

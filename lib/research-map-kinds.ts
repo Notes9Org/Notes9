@@ -3,25 +3,25 @@ import type { Icon as LucideIcon } from "@phosphor-icons/react"
 import type { ResearchMapNodeKind } from "@/lib/research-map-types"
 
 /**
- * Pure presentation helpers for research-map node kinds — colors, tints, and
+ * Pure presentation helpers for research-map node kinds, colors, tints, and
  * labels. Kept in a separate module from `research-map-layout` (which pulls in
  * the CommonJS `dagre` dependency) so the client-side node component can import
  * these without dragging `dagre` into its bundle.
  *
  * Color assignment (kindAccentClass / kindHexColor / edgeColorForKind agree):
- *   project    burnt sienna (brand) — warm brown
- *   experiment blue-600             — blue
- *   protocol   yellow-600           — gold
- *   literature green-600            — green
- *   lab_note   red-600              — red
- *   paper      purple-600           — purple
- *   report     cyan-600             — teal
- *   data_file  orange-600           — orange
+ *   project    burnt sienna (brand), warm brown
+ *   experiment blue-600             - blue
+ *   protocol   yellow-600           - gold
+ *   literature green-600            - green
+ *   lab_note   red-600              - red
+ *   paper      purple-600           - purple
+ *   report     cyan-600             - teal
+ *   data_file  orange-600           - orange
  */
 
 /** Border + text accent for a node. The background tint lives in
  * `kindTintClass` and is rendered as a separate overlay so the node itself can
- * keep an OPAQUE base (bg-card) — otherwise the translucent tint lets the edges
+ * keep an OPAQUE base (bg-card), otherwise the translucent tint lets the edges
  * behind the node show through and cover its text. */
 export function kindAccentClass(kind: ResearchMapNodeKind): string {
   switch (kind) {
@@ -126,7 +126,7 @@ export function edgeColorForKind(kind: string): string {
   }
 }
 
-/** Minimap dot color — mirrors edge palette so the minimap reads as a legend. */
+/** Minimap dot color, mirrors edge palette so the minimap reads as a legend. */
 export function kindHexColor(kind: ResearchMapNodeKind): string {
   switch (kind) {
     case "project":
@@ -176,7 +176,7 @@ export function kindIcon(kind: ResearchMapNodeKind): LucideIcon {
   }
 }
 
-/** Icon tint — mirrors the kind accent hue. */
+/** Icon tint, mirrors the kind accent hue. */
 export function kindIconClass(kind: ResearchMapNodeKind): string {
   switch (kind) {
     case "project":

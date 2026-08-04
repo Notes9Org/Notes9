@@ -85,7 +85,7 @@ function normalizeSourceItem(raw: unknown, index: number): { label: string; url?
 
 /**
  * Prefer `sources` (web search shape: `{ url, title }[]`) first, then other keys.
- * Does not merge multiple arrays — first non-empty wins.
+ * Does not merge multiple arrays, first non-empty wins.
  */
 export function extractSourceListFromChatPayload(data: Record<string, unknown>): unknown[] {
   for (const key of ['sources', 'resources', 'citations', 'references', 'search_results']) {
@@ -125,7 +125,7 @@ export function appendSourcesMarkdownSection(
     if (s.excerpt && s.label !== s.excerpt) {
       // Only show excerpt if it's not already the label
       const ex = s.excerpt.length > 220 ? `${s.excerpt.slice(0, 217)}…` : s.excerpt;
-      line += ` — ${ex}`;
+      line += `, ${ex}`;
     }
     bodyLines.push(line);
   });

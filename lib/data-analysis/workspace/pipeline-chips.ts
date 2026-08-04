@@ -5,7 +5,7 @@ import { describeMutation } from "@/lib/data-analysis/spec/mutations"
  * Chip text for the pipeline bar (P5).
  *
  * Every label borrows `describeMutation`'s own wording rather than inventing a
- * second phrasing for the same concept — "excluded", "Transform" — so a chip
+ * second phrasing for the same concept, "excluded", "Transform", so a chip
  * reads the same as the sentence the AI reply card or the history list would
  * use for the identical fact. `data.excludeRow` already says exactly what an
  * exclusion chip needs, so that one is a direct call-through; a filter has no
@@ -36,8 +36,8 @@ export function filterChipLabel(filter: RowFilter): string {
 
 export function transformChipLabel(transform: Transform): string {
   // "Transform added: {kind}" is the right vocabulary, wrong tense for a step
-  // that already exists — a chip is showing current state, not narrating an
-  // edit — so only the tense is adjusted, not the wording.
+  // that already exists, a chip is showing current state, not narrating an
+  // edit, so only the tense is adjusted, not the wording.
   return describeMutation({ kind: "data.addTransform", transform }).replace(/^Transform added:/, "Transform:")
 }
 

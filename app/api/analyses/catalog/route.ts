@@ -5,7 +5,7 @@ import { isTableType } from "@/types/analysis"
 import { catalystErrorResponse, requireSession } from "../_shared"
 
 /**
- * GET /api/analyses/catalog?table_type= — the analyses (and their params
+ * GET /api/analyses/catalog?table_type=, the analyses (and their params
  * schema) available for a table shape. Pass-through to catalyst; the catalog
  * is declared there, never mirrored here.
  */

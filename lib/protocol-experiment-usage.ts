@@ -45,7 +45,7 @@ export async function loadProtocolExperimentUsage(
 
   for (const row of junctionRows ?? []) {
     // PostgREST nested-relation typings come back as an array, but our query
-    // joins one-to-one — flatten then cast through `unknown` to the intended shape.
+    // joins one-to-one, flatten then cast through `unknown` to the intended shape.
     const exRaw: unknown = Array.isArray(row.experiment) ? row.experiment[0] : row.experiment
     const ex = exRaw as
       | { id: string; name: string; status: string | null; project?: { id: string; name: string } | null }
@@ -56,9 +56,9 @@ export async function loadProtocolExperimentUsage(
       key: `ep-${row.id}`,
       source: "experiment_link",
       experimentName: ex.name,
-      projectName: ex.project?.name ?? "—",
+      projectName: ex.project?.name ?? "-",
       projectId: ex.project?.id ?? null,
-      status: ex.status ?? "—",
+      status: ex.status ?? "-",
       actionHref: experimentHref(ex.id, ex.project?.id),
     })
   }
@@ -112,9 +112,9 @@ export async function loadProtocolExperimentUsage(
         key: `ln-${row.id}`,
         source: "lab_note",
         experimentName: ex.name,
-        projectName: ex.project?.name ?? "—",
+        projectName: ex.project?.name ?? "-",
         projectId: ex.project?.id ?? null,
-        status: ex.status ?? "—",
+        status: ex.status ?? "-",
         actionHref: experimentHref(ex.id, ex.project?.id),
       })
     } else if (note.project?.id) {
@@ -124,7 +124,7 @@ export async function loadProtocolExperimentUsage(
         experimentName: `Lab note: ${note.title?.trim() || "Untitled"}`,
         projectName: note.project.name,
         projectId: note.project.id,
-        status: "—",
+        status: "-",
         actionHref: `/projects/${note.project.id}`,
       })
     }
@@ -151,9 +151,9 @@ export async function loadProtocolExperimentUsage(
         key: "direct-protocol-experiment",
         source: "direct_protocol",
         experimentName: ex.name,
-        projectName: project?.name ?? "—",
+        projectName: project?.name ?? "-",
         projectId: project?.id ?? null,
-        status: ex.status ?? "—",
+        status: ex.status ?? "-",
         actionHref: experimentHref(ex.id, project?.id),
       })
     }

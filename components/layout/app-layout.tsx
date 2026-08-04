@@ -254,7 +254,7 @@ function AppLayoutBody({ children }: AppLayoutProps) {
     if (!catalystVisible) setCatalystActive(false)
   }, [catalystVisible])
 
-  // Smooth open/close for the (desktop) Catalyst panel — matches the left sidebar
+  // Smooth open/close for the (desktop) Catalyst panel, matches the left sidebar
   // and chat history: stay mounted and animate WIDTH 0 ↔ full, then unmount after
   // the close transition. `catalystRender` = in the DOM; `catalystExpanded` = the
   // animated open state.
@@ -347,7 +347,7 @@ function AppLayoutBody({ children }: AppLayoutProps) {
 
   // When switching to mobile, ensure the sidebar is in expanded (open) mode
   // so the Sheet overlay shows full content instead of the collapsed icon-only
-  // view. Only fires on the isMobile transition — `sidebarOpen` deliberately
+  // view. Only fires on the isMobile transition, `sidebarOpen` deliberately
   // stays out of the deps so user-initiated closes aren't immediately undone.
   useEffect(() => {
     if (isMobile) {
@@ -382,7 +382,7 @@ function AppLayoutBody({ children }: AppLayoutProps) {
   const catalystWidth = rightSidebar.width
 
   // Once a real conversation starts, widen the docked Catalyst sidebar for
-  // comfortable reading — but only upward, and ephemerally (never persisted), so
+  // comfortable reading, but only upward, and ephemerally (never persisted), so
   // it can't override a narrower width the user has deliberately dragged later.
   const chatActiveWidth = isTablet ? 460 : 540
   useEffect(() => {
@@ -525,7 +525,7 @@ function AppLayoutBody({ children }: AppLayoutProps) {
                     aria-label={headerAi.ariaLabel ?? "Toggle protocol AI"}
                     title={headerAi.title ?? "Toggle protocol AI"}
                   >
-                    {/* Protocol glyph — keeps this AI toggle visually distinct
+                    {/* Protocol glyph, keeps this AI toggle visually distinct
                         from the Catalyst flare button beside it. */}
                     <ClipboardInfoIcon className="size-4" />
                   </Button>
@@ -546,7 +546,7 @@ function AppLayoutBody({ children }: AppLayoutProps) {
                 aria-label={catalystVisible ? "Close Catalyst" : "Ask Catalyst"}
                 title={catalystVisible ? "Close Catalyst" : "Ask Catalyst"}
               >
-                {/* Flare — same glyph as the left sidebar's Catalyst item,
+                {/* Flare, same glyph as the left sidebar's Catalyst item,
                     so the top-right toggle reads as the same feature. */}
                 <FlareIcon className="size-4" />
               </Button>
@@ -558,7 +558,7 @@ function AppLayoutBody({ children }: AppLayoutProps) {
             id="main"
             className={cn(
               "flex min-h-0 flex-1 flex-col min-w-0",
-              // scrollbar-gutter:stable — the ghost-scrollbar pattern fades
+              // scrollbar-gutter:stable, the ghost-scrollbar pattern fades
               // the thumb in on hover, which could re-reserve the gutter and
               // nudge the whole center pane sideways. A permanently reserved
               // gutter means hovering never changes the pane's width.
@@ -578,7 +578,7 @@ function AppLayoutBody({ children }: AppLayoutProps) {
             One slot, two possible occupants: protocol-AI (when registered &
             open) takes priority; otherwise Catalyst when the user has opened
             it from the header.
-            Suppressed entirely on /catalyst — the route already mounts the
+            Suppressed entirely on /catalyst, the route already mounts the
             same RightSidebar as the page, so a second instance here would
             duplicate the chat. */}
         {isCatalystRoute ? null : protocolAiVisible ? (

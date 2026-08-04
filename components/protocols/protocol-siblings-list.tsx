@@ -43,7 +43,7 @@ interface ProtocolSibling {
 }
 
 interface ProtocolSiblingsListProps {
-  /** Current protocol id — highlighted in the list and used to filter `is.not`. */
+  /** Current protocol id, highlighted in the list and used to filter `is.not`. */
   currentProtocolId: string
   /** Scope: list protocols from the same project (and optional experiment). */
   organizationId: string | null
@@ -59,7 +59,7 @@ interface ProtocolSiblingsListProps {
  *
  * - Click a row to navigate to that protocol
  * - Per-row dropdown for Rename + Delete (deletion requires confirm)
- * - "+" button creates a new protocol in the same scope (no name yet — the
+ * - "+" button creates a new protocol in the same scope (no name yet, the
  *   user gets dropped into the editor with the default title)
  */
 export function ProtocolSiblingsList({

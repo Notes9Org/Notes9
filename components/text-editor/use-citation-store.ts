@@ -1,5 +1,5 @@
 /**
- * Citation store — React context + useReducer.
+ * Citation store, React context + useReducer.
  *
  * Single source of truth for all citation state within a TiptapEditor instance.
  * Manages: ordered citation list, selected style, and provides actions to
@@ -34,7 +34,7 @@ export interface CitationEntry {
 }
 
 export interface CitationState {
-  /** Ordered list — index+1 = citation number */
+  /** Ordered list, index+1 = citation number */
   entries: CitationEntry[]
   /** Active citation style id */
   style: string

@@ -69,12 +69,12 @@ export type Notes9AgentRequestInput = {
   session_id: string;
   history?: Notes9AgentHistoryItem[];
   scope?: object | null;
-  /** Top-level attachments — preflight-loaded by the backend. */
+  /** Top-level attachments, preflight-loaded by the backend. */
   attachments?: Notes9AgentAttachment[];
   /** User-uploaded files (images, PDFs) the LLM should consume this turn. */
   file_attachments?: Notes9FileAttachment[];
   /** Transient papers (title + abstract + ids) grounded + inline-cited without a
-   * literature_review row — follow-up context / closed-access "Ask Catalyst". */
+   * literature_review row, follow-up context / closed-access "Ask Catalyst". */
   literature_sources?: Notes9LiteratureSource[];
   /** What the user has open on screen (URL → entity). The backend grounds the
    * turn in it when no explicit @-tag is present (FocusEnvelope; consumed only
@@ -94,7 +94,7 @@ export type Notes9AgentRequestInput = {
 
 /** Field caps mirrored from the backend contract (AI/catalyst/agents/contracts/request.py
  * LiteratureSource + MAX_LITERATURE_SOURCES_PER_REQUEST). Pydantic REJECTS the whole
- * request (422) when any cap is exceeded, so the client must truncate — never reject —
+ * request (422) when any cap is exceeded, so the client must truncate, never reject
  * before sending. Keep these in sync with the backend. */
 const LITERATURE_SOURCE_CAPS = {
   maxSources: 12,
@@ -161,7 +161,7 @@ export function sanitizeLiteratureSources(input: unknown): Notes9LiteratureSourc
 export function notes9AgentIncludesBodyHistory(): boolean {
   // Opt-OUT: history passthrough is ON unless explicitly disabled. Previously
   // this was opt-in (`=== 'true'`) for a Zep integration that was never wired
-  // up, so the flag stayed unset and EVERY turn shipped `history: []` — the
+  // up, so the flag stayed unset and EVERY turn shipped `history: []`, the
   // agent saw only the current message and lost all short-term memory. Disable
   // only when a real server-side memory store owns the thread.
   return process.env.NEXT_PUBLIC_NOTES9_AGENT_INCLUDE_HISTORY !== 'false';
@@ -187,7 +187,7 @@ export function buildNotes9AgentRequestBody(params: Notes9AgentRequestInput): Re
   if (params.scope !== undefined && params.scope !== null) {
     body.scope = params.scope;
   }
-  // Top-level attachments — the backend reads request.attachments to
+  // Top-level attachments, the backend reads request.attachments to
   // preflight the corresponding records.
   if (params.attachments && params.attachments.length > 0) {
     body.attachments = params.attachments;

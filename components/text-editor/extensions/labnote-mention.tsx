@@ -150,7 +150,7 @@ export function createLabNoteSuggestion(
                         appendTo: () => document.body,
                         content: component.element,
                         // No popup when there is nothing to suggest (e.g. a surface
-                        // with no mention data) — typing "#" should stay silent.
+                        // with no mention data), typing "#" should stay silent.
                         showOnCreate: props.items.length > 0,
                         interactive: true,
                         trigger: "manual",

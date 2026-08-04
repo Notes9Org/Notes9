@@ -26,9 +26,9 @@ const defaultToasts: NoteExportToastHandlers = {
 
 export async function exportNoteAsMarkdown(html: string, title: string, toasts = defaultToasts) {
   try {
-    // @ts-expect-error — turndown ships without bundled types
+    // @ts-expect-error, turndown ships without bundled types
     const TurndownService = (await import("turndown")).default
-    // @ts-expect-error — plugin ships without types
+    // @ts-expect-error, plugin ships without types
     const { gfm } = await import("turndown-plugin-gfm")
 
     const turndownService = new TurndownService({

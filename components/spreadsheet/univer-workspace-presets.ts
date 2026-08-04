@@ -1,5 +1,5 @@
 /**
- * Workspace-tier Univer feature presets — the Excel-grade plugin suite layered
+ * Workspace-tier Univer feature presets, the Excel-grade plugin suite layered
  * on top of `UniverSheetsCorePreset`:
  *
  *   • Conditional formatting (color scales, data bars, icon sets, rules)
@@ -16,7 +16,7 @@
  * Isolated in its own module and imported dynamically (client-only) so the
  * lightweight `embed` variant used inside note pages never pays for this
  * bundle. Every feature above serializes its state into the workbook
- * snapshot's top-level `resources` array — which {@link
+ * snapshot's top-level `resources` array, which {@link
  * normalizeWorkbookSnapshot} must preserve for the features to survive a
  * reload.
  */

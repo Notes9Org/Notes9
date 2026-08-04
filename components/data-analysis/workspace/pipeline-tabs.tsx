@@ -9,7 +9,7 @@
  * work, a tab is the front edge of it.
  *
  * Each tab carries its index, because that is what the figure panels and the
- * draft caption call this analysis — the number is a reference, not decoration.
+ * draft caption call this analysis, the number is a reference, not decoration.
  *
  * A tab shows a dot when its result is stale: the spec or the data moved and
  * the engine has not caught up. Without it, switching to a tab shows numbers
@@ -57,7 +57,7 @@ export function PipelineTabs({
   const stripRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Keep the selected tab in view when it is activated from elsewhere — a
+  // Keep the selected tab in view when it is activated from elsewhere, a
   // figure panel's "open this analysis", say.
   useEffect(() => {
     if (!activeId || !stripRef.current) return
@@ -112,7 +112,7 @@ export function PipelineTabs({
                   onActivate(p.id)
                 }
               }}
-              title={`${p.name}${p.stale ? " — not yet computed for the current spec" : ""}`}
+              title={`${p.name}${p.stale ? ", not yet computed for the current spec" : ""}`}
               className={cn(
                 "group relative flex max-w-[240px] shrink-0 cursor-pointer items-center gap-2 rounded-t-lg border border-b-0 px-3 py-2 text-[13px] transition-colors",
                 active

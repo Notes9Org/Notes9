@@ -150,7 +150,7 @@ function LiteratureDetailViewInner({
   const activeLitHighlight = inlineLitHighlight ?? litHighlight;
   const hasPdf = !!literature.pdf_storage_path;
   // A PDF contains the full text (abstract + body), so when one is attached we
-  // always highlight in the PDF — the matcher's anchor fallback locates the
+  // always highlight in the PDF, the matcher's anchor fallback locates the
   // snippet whether it came from the abstract or the body. With no PDF, fall
   // back to the abstract on the details page.
   const highlightSurface = activeLitHighlight
@@ -162,14 +162,14 @@ function LiteratureDetailViewInner({
   const [activeTab, setActiveTab] = useState<string>(initialTab);
 
   // Auto-scroll the PDF into view when the PDF tab is shown for a repository
-  // paper — same affordance the staged "Read" view already has. Skipped when a
+  // paper, same affordance the staged "Read" view already has. Skipped when a
   // RAG highlight is driving its own scroll, so we don't fight it.
   const pdfSectionRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (activeTab !== "pdf" || !hasPdf) return;
     if (activeLitHighlight && highlightSurface === "pdf") return;
     // Single, stable scroll: aligning the section TOP isn't affected by the PDF
-    // growing below it, so one pass suffices — no double-scroll jump.
+    // growing below it, so one pass suffices, no double-scroll jump.
     const t = setTimeout(
       () => pdfSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
       350,
@@ -205,7 +205,7 @@ function LiteratureDetailViewInner({
     };
   }, [literature.id]);
   const formatDate = (date: string | null) => {
-    if (!date) return "—";
+    if (!date) return "-";
     return new Date(date).toLocaleDateString();
   };
 
@@ -375,7 +375,7 @@ ER  - `;
                     Authors
                   </p>
                   <p className="text-sm text-foreground">
-                    {literature.authors ? decodeHtmlEntities(literature.authors) : "—"}
+                    {literature.authors ? decodeHtmlEntities(literature.authors) : "-"}
                   </p>
                 </div>
                 <div>
@@ -383,7 +383,7 @@ ER  - `;
                     Journal
                   </p>
                   <p className="text-sm text-foreground">
-                    {literature.journal ? decodeHtmlEntities(literature.journal) : "—"}
+                    {literature.journal ? decodeHtmlEntities(literature.journal) : "-"}
                   </p>
                 </div>
                 <div>
@@ -391,7 +391,7 @@ ER  - `;
                     Year
                   </p>
                   <p className="text-sm text-foreground">
-                    {literature.publication_year || "—"}
+                    {literature.publication_year || "-"}
                   </p>
                 </div>
                 <div>
@@ -401,7 +401,7 @@ ER  - `;
                   <p className="text-sm text-foreground">
                     {literature.volume && literature.issue
                       ? `${literature.volume}(${literature.issue})`
-                      : literature.volume || literature.issue || "—"}
+                      : literature.volume || literature.issue || "-"}
                   </p>
                 </div>
                 <div>
@@ -409,7 +409,7 @@ ER  - `;
                     Pages
                   </p>
                   <p className="text-sm text-foreground">
-                    {literature.pages || "—"}
+                    {literature.pages || "-"}
                   </p>
                 </div>
                 <div>
@@ -427,7 +427,7 @@ ER  - `;
                       <ExternalLink className="h-3 w-3" />
                     </a>
                   ) : (
-                    <p className="text-sm text-foreground">—</p>
+                    <p className="text-sm text-foreground">-</p>
                   )}
                 </div>
               </div>

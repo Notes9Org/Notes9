@@ -5,7 +5,7 @@
  * when they first cross 50% or 90%, push a calm notice bubble into the chat via
  * the existing `notifyCatalyst` mechanism. Fires at most once per threshold per
  * calendar month (deduped in localStorage), and only the highest newly-crossed
- * tier — so a fast crosser sees one message, not two.
+ * tier, so a fast crosser sees one message, not two.
  *
  * Data source: GET /api/usage/summary (ai_budget.used_credits / limit_credits).
  * Copy: getMessage('ai_budget_monthly', 'approaching' | 'near').
@@ -51,7 +51,7 @@ function markNotified(monthKey: string, tier: Tier): void {
 }
 
 /**
- * Check credit usage and return a threshold notice if a new tier was crossed —
+ * Check credit usage and return a threshold notice if a new tier was crossed
  * the caller renders it as a dismissible card above the composer (not a chat
  * bubble). Safe to call on every turn completion: self-throttles via
  * localStorage (once per tier per month) and never throws.
@@ -83,7 +83,7 @@ export async function maybeNotifyCreditThreshold(): Promise<CreditNotice | null>
 
     return { message: getMessage("ai_budget_monthly", crossed.severity), severity: crossed.severity }
   } catch {
-    /* metering is advisory — never disrupt the chat */
+    /* metering is advisory, never disrupt the chat */
     return null
   }
 }

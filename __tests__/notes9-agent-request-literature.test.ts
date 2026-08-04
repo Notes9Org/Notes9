@@ -4,7 +4,7 @@
  * Locks in the fix for the proxy silently dropping literature grounding:
  * buildNotes9AgentRequestBody must forward literature_sources, and the
  * sanitizer must clamp entries to the backend pydantic caps
- * (AI/catalyst/agents/contracts/request.py LiteratureSource) — pydantic
+ * (AI/catalyst/agents/contracts/request.py LiteratureSource), pydantic
  * REJECTS the whole request on any over-limit field, so the client
  * truncates instead.
  */

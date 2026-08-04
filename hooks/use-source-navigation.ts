@@ -36,7 +36,7 @@ function workspaceRoute(sourceType: string, sourceId: string): string {
 // same source) is still value-distinct through both delivery paths (the
 // dispatched CustomEvent detail and the `?highlight=` URL param). Content-keyed
 // dedup gates downstream (e.g. the PDF panel's fired-ref) never reset without
-// this. Monotonic counter, not Date.now()/Math.random() — deterministic and
+// this. Monotonic counter, not Date.now()/Math.random(), deterministic and
 // SSR/hydration-safe.
 let hlSeq = 0
 const nextNonce = () => ++hlSeq
@@ -51,7 +51,7 @@ export interface SourceNavDescriptor {
 }
 
 /**
- * The single place workspace-source / citation navigation lives — shared by the
+ * The single place workspace-source / citation navigation lives, shared by the
  * inline citation chips, the source-viewer "Open document", and the Sources
  * panel. Web URLs open a tab; a same-page doc viewer just scrolls to the excerpt
  * (no reload); otherwise we SPA-navigate, letting the Catalyst full page dock the
@@ -82,7 +82,7 @@ export function useSourceNavigation(): (desc: SourceNavDescriptor) => void {
         // One nonce per click, attached before both delivery paths below.
         nonce: nextNonce(),
       }
-      // Same-page doc viewers handle this (scroll to the excerpt, no reload) —
+      // Same-page doc viewers handle this (scroll to the excerpt, no reload)
       // also how a second citation into the SAME open document just scrolls.
       if (spanText && dispatchDocumentHighlight(target)) return
 

@@ -32,7 +32,7 @@ export class CatalystErrorBoundary extends Component<Props, State> {
   override componentDidCatch(error: Error, info: ErrorInfo): void {
     // Full detail to the LOCAL console only (not exfiltrated).
     console.error('[CatalystErrorBoundary] AI render crash:', error, info);
-    // RUM goes to an external service — send only the error CLASS and the
+    // RUM goes to an external service, send only the error CLASS and the
     // innermost component name. Never the message or full stack, which can
     // carry user-authored lab-note/chat content or internal record ids.
     const component =
@@ -63,7 +63,7 @@ export class CatalystErrorBoundary extends Component<Props, State> {
               Something went wrong with the assistant
             </p>
             <p className="text-xs text-muted-foreground">
-              A rendering error occurred. Your conversation history is safe — click Retry to reload
+              A rendering error occurred. Your conversation history is safe, click Retry to reload
               the assistant.
             </p>
           </div>

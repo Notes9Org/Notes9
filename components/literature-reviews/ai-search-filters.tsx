@@ -36,7 +36,7 @@ function toYear(v: string): number | null {
 
 /**
  * A free-typing year field. Holds its own raw text so partial input (e.g. "2",
- * "20", "202" on the way to "2024") is never wiped — only complete, in-range
+ * "20", "202" on the way to "2024") is never wiped, only complete, in-range
  * years are committed to the filter. Normalizes on blur.
  */
 function YearField({
@@ -91,7 +91,7 @@ export function AiSearchFilters({
   triggerClassName?: string
   /** Journal/Source options derived from the current result set. */
   journals?: string[]
-  /** Min/max year present in the results — grounds the year-range placeholders. */
+  /** Min/max year present in the results, grounds the year-range placeholders. */
   yearHint?: { min: number; max: number } | null
 }) {
   const active = countActiveFilters(value)
@@ -160,7 +160,7 @@ export function AiSearchFilters({
             </Select>
           </div>
 
-          {/* Citations — typeable count + quick presets */}
+          {/* Citations, typeable count + quick presets */}
           <div className="grid grid-cols-[5rem_1fr] items-start gap-3">
             <Label className="pt-1.5 text-xs text-muted-foreground">Citations</Label>
             <div className="space-y-1.5">
@@ -228,7 +228,7 @@ export function AiSearchFilters({
 
           <Separator />
 
-          {/* Type of work — pill toggles */}
+          {/* Type of work, pill toggles */}
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">Type of work</Label>
             <div className="flex flex-wrap gap-1.5">
@@ -257,7 +257,7 @@ export function AiSearchFilters({
           {journals.length > 0 && (
             <>
               <Separator />
-              {/* Journal / Source — options derived from the current results */}
+              {/* Journal / Source, options derived from the current results */}
               <div className="space-y-2">
                 <Label className="text-xs text-muted-foreground">Journal / source</Label>
                 <div className="flex flex-wrap gap-1.5">

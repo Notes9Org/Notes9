@@ -57,7 +57,7 @@ export type DataFileRow = {
   created_at: string
   experiment_id: string
   project_id: string | null
-  /** Storage path inside the `user` bucket (or a legacy full URL) — needed to preview in place. */
+  /** Storage path inside the `user` bucket (or a legacy full URL), needed to preview in place. */
   file_url: string
   tabular_format?: string | null
   experiment_name: string | null
@@ -86,7 +86,7 @@ function getFileIcon(fileName: string, fileType: string | null) {
 }
 
 function formatFileSize(bytes: number | null): string {
-  if (!bytes) return "—"
+  if (!bytes) return "-"
   const k = 1024
   const sizes = ["Bytes", "KB", "MB"]
   const i = Math.floor(Math.log(bytes) / Math.log(k))
@@ -111,7 +111,7 @@ export function DataFilesListClient({
 
   // In-place file viewers (mirror the experiment Data tab): spreadsheets open in
   // the Univer viewer, images/PDF/text in the preview dialog, anything else in a
-  // new tab via a signed URL — no navigation away from the Data files browser.
+  // new tab via a signed URL, no navigation away from the Data files browser.
   const [tabularOpen, setTabularOpen] = useState(false)
   const [tabularFile, setTabularFile] = useState<DataFileRow | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
@@ -119,7 +119,7 @@ export function DataFilesListClient({
 
   // Read-only URL sync (same pattern as lab-notes): the sidebar context
   // arrives as ?project=/?experiment= and prefills the filters; changing a
-  // filter here is a LOCAL viewing choice — it deliberately does not write
+  // filter here is a LOCAL viewing choice, it deliberately does not write
   // back to the URL, so browsing another project's files never flips the
   // global sidebar context.
   useEffect(() => {
@@ -164,7 +164,7 @@ export function DataFilesListClient({
     })
   }, [files, projectFilter, experimentFilter])
 
-  // ——— Upload scoping (context-prefilled, editable, both REQUIRED) ————
+  // --- Upload scoping (context-prefilled, editable, both REQUIRED) ---
   // experiment_data.experiment_id is NOT NULL, so unlike docs the target
   // experiment is mandatory. Prefill order: active filter → sidebar context.
   const [uploadProjectId, setUploadProjectId] = useState<string | null>(null)
@@ -247,7 +247,7 @@ export function DataFilesListClient({
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">
-          Data files always live inside an experiment — both selections are required.
+          Data files always live inside an experiment, both selections are required.
         </p>
       </div>
     </div>
@@ -391,17 +391,17 @@ export function DataFilesListClient({
                         {file.data_type}
                       </Badge>
                     ) : (
-                      "—"
+                      "-"
                     )}
                   </TableCell>
                   <TableCell className="max-w-[180px]">
                     <span className="truncate block" title={file.experiment_name ?? undefined}>
-                      {file.experiment_name ?? "—"}
+                      {file.experiment_name ?? "-"}
                     </span>
                   </TableCell>
                   <TableCell className="hidden lg:table-cell max-w-[160px]">
                     <span className="truncate block" title={file.project_name ?? undefined}>
-                      {file.project_name ?? "—"}
+                      {file.project_name ?? "-"}
                     </span>
                   </TableCell>
                   <TableCell className="hidden md:table-cell whitespace-nowrap">

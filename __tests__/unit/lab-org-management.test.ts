@@ -15,7 +15,7 @@ import {
 } from "@/lib/org/invitation"
 
 // ---------------------------------------------------------------------------
-// 13.1 — Org name validation edge cases (Req 2.9)
+// 13.1, Org name validation edge cases (Req 2.9)
 // ---------------------------------------------------------------------------
 
 /**
@@ -28,7 +28,7 @@ const orgNameSchema = z
   .min(2, "Organization name must be at least 2 characters")
   .max(100, "Organization name must be at most 100 characters")
 
-describe("13.1 — Org name validation edge cases (Req 2.9)", () => {
+describe("13.1, Org name validation edge cases (Req 2.9)", () => {
   it("rejects an empty string", () => {
     const result = orgNameSchema.safeParse("")
     expect(result.success).toBe(false)
@@ -69,10 +69,10 @@ describe("13.1 — Org name validation edge cases (Req 2.9)", () => {
 })
 
 // ---------------------------------------------------------------------------
-// 13.2 — Invitation token generation and URL building (Req 4.7, 8.5)
+// 13.2, Invitation token generation and URL building (Req 4.7, 8.5)
 // ---------------------------------------------------------------------------
 
-describe("13.2 — Invitation token generation and URL building (Req 4.7, 8.5)", () => {
+describe("13.2, Invitation token generation and URL building (Req 4.7, 8.5)", () => {
   it("generates a token that is exactly 64 hex characters", () => {
     const token = generateInvitationToken()
     expect(token).toHaveLength(64)
@@ -120,10 +120,10 @@ describe("13.2 — Invitation token generation and URL building (Req 4.7, 8.5)",
 })
 
 // ---------------------------------------------------------------------------
-// 13.3 — Permission utility functions (Req 3.3, 6.8)
+// 13.3, Permission utility functions (Req 3.3, 6.8)
 // ---------------------------------------------------------------------------
 
-describe("13.3 — Permission utility functions (Req 3.3, 6.8)", () => {
+describe("13.3, Permission utility functions (Req 3.3, 6.8)", () => {
   describe("hasPermission", () => {
     it("returns true when the permission key is present", () => {
       const perms: PermissionKey[] = ["projects.view", "experiments.create"]
@@ -200,7 +200,7 @@ describe("13.3 — Permission utility functions (Req 3.3, 6.8)", () => {
 
 
 // ---------------------------------------------------------------------------
-// 13.4 — API route error conditions (Req 2.8, 3.7, 3.8, 4.6, 5.3, 5.7)
+// 13.4, API route error conditions (Req 2.8, 3.7, 3.8, 4.6, 5.3, 5.7)
 // ---------------------------------------------------------------------------
 
 /**
@@ -253,8 +253,8 @@ function readSource(relativePath: string): string {
   )
 }
 
-describe("13.4 — API route error conditions (Req 2.8, 3.7, 3.8, 4.6, 5.3, 5.7)", () => {
-  describe("Org creation — invalid request bodies (Req 2.8)", () => {
+describe("13.4, API route error conditions (Req 2.8, 3.7, 3.8, 4.6, 5.3, 5.7)", () => {
+  describe("Org creation, invalid request bodies (Req 2.8)", () => {
     it("rejects missing name field", () => {
       const result = createOrgSchema.safeParse({})
       expect(result.success).toBe(false)
@@ -292,7 +292,7 @@ describe("13.4 — API route error conditions (Req 2.8, 3.7, 3.8, 4.6, 5.3, 5.7)
     })
   })
 
-  describe("Duplicate role names — 409 (Req 3.8)", () => {
+  describe("Duplicate role names, 409 (Req 3.8)", () => {
     const rolesSource = readSource("app/api/org/roles/route.ts")
 
     it("route checks for existing role with same name", () => {
@@ -306,7 +306,7 @@ describe("13.4 — API route error conditions (Req 2.8, 3.7, 3.8, 4.6, 5.3, 5.7)
     })
   })
 
-  describe("System role deletion — 403 (Req 3.7)", () => {
+  describe("System role deletion, 403 (Req 3.7)", () => {
     const rolesSource = readSource("app/api/org/roles/route.ts")
 
     it("rejects deletion of system role", () => {
@@ -324,7 +324,7 @@ describe("13.4 — API route error conditions (Req 2.8, 3.7, 3.8, 4.6, 5.3, 5.7)
     })
   })
 
-  describe("Duplicate invitations — 409 (Req 4.6)", () => {
+  describe("Duplicate invitations, 409 (Req 4.6)", () => {
     const inviteSource = readSource("app/api/org/invite/route.ts")
 
     it("checks for existing pending invitations", () => {
@@ -339,7 +339,7 @@ describe("13.4 — API route error conditions (Req 2.8, 3.7, 3.8, 4.6, 5.3, 5.7)
     })
   })
 
-  describe("Invalid tokens — 400 (Req 5.3)", () => {
+  describe("Invalid tokens, 400 (Req 5.3)", () => {
     it("accept schema rejects empty token", () => {
       const result = acceptSchema.safeParse({ token: "" })
       expect(result.success).toBe(false)
@@ -358,7 +358,7 @@ describe("13.4 — API route error conditions (Req 2.8, 3.7, 3.8, 4.6, 5.3, 5.7)
     })
   })
 
-  describe("Existing org conflict — 409 (Req 5.7)", () => {
+  describe("Existing org conflict, 409 (Req 5.7)", () => {
     const acceptSource = readSource("app/api/org/invite/accept/route.ts")
 
     it("returns 409 when user already belongs to another org", () => {
@@ -398,7 +398,7 @@ describe("13.4 — API route error conditions (Req 2.8, 3.7, 3.8, 4.6, 5.3, 5.7)
 
 
 // ---------------------------------------------------------------------------
-// 13.5 — Edge Function email template (Req 4.4, 8.2, 8.4)
+// 13.5, Edge Function email template (Req 4.4, 8.2, 8.4)
 // ---------------------------------------------------------------------------
 
 /**
@@ -459,7 +459,7 @@ function buildInvitationEmailHtml(params: {
 </html>`
 }
 
-describe("13.5 — Edge Function email template (Req 4.4, 8.2, 8.4)", () => {
+describe("13.5, Edge Function email template (Req 4.4, 8.2, 8.4)", () => {
   describe("buildInvitationEmailHtml output", () => {
     const html = buildInvitationEmailHtml({
       orgName: "Genomics Lab",
@@ -535,10 +535,10 @@ describe("13.5 — Edge Function email template (Req 4.4, 8.2, 8.4)", () => {
 
 
 // ---------------------------------------------------------------------------
-// 13.6 — Auth flow token preservation (Req 5.4, 5.5)
+// 13.6, Auth flow token preservation (Req 5.4, 5.5)
 // ---------------------------------------------------------------------------
 
-describe("13.6 — Auth flow token preservation (Req 5.4, 5.5)", () => {
+describe("13.6, Auth flow token preservation (Req 5.4, 5.5)", () => {
   describe("Sign-up page preserves ?token= param (Req 5.4)", () => {
     const signUpSource = readSource("app/auth/sign-up/page.tsx")
 

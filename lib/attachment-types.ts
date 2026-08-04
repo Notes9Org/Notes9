@@ -6,7 +6,7 @@
 // MUST stay in lockstep with the Python agent contract:
 //   AI/catalyst/agents/contracts/request.py  SUPPORTED_FILE_MIME_TYPES.
 // A type accepted here but not there is uploaded then silently rejected by the
-// agent — the exact class of "attachment sometimes not handled" bug this fixes.
+// agent, the exact class of "attachment sometimes not handled" bug this fixes.
 
 export const ATTACHMENT_MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 export const MAX_FILE_ATTACHMENTS_PER_REQUEST = 5;
@@ -16,7 +16,7 @@ export const MAX_FILE_ATTACHMENTS_PER_REQUEST = 5;
  *
  * `image/svg+xml` is deliberately excluded: files are served from a private
  * bucket via signed URLs (still same-origin), and a user-supplied SVG can
- * embed <script>/event-handler payloads — a stored-XSS vector. Every upload
+ * embed <script>/event-handler payloads, a stored-XSS vector. Every upload
  * surface (chat, experiments) must agree on this deny.
  */
 export const ALLOWED_MIME_TYPES = [
@@ -38,7 +38,7 @@ export type AllowedMimeType = (typeof ALLOWED_MIME_TYPES)[number];
 /**
  * Extension → canonical MIME. Used to (a) build the file-picker `accept`
  * attribute and (b) recover the MIME when the browser reports a blank or
- * generic `file.type` for .docx/.xlsx — common on some OS/browser combos and
+ * generic `file.type` for .docx/.xlsx, common on some OS/browser combos and
  * for files coming from zips or cloud drives.
  */
 export const EXTENSION_TO_MIME: Record<string, AllowedMimeType> = {
@@ -81,7 +81,7 @@ export const TEXT_SNIFF_MIME_TYPES: readonly AllowedMimeType[] = [
 const ACCEPT_EXTENSIONS = Object.keys(EXTENSION_TO_MIME);
 
 /**
- * Value for an `<input accept>` / dropzone `accept` — MIME types AND extensions
+ * Value for an `<input accept>` / dropzone `accept`, MIME types AND extensions
  * so the OS file picker never greys out files the browser can't MIME-detect.
  */
 export const ATTACHMENT_ACCEPT_LIST: string[] = [...ALLOWED_MIME_TYPES, ...ACCEPT_EXTENSIONS];

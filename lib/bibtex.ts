@@ -179,7 +179,7 @@ export function generateKey(authors: string[], year: string | number): string {
 }
 
 // ---------------------------------------------------------------------------
-// Generator — citation metadata to BibTeX string
+// Generator, citation metadata to BibTeX string
 // ---------------------------------------------------------------------------
 
 export interface CitationForBib {

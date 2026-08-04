@@ -40,7 +40,7 @@ export function ProjectPicker({ currentProject, projects }: Props) {
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          aria-label={`Switch project — currently ${currentProject.name}`}
+          aria-label={`Switch project, currently ${currentProject.name}`}
           className="group/picker inline-flex max-w-full items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-sm transition-colors hover:bg-muted/60 data-[state=open]:bg-muted"
         >
           <span className="font-medium text-muted-foreground">Project</span>

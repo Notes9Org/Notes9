@@ -37,7 +37,7 @@ const VIEWPORT = { width: 1920, height: 1080, deviceScaleFactor: DEVICE_SCALE_FA
 
 /**
  * Optional comma-separated filter, matched as a substring against the output
- * filename — e.g. CAPTURE_ONLY=data-analysis,research-map.
+ * filename, e.g. CAPTURE_ONLY=data-analysis,research-map.
  *
  * Without this the script re-captures every route, which both takes minutes and
  * overwrites screenshots whose underlying demo data may have moved on. Being
@@ -182,7 +182,7 @@ async function capture(
 /**
  * Catalyst's default route is an empty composer with a greeting, which shows
  * nothing of what the assistant does. Open the most recent conversation first so
- * the capture contains a real exchange — reasoning, answer and citations.
+ * the capture contains a real exchange, reasoning, answer and citations.
  */
 async function captureCatalystConversation(page: Page): Promise<void> {
   await page.goto(`${BASE_URL}/catalyst`, { waitUntil: "networkidle2", timeout: 30000 })
@@ -293,8 +293,8 @@ async function captureLiteratureSearchResults(page: Page): Promise<void> {
   // AI literature search returns papers, then streams a cited AI overview.
   // Wait for results to arrive, then poll until the overview stops summarizing.
   await new Promise((r) => setTimeout(r, 6000))
-  // Wait for papers to arrive first (fast), then — when CAPTURE_WAIT_AI_OVERVIEW
-  // is set — keep waiting for the cited AI overview to finish streaming (it can
+  // Wait for papers to arrive first (fast), then, when CAPTURE_WAIT_AI_OVERVIEW
+  // is set, keep waiting for the cited AI overview to finish streaming (it can
   // take ~4 min). Default runs don't block on it.
   await page
     .waitForFunction(() => /\bcitations?\b/.test((document.body.innerText || "").toLowerCase()), {

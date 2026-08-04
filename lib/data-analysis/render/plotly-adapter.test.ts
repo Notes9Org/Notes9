@@ -88,7 +88,7 @@ describe("exclusions are drawn, not removed (§8.1)", () => {
   it("keeps an excluded point on the figure", () => {
     const figure = buildFigure(spec(), result())
     const control = figure.data.find((t) => t.type === "scatter" && t.name === "Control")
-    // Three Control rows, one excluded — all three are drawn.
+    // Three Control rows, one excluded, all three are drawn.
     expect((control!.y as number[]).length).toBe(3)
   })
 
@@ -126,7 +126,7 @@ describe("the error-bar choice is stated on the figure (§2)", () => {
     )
     const title = (figure.layout.title as { text: string }).text
     expect(title).toContain("mean ± SD")
-    // Wrapped in the small, dimmed span — not sitting bare at title weight.
+    // Wrapped in the small, dimmed span, not sitting bare at title weight.
     expect(title).toMatch(/^<span style="font-size:\d+px;opacity:0\.65">/)
   })
 })
@@ -271,7 +271,7 @@ describe("group names reach the x axis", () => {
   })
 
   // Bar charts jitter their own overlay, and a category axis reads each numeric
-  // offset as a brand-new category — 24 points became 24 ticks. So they sit on
+  // offset as a brand-new category, 24 points became 24 ticks. So they sit on
   // a numbered axis and get the group names back as tick labels.
   it.each(["bar-scatter-error", "grouped-bar"] as const)(
     "labels a numbered axis for %s",
@@ -397,7 +397,7 @@ describe("on-screen figures fill their container; exports keep the spec size", (
 
 describe("bar labels live on the axis, not on the bars", () => {
   // Regression: the group name was passed as the bar trace's `text`, which
-  // Plotly paints onto each bar — so every name appeared twice, once as a tick
+  // Plotly paints onto each bar, so every name appeared twice, once as a tick
   // label and once stamped across the middle of the chart.
   it("does not stamp text onto the bars", () => {
     const figure = buildFigure(spec(), result())
@@ -777,7 +777,7 @@ describe("pie composition", () => {
 
 describe("every chart kind the spec names can be drawn", () => {
   // A kind the adapter cannot build is a kind that can be chosen, saved and
-  // reopened as an empty figure — worse than not offering it.
+  // reopened as an empty figure, worse than not offering it.
   const xy = result({
     plotData: Array.from({ length: 8 }, (_, i) => ({
       rowId: `r${i}`,

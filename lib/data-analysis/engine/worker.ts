@@ -4,19 +4,19 @@
  * The compute engine's host process (L4).
  *
  * Pyodide is CPython compiled to WebAssembly, so this worker runs the SAME
- * scipy/statsmodels code the validation corpus is asserted against — the
+ * scipy/statsmodels code the validation corpus is asserted against, the
  * document's L4 stack, without a server to pay for. Three properties of L4 come
  * free from running it here:
  *
- *   sandboxed        — a worker has no DOM and no access to the page;
- *   network-isolated — after the runtime and wheels have loaded, the engine
+ *   sandboxed        - a worker has no DOM and no access to the page;
+ *   network-isolated, after the runtime and wheels have loaded, the engine
  *                      makes no further requests; nothing in the Python calls out;
- *   resource-capped  — the browser caps the worker's memory, and a runaway fit
+ *   resource-capped  - the browser caps the worker's memory, and a runaway fit
  *                      cannot lock the UI thread because it is not on it.
  *
  * Loading is deliberately lazy: nobody pays the runtime download until they
  * actually run an analysis, and the browser caches it for every session after.
- * Where it loads FROM is a deployment decision — see `resolvePyodideBaseUrl`.
+ * Where it loads FROM is a deployment decision, see `resolvePyodideBaseUrl`.
  */
 
 import {
@@ -69,8 +69,8 @@ function bootPyodide(id: string): Promise<PyodideApi> {
 
   pyodidePromise = (async () => {
     post({ id, type: "progress", stage: "runtime", detail: "Starting the statistics engine" })
-    // Every failure in here — a blocked CDN, an incomplete self-hosted mirror, a
-    // base URL pointing at the wrong version — surfaces to an operator as one
+    // Every failure in here, a blocked CDN, an incomplete self-hosted mirror, a
+    // base URL pointing at the wrong version, surfaces to an operator as one
     // error string. Naming the origin is the difference between a diagnosis and
     // a guess, so it is attached once, around all three fetching steps.
     let pyodide: PyodideApi
@@ -84,7 +84,7 @@ function bootPyodide(id: string): Promise<PyodideApi> {
       await pyodide.loadPackage([...ENGINE_PACKAGES.prebuilt])
     } catch (err) {
       throw new Error(
-        `Could not load the statistics engine from ${PYODIDE_BASE_URL} — ` +
+        `Could not load the statistics engine from ${PYODIDE_BASE_URL}, ` +
           `${err instanceof Error ? err.message : String(err)}`
       )
     }
@@ -111,7 +111,7 @@ function bootPyodide(id: string): Promise<PyodideApi> {
 
     post({ id, type: "progress", stage: "engine", detail: "Loading notes9-stats" })
     // Absolute, against the page origin. A bundled module worker's base URL is
-    // a blob:, and a root-relative path has nothing to resolve against there —
+    // a blob:, and a root-relative path has nothing to resolve against there
     // `fetch("/…")` fails to parse the URL outright rather than hitting the
     // server.
     const sourceUrl = new URL(ENGINE_SOURCE_URL, self.location.origin).toString()

@@ -188,7 +188,7 @@ describe('checkRegisterItems', () => {
 });
 
 // ---------------------------------------------------------------------------
-// enforceLimits — mode behaviour
+// enforceLimits, mode behaviour
 // ---------------------------------------------------------------------------
 
 describe('enforceLimits', () => {

@@ -56,7 +56,7 @@ const POSTHOC: { id: CorrectionMethod; label: string }[] = [
   { id: "none", label: "Uncorrected" },
 ]
 
-const num = (v: number, d = 3) => (isFinite(v) ? v.toFixed(d) : "—")
+const num = (v: number, d = 3) => (isFinite(v) ? v.toFixed(d) : "-")
 
 export function useStatsPanel(table: Table, numericCols: string[]): { canvas: ReactNode; settings: ReactNode } {
   const colVals = useMemo(() => {
@@ -266,7 +266,7 @@ export function useStatsPanel(table: Table, numericCols: string[]): { canvas: Re
         </Labeled>
       )}
       <p className="border-t border-border pt-3 text-[11px] text-muted-foreground">
-        Parametric tests assume roughly normal data — check Shapiro–Wilk; if it flags, use the matching non-parametric test.
+        Parametric tests assume roughly normal data, check Shapiro–Wilk; if it flags, use the matching non-parametric test.
       </p>
     </div>
   )
@@ -366,7 +366,7 @@ function ColSelect({ cols, value, onChange }: { cols: string[]; value: string; o
     </NativeSelect>
   )
 }
-/** A native <select> styled to look modern, with a Phosphor chevron — no shadcn. */
+/** A native <select> styled to look modern, with a Phosphor chevron, no shadcn. */
 function NativeSelect({ value, onChange, children }: { value: string; onChange: (v: string) => void; children: ReactNode }) {
   return (
     <div className="relative">

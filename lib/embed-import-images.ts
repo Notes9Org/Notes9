@@ -1,7 +1,7 @@
 /**
  * Replace externally-linked images in imported HTML with inline data URIs, so
  * imported documents are self-contained (the image is *copied* into the note,
- * not just referenced — it won't break if the source URL later dies).
+ * not just referenced, it won't break if the source URL later dies).
  *
  * Images that are already inline (data:/blob:) are left untouched. Fetches go
  * through `/api/import/embed-image` (server-side, to bypass CORS); any image

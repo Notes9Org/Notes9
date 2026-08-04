@@ -53,7 +53,7 @@ const ALLOWED_MIME_TYPES = [
   'text/csv',
   'text/markdown',
   'text/x-markdown',
-  // Images (SVG omitted — embedded <script> in user-supplied SVG is a stored-XSS vector)
+  // Images (SVG omitted, embedded <script> in user-supplied SVG is a stored-XSS vector)
   'image/jpeg',
   'image/png',
   'image/gif',
@@ -88,7 +88,7 @@ interface UploadFileDialogProps {
   /**
    * Target experiment. Nullable so callers outside an experiment page (the
    * Data & Files list) can inject their own project/experiment pickers via
-   * `contextPicker` — upload stays disabled until an experiment is chosen.
+   * `contextPicker`, upload stays disabled until an experiment is chosen.
    */
   experimentId: string | null
   onUploadComplete: () => void
@@ -132,7 +132,7 @@ export function UploadFileDialog({ experimentId, onUploadComplete, contextPicker
     
     // Check MIME type OR file extension (extension covers scientific formats
     // like FASTA whose declared MIME varies by OS/browser). No `image/*` or
-    // `text/*` wildcard escape hatch — that let arbitrary undeclared types
+    // `text/*` wildcard escape hatch, that let arbitrary undeclared types
     // (e.g. image/svg+xml) through the allowlist below.
     const hasAllowedMimeType = ALLOWED_MIME_TYPES.includes(file.type)
 
@@ -241,7 +241,7 @@ export function UploadFileDialog({ experimentId, onUploadComplete, contextPicker
             idx === i ? { ...f, progress: 60 } : f
           ))
 
-          // Bucket is private — keep the canonical path in `file_url` so we can
+          // Bucket is private, keep the canonical path in `file_url` so we can
           // sign a fresh URL at read time (see data-files-tab and storage-signed-url).
           const fileUrlValue = storagePath
 
@@ -283,7 +283,7 @@ export function UploadFileDialog({ experimentId, onUploadComplete, contextPicker
           if (dbError) {
             // The object landed in storage but has no experiment_data row, so
             // it can never be found/reaped (org-scoped paths have no TTL/cron
-            // reaper). Delete it so it doesn't leak. Best-effort — a removal
+            // reaper). Delete it so it doesn't leak. Best-effort, a removal
             // failure shouldn't mask the original insert error.
             try {
               await supabase.storage.from(USER_STORAGE_BUCKET).remove([storagePath])

@@ -2,11 +2,11 @@
  * A refined "send to Catalyst" flourish: a small document card lifts off the
  * clicked control, glides along a smooth eased arc toward the Catalyst chat
  * composer with a soft accent glow, and settles in with a gentle ring pulse.
- * Purely cosmetic — it never blocks the Catalyst launch and is a no-op under
+ * Purely cosmetic, it never blocks the Catalyst launch and is a no-op under
  * reduced-motion or SSR.
  */
 
-/** The Catalyst composer ("chat bar") — the flourish's landing target. */
+/** The Catalyst composer ("chat bar"), the flourish's landing target. */
 const COMPOSER_SELECTOR = '#tour-ai-chat'
 
 export interface FlyToCatalystOptions {
@@ -19,7 +19,7 @@ export function flyToCatalyst(origin?: HTMLElement | null, opts: FlyToCatalystOp
   if (typeof document === 'undefined' || typeof window === 'undefined') return
   const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
   if (reduced || typeof document.body.animate !== 'function') {
-    // Still deliver the attachment, just without the flourish — but give the
+    // Still deliver the attachment, just without the flourish, but give the
     // panel a beat to mount and register its attach listener first.
     if (opts.onLand) window.setTimeout(opts.onLand, 350)
     return
@@ -67,7 +67,7 @@ function resolveComposerRect(done: (rect: DOMRect | null) => void) {
   requestAnimationFrame(tick)
 }
 
-/** easeInOutCubic — smooth acceleration then deceleration along the path. */
+/** easeInOutCubic, smooth acceleration then deceleration along the path. */
 function easeInOut(p: number): number {
   return p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2
 }

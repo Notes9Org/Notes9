@@ -34,7 +34,7 @@ const ROLES: { id: WellRole; label: string }[] = [
   { id: "empty", label: "Clear" },
 ]
 
-const num = (v: number, d = 3) => (isFinite(v) ? v.toFixed(d) : "—")
+const num = (v: number, d = 3) => (isFinite(v) ? v.toFixed(d) : "-")
 
 function heatColor(t: number): string {
   const stops = [[68, 1, 84], [59, 82, 139], [33, 144, 141], [93, 200, 99], [253, 231, 37]]
@@ -158,7 +158,7 @@ export function usePlate(model: PlateModel): { canvas: ReactNode; settings: Reac
           <Switch checked={showHeat} onCheckedChange={setShowHeat} className="data-[state=checked]:bg-[var(--n9-accent,#965034)]" />
         </label>
       </div>
-      <p className="mb-3 text-[11px] text-muted-foreground">Live mirror of the sheet — each cell maps to a well. Assign a standard-curve template (right); the Standard curve tab quantifies from this layout.</p>
+      <p className="mb-3 text-[11px] text-muted-foreground">Live mirror of the sheet, each cell maps to a well. Assign a standard-curve template (right); the Standard curve tab quantifies from this layout.</p>
 
       {filledCount === 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-muted/20 p-8 text-center text-sm text-muted-foreground">
@@ -208,7 +208,7 @@ export function usePlate(model: PlateModel): { canvas: ReactNode; settings: Reac
           <div className="grid max-h-44 grid-cols-2 gap-x-6 gap-y-0.5 overflow-y-auto font-mono text-xs tabular-nums sm:grid-cols-3 lg:grid-cols-4">
             {samples.slice(0, 96).map((s) => {
               const c = fit.interpolate(s.value)
-              return (<div key={s.id} className="flex items-center justify-between"><span className="text-muted-foreground">{s.id}</span><span className={isFinite(c) ? "" : "text-muted-foreground"}>{isFinite(c) ? num(c, 2) : "—"}</span></div>)
+              return (<div key={s.id} className="flex items-center justify-between"><span className="text-muted-foreground">{s.id}</span><span className={isFinite(c) ? "" : "text-muted-foreground"}>{isFinite(c) ? num(c, 2) : "-"}</span></div>)
             })}
           </div>
         </div>

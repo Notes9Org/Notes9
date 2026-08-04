@@ -5,7 +5,7 @@ import type { EngineResult } from "@/lib/data-analysis/engine/contract"
 import { MUTATION_CONTRACT, parseMutation } from "@/lib/data-analysis/spec/mutation-schema"
 
 /**
- * L7 — AI orchestration.
+ * L7, AI orchestration.
  *
  * The model authors and revises the ANALYSIS SPEC. It never computes, and it
  * never sees a number it could be tempted to repeat as fact. Concretely (§6.6):
@@ -20,7 +20,7 @@ import { MUTATION_CONTRACT, parseMutation } from "@/lib/data-analysis/spec/mutat
  *
  * The guardrails in `screenRequest` are the §8.1 half of the job. The document
  * is explicit that the assistant "will not action 'remove points until
- * significant' and will instead offer a documented sensitivity analysis" — so
+ * significant' and will instead offer a documented sensitivity analysis", so
  * that refusal lives in code, not in a system prompt that a determined user can
  * talk their way around.
  */
@@ -83,7 +83,7 @@ export const ALLOWED_MUTATION_KINDS = new Set<SpecMutation["kind"]>([
  * Excluding a data point requires a reason, an author and a timestamp (§8.1),
  * and the author must be a person. An assistant that can exclude rows is an
  * assistant that can be talked into excluding the inconvenient ones, so the
- * capability simply does not exist on this path — the user excludes points
+ * capability simply does not exist on this path, the user excludes points
  * through the figure, and the record says they did.
  */
 export const FORBIDDEN_MUTATION_KINDS = new Set<string>([
@@ -143,7 +143,7 @@ const P_HACKING_PATTERNS: { re: RegExp; reason: RequestScreen["reason"] }[] = [
  *
  * Doing this in code rather than in the prompt matters: a system-prompt rule is
  * a request, and this is a refusal. The alternative offered is always a real,
- * documented one — the point is not to obstruct the researcher but to route the
+ * documented one, the point is not to obstruct the researcher but to route the
  * legitimate version of what they want through the governed path.
  */
 export function screenRequest(prompt: string): RequestScreen {
@@ -178,7 +178,7 @@ export function screenRequest(prompt: string): RequestScreen {
 export interface ColumnProfile {
   name: string
   kind: "numeric" | "categorical" | "datetime" | "text"
-  /** Distinct level names for categoricals, capped — they drive test choice. */
+  /** Distinct level names for categoricals, capped, they drive test choice. */
   levels?: string[]
   missing: number
   /** Summary statistics only. Never raw values. */
@@ -212,7 +212,7 @@ export interface SpecAuthorContext {
   /** Recent edits, so the assistant knows what the user changed by hand. */
   recentEdits?: { description: string; origin: "user" | "ai" }[]
   /**
-   * The current result is passed for CONTEXT ONLY — so the assistant can say
+   * The current result is passed for CONTEXT ONLY, so the assistant can say
    * "the variance check failed, consider Welch". It must never quote a value
    * from here as its own; the report sentence the engine produced is the only
    * sanctioned wording.
@@ -231,7 +231,7 @@ export interface SpecAuthorContext {
 /**
  * Build the model's context. Note what is absent: raw rows. §11 decision 10
  * ("scope of what the model sees") directly affects the privacy claim we can
- * make, and profile-only is the strongest defensible position — we can say the
+ * make, and profile-only is the strongest defensible position, we can say the
  * model never sees the data.
  */
 export function buildContextBundle(ctx: SpecAuthorContext): Record<string, unknown> {
@@ -260,11 +260,11 @@ export function buildContextBundle(ctx: SpecAuthorContext): Record<string, unkno
       exclusionCount: ctx.spec.exclusions.length,
     },
     // Whole filter objects, not a count: `data.setFilters` replaces the array
-    // wholesale, so a filter the model wants to keep has to be re-emitted — it
+    // wholesale, so a filter the model wants to keep has to be re-emitted, it
     // can only do that if it was told the full, exact objects to begin with.
     filters: ctx.spec.filters,
     // The legal kinds and their exact payload shapes, walked from
-    // `SpecMutationSchema` (mutation-schema.ts) — see that file for why this is
+    // `SpecMutationSchema` (mutation-schema.ts), see that file for why this is
     // generated rather than prose.
     contract: MUTATION_CONTRACT,
     // Which tests this data shape can actually support, and why the rest can't
@@ -272,7 +272,7 @@ export function buildContextBundle(ctx: SpecAuthorContext): Record<string, unkno
     // model guessing at `analysis.setTest`'s domain from the bare enum alone.
     offerableTests: ctx.offerableTests ?? [],
     recentEdits: (ctx.recentEdits ?? []).slice(-10),
-    // Assumption verdicts only — no statistics.
+    // Assumption verdicts only, no statistics.
     assumptionFlags:
       ctx.result?.test?.assumptions
         .filter((a) => !a.passed)
@@ -337,7 +337,7 @@ export function validateProposal(raw: unknown): ValidatedPatch {
       continue
     }
     // A calculatedColumn transform parses and applies, but the resolver deliberately
-    // ignores it — formula evaluation belongs to the sheet, which already owns it, and a
+    // ignores it, formula evaluation belongs to the sheet, which already owns it, and a
     // second expression evaluator would be a second source of truth. Left through, it
     // would be proposed, executed and reported as applied while doing nothing: exactly
     // the silent-success the rest of this seam exists to remove. Refuse it here so it
@@ -345,7 +345,7 @@ export function validateProposal(raw: unknown): ValidatedPatch {
     if (result.mutation.kind === "data.addTransform" && result.mutation.transform.kind === "calculatedColumn") {
       rejected.push({
         mutation: candidate,
-        reason: "Calculated columns are the sheet's own formulas — add the column there and it becomes available here.",
+        reason: "Calculated columns are the sheet's own formulas, add the column there and it becomes available here.",
       })
       continue
     }
@@ -412,11 +412,11 @@ export const SPEC_AUTHOR_SYSTEM_PROMPT = `You configure statistical analyses for
 
 You do NOT compute anything. A separate, validated engine computes every number. Never state a p-value, test statistic, effect size, R², or EC50 in your reply: the researcher reads those from the results panel, and any figure you write would be an invention.
 
-You return a patch: a JSON object with exactly three fields — "rationale" (a short plain-language explanation), "mutations" (an array of mutation objects), and "clarificationNeeded" (a string if you need to ask something instead of acting, otherwise null).
+You return a patch: a JSON object with exactly three fields, "rationale" (a short plain-language explanation), "mutations" (an array of mutation objects), and "clarificationNeeded" (a string if you need to ask something instead of acting, otherwise null).
 
-Every mutation object must have a "kind" field naming one of the mutations listed under "contract" in the bundle, plus exactly the other fields that kind's entry names — nothing more, nothing invented. A mutation of a kind not listed there, or missing a required field, is rejected outright and never reaches the researcher's analysis.
+Every mutation object must have a "kind" field naming one of the mutations listed under "contract" in the bundle, plus exactly the other fields that kind's entry names, nothing more, nothing invented. A mutation of a kind not listed there, or missing a required field, is rejected outright and never reaches the researcher's analysis.
 
-"data.setFilters" REPLACES the entire filter list; it does not append. If the bundle's "filters" already has entries you want to keep, re-emit them in full alongside whatever you are adding or changing — anything you leave out is gone.
+"data.setFilters" REPLACES the entire filter list; it does not append. If the bundle's "filters" already has entries you want to keep, re-emit them in full alongside whatever you are adding or changing, anything you leave out is gone.
 
 How to choose a test:
 - Prefer the design RECORDED in the project over the shape of the numbers. If the record says the same subjects were measured twice, the comparison is paired even if the columns look independent.

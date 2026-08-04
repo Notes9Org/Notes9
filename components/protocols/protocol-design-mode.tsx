@@ -60,7 +60,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-// useHeaderAi removed — Protocol AI sidechat is no longer mounted in edit mode.
+// useHeaderAi removed, Protocol AI sidechat is no longer mounted in edit mode.
 import { ScientificCalculatorSheet } from "@/components/lab-notes/scientific-calculator"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { cn } from "@/lib/utils"
@@ -117,7 +117,7 @@ export function ProtocolDesignMode({
   const [savedContent, setSavedContent] = useState(protocol.content)
   const historyBaselineRef = useRef(protocol.content)
   const { recordDiff } = useContentDiffs("protocol", protocol.id)
-  // Immutable version history (document_versions) — written by the
+  // Immutable version history (document_versions), written by the
   // trg_write_document_version trigger on every committed content change.
   const {
     versions,
@@ -139,7 +139,7 @@ export function ProtocolDesignMode({
   const [siblingsPanelOpen, setSiblingsPanelOpen] = useState(true)
   const [scientificCalculatorOpen, setScientificCalculatorOpen] = useState(false)
   const protocolEditorRef = useRef<Editor | null>(null)
-  /** Literature column + editor column — Tiptap region fullscreen covers this whole strip. */
+  /** Literature column + editor column, Tiptap region fullscreen covers this whole strip. */
   const protocolDesignWorkspaceRef = useRef<HTMLDivElement>(null)
   /** Tiptap app-region fullscreen: collapse heavy chrome; keep literature + essentials. */
   const [tiptapRegionFullscreen, setTiptapRegionFullscreen] = useState(false)
@@ -202,7 +202,7 @@ export function ProtocolDesignMode({
 
   // Re-sync local state from the server ONLY when it genuinely has something
   // new: a different protocol (id change) or a strictly newer version. The old
-  // unconditional sync re-ran on every prop identity churn — after
+  // unconditional sync re-ran on every prop identity churn, after
   // "Accept & Save", onSaved() → router.refresh() could hand back a STALE
   // protocol.content and silently wipe the just-saved draft (freshly applied
   // templates "kept disappearing"). Never clobber a dirty draft.
@@ -262,7 +262,7 @@ export function ProtocolDesignMode({
 
   const hasPendingChanges = draftContent !== savedContent || templateMetaDirty
 
-  // The protocol draft lives ONLY in memory until Accept & Save — closing or
+  // The protocol draft lives ONLY in memory until Accept & Save, closing or
   // refreshing the tab with pending changes would silently discard them, so
   // ask the browser to confirm first.
   useEffect(() => {
@@ -282,7 +282,7 @@ export function ProtocolDesignMode({
 
   // AI-context lists, candidate protocols, literature-viewer metadata, and the
   // multi-tab viewer have all been retired with the Protocol AI panel removal.
-  // Edit mode is now a single editor tab — no side panels.
+  // Edit mode is now a single editor tab, no side panels.
   const contextViewerTabs: ContextViewerTab[] = []
   const activeContextTab: ContextViewerTab | null = null
 
@@ -293,7 +293,7 @@ export function ProtocolDesignMode({
 
       // commit_protocol sets app.force_version so the trigger writes an immutable
       // version even inside its 3-minute throttle window, then updates the
-      // protocol — one transaction, no double-write. The trigger owns versioning.
+      // protocol, one transaction, no double-write. The trigger owns versioning.
       const { error: upErr } = await supabase.rpc("commit_protocol", {
         p_id: protocol.id,
         p_content: newContent,
@@ -312,7 +312,7 @@ export function ProtocolDesignMode({
         toast({
           title: "Couldn't save protocol",
           description: /commit_protocol|function .* does not exist/i.test(msg)
-            ? `${msg} — run scripts/067_protocol_versions.sql.`
+            ? `${msg}, run scripts/067_protocol_versions.sql.`
             : msg,
           variant: "destructive",
         })
@@ -430,7 +430,7 @@ export function ProtocolDesignMode({
       setDraftDocumentTemplateId(choice.id)
       setDraftTemplateLabel(choice.name)
     }
-    // Hard-remount so the applied template is guaranteed to render — the
+    // Hard-remount so the applied template is guaranteed to render, the
     // editor keeps internal ProseMirror state and can suppress a plain
     // `content` prop swap (same pattern as version restore above).
     setEditorRemountNonce((n) => n + 1)
@@ -468,7 +468,7 @@ export function ProtocolDesignMode({
           <List className="h-4 w-4 pointer-events-none" />
         )}
       </Button>
-      {/* Hairline divider — separates the list toggle from the document
+      {/* Hairline divider, separates the list toggle from the document
           identity, Notion-style: [toggle] | Title */}
       <div aria-hidden className="h-4 w-px shrink-0 bg-border/70" />
       <div className="min-w-0 flex-1 pl-1.5 sm:pl-2">
@@ -559,14 +559,14 @@ export function ProtocolDesignMode({
     <>
     <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden">
       <div className="flex-1 min-w-0 min-h-0 flex flex-col">
-        {/* Card shell — same shape as the lab-notes single-card wrapper */}
+        {/* Card shell, same shape as the lab-notes single-card wrapper */}
         <Card className="flex h-full min-h-0 flex-col gap-0 py-0">
           <div
             ref={protocolDesignWorkspaceRef}
             data-editor-workspace-shell=""
             className="flex h-full min-h-0 min-w-0 flex-1 flex-row items-stretch overflow-hidden"
           >
-            {/* Siblings list — desktop glass rail (Catalyst history look).
+            {/* Siblings list, desktop glass rail (Catalyst history look).
                 Collapses to width 0 when hidden. */}
             <SideRail
               open={!isMobile && siblingsPanelOpen}
@@ -608,11 +608,11 @@ export function ProtocolDesignMode({
               tiptapRegionFullscreen ? "gap-0 py-0 sm:py-0" : "gap-4 py-4",
             )}
           >
-            {/* Context viewer tabs removed — edit mode is editor-only. */}
+            {/* Context viewer tabs removed, edit mode is editor-only. */}
 
             {activeMainTabKey === "editor" ? (
               <>
-                {/* ── Document chrome — compact CardHeader when fullscreen without merged toolbar; merged mode uses Tiptap slots ── */}
+                {/* ── Document chrome, compact CardHeader when fullscreen without merged toolbar; merged mode uses Tiptap slots ── */}
                 {!protocolMergedFullscreenToolbar &&
                   (tiptapRegionFullscreen ? (
                   <CardHeader className="shrink-0 gap-1 border-b border-border/70 px-3 py-1.5 sm:px-4 [.border-b]:pb-1.5 items-center">
@@ -635,9 +635,9 @@ export function ProtocolDesignMode({
                   <CardHeader className="shrink-0 px-4 pb-0 sm:px-6">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                 <div className="flex min-w-0 flex-1 items-center gap-2">
-                  {/* Sidebar toggle — first control in the header, like lab notes */}
+                  {/* Sidebar toggle, first control in the header, like lab notes */}
                   {siblingsToggleButton}
-                  {/* Editable title — same pattern as lab notes inline-edit */}
+                  {/* Editable title, same pattern as lab notes inline-edit */}
                   <div className="flex min-w-0 flex-1 items-center gap-1">
                     <div className="min-w-0 flex-1">
                       <InlineDocTitle
@@ -653,12 +653,12 @@ export function ProtocolDesignMode({
                   </div>
                 </div>
 
-                {/* Right action buttons — matches lab-notes compact icon row */}
+                {/* Right action buttons, matches lab-notes compact icon row */}
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-1 sm:justify-start">
                   <Badge variant="outline" className="shrink-0 text-2xs font-normal">
                     v{currentVersion}
                   </Badge>
-                  {/* "+" sits left of version history — same order as lab notes. */}
+                  {/* "+" sits left of version history, same order as lab notes. */}
                   <Button
                     asChild
                     type="button"
@@ -684,7 +684,7 @@ export function ProtocolDesignMode({
                   >
                     <GitCompare className="h-4 w-4" />
                   </Button>
-                  {/* Template picker collapsed into a small icon button — replaces
+                  {/* Template picker collapsed into a small icon button, replaces
                       the loud horizontal "Document template" strip so the header
                       visually matches lab notes. Hover/title reveals the current
                       template name. */}
@@ -708,7 +708,7 @@ export function ProtocolDesignMode({
                     title={
                       draftDocumentTemplateId
                         ? `Template: ${draftTemplateLabel ?? "selected"}`
-                        : "No template — click to pick one"
+                        : "No template, click to pick one"
                     }
                   >
                     <FileStack className="h-4 w-4" />
@@ -815,7 +815,7 @@ export function ProtocolDesignMode({
             <DialogTitle>Change template</DialogTitle>
             <DialogDescription>
               Replaces the draft body with the selected letterhead and section skeleton. Your existing
-              content will be replaced — nothing is saved until you confirm Accept changes in the
+              content will be replaced, nothing is saved until you confirm Accept changes in the
               approval bar below.
             </DialogDescription>
           </DialogHeader>

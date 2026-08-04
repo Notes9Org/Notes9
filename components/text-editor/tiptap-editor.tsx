@@ -63,10 +63,10 @@ import { createPortal } from "react-dom"
 import "@/styles/inline-diff.css"
 // @ts-ignore
 // `mammoth` is large (~500KB) and only needed when the user actually drops a
-// .docx file — load it dynamically inside `insertDocxFromFile` instead of
+// .docx file, load it dynamically inside `insertDocxFromFile` instead of
 // bundling it into the initial editor chunk.
 import { toast } from "sonner"
-// Hover tooltips are intentionally DISABLED on the editor toolbar — the
+// Hover tooltips are intentionally DISABLED on the editor toolbar, the
 // hover/focus popups rendered glitchy over this surface (user request,
 // 2026-07). No-op stand-ins keep the many call sites unchanged while never
 // showing anything on hover or focus; buttons keep their aria-labels.
@@ -266,7 +266,7 @@ interface TiptapEditorProps {
   /** Populated with a toggle for the comments sidebar so external toolbars can open it. */
   commentsToggleRef?: RefObject<(() => void) | null>
   /**
-   * When set, the fullscreen document title (shown only if fullscreen covers the page title — no fullscreenWorkspaceRef)
+   * When set, the fullscreen document title (shown only if fullscreen covers the page title, no fullscreenWorkspaceRef)
    * is editable with the same click-to-edit / blur-commit pattern as protocol design.
    */
   onDocumentTitleChange?: (value: string) => void
@@ -586,7 +586,7 @@ function CommentSidebar({ editor, open, onClose }: { editor: any; open: boolean;
 
   return (
     <div className="absolute right-0 top-0 z-50 h-full w-72 max-w-full p-2 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-right-4 motion-safe:duration-300">
-      {/* Floating glass card — matches the AI chat-history sidebar. */}
+      {/* Floating glass card, matches the AI chat-history sidebar. */}
       <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-[0_10px_34px_-18px_rgba(20,14,8,0.4)] dark:shadow-[0_12px_38px_-16px_rgba(0,0,0,0.6)]">
         <div className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-border px-3">
           <span className="flex items-center gap-1.5 text-[0.7rem] font-semibold uppercase tracking-wider text-sidebar-foreground/70">
@@ -685,7 +685,7 @@ const TableControlsOverlay = ({
   const [rect, setRect] = useState<DOMRect | null>(null)
   const [clipRect, setClipRect] = useState<DOMRect | null>(null)
   // Live cursor position (viewport coords) so handles only reveal near a border
-  // line — they stay out of the way while typing in a cell.
+  // line, they stay out of the way while typing in a cell.
   const [mouse, setMouse] = useState<{ x: number; y: number } | null>(null)
   const [dragState, setDragState] = useState<{
     type: 'col' | 'row' | 'both'
@@ -746,8 +746,8 @@ const TableControlsOverlay = ({
     let frame: number | null = null
     let latest: { dx: number; dy: number } | null = null
 
-    // Drive the resize through the document model (colwidth / row height) — the
-    // same path the built-in column resizer uses — so it actually renders under
+    // Drive the resize through the document model (colwidth / row height), the
+    // same path the built-in column resizer uses, so it actually renders under
     // `table-layout` + colgroup and persists. Pure DOM style tweaks get
     // overridden by the colgroup and the cells' `min-width`, which is why
     // dragging appeared to do nothing.
@@ -832,7 +832,7 @@ const TableControlsOverlay = ({
   if (!rect) return null
 
   // All overlay coordinates are relative to the clip box (the editor viewport),
-  // and the outer container clips to it — so handles/controls never escape the
+  // and the outer container clips to it, so handles/controls never escape the
   // editor even when the table sits at its edge or is scrolled.
   const clip = clipRect ?? rect
 
@@ -843,7 +843,7 @@ const TableControlsOverlay = ({
 
   // A handle only reveals when the cursor is within REVEAL_PX of its border line
   // (or it's the one being dragged), so handles never sit over the cells while
-  // you're typing — they appear only near the table lines.
+  // you're typing, they appear only near the table lines.
   const REVEAL_PX = 8
   const isDragging = !!dragState
   const mx = mouse?.x ?? -Infinity
@@ -853,7 +853,7 @@ const TableControlsOverlay = ({
   const withinTableY = my >= rect.top - REVEAL_PX && my <= rect.bottom + REVEAL_PX
   const withinTableX = mx >= rect.left - REVEAL_PX && mx <= rect.right + REVEAL_PX
 
-  // Column handles — one per column boundary, spanning the FULL table height.
+  // Column handles, one per column boundary, spanning the FULL table height.
   firstRowCells.forEach((cell, colIndex) => {
     const cellRect = cell.getBoundingClientRect()
     const boundaryX = cellRect.right
@@ -886,7 +886,7 @@ const TableControlsOverlay = ({
     )
   })
 
-  // Row handles — one per row boundary, spanning the FULL table width.
+  // Row handles, one per row boundary, spanning the FULL table width.
   rows.forEach((row, rowIndex) => {
     const rowRect = row.getBoundingClientRect()
     const boundaryY = rowRect.bottom
@@ -919,7 +919,7 @@ const TableControlsOverlay = ({
     )
   })
 
-  // Corner handle (bottom-right of the table) — resize both at once. Reveals only
+  // Corner handle (bottom-right of the table), resize both at once. Reveals only
   // when the cursor is near the bottom-right corner.
   const lastRow = rows[rows.length - 1]
   const lastRowCells = lastRow ? (Array.from(lastRow.querySelectorAll('td, th')) as HTMLElement[]) : []
@@ -979,7 +979,7 @@ const TableControlsOverlay = ({
       <div className="relative w-full h-full">
         {handles}
 
-        {/* Edit Table trigger — anchored to the table, clamped inside the editor. */}
+        {/* Edit Table trigger, anchored to the table, clamped inside the editor. */}
         <div
           className="table-controls-overlay absolute pointer-events-auto"
           style={{
@@ -1244,7 +1244,7 @@ export const Indent = Extension.create<IndentOptions>({
       // @ts-expect-error Tiptap's Commands augmentation isn't surfaced on the
       // SingleCommands type inside addKeyboardShortcuts; setIndent is declared above.
       Tab: () => this.editor.commands.setIndent(),
-      // @ts-expect-error see above — unsetIndent is declared in the module augmentation.
+      // @ts-expect-error see above, unsetIndent is declared in the module augmentation.
       'Shift-Tab': () => this.editor.commands.unsetIndent(),
     };
   },
@@ -1796,7 +1796,7 @@ export function TiptapEditor({
   const syncEditorFullscreenBounds = useCallback(() => {
     if (!editorRegionFullscreen) return
 
-    // Find the SidebarInset container — it holds the header + main area and stops
+    // Find the SidebarInset container, it holds the header + main area and stops
     // before the right sidebar. We stretch the fullscreen shell from (0, 0) to
     // the right edge of SidebarInset so it covers the top bar AND the left
     // sidebar but leaves any open right sidebar untouched.
@@ -1885,7 +1885,7 @@ export function TiptapEditor({
   }
 
   // Collapse the left sidebar ONCE when entering fullscreen (maximize canvas),
-  // but let the user reopen it from the icon rail — the shell's ResizeObserver
+  // but let the user reopen it from the icon rail, the shell's ResizeObserver
   // tracks SidebarInset and slides the editor over as the sidebar expands.
   // (Previously this re-collapsed on every state change, making the sidebar
   // impossible to open in fullscreen.)
@@ -1907,7 +1907,7 @@ export function TiptapEditor({
 
   /** Ancestors with `transform`, `filter` or `backdrop-filter` (glass panels,
    * motion wrappers) establish a CSS containing block, which re-bases
-   * `position: fixed` — the "fullscreen" shell then spans that card instead of
+   * `position: fixed`, the "fullscreen" shell then spans that card instead of
    * the viewport, and its top-right controls (exit fullscreen) fall off-screen.
    * While fullscreen, flatten those properties on the ancestor chain; the shell
    * covers the whole page, so the visual change is invisible. Everything is
@@ -1945,13 +1945,13 @@ export function TiptapEditor({
       }
       // A running OR fill-mode-retained animation of transform-like properties
       // makes the element a containing block even at computed transform:none
-      // (spec: treated as will-change:transform) — invisible to the checks
+      // (spec: treated as will-change:transform), invisible to the checks
       // above. tw-animate's `animate-in ... forwards` on tab panels did this.
       if (cs.animationName && cs.animationName !== "none") {
         props.push(["animation", node.style.getPropertyValue("animation")])
       }
       // STACKING contexts on the ancestor chain cap the shell's z-index inside
-      // them — sticky page chrome (experiment header, tabs bar, z-10..z-50)
+      // them, sticky page chrome (experiment header, tabs bar, z-10..z-50)
       // then paints OVER the "fullscreen" editor. Flatten them so the shell's
       // z-130 competes at the root and genuinely tops every layer. All of this
       // sits under the fullscreen shell, so the temporary change is invisible.
@@ -2040,7 +2040,7 @@ export function TiptapEditor({
     }
     // Catch-all for any containing block the neutralizer missed: measure where
     // the shell actually landed and shift by the drift, so (0,0) is ALWAYS the
-    // viewport corner — covering the app header — never a card's corner.
+    // viewport corner, covering the app header, never a card's corner.
     // Only for plain-px coords (the desktop path); the mobile fallback uses
     // env() safe-area expressions we must not fight.
     const isPx = (v: unknown): v is string =>
@@ -2247,9 +2247,9 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
   // height even when only partly filled. Page count is the MAX of two independent
   // signals so the ruler never lags behind the real pages regardless of which
   // updates first on a given render:
-  //   • breaks  — portal page numbers run up to (breaks + 1); authoritative but a
+  //   • breaks  - portal page numbers run up to (breaks + 1); authoritative but a
   //     React-state hop behind the pagination pass.
-  //   • height  — measured sheet height ÷ page pitch (floor formula, exact, no
+  //   • height  - measured sheet height ÷ page pitch (floor formula, exact, no
   //     phantom trailing page); reflects what's actually rendered right now.
   const pagePitchPx = pageMinHeightPx + PAGE_GAP_PX
   const pagesFromBreaks = Math.max(1, ...pageBreakPortals.map((p) => p.page))
@@ -2260,7 +2260,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
   // Live params the pagination plugin reads each measure pass.
   const paginationParamsRef = useRef<PaginationParams>({ enabled: false, pageContentHeightPx: 0, gapPx: 0, marginTopPx: 0, marginBottomPx: 0 })
   paginationParamsRef.current = {
-    // Gate only on Page view — NOT on a React-measured height. The plugin measures
+    // Gate only on Page view, NOT on a React-measured height. The plugin measures
     // the DOM itself and bails safely when nodes aren't laid out yet, and its own
     // ResizeObserver re-triggers it once the (async) editor content renders. Gating
     // on `pageSheetHeight > 100` raced the content render, so on first paint
@@ -2354,7 +2354,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
   // Citation store (single source of truth for citations + style)
   const [citationState, citationDispatch] = useCitationReducer(paperMode)
   const selectedCitationStyle = citationState.style
-  // Memoize the metadata map — `buildMetadataMap` walks the full citation
+  // Memoize the metadata map, `buildMetadataMap` walks the full citation
   // store and runs on every render (the editor re-renders on selection change).
   const citationMetadata = useMemo(() => buildMetadataMap(citationState), [citationState])
   const [isCommenting, setIsCommenting] = useState(false)
@@ -2394,7 +2394,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
   const lastInterimTextRef = useRef<string>("")
   const editorRef = useRef<ReturnType<typeof useEditor> | null>(null)
   // Re-run pagination when page setup changes (margins/orientation/page-view toggle)
-  // even without a doc edit — the plugin recomputes on any transaction.
+  // even without a doc edit, the plugin recomputes on any transaction.
   useEffect(() => {
     const ed = editorRef.current
     if (ed) ed.view.dispatch(ed.state.tr.setMeta("n9-paginate-refresh", true))
@@ -2616,7 +2616,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
       }
     },
     // Catches storedMarks changes (font/color/size set on a collapsed selection
-    // — i.e. cursor-only, no selected text) that don't fire onUpdate or
+    // i.e. cursor-only, no selected text) that don't fire onUpdate or
     // onSelectionUpdate. Without this, the toolbar labels lag behind reality
     // whenever the menu stays open across multiple attribute tweaks.
     onTransaction: ({ transaction }) => {
@@ -2860,7 +2860,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     if (editor) onEditorReady?.(editor)
   }, [editor])
 
-  // Inline diff widget — render a DOM element at the cursor position when inlineDiffHtml is set
+  // Inline diff widget, render a DOM element at the cursor position when inlineDiffHtml is set
   useEffect(() => {
     if (!editor || !editorContainer) return
     // Clean up any existing widget
@@ -2885,7 +2885,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     header.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.855z"/></svg><span>AI Suggestion</span><span class="diff-badge">Insert</span>`
     widget.appendChild(header)
 
-    // Body — render the HTML content. AI-generated diff HTML is sanitized
+    // Body, render the HTML content. AI-generated diff HTML is sanitized
     // before insertion to prevent XSS via injected <script>/event handlers.
     const body = document.createElement('div')
     body.className = 'inline-diff-body'
@@ -3058,7 +3058,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
   }, [activeCommentData])
 
   // Mirror `content` prop into the editor ONLY when an external source changes
-  // it (note switch, AI insert, etc.) — not when the change came from this
+  // it (note switch, AI insert, etc.), not when the change came from this
   // editor's own onUpdate -> parent setState round trip. `lastEmittedHtmlRef`
   // captures whatever we just emitted upward so we can compare against it.
   const lastEmittedHtmlRef = useRef<string>(content ?? "")
@@ -3094,7 +3094,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
   }, [editor, content, applyLayoutToState])
 
   // Persist layout-only changes (header/footer text + alignment, margins,
-  // orientation, page numbers, view toggles) — these don't change the document, so
+  // orientation, page numbers, view toggles), these don't change the document, so
   // onUpdate never fires for them. Emitting the content+marker lets the host's
   // existing save write the new layout to the cloud. Guarded so it only fires on a
   // real layout change (never on mount or when applying a just-loaded layout).
@@ -3110,7 +3110,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
 
   // Nudge the pagination plugin to recompute when the page geometry changes. The
   // plugin reads `paginationParamsRef` but only recomputes on editor view updates
-  // / window resize — so when `enabled` flips true after the sheet is first
+  // / window resize, so when `enabled` flips true after the sheet is first
   // measured (pageSheetHeight 0 → real), or margins/orientation/page-view change,
   // nothing re-triggers it. This was why page breaks + the per-page vertical ruler
   // only appeared after toggling the view. Dispatching a no-op transaction (no doc
@@ -3208,7 +3208,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
       const query = rawQuery.trim().slice(0, 1000)
       // Use the web-capable literature endpoint (web search first, then
       // PubMed/Europe PMC/OpenAlex). It streams SSE: `papers` arrives first,
-      // followed by AI summaries we don't need here — so we read until the
+      // followed by AI summaries we don't need here, so we read until the
       // `papers` event, then stop the stream early.
       const response = await fetch(`/api/literature/ai-search`, {
         method: "POST",
@@ -3242,7 +3242,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
               const parsed = JSON.parse(dataLines.join("\n")) as { papers?: SearchPaper[] }
               papers = parsed.papers ?? []
             } catch {
-              /* ignore a malformed papers frame — treated as no results */
+              /* ignore a malformed papers frame, treated as no results */
             }
             break streamLoop
           }
@@ -3306,7 +3306,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     try {
       setIsCiteProcessing(true)
 
-      // Repository first — instant if the paper is already saved.
+      // Repository first, instant if the paper is already saved.
       const repoResults = await searchRepositoryCitations(query)
       if (repoResults.length > 0) {
         setFoundPapers(repoResults)
@@ -3366,7 +3366,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
   const handleCiteSelected = useCallback(() => {
     if (!editor || selectedPapers.size === 0) return
 
-    // Insert at the user's live cursor — the docked sidebar is non-modal, so the
+    // Insert at the user's live cursor, the docked sidebar is non-modal, so the
     // editor keeps its selection and the user can reposition between insertions.
     const insertPos = editor.state.selection.to
     const html = editor.getHTML()
@@ -3399,7 +3399,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
       }
     })
 
-    // Add to store — reducer handles renumbering everything
+    // Add to store, reducer handles renumbering everything
     citationDispatch({ type: 'ADD_CITATIONS', citations: newEntries, afterNumber: insertAfterNumber })
 
     // Build the HTML for the new citations to insert at cursor
@@ -3495,7 +3495,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     }
   }, [])
 
-  // Sidebar view switches — clear the (index-based) selection when the list changes.
+  // Sidebar view switches, clear the (index-based) selection when the list changes.
   const showCitationResults = useCallback(() => {
     setCiteView("results")
     setSelectedPapers(new Set())
@@ -3506,7 +3506,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     void loadRepositoryPapers()
   }, [loadRepositoryPapers])
 
-  // One-click "insert bibliography at end" from the sidebar — same numbering and
+  // One-click "insert bibliography at end" from the sidebar, same numbering and
   // citation-format pipeline as the toolbar bibliography, without the preview modal.
   // Build the store state locally so it applies immediately (the reducer dispatch
   // below only keeps the store in sync for later edits).
@@ -3549,7 +3549,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
       })
       return
     }
-    // Don't block on style selection — fall back to the active style so the
+    // Don't block on style selection, fall back to the active style so the
     // button always produces references; remember the choice for next time.
     if (!citationStyleChosen) markCitationStyleChosen()
     const entries: CitationEntry[] = parsed.map((c) => ({
@@ -3668,7 +3668,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     const layout = getCurrentPageLayout()
     const { injectHeaderFooterForExport } = await import("@/lib/page-layout")
     // Convert the editor HTML to Markdown (headings, bold/italic, lists, tables,
-    // links, code) instead of dumping plain text — keeps the export faithful to
+    // links, code) instead of dumping plain text, keeps the export faithful to
     // what's in the editor.
     const { exportNoteAsMarkdown } = await import("@/lib/note-export")
     const html = injectHeaderFooterForExport(editor.getHTML(), layout)
@@ -3757,7 +3757,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     URL.revokeObjectURL(url)
   }, [editor, title])
 
-  // Fallback PDF print (no live page numbers) — used if Paged.js fails to load/run.
+  // Fallback PDF print (no live page numbers), used if Paged.js fails to load/run.
   const printPdfFallback = useCallback(async () => {
     if (!editor) return
     const { prepareHtmlForExport, buildPrintDocumentHtml } = await import("@/lib/print-export")
@@ -4335,10 +4335,10 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     }
     // Verify the URL actually resolves to an image before inserting. A common
     // cause of "image URL doesn't work" is pasting a webpage/search-result URL
-    // rather than a direct link to the image file — preloading lets us give
+    // rather than a direct link to the image file, preloading lets us give
     // clear feedback instead of silently inserting a broken image.
     const alt = imageAltInput.trim()
-    // Insert immediately so the action always "works" — gating on a preload probe
+    // Insert immediately so the action always "works", gating on a preload probe
     // silently dropped valid cross-origin images (CORS images never fire onload
     // on a bare probe in some browsers). We still warn, but never block.
     editor.chain().focus().setImage({ src, alt }).run()
@@ -4347,7 +4347,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     setImageAltInput("")
     const probe = new window.Image()
     probe.onerror = () => {
-      toast.error("That image couldn't be loaded — check it's a direct link to an image file (.png, .jpg, .gif, …).")
+      toast.error("That image couldn't be loaded, check it's a direct link to an image file (.png, .jpg, .gif, …).")
     }
     probe.src = src
   }, [editor, imageAltInput, imageUrlInput])
@@ -4451,7 +4451,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     if (!isSpreadsheetFile(file)) return
 
     const arrayBuffer = await file.arrayBuffer()
-    // Dynamic import — xlsx (~1 MB) only loads when the user actually inserts
+    // Dynamic import, xlsx (~1 MB) only loads when the user actually inserts
     // a spreadsheet file, keeping it out of the initial editor bundle.
     const { readSpreadsheetWorkbook, buildSpreadsheetWorkbookSnapshot } =
       await import("@/lib/spreadsheet-workbook")
@@ -4621,7 +4621,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     "top"
 
   const inTable = editor.isActive("table")
-  // Word-style ribbon tabs. "table" is contextual — only present inside a table.
+  // Word-style ribbon tabs. "table" is contextual, only present inside a table.
   const ribbonTabs: { id: RibbonTab; label: string }[] = [
     { id: "home", label: "Home" },
     { id: "insert", label: "Insert" },
@@ -4740,7 +4740,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
         <TooltipContent>Redo</TooltipContent>
       </Tooltip>
     
-      {/* Text — paragraph, font, size, color (single menu) */}
+      {/* Text, paragraph, font, size, color (single menu) */}
       <DropdownMenu modal={false} open={toolbarClusterMenu === "text"} onOpenChange={handleToolbarClusterChange("text")}>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -5293,7 +5293,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
               const { from, to } = editor.state.selection
               const selectedText = editor.state.doc.textBetween(from, to, " ")
               if (!selectedText.trim()) {
-                // No selection — let the user type a formula (e.g. H2O, CO2, Ca(OH)2).
+                // No selection, let the user type a formula (e.g. H2O, CO2, Ca(OH)2).
                 setChemInput("")
                 setChemDialogOpen(true)
                 return
@@ -5450,7 +5450,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
         </span>
       )}
 
-      {/* ── Home run: quick tools — comments, citations/library, dictation ── */}
+      {/* ── Home run: quick tools, comments, citations/library, dictation ── */}
       <span className={rg("home")}>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -5760,7 +5760,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
 
   const citationStoreValue = { state: citationState, dispatch: citationDispatch }
 
-  /** When fullscreen targets only the editor shell, the page-level title is covered — surface `title` here. */
+  /** When fullscreen targets only the editor shell, the page-level title is covered, surface `title` here. */
   const fullscreenTitleRaw = String(title ?? "")
   const fullscreenTitleDisplay = fullscreenTitleRaw.trim() || "Untitled"
   const fullscreenTitleEditable = Boolean(onDocumentTitleChange) && editable
@@ -5769,7 +5769,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     fullscreenWorkspaceRef == null &&
     (fullscreenTitleEditable || fullscreenTitleRaw.trim().length > 0)
 
-  /** Title / notes / protocol actions merged into toolbar row — needs extra layout on small screens. */
+  /** Title / notes / protocol actions merged into toolbar row, needs extra layout on small screens. */
   const toolbarMergedLayout =
     leadingToolbarSlot != null ||
     trailingToolbarSlot != null ||
@@ -5870,8 +5870,8 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
             {toolbarMergedLayout && (
               <div className="flex min-h-9 min-w-0 items-center gap-2 pl-0.5 sm:pl-1">
                 {/* overflow-x-auto: a wide leading slot (note title + actions)
-                    must scroll, not push the trailing cluster — with the
-                    fullscreen toggle in it — past the shell's overflow-hidden
+                    must scroll, not push the trailing cluster, with the
+                    fullscreen toggle in it, past the shell's overflow-hidden
                     right edge, where it was unreachable in fullscreen. */}
                 <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto hide-scrollbar sm:gap-1">
                   {leadingToolbarSlot}
@@ -6158,7 +6158,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
             className={cn(
               "absolute bottom-2 right-2 top-2 z-50 flex max-w-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-[0_10px_34px_-18px_rgba(20,14,8,0.4)] dark:shadow-[0_12px_38px_-16px_rgba(0,0,0,0.6)]",
               !citationSidebar.isResizing && "transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
-              // Closed: shift by width PLUS the right-2 inset + shadow bleed —
+              // Closed: shift by width PLUS the right-2 inset + shadow bleed
               // plain translate-x-full left an unresponsive 8px strip of the
               // panel edge permanently peeking inside the editor.
               citationModalOpen ? "translate-x-0" : "pointer-events-none translate-x-[calc(100%+1.5rem)]",
@@ -6254,7 +6254,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
                       : "No matches yet. Select text in the document and choose “Cite with AI”, or search the web."}
                   </div>
                 ) : citeLayout === "table" ? (
-                  /* Compact list — scan many citations at once. */
+                  /* Compact list, scan many citations at once. */
                   <ul className="divide-y divide-border/50">
                     {displayedCitationPapers.map((paper, index) => {
                       const year = paper.year && paper.year > 0 ? paper.year : null

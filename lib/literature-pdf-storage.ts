@@ -55,7 +55,7 @@ export function createUserScopedStoragePath(
   return `${userId}/${domain}/${recordId}/${Date.now()}-${sanitizeStorageFileName(fileName)}`
 }
 
-/** @deprecated Use createUserScopedStoragePath — kept for call sites migrating to user-scoped keys. */
+/** @deprecated Use createUserScopedStoragePath, kept for call sites migrating to user-scoped keys. */
 export function createLiteraturePdfPath(
   userId: string,
   literatureId: string,

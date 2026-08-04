@@ -1,5 +1,5 @@
 """
-notes9-stats — the deterministic compute engine (L4).
+notes9-stats, the deterministic compute engine (L4).
 
 Runs inside Pyodide, in a Web Worker, with no network access after the runtime
 has loaded. A pure function of its payload: the same inputs produce the same
@@ -7,16 +7,16 @@ outputs forever, which is what Law 4 of the architecture promises.
 
 Two rules govern every function here:
 
-  Law 2 — no number reaches the user that did not come from this file. The model
+  Law 2, no number reaches the user that did not come from this file. The model
           may describe and caveat results; it never produces one. That means this
           engine also generates the report sentence, so even the prose in a
           figure legend is built from computed values by template.
 
-  §6.3  — every test carries its assumption checks and its effect size by
+  §6.3  - every test carries its assumption checks and its effect size by
           default, not on request. A p-value shipped without the assumption it
           depends on is how a wrong statistic reaches a publication.
 
-DEPENDENCIES. numpy, scipy and statsmodels only — all of which ship prebuilt in
+DEPENDENCIES. numpy, scipy and statsmodels only, all of which ship prebuilt in
 the Pyodide distribution. Kaplan-Meier, the log-rank test, Dunn's test and
 Mauchly's sphericity test are implemented here rather than imported from
 lifelines / scikit-posthocs / pingouin, because those are pure-Python wheels
@@ -26,7 +26,7 @@ checkable against R.
 
 The payload arrives already shaped by the TypeScript resolver
 (lib/data-analysis/engine/resolver.ts). This file never filters, groups, or
-guesses — it receives clean arrays and computes.
+guesses, it receives clean arrays and computes.
 """
 
 from __future__ import annotations
@@ -311,7 +311,7 @@ def _post_hoc(names, arrays, method, alpha, ms_within, df_within, reference=None
 
 
 def _dunn(names, arrays, alpha, method="holm"):
-    """Dunn's test with tie correction — the post-hoc for Kruskal-Wallis."""
+    """Dunn's test with tie correction, the post-hoc for Kruskal-Wallis."""
     allv = np.concatenate(arrays)
     ranks = stats.rankdata(allv)
     n = allv.size
@@ -358,7 +358,7 @@ def run_normality(p) -> dict:
     assumptions = []
     for name, values in cols.items():
         chk = _normality([_clean(values)])
-        chk["name"] = f"Normality — {name} (Shapiro-Wilk)"
+        chk["name"] = f"Normality, {name} (Shapiro-Wilk)"
         assumptions.append(chk)
     return _result("Normality", assumptions=assumptions,
                    sentence="Normality assessed by Shapiro-Wilk on each column.")
@@ -1019,7 +1019,7 @@ def run(payload: dict) -> dict:
                 survival = out.pop("_survival", None)
                 test_result = out
         except Exception as exc:
-            # Reported, never swallowed — but as a failure, not a caveat. Filed
+            # Reported, never swallowed, but as a failure, not a caveat. Filed
             # under `warnings` this returned as a successful run with nothing to
             # report, and put "OverflowError: (68, 'Result not representable')"
             # in front of a bench scientist. The repr stays, in `detail`.

@@ -1,14 +1,14 @@
 /**
- * Vercel Cron — enforces the TTL on `agent_artifact_drafts`.
+ * Vercel Cron, enforces the TTL on `agent_artifact_drafts`.
  *
  * AI-generated files (PDF/Word/Excel/chart/figure) land in the private `user`
  * bucket under `{org}/agent-drafts/{session}/{data_id}/{file}` with a row in
  * `agent_artifact_drafts` BEFORE the user decides to keep them. When the user
  * clicks "Save to Data files" the draft is committed (copied to the canonical
  * experiment path, `committed_at` stamped). Drafts the user never saves would
- * otherwise accumulate forever in DB + storage — this job reaps them.
+ * otherwise accumulate forever in DB + storage, this job reaps them.
  *
- * Single-phase (drafts need no UI tombstone — an unsaved draft just vanishes):
+ * Single-phase (drafts need no UI tombstone, an unsaved draft just vanishes):
  *   `committed_at IS NULL AND expires_at < now()`
  *     → remove the storage object from the `user` bucket, then delete the row.
  *   Committed drafts are left untouched (the file lives in the experiment now;
@@ -21,7 +21,7 @@
  * Schedule: configured in `vercel.json`. Default once per day at 03:10 UTC
  *           (offset from chat-attachments at 03:00 so they don't contend).
  *
- * Idempotent: re-running mid-pass is safe — the batch select is backed by the
+ * Idempotent: re-running mid-pass is safe, the batch select is backed by the
  *             partial index `idx_artifact_drafts_expiry` (live drafts by expiry).
  */
 import { NextResponse } from "next/server";
@@ -32,11 +32,11 @@ const BATCH_SIZE = Number(process.env.AGENT_DRAFT_CLEANUP_BATCH ?? "500");
 const MAX_ROWS_PER_RUN = Number(
   process.env.AGENT_DRAFT_CLEANUP_MAX_ROWS ?? "5000",
 );
-// Bucket the agent stages drafts in — must match catalyst's NOTES9_USER_BUCKET
+// Bucket the agent stages drafts in, must match catalyst's NOTES9_USER_BUCKET
 // (artifact_storage.py USER_BUCKET, default "user").
 const USER_BUCKET = process.env.NOTES9_USER_BUCKET ?? "user";
 
-// Node runtime — needs the service-role key + supabase-js storage client.
+// Node runtime, needs the service-role key + supabase-js storage client.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -98,7 +98,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     // Remove storage objects first. All drafts live in the same `user` bucket,
     // so one `remove([...])` per batch instead of one round-trip per row. If
-    // storage removal fails we still delete the rows — an orphaned object is
+    // storage removal fails we still delete the rows, an orphaned object is
     // recoverable by manual cleanup, but a kept expired row would mislead the
     // commit path into thinking the draft is still live.
     const paths = rows

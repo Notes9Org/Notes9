@@ -29,7 +29,7 @@ export function ViewModeToggle({
     <div
       data-tour="view-mode"
       className={cn(
-        // Sandglass strip — matches TabsList so every switch control shares
+        // Sandglass strip, matches TabsList so every switch control shares
         // the same rounded glass look.
         'n9-grain inline-flex gap-1 rounded-xl border border-[color:var(--glass-border)] bg-[color:var(--glass-bg)] p-1 backdrop-blur-md',
         className,

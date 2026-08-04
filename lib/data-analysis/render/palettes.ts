@@ -23,7 +23,7 @@
  *               unreadable in the version of record.
  *
  * PROVENANCE OF THE JOURNAL-NAMED SETS. These are the `ggsci` R package's
- * palettes (npg, aaas, lancet, nejm, jama) — one author's derivation from
+ * palettes (npg, aaas, lancet, nejm, jama), one author's derivation from
  * figures published in those journals, widely used in the R ecosystem. No
  * journal publishes an official palette, and none of these is endorsed by one.
  * The names say which house style they were derived from; they are not a claim

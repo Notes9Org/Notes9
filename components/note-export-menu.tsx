@@ -94,7 +94,7 @@ type NoteExportMenuProps = {
   title: string
   /** Static HTML (e.g. form state). */
   htmlContent?: string
-  /** Live HTML from the editor — preferred when both are available. */
+  /** Live HTML from the editor, preferred when both are available. */
   getHtmlContent?: () => string
   disabled?: boolean
   includeCommentsInPdf?: boolean

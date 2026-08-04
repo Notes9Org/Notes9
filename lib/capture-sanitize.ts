@@ -35,7 +35,7 @@ export async function addCaptureInitScripts(page: Page): Promise<void> {
     // The welcome/onboarding modal is gated by a per-user key
     // (`notes9_welcome_seen:<userId>`) that we can't know ahead of login.
     // Shim getItem so any welcome-seen lookup returns "true", passing the
-    // client gate before the app hydrates — no modal ever flashes in captures.
+    // client gate before the app hydrates, no modal ever flashes in captures.
     const proto = Storage.prototype as Storage & { __n9Patched?: boolean }
     if (!proto.__n9Patched) {
       const origGet = proto.getItem
@@ -52,7 +52,7 @@ export async function addCaptureInitScripts(page: Page): Promise<void> {
 /**
  * Light sanitize for pages whose main content is PUBLIC (e.g. live literature
  * search results from PubMed/Europe PMC/OpenAlex). Only blurs the sidebar user
- * block + avatars and redacts emails — it does NOT genericize titles/names,
+ * block + avatars and redacts emails, it does NOT genericize titles/names,
  * which on these pages are published paper titles and abstract text.
  */
 export async function sanitizeLightForDemo(page: Page): Promise<void> {
@@ -160,7 +160,7 @@ export async function sanitizeForDemo(page: Page): Promise<void> {
         "Literature", "Complete list", "View Project", "View Details", "Untitled", "New Lab Note",
         "members", "experiments", "Manage your", "Research Lab", "Active Projects", "Notes9", "LIMS",
         "Workspace", "Dashboard", "Settings", "Search", "Create", "Add", "Edit", "Delete", "Cancel",
-        "Save", "Submit", "Loading", "—", "Copy", "Duplicate", "Export", "Import", "Unassigned",
+        "Save", "Submit", "Loading", "-", "Copy", "Duplicate", "Export", "Import", "Unassigned",
         "New note", "Rename", "Delete note", "Notes", "Markdown", "HTML", "PDF", "Word", "Download as",
         "Create your first lab notebook", "Create Note", "Select a note", "Protocol", "Overview",
         "Samples", "Data & Files", "Protocol & Assays", "Lab Notes"

@@ -10,6 +10,7 @@ import { useCatalystPanelState } from "@/contexts/catalyst-panel-state"
 import { openCatalystPanel, type CatalystSectionScope, type CatalystLaunchAttachment } from "@/lib/catalyst-launch"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { isComposerBlocked } from "@/lib/catalyst/composer-gate"
 import { useAwsTranscribe } from "@/hooks/use-aws-transcribe"
 import { VoiceWaveform } from "@/components/text-editor/voice-waveform"
 
@@ -33,14 +34,25 @@ type Props = {
   /** When "inline", the composer scrolls with the page instead of sticking. */
   formPlacement?: "sticky" | "inline"
   shrinkOnScroll?: boolean
+  /**
+   * Why this composer cannot accept a question yet, or null when it can.
+   *
+   * The Data page sets it: a statistical question with no dataset is
+   * unanswerable, and the honest place to say so is here, before the request
+   * leaves the page — not as a model reply apologising for having nothing to
+   * work with. Attaching a file clears it, because an attachment IS a dataset;
+   * the requirement is "at least one dataset", not "a populated sheet".
+   */
+  requiresDataReason?: string | null
 }
 
 export function CatalystSectionHero({
   size = "sm",
   scope = "lab",
-  placeholder = "How can I help you today?",
+  placeholder,
   formPlacement = "inline",
   shrinkOnScroll = false,
+  requiresDataReason = null,
 }: Props) {
   const [input, setInput] = useState("")
   const [webSearchEnabled, setWebSearchEnabled] = useState(false)
@@ -57,7 +69,7 @@ export function CatalystSectionHero({
   const { isOpen: catalystPanelOpen } = useCatalystPanelState()
 
   // Detect scroll on the nearest scrollable ancestor (the app layout's <main>
-  // with overflow-auto). We identify it by its overflow STYLE alone — not by
+  // with overflow-auto). We identify it by its overflow STYLE alone, not by
   // `scrollHeight > clientHeight`, which depends on the current window size and
   // whether content has loaded yet. Gating on that made the lookup fall back to
   // `window` on short pages or large windows, so the shrink effect only worked
@@ -143,6 +155,13 @@ export function CatalystSectionHero({
   function dispatchAsk(text: string) {
     const query = text.trim()
     if (!query && attachments.length === 0 && uploadQueue.length === 0) return
+    // The disabled Send button covers the click; this covers Enter, which
+    // bypasses it. Refusing loudly rather than returning silently — a composer
+    // that swallows a keystroke reads as broken, not as a requirement.
+    if (blockedForData) {
+      toast.error(requiresDataReason ?? "Add a dataset first.")
+      return
+    }
     startTransition(() => {
       const launch = {
         query: query || undefined,
@@ -150,7 +169,7 @@ export function CatalystSectionHero({
         projectId: projectId ?? undefined,
         attachments: attachments.length > 0 ? attachments : undefined,
         webSearch: webSearchEnabled || undefined,
-        // The user already pressed Send here — the sidebar should submit the
+        // The user already pressed Send here, the sidebar should submit the
         // prompt automatically rather than make them click Send a second time.
         autoSend: true,
       }
@@ -180,18 +199,32 @@ export function CatalystSectionHero({
     }
   }
 
-  const canSend = input.trim().length > 0 || attachments.length > 0
+  // An attachment satisfies the data requirement on its own — a CSV in the
+  // composer is a dataset Catalyst can read, so the block lifts the moment one
+  // is queued rather than waiting for the sheet to be populated.
+  const blockedForData = isComposerBlocked(requiresDataReason, attachments.length, uploadQueue.length)
+
+  const canSend = !blockedForData && (input.trim().length > 0 || attachments.length > 0)
   const isUploading = uploadQueue.length > 0
   // One line at rest on every page; the composer expands (height AND width,
-  // sprung) only while the user is actually in it — focused, typing, or with
+  // sprung) only while the user is actually in it, focused, typing, or with
   // attachments in flight.
   const expanded = isFocused || input.trim().length > 0 || attachments.length > 0 || isUploading
-  const effectivePlaceholder = projectName
-    ? `How can I help with ${projectName} today?`
-    : placeholder
+  // A placeholder passed by the caller describes what THIS page's composer is
+  // for, and outranks the project greeting: on the Data page the difference is
+  // between "ask about your data" and a generic prompt that tells a researcher
+  // nothing about the analysis seam sitting under it. The greeting is the
+  // fallback for pages that don't name their own job.
+  // While blocked, the placeholder carries the reason. It is the one piece of
+  // text a researcher is already reading when they go to type, so the
+  // requirement arrives before the wasted keystrokes rather than after them.
+  const effectivePlaceholder = blockedForData
+    ? requiresDataReason!
+    : placeholder ??
+      (projectName ? `How can I help with ${projectName} today?` : "How can I help you today?")
 
   // One shared, gently-damped spring for every part of the expand gesture so
-  // width, height and the controls row land together — no FLIP `layout`
+  // width, height and the controls row land together, no FLIP `layout`
   // animation here (it visibly stretched the textarea/placeholder mid-flight).
   const composerSpring = { type: "spring" as const, stiffness: 280, damping: 32, mass: 0.9 }
 
@@ -249,7 +282,7 @@ export function CatalystSectionHero({
         onFocus={() => setIsFocused(true)}
         onBlur={(e) => {
           // Keep the composer expanded while focus moves WITHIN it (mic,
-          // paperclip, send) — otherwise the row collapses under the pointer
+          // paperclip, send), otherwise the row collapses under the pointer
           // before the button's click can land.
           const form = e.currentTarget.form
           if (form && e.relatedTarget instanceof Node && form.contains(e.relatedTarget)) return
@@ -267,7 +300,7 @@ export function CatalystSectionHero({
       />
 
       {/* Compact one-liner keeps a quiet send affordance at the right edge
-          (absolute — fades without touching layout). */}
+          (absolute, fades without touching layout). */}
       <AnimatePresence initial={false}>
         {!expanded && (
           <motion.button
@@ -297,7 +330,7 @@ export function CatalystSectionHero({
         disabled={isUploading}
       />
 
-      {/* Controls row — mounts/unmounts with a real exit animation; the top
+      {/* Controls row, mounts/unmounts with a real exit animation; the top
           spacing lives INSIDE the collapsing container so the height reaches
           exactly zero (an outer margin left an 8px jump at the end). */}
       <AnimatePresence initial={false}>
@@ -402,7 +435,7 @@ export function CatalystSectionHero({
   }
 
   if (formPlacement === "inline") {
-    // Inline: fade only — NO height/overflow-hidden animation. The earlier
+    // Inline: fade only, NO height/overflow-hidden animation. The earlier
     // height:"auto" + overflow:hidden collapse settled shorter than the
     // composer's content and clipped the bottom toolbar (Catalyst badge +
     // send button). A plain opacity fade has no such measurement hazard.
@@ -438,7 +471,7 @@ export function CatalystSectionHero({
   const stickyShell = cn(
     "sticky top-0 z-30 -mx-3 sm:-mx-4 md:-mx-6 px-3 sm:px-4 md:px-6 transition-colors duration-300",
     // The wash exists so content scrolling UNDER the stuck composer stays
-    // readable — at rest it just painted a page-wide light bar behind the
+    // readable, at rest it just painted a page-wide light bar behind the
     // (narrower) composer, so it now appears only once the page scrolls.
     isScrolled
       ? "backdrop-blur-md bg-background/75 supports-[backdrop-filter]:bg-background/55"

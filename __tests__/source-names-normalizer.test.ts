@@ -45,7 +45,7 @@ describe("normalizeSourceNames", () => {
   });
 });
 
-describe("sourceNamesFromEvent — structured fields only", () => {
+describe("sourceNamesFromEvent, structured fields only", () => {
   it("reads tool_result.source_names", () => {
     expect(
       sourceNamesFromEvent("tool_result", {
@@ -70,7 +70,7 @@ describe("sourceNamesFromEvent — structured fields only", () => {
     expect(sourceNamesFromEvent("rag_chunks", { chunks })).toHaveLength(5);
   });
 
-  it("NEVER parses a thinking message — prose yields no sources (P0)", () => {
+  it("NEVER parses a thinking message, prose yields no sources (P0)", () => {
     expect(
       sourceNamesFromEvent("thinking", {
         node: "rag",

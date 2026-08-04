@@ -1,6 +1,6 @@
 /**
  * Approximate molecular weights (g/mol) for common lab compounds.
- * For verification only — confirm critical preparations from a primary source.
+ * For verification only, confirm critical preparations from a primary source.
  */
 export type MolecularWeightEntry = {
   /** Canonical display name */

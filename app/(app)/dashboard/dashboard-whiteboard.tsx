@@ -50,7 +50,7 @@ type Row = {
   updated_at: string
 }
 
-// Notes9 brand keeps to warm tones — lilac is intentionally absent from the
+// Notes9 brand keeps to warm tones, lilac is intentionally absent from the
 // pickable palette. The `lilac` kind survives in the DB enum for back-compat
 // with any pre-brand rows but isn't selectable here.
 const PALETTE: { kind: Exclude<NoteKind, "ai" | "lilac">; swatch: string }[] = [
@@ -136,12 +136,12 @@ export function DashboardWhiteboard({
     return () => ro.disconnect()
   }, [isFullscreen])
 
-  // The drag effect re-runs only when `drag` changes — so the `up` handler's
+  // The drag effect re-runs only when `drag` changes, so the `up` handler's
   // closure can't reach the latest `notes`. Mirror notes into a ref each
   // render so mouseup persists the drop position, not the pickup position.
   const notesRef = useRef<WhiteboardNote[]>(notes)
   notesRef.current = notes
-  /** Selection mirror for the keyboard effect — it lives outside React's
+  /** Selection mirror for the keyboard effect, it lives outside React's
       render deps to avoid re-attaching the window listener on every selection
       change. */
   const selectedRef = useRef<Set<string>>(selected)
@@ -153,7 +153,7 @@ export function DashboardWhiteboard({
       updateWhiteboardNotePosition({ id, x, y }).catch((err) => {
         // The visible state already shows the user's drag; log so the failure is observable.
         console.error('whiteboard_mutation_failed', { op: 'persistPosition', err })
-        toast.error("Couldn't save — your changes may not persist. Please retry.")
+        toast.error("Couldn't save, your changes may not persist. Please retry.")
       })
     })
   }, [])
@@ -178,7 +178,7 @@ export function DashboardWhiteboard({
     })
   }, [])
 
-  /** Repaint every selected note to the given kind — optimistic update, then
+  /** Repaint every selected note to the given kind, optimistic update, then
       issue one server action per note (small numbers, no batching needed). */
   const repaintSelected = useCallback(
     (kind: Exclude<NoteKind, "ai" | "lilac">) => {
@@ -190,7 +190,7 @@ export function DashboardWhiteboard({
           if (id.startsWith("temp-")) continue
           updateWhiteboardNoteKind({ id, kind }).catch((err) => {
             console.error('whiteboard_mutation_failed', { op: 'updateNoteKind', err });
-            toast.error("Couldn't save — your changes may not persist. Please retry.");
+            toast.error("Couldn't save, your changes may not persist. Please retry.");
           })
         }
       })
@@ -198,7 +198,7 @@ export function DashboardWhiteboard({
     [],
   )
 
-  /** Delete every selected note — optimistic; failure tolerance is "if the
+  /** Delete every selected note, optimistic; failure tolerance is "if the
       server still has it, the next refetch restores it" since we don't have
       realtime here yet. */
   const deleteSelected = useCallback(() => {
@@ -211,7 +211,7 @@ export function DashboardWhiteboard({
         if (id.startsWith("temp-")) continue
         deleteWhiteboardNote(id).catch((err) => {
           console.error('whiteboard_mutation_failed', { op: 'deleteSelected', err });
-          toast.error("Couldn't save — your changes may not persist. Please retry.");
+          toast.error("Couldn't save, your changes may not persist. Please retry.");
         })
       }
     })
@@ -286,13 +286,13 @@ export function DashboardWhiteboard({
         if (!n) continue
         updateWhiteboardNotePosition({ id, x: n.x, y: n.y }).catch((err) => {
           console.error('whiteboard_mutation_failed', { op: 'nudgePosition', err });
-          toast.error("Couldn't save — your changes may not persist. Please retry.");
+          toast.error("Couldn't save, your changes may not persist. Please retry.");
         })
       }
     })
   }, [])
 
-  // Keyboard shortcuts — Delete/Backspace, ⌘A, ⌘D, Esc, arrow nudges. Bound to
+  // Keyboard shortcuts, Delete/Backspace, ⌘A, ⌘D, Esc, arrow nudges. Bound to
   // the window so they fire from anywhere on the dashboard; we just guard
   // against fires while typing in an input/textarea anywhere on the page.
   useEffect(() => {
@@ -303,7 +303,7 @@ export function DashboardWhiteboard({
       return false
     }
     function onKey(e: KeyboardEvent) {
-      // Don't hijack typing anywhere on the page — the dashboard has the
+      // Don't hijack typing anywhere on the page, the dashboard has the
       // tasks composer, the catalyst hero, etc.
       if (isTypingTarget(e.target)) {
         if (e.key === "Escape" && editingId === null && editingTagId === null) {
@@ -418,7 +418,7 @@ export function DashboardWhiteboard({
     startTransition(() => {
       updateWhiteboardNoteTag({ id, tag }).catch((err) => {
       console.error('whiteboard_mutation_failed', { op: 'updateNoteTag', err });
-      toast.error("Couldn't save — your changes may not persist. Please retry.");
+      toast.error("Couldn't save, your changes may not persist. Please retry.");
     })
     })
   }
@@ -548,7 +548,7 @@ export function DashboardWhiteboard({
     startTransition(() => {
       updateWhiteboardNoteBody({ id, body: note.body }).catch((err) => {
         console.error('whiteboard_mutation_failed', { op: 'commitBody', err });
-        toast.error("Couldn't save — your changes may not persist. Please retry.");
+        toast.error("Couldn't save, your changes may not persist. Please retry.");
       })
     })
   }
@@ -559,7 +559,7 @@ export function DashboardWhiteboard({
     startTransition(() => {
       deleteWhiteboardNote(id).catch((err) => {
         console.error('whiteboard_mutation_failed', { op: 'removeSingle', err });
-        toast.error("Couldn't save — your changes may not persist. Please retry.");
+        toast.error("Couldn't save, your changes may not persist. Please retry.");
       })
     })
   }
@@ -604,7 +604,7 @@ export function DashboardWhiteboard({
         </div>
       </header>
 
-      {/* Toolbar — mode switches between "Add" (default) and "Repaint" when
+      {/* Toolbar, mode switches between "Add" (default) and "Repaint" when
           any notes are selected. Same swatches; click semantics differ. */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
         <span
@@ -811,7 +811,7 @@ export function DashboardWhiteboard({
           )
         })}
 
-        {/* Marquee — drawn while user is dragging on empty canvas. */}
+        {/* Marquee, drawn while user is dragging on empty canvas. */}
         {marquee && (marquee.w > 1 || marquee.h > 1) && (
           <div
             aria-hidden

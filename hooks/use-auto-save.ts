@@ -27,7 +27,7 @@ export function useAutoSave<TArgs extends unknown[] = unknown[]>({
   // on their input handlers (preserving TiptapEditor memoization) without
   // capturing a stale closure over things like formData.title. Without this
   // pattern, the first-render `onSave` was being called forever and reading
-  // an empty title — silently bailing out and falsely flipping status to
+  // an empty title, silently bailing out and falsely flipping status to
   // "saved" while the server was never touched.
   const onSaveRef = useRef(onSave)
   useEffect(() => {
@@ -95,7 +95,7 @@ export function useAutoSave<TArgs extends unknown[] = unknown[]>({
   /**
    * Clear pending debounced save without persisting. Also drops paramsRef so a
    * later forceSave (or the 5s error-retry) can't replay this draft against a
-   * different record — relevant when the user switches lab notes or protocols
+   * different record, relevant when the user switches lab notes or protocols
    * with an in-flight debounce.
    */
   const cancelPendingSave = useCallback(() => {

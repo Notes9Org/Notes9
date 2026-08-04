@@ -86,7 +86,7 @@ function splitSentences(text: string): string[] {
  * Pick the passage of a paper's text most relevant to the user's query, by
  * scoring each sentence on how many query keywords it contains. Returns the
  * single best sentence (plus its immediate neighbor when that's also on-topic),
- * in original order — a real, paper-specific snippet rather than a shared blurb.
+ * in original order, a real, paper-specific snippet rather than a shared blurb.
  */
 function bestSnippetForQuery(text: string, query: string): string {
   if (!text || !query) return ''
@@ -125,7 +125,7 @@ function bestSnippetForQuery(text: string, query: string): string {
 
 /**
  * Google-Scholar-style highlighting: wrap the query's terms in <mark>. Pure string/regex
- * — NO LLM. Case-insensitive, word-boundary, stopwords removed. Returns React nodes; the
+ * NO LLM. Case-insensitive, word-boundary, stopwords removed. Returns React nodes; the
  * input must already be plain text (highlight LAST, after tag-stripping).
  */
 function highlightTerms(text: string, query: string): ReactNode {
@@ -169,25 +169,25 @@ function AiPaperCardImpl({
   projectId?: string | null
   /** Experiment (e.g. sidebar pin) the save should also link to. */
   experimentId?: string | null
-  /** Human-readable "Project / Experiment" the save links to — named in the toast. */
+  /** Human-readable "Project / Experiment" the save links to, named in the toast. */
   scopeLabel?: string | null
   /** Invoked instead of saving when no project context exists (project is required). */
   onRequestSave?: (paper: SearchPaper) => void
-  /** The user's search query — used to pull the most query-relevant passage out
+  /** The user's search query, used to pull the most query-relevant passage out
    *  of this paper's text. */
   query?: string
-  /** True while the overall AI summary is still streaming — the per-paper "Why
+  /** True while the overall AI summary is still streaming, the per-paper "Why
    *  it matters" note shows a loading state until it settles. */
   summaryLoading?: boolean
   /** The AI's own sentences (from the overall summary) about why this paper
-   *  answers the user's query — shown in the per-paper "AI summary" tab. */
+   *  answers the user's query, shown in the per-paper "AI summary" tab. */
   relevanceSummary?: string
   onSaved?: () => void
-  /** Same stage action the database card uses — stages + opens a reader tab. */
+  /** Same stage action the database card uses, stages + opens a reader tab. */
   onStage?: (paper: SearchPaper) => void | Promise<void>
   onOpenStaged?: (paper: SearchPaper) => void
   /** Resolves a search result to its literature_reviews row id when the paper is
-   *  already staged/saved — Ask Catalyst then @-mentions the row instead of
+   *  already staged/saved, Ask Catalyst then @-mentions the row instead of
    *  re-downloading the PDF. */
   getPaperReviewId?: (paper: SearchPaper) => string | null
   isStaged?: boolean
@@ -215,21 +215,21 @@ function AiPaperCardImpl({
   // the legacy "why it matters" sentences derived from the overall summary.
   const relevance = (result.aiSummary || relevanceSummary)?.trim() || ''
   // The backend is still generating this paper's summary, or the legacy overall
-  // summary is still streaming — either way, show the shimmer.
+  // summary is still streaming, either way, show the shimmer.
   const relevanceLoading = result.summaryPending || summaryLoading
   // The exact passage relevant to the query: prefer a backend-cited quote; else
-  // extract the most query-relevant sentence(s) from this paper's own abstract —
+  // extract the most query-relevant sentence(s) from this paper's own abstract
   // so every card shows a real, paper-specific snippet (never a shared blurb).
   // Strip JATS/HTML tags so the snippet reads as clean prose (abstracts carry
   // <i>…</i>, <h4>Methods</h4>, <sub>, etc.). Derive the excerpt from the PLAIN
-  // abstract and clean the backend snippet too — never render raw tags.
+  // abstract and clean the backend snippet too, never render raw tags.
   const backendSnippet = result.snippet?.trim()
     ? formatLiteratureAbstractPlain(result.snippet.trim())
     : ''
   const queryExcerpt = useMemo(() => bestSnippetForQuery(abstractPlain, query), [abstractPlain, query])
   const exactPassage = backendSnippet || queryExcerpt
   // Where the passage came from: the abstract, the open-access full text, or the
-  // cited source — so the user knows what grounds it.
+  // cited source, so the user knows what grounds it.
   const passageSource = (() => {
     if (!exactPassage) return ''
     if (exactPassage === queryExcerpt) return 'From the abstract'
@@ -254,7 +254,7 @@ function AiPaperCardImpl({
     .join(' • ')
   const href = readUrl(result)
   // The green badge reflects *true* open access only. A `pdfUrl` just means a PDF
-  // link exists (e.g. Europe PMC full text) — that's not the same as open access,
+  // link exists (e.g. Europe PMC full text), that's not the same as open access,
   // so it drives inline-read behavior (`canReadInline`) but never the badge.
   const isOpenAccess = !!result.paper?.isOpenAccess
   const canReadInline = !!(result.paper?.isOpenAccess || result.paper?.pdfUrl)
@@ -275,7 +275,7 @@ function AiPaperCardImpl({
     if (onStage) {
       void onStage(paper)
       if (!canReadInline) {
-        toast.info('Not open access — download the PDF and upload it in its tab to read it in Notes9.')
+        toast.info('Not open access, download the PDF and upload it in its tab to read it in Notes9.')
       }
       return
     }
@@ -298,7 +298,7 @@ function AiPaperCardImpl({
       onRequestSave(paper)
       return
     }
-    // Fire immediately on click — the save never waits on summaries or other
+    // Fire immediately on click, the save never waits on summaries or other
     // results still loading.
     setSaving(true)
     try {
@@ -309,7 +309,7 @@ function AiPaperCardImpl({
       if (res.success) {
         setOptimisticSaved(true)
         toast.success(
-          `Saved to library${scopeLabel ? ` — linked to ${scopeLabel}` : ''}` +
+          `Saved to library${scopeLabel ? `, linked to ${scopeLabel}` : ''}` +
             ('warning' in res && res.warning ? ` (${res.warning})` : ''),
         )
         onSaved?.()
@@ -383,7 +383,7 @@ function AiPaperCardImpl({
         </h3>
         {authors && <p className="mb-3 text-sm text-muted-foreground">{authors}</p>}
 
-        {/* Tabs — a pill segmented control so the active view (AI summary vs the
+        {/* Tabs, a pill segmented control so the active view (AI summary vs the
             abstract) reads at a glance: solid fill + icon for the selected tab. */}
         <div className="mb-3 inline-flex items-center gap-0.5 rounded-lg border border-border/60 bg-muted/40 p-0.5">
           <button
@@ -468,7 +468,7 @@ function AiPaperCardImpl({
             ) : null}
             {!exactPassage && !relevance && !result.abstractPending && !relevanceLoading && (
               <p className="text-sm italic text-muted-foreground/70">
-                No grounded summary available for this paper — open it to read more.
+                No grounded summary available for this paper, open it to read more.
               </p>
             )}
           </div>
@@ -508,7 +508,7 @@ function AiPaperCardImpl({
             ) : (
               <p className="text-sm italic text-muted-foreground/70">
                 {href
-                  ? 'Abstract not available — open the source to read this paper.'
+                  ? 'Abstract not available, open the source to read this paper.'
                   : 'Abstract not available for this result.'}
               </p>
             )}
@@ -530,7 +530,7 @@ function AiPaperCardImpl({
             Ask Catalyst
           </Button>
           <div className="flex-1" />
-          {/* Step 2 — keep it: add to your library. */}
+          {/* Step 2, keep it: add to your library. */}
           <Button
             variant="outline"
             size="sm"
@@ -548,7 +548,7 @@ function AiPaperCardImpl({
             )}
             {saved ? 'Saved to library' : 'Save to library'}
           </Button>
-          {/* Step 1 — read it: open the full text (open-access loads the PDF). */}
+          {/* Step 1, read it: open the full text (open-access loads the PDF). */}
           <Button
             variant="default"
             size="sm"
@@ -557,10 +557,10 @@ function AiPaperCardImpl({
             disabled={isStaging}
             title={
               membership === 'saved'
-                ? 'Already in your library — open it in your reader'
+                ? 'Already in your library, open it in your reader'
                 : membership === 'staged' || isStaged
                   ? 'Open this paper in your reader'
-                  : 'Open to read the full paper — the PDF loads inline for open-access papers'
+                  : 'Open to read the full paper, the PDF loads inline for open-access papers'
             }
           >
             {isStaging ? <Loader2 className="size-3.5 animate-spin" /> : <BookOpen className="size-3.5" />}
@@ -582,7 +582,7 @@ type AiPaperCardProps = Parameters<typeof AiPaperCardImpl>[0]
  * Value-based re-render guard. The result list re-renders on every summary
  * streaming tick; without this, all cards re-render even though only the one
  * whose own data changed needs to. We compare the display-affecting fields
- * (result content + presentation flags) and ignore callback identity — the
+ * (result content + presentation flags) and ignore callback identity, the
  * handlers are behaviourally stable (onSaved just writes a ref, onStage is a
  * host callback), so their reference churn shouldn't force a repaint.
  */

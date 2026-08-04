@@ -72,7 +72,7 @@ const INDICATOR_SPRING = { type: "spring", stiffness: 500, damping: 40, mass: 0.
 /**
  * Shared-layout active-tab underline. Only the active trigger renders it; framer's
  * `layoutId` glides the single underline between triggers on switch. Reduced-motion
- * users get a static span (no layout animation). Decorative — pointer-events-none.
+ * users get a static span (no layout animation). Decorative, pointer-events-none.
  */
 /** Pill active-indicator, mirrors My Library (RepoTab) so both tab strips match. */
 function TabPill({ reduce }: { reduce: boolean | null }) {
@@ -124,7 +124,7 @@ interface LiteratureTabsProps {
   experiments: { id: string; name: string; project_id: string }[]
   initialProjectId?: string | null
   initialTab?: "search" | "repo"
-  /** When set (from ?openPaper=<id>), open that paper's read-mode tab on mount —
+  /** When set (from ?openPaper=<id>), open that paper's read-mode tab on mount
    * how a Catalyst citation lands here from another page. */
   openPaperId?: string | null
   /** Query to auto-fill (from the marketing hero → sign-up → here). */
@@ -135,8 +135,8 @@ interface LiteratureTabsProps {
 
 /**
  * Module-level snapshot of the active search session, keyed by context (project
- * scope). Persists across SPA navigation — clicking a citation routes to the
- * cited page and unmounts this tree — so returning to Literature restores the
+ * scope). Persists across SPA navigation, clicking a citation routes to the
+ * cited page and unmounts this tree, so returning to Literature restores the
  * user's query and results instead of resetting to a blank search.
  */
 type LiteratureSearchSession = {
@@ -173,7 +173,7 @@ export function LiteratureTabs({
   )
 
   const [query, setQuery] = useState(savedSession?.query ?? initialQuery ?? "")
-  // The query the AI search actually ran on — updated only on submit, NOT on
+  // The query the AI search actually ran on, updated only on submit, NOT on
   // every keystroke, so typing a new query doesn't re-trigger / flash the AI.
   const [submittedQuery, setSubmittedQuery] = useState(savedSession?.submittedQuery ?? "")
   const [searchSort, setSearchSort] = useState<PaperSearchSortMode>(savedSession?.searchSort ?? "relevance")
@@ -188,7 +188,7 @@ export function LiteratureTabs({
   const [aiFilters, setAiFilters] = useState<AiResultFilters>(savedSession?.aiFilters ?? DEFAULT_AI_FILTERS)
 
   const [activeInnerTab, setActiveInnerTab] = useState<string>(savedSession?.activeInnerTab ?? "search")
-  /** Staged papers the user opened — used to focus Search results on a new search. */
+  /** Staged papers the user opened, used to focus Search results on a new search. */
   const [openedStagedIds, setOpenedStagedIds] = useState<string[]>([])
   const openedStagedIdsRef = useRef(openedStagedIds)
   openedStagedIdsRef.current = openedStagedIds
@@ -277,7 +277,7 @@ export function LiteratureTabs({
   /**
    * Stable key so the tab-sync effect does not re-run on every parent refresh
    * that produces the same staged rows. We sort the ids and join them with the
-   * NUL character ("") — a delimiter that cannot appear inside an id — so
+   * NUL character (""), a delimiter that cannot appear inside an id, so
    * the key changes only when the *set* of staged ids changes, not when row
    * objects are re-created with identical ids. NUL (rather than e.g. ",") is an
    * unambiguous separator that two concatenated ids can never reproduce.
@@ -443,7 +443,7 @@ export function LiteratureTabs({
       }
     }
     // ponytail: only apply the global (un-namespaced) last-active-tab value on
-    // a true first-ever mount for this session — otherwise it clobbers the
+    // a true first-ever mount for this session, otherwise it clobbers the
     // already-correct session-scoped `savedSession.activeInnerTab` (or the
     // "search" default) with a stale tab from a different project/session,
     // which is what left the panel stuck at opacity 0 on return.
@@ -571,7 +571,7 @@ export function LiteratureTabs({
             // refetch. The earlier router.refresh() caused a second visible
             // reload of the paper right as it finished importing.
           } else if (data.pdf_import_status === "none" || data.pdf_import_status === "failed") {
-            // Terminal failure: say so actively — the import runs server-side
+            // Terminal failure: say so actively, the import runs server-side
             // after the staging action returns, so this poller is the only
             // place the outcome becomes known. Fires once per paper: the patch
             // above removes the id from pendingPdfImportIds.
@@ -580,8 +580,8 @@ export function LiteratureTabs({
             const paperLabel = title ? `"${title}"` : "this paper"
             toast.warning(
               data.pdf_import_status === "none"
-                ? `No open-access PDF is available for ${paperLabel} — upload the PDF in its tab to read the full text.`
-                : `The PDF for ${paperLabel} could not be downloaded — upload it in its tab to read the full text.`,
+                ? `No open-access PDF is available for ${paperLabel}, upload the PDF in its tab to read the full text.`
+                : `The PDF for ${paperLabel} could not be downloaded, upload it in its tab to read the full text.`,
             )
           }
         } catch (err) {
@@ -593,7 +593,7 @@ export function LiteratureTabs({
         pollErrorCountRef.current += 1
         if (pollErrorCountRef.current >= 3 && !pollWarningShownRef.current) {
           pollWarningShownRef.current = true
-          toast.warning("PDF import status check failed — retrying")
+          toast.warning("PDF import status check failed, retrying")
         }
         if (pollErrorCountRef.current >= 10 && !pollStoppedRef.current) {
           pollStoppedRef.current = true
@@ -684,7 +684,7 @@ export function LiteratureTabs({
   }, [openPaperId, openPaperTab, stagedByIdMerged, repoById, highlightTarget])
 
   // Same-tree citation click: a citation into a paper whose tab is ALREADY open
-  // (kept-mounted) doesn't need the full `?openPaper=&highlight=` reroute — just
+  // (kept-mounted) doesn't need the full `?openPaper=&highlight=` reroute, just
   // re-activate that tab. `event.preventDefault()` tells `dispatchDocumentHighlight`
   // (in use-source-navigation.ts) to skip the router.push entirely; the mounted
   // `StagedPaperView` picks up the same event (with its fresh nonce) to re-fire
@@ -730,8 +730,8 @@ export function LiteratureTabs({
     [stagedLiterature, lockedProjectId]
   )
 
-  // Resolve a result paper to an existing literature row — staged first, then the
-  // library — so "Read" opens the already-imported paper (PDF or overview)
+  // Resolve a result paper to an existing literature row, staged first, then the
+  // library, so "Read" opens the already-imported paper (PDF or overview)
   // instead of re-staging it.
   // Placement-aware membership: is this search paper already in the user's DB, and
   // where? Staging first (a staged read), then the repository (library). Returns the
@@ -769,7 +769,7 @@ export function LiteratureTabs({
 
   /**
    * Sorting (Best match / Newest first / Most cited) and the open-access filter
-   * are derived from the metadata we already fetched — no new network search.
+   * are derived from the metadata we already fetched, no new network search.
    * "Best match" preserves the relevance order the backend returned; recent and
    * cited sorts are stable, so ties keep that relevance order.
    */
@@ -787,7 +787,7 @@ export function LiteratureTabs({
   }, [searchResults, openAccessOnlySearch, searchSort])
 
   // The dedicated AI-search endpoint (/api/literature/ai-search) is invoked by
-  // AiSearchView from the submitted query — there's no separate
+  // AiSearchView from the submitted query, there's no separate
   // /api/search-papers call. AiSearchView lifts its papers (for staging
   // detection + count) via onResults and its loading via onLoadingChange.
   const handleSearch = (override?: string, { fresh = false }: { fresh?: boolean } = {}) => {
@@ -795,7 +795,7 @@ export function LiteratureTabs({
     if (!q) return
     // fresh = explicit search (Enter / button / history re-run): force a live fetch by
     // clearing the cache + lastRunQuery guard, and show the spinner.
-    // not fresh = history restore: instant, renders from the seeded cache — no spinner
+    // not fresh = history restore: instant, renders from the seeded cache, no spinner
     // (setting it here is what used to hang forever when the query was unchanged).
     if (fresh) literatureSearchEngine.forgetCache(q)
     if (override !== undefined && override !== query) setQuery(override)
@@ -808,7 +808,7 @@ export function LiteratureTabs({
       setIsSearching(true) // cleared by AiSearchView via onLoadingChange
       setSearchResults([]) // clear stale results until the new search streams in
     }
-    // restore (not fresh): keep results — the seeded cache repopulates via onResults.
+    // restore (not fresh): keep results, the seeded cache repopulates via onResults.
     syncTabsForSearchSession()
   }
 
@@ -854,7 +854,7 @@ export function LiteratureTabs({
       literatureSearchEngine.forgetCache(q)
     } else {
       // ponytail: DEFAULT behavior is instant restore from the saved answer
-      // (no LLM call) — seed the engine cache so handleSearch's run() below
+      // (no LLM call), seed the engine cache so handleSearch's run() below
       // hits it immediately. Flip to "always refresh" by always taking the
       // opts.refresh branch above.
       const session = literatureHistory.find((s) => (s.title ?? "") === q)
@@ -919,7 +919,7 @@ export function LiteratureTabs({
   }
 
   // After a save-to-library, re-fetch the server-rendered library list so
-  // `repositoryReviews` (the membership source of truth) includes the new row —
+  // `repositoryReviews` (the membership source of truth) includes the new row
   // otherwise the card's "Saved" state reverts from the stale prop. Mirrors what
   // handleStagePaper already does for staging.
   const handlePaperSaved = () => {
@@ -943,7 +943,7 @@ export function LiteratureTabs({
         if (result.alreadyStaged) {
           toast.message("Already open")
         } else {
-          toast.success("Opening paper — downloading the PDF…")
+          toast.success("Opening paper, downloading the PDF…")
         }
         if ("warning" in result && typeof result.warning === "string" && result.warning) {
           toast.message(result.warning)
@@ -996,7 +996,7 @@ export function LiteratureTabs({
   const handleCloseTabClick = (id: string, e: React.MouseEvent | React.KeyboardEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    // Closing a reader tab just closes the view — no prompt. The paper (and its
+    // Closing a reader tab just closes the view, no prompt. The paper (and its
     // already-downloaded PDF) stays available to reopen or save to the library;
     // it clears itself after the 7-day TTL if never saved.
     closeTabOnly(id)
@@ -1028,7 +1028,7 @@ export function LiteratureTabs({
       })
       if (result.success) {
         const pdfAttached = Boolean(result.data?.pdf_storage_path) && !result.warning
-        const linkSuffix = saveScopeLabel ? ` — linked to ${saveScopeLabel}` : ""
+        const linkSuffix = saveScopeLabel ? `, linked to ${saveScopeLabel}` : ""
         toast.success(
           (pdfAttached ? "Paper and PDF saved to library" : "Paper saved to library") +
             linkSuffix
@@ -1057,7 +1057,7 @@ export function LiteratureTabs({
     if (!pendingSavePaper) return
     const projectIdToSave = selectedProjectId || lockedProjectId
     // Library papers require a project; the dialog's Save button is disabled
-    // until one is picked — this is just a defensive guard.
+    // until one is picked, this is just a defensive guard.
     if (!projectIdToSave) return
 
     setIsSavingPaper(true)
@@ -1076,7 +1076,7 @@ export function LiteratureTabs({
           ? experiments.find((e) => e.id === selectedExperimentId)?.name ?? null
           : null
         const linkSuffix = projectName
-          ? ` — linked to ${projectName}${experimentName ? ` / ${experimentName}` : ""}`
+          ? `, linked to ${projectName}${experimentName ? ` / ${experimentName}` : ""}`
           : ""
         toast.success(
           (pdfAttached ? "Paper and PDF saved to library" : "Paper saved to library") +
@@ -1108,7 +1108,7 @@ export function LiteratureTabs({
   const unifiedTabStrip = (
     <div className="relative group transition-all">
       <div className="flex items-stretch bg-muted/15 rounded-lg overflow-hidden">
-        {/* Pinned "Search results" — always visible; only the paper tabs scroll. */}
+        {/* Pinned "Search results", always visible; only the paper tabs scroll. */}
         <TabsList scrollable={false} className="bg-transparent h-auto border-none rounded-none flex items-center flex-shrink-0 px-1 pt-0 pb-1.5">
           {hasSearched && (
             <TabsTrigger
@@ -1145,7 +1145,7 @@ export function LiteratureTabs({
                   {resolvedActiveTab === id && <TabPill reduce={reduce} />}
                   <span className="relative z-10 truncate text-sm font-semibold">{tabTitle}</span>
                   {/* role=button span, NOT a nested <button> (invalid inside the
-                      TabsTrigger button — causes hydration errors). */}
+                      TabsTrigger button, causes hydration errors). */}
                   <span
                     role="button"
                     tabIndex={0}
@@ -1233,7 +1233,7 @@ export function LiteratureTabs({
       {topSection === "search" ? (
         <div className="space-y-6">
           {/* Filters live next to the results (see AiSearchView) so they're
-              right where you read the papers — not buried in the search bar. */}
+              right where you read the papers, not buried in the search bar. */}
           <LiteratureSearchForm
             query={query}
             setQuery={setQuery}
@@ -1265,7 +1265,7 @@ export function LiteratureTabs({
               <div className="mt-6">
                 {/* forceMount keeps the results + live stream mounted across tab
                     switches, but Radix then renders it with hidden=false even when
-                    inactive — so a staged paper tab would stack its reader below
+                    inactive, so a staged paper tab would stack its reader below
                     the search list. Hide it ourselves when another tab is active. */}
                 {hasSearched && (
                   <TabsContent

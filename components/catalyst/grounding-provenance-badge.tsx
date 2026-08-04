@@ -3,7 +3,7 @@
 import { cn } from '@/lib/utils';
 
 /**
- * Provenance of a span-level citation — how the supporting span was located.
+ * Provenance of a span-level citation, how the supporting span was located.
  *
  * - `native`    → the model emitted the citation itself (Anthropic Citations).
  *                 Highest fidelity: the quote is verbatim from the source.
@@ -25,7 +25,7 @@ const GROUNDING_STYLE: Record<'native' | 'heuristic' | 'none', BadgeStyle> = {
     short: 'Exact',
     full: 'Exact match',
     description:
-      'High-fidelity citation — the supporting quote was emitted by the model directly from the source text.',
+      'High-fidelity citation, the supporting quote was emitted by the model directly from the source text.',
     className:
       'bg-emerald-500/10 text-emerald-700 ring-emerald-500/30 dark:text-emerald-400',
   },
@@ -33,14 +33,14 @@ const GROUNDING_STYLE: Record<'native' | 'heuristic' | 'none', BadgeStyle> = {
     short: 'Approx',
     full: 'Approximate match',
     description:
-      'Best-effort grounding — the supporting passage was located by matching the claim against the source after the fact.',
+      'Best-effort grounding, the supporting passage was located by matching the claim against the source after the fact.',
     className: 'bg-amber-500/10 text-amber-700 ring-amber-500/30 dark:text-amber-400',
   },
   none: {
     short: 'Source',
     full: 'Source only',
     description:
-      'No exact supporting passage was pinpointed — this points at the cited source as a whole.',
+      'No exact supporting passage was pinpointed, this points at the cited source as a whole.',
     className: 'bg-muted text-muted-foreground ring-border/50',
   },
 };
@@ -58,7 +58,7 @@ export interface GroundingProvenanceBadgeProps {
 /**
  * A single compact, color-coded badge that distinguishes native (exact) from
  * heuristic (approximate) from none (source-only) grounding. The explanation
- * lives in the aria/title text — the hover tooltip was removed (it rendered
+ * lives in the aria/title text, the hover tooltip was removed (it rendered
  * glitchy; user request, 2026-07). Renders nothing when grounding is absent
  * so it never clutters citations that carry no provenance signal.
  */

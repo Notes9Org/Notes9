@@ -159,11 +159,11 @@ export function LabNotesTab({
     note_type: "general",
   });
 
-  /** Committed note body — the approval bar diffs the live draft against this. Advanced only by an explicit Save. */
+  /** Committed note body, the approval bar diffs the live draft against this. Advanced only by an explicit Save. */
   const [savedContent, setSavedContent] = useState("");
   const { recordDiff } = useContentDiffs("lab_note", selectedNote?.id ?? null);
 
-  // Immutable version history (document_versions) — one row per explicit Save.
+  // Immutable version history (document_versions), one row per explicit Save.
   const {
     versions,
     loading: versionsLoading,
@@ -198,7 +198,7 @@ export function LabNotesTab({
   // toolbars so both stay in sync.
   const renderNoteActionMenus = () => (
     <>
-      {/* Direct version-history button — same control as protocol design mode.
+      {/* Direct version-history button, same control as protocol design mode.
           (Comments already has its own toggle in the editor toolbar.) */}
       <Button
         variant="ghost"
@@ -211,7 +211,7 @@ export function LabNotesTab({
       >
         <GitCompare className="h-4 w-4" />
       </Button>
-      {/* Print / import / export — same triple, order and styling as the
+      {/* Print / import / export, same triple, order and styling as the
           protocol, report and paper headers. */}
       <NotePrintButton
         title={resolvedExportTitle}
@@ -244,7 +244,7 @@ export function LabNotesTab({
     </>
   );
   /**
-   * Notes list column + editor column — Tiptap region fullscreen applies `position: fixed` to this shell so the
+   * Notes list column + editor column, Tiptap region fullscreen applies `position: fixed` to this shell so the
    * whole block tracks SidebarInset `main` (notes rail and editor move together, no inset math).
    */
   const labNotesFullscreenShellRef = useRef<HTMLDivElement>(null);
@@ -259,7 +259,7 @@ export function LabNotesTab({
   const [inlineHighlightTarget, setInlineHighlightTarget] =
     useState<HighlightTarget | null>(null);
 
-  // Highlight from AI reference navigation — retries until content is loaded
+  // Highlight from AI reference navigation, retries until content is loaded
   const highlightParam = searchParams.get(HIGHLIGHT_PARAM);
   const highlightFiredRef = useRef<string | null>(null);
   // Memo of share-status checks performed this session: maps note id → "published" |
@@ -314,7 +314,7 @@ export function LabNotesTab({
         if (cancelled) return;
         const el = editor.view.dom.querySelector('.rag-chunk-highlight');
         if (el) {
-          // Found it — mark done, scroll to it, schedule fade
+          // Found it, mark done, scroll to it, schedule fade
           highlightFiredRef.current = highlightKey;
           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
           setTimeout(() => {
@@ -322,7 +322,7 @@ export function LabNotesTab({
             setTimeout(() => { try { editor.commands.clearRagHighlight(); } catch (err) { if (process.env.NODE_ENV !== 'production') { console.warn('clearRagHighlight (fade) failed', err); } } }, 1_200);
           }, 12_000);
         } else if (attempt < retryDelays.length - 1) {
-          // No element yet — clear and retry after a longer delay
+          // No element yet, clear and retry after a longer delay
           try { editor.commands.clearRagHighlight(); } catch (err) { if (process.env.NODE_ENV !== 'production') { console.warn('clearRagHighlight (retry) failed', err); } }
           attempt++;
           setTimeout(tryHighlight, retryDelays[attempt]);
@@ -337,7 +337,7 @@ export function LabNotesTab({
   // Guards a brand-new-note INSERT so a burst of debounced saves can't create
   // two rows before the first INSERT resolves and flips selectedNote.
   const draftInsertInFlightRef = useRef(false);
-  // Set synchronously the moment the INSERT resolves — React state (and the
+  // Set synchronously the moment the INSERT resolves, React state (and the
   // id ref fed by an effect) lands a tick later, and Accept & Save must see
   // the new row id immediately to avoid committing as a duplicate create.
   const lastDraftInsertIdRef = useRef<string | null>(null);
@@ -427,7 +427,7 @@ export function LabNotesTab({
   });
 
   // Refresh/close with a pending debounce would drop the last ~2s of typing
-  // from the DRAFT buffer — flush it when the tab hides or unloads.
+  // from the DRAFT buffer, flush it when the tab hides or unloads.
   useEffect(() => {
     const flush = () => {
       void forceSave();
@@ -443,11 +443,11 @@ export function LabNotesTab({
     };
   }, [forceSave]);
 
-  // Baseline for the diff bar when switching notes — mirrors the COMMITTED
+  // Baseline for the diff bar when switching notes, mirrors the COMMITTED
   // `content`, so the approval bar compares the live draft against the official
   // record. If the note carries an uncommitted draft, that draft is shown in the
   // editor (see fetchNotes / performSwitchToNote) and the bar correctly surfaces
-  // it as pending — and this survives reloads because the draft is persisted.
+  // it as pending, and this survives reloads because the draft is persisted.
   useEffect(() => {
     setSavedContent(selectedNote?.content ?? "");
   }, [selectedNote?.id]);
@@ -455,7 +455,7 @@ export function LabNotesTab({
   // Fetch existing lab notes
   const noteIdFromQuery = searchParams.get("noteId");
 
-  // Memoize the protocols projection — without this, every keystroke recreates
+  // Memoize the protocols projection, without this, every keystroke recreates
   // a new array reference and busts memoization inside <TiptapEditor>.
   const editorProtocols = useMemo(
     () => availableProtocols.map((p) => ({ id: p.id, name: p.name, version: p.version, type: 'protocol' as const })),
@@ -467,7 +467,7 @@ export function LabNotesTab({
     [experiment.samples]
   )
 
-  // Stable editor callbacks — also recreated on every render previously, which
+  // Stable editor callbacks, also recreated on every render previously, which
   // forced TiptapEditor's child memoization to invalidate per keystroke.
   const handleEditorContentChange = useCallback((nextContent: string) => {
     setFormData((prev) => ({ ...prev, content: nextContent }))
@@ -486,7 +486,7 @@ export function LabNotesTab({
   // Mirror selectedNote?.id and isCreating into refs so `fetchNotes` stays
   // referentially stable across selection changes. Previously `fetchNotes`
   // listed `selectedNote?.id` in its deps and got recreated on every note
-  // switch — the effect at line ~462 then refired with the *stale*
+  // switch, the effect at line ~462 then refired with the *stale*
   // `noteIdFromQuery` (because `router.replace` updates the URL asynchronously),
   // momentarily re-selecting the old note before the URL settled and the
   // next firing re-selected the new one. The TiptapEditor's `key` ping-pong
@@ -495,7 +495,7 @@ export function LabNotesTab({
   useEffect(() => {
     selectedNoteIdRef.current = selectedNote?.id ?? null;
     // Once React state carries the id, the synchronous INSERT stash has served
-    // its purpose — clear it so it can never leak into a LATER creation.
+    // its purpose, clear it so it can never leak into a LATER creation.
     if (selectedNote?.id) lastDraftInsertIdRef.current = null;
   }, [selectedNote?.id]);
   const isCreatingRef = useRef(isCreating);
@@ -527,7 +527,7 @@ export function LabNotesTab({
           data[0];
 
         // Skip the state writes when the resolved note is already the one
-        // we're showing — without this, every refetch replaces selectedNote
+        // we're showing, without this, every refetch replaces selectedNote
         // with a new reference (same id, fresh row from the network), which
         // briefly remounts the editor via `key={selectedNote?.id}` and wipes
         // any in-flight diff/edit state for no user-visible benefit.
@@ -578,7 +578,7 @@ export function LabNotesTab({
 
   // Sync header breadcrumb: project › experiment › current note name.
   // On unmount (e.g. user switches to Overview tab) we restore the 2-segment
-  // base instead of clearing — clearing would leave the breadcrumb blank
+  // base instead of clearing, clearing would leave the breadcrumb blank
   // because the parent page's <SetPageBreadcrumb> doesn't re-fire on tab
   // change (its segments prop is stable).
   useEffect(() => {
@@ -667,7 +667,7 @@ export function LabNotesTab({
         // Other status codes (5xx, 401) intentionally NOT cached so a transient
         // server hiccup gets re-asked next time the user opens the note.
       } catch {
-        /* network blip — leave uncached so a retry is possible */
+        /* network blip, leave uncached so a retry is possible */
       }
     })();
 
@@ -828,7 +828,7 @@ export function LabNotesTab({
 
       // A brand-new note's draft INSERT may still be resolving (typing fires it
       // async). Accept & Save during that window must WAIT and then commit to
-      // the freshly-created row — the stale `selectedNote` closure would
+      // the freshly-created row, the stale `selectedNote` closure would
       // otherwise take the create branch and insert a DUPLICATE note.
       for (let i = 0; i < 30 && draftInsertInFlightRef.current; i++) {
         await new Promise((r) => setTimeout(r, 100));
@@ -842,7 +842,7 @@ export function LabNotesTab({
         // Commit via commit_lab_note: it sets app.force_version so the DB trigger
         // `trg_write_document_version` writes a version even inside its 3-minute
         // throttle window, then promotes the draft into `content` and clears the
-        // draft — all in one transaction. The trigger owns versioning; the client
+        // draft, all in one transaction. The trigger owns versioning; the client
         // must NOT also write document_versions (that would double-write).
         const { error } = await commitLabNote(supabase, {
           id: freshNoteId,
@@ -878,7 +878,7 @@ export function LabNotesTab({
         });
       } else {
         // Create new note. The DB trigger records its first version (action
-        // 'create') automatically on INSERT — no client-side versioning.
+        // 'create') automatically on INSERT, no client-side versioning.
         const { error } = await createLabNote(supabase, {
           experimentId,
           title: formData.title,
@@ -1081,7 +1081,7 @@ export function LabNotesTab({
       }
       setLinkedProtocols([]);
       // Only surface a toast for a *real* failure. An empty error object (no
-      // code/message — e.g. an RLS-filtered embed or aborted request on note
+      // code/message, e.g. an RLS-filtered embed or aborted request on note
       // switch) is benign and was previously spamming a destructive toast on
       // every note open.
       if (code || message) {
@@ -1121,7 +1121,7 @@ export function LabNotesTab({
   /**
    * Mirror the currently-open note into the URL via `?noteId=<id>`. Used by
    * the sidebar select-note and the `+` create-note flows so the URL is
-   * always the source of truth — without this, refresh would jump back to
+   * always the source of truth, without this, refresh would jump back to
    * the stale `noteId` and the sidebar highlight wouldn't update.
    * Pass `null` to clear the param entirely (e.g. when no note is selected).
    */
@@ -1170,7 +1170,7 @@ export function LabNotesTab({
     e.stopPropagation();
     // Optimistic delete: hide the note immediately so the click feels instant,
     // then issue the network call. On failure we re-insert and surface a toast
-    // — the user only ever sees a delay if it actually fails, which is rare.
+    // the user only ever sees a delay if it actually fails, which is rare.
     const previousNotes = notes;
     const wasSelected = selectedNote?.id === note.id;
     const previousSelected = selectedNote;
@@ -1188,7 +1188,7 @@ export function LabNotesTab({
       if (error) throw error;
       toast({ title: "Note deleted", description: `"${note.title}" has been removed.` });
     } catch (err: any) {
-      // Roll back local state — restore the deleted row in its prior position,
+      // Roll back local state, restore the deleted row in its prior position,
       // and re-select it if it was active so the user doesn't lose their place.
       setNotes(previousNotes);
       if (wasSelected) {
@@ -1228,7 +1228,7 @@ export function LabNotesTab({
     const previousSelectedTitle = selectedNote?.id === id ? selectedNote.title : null;
     const nowIso = new Date().toISOString();
 
-    // Optimistic update — close the dialog and reflect the rename immediately.
+    // Optimistic update, close the dialog and reflect the rename immediately.
     setNotes((prev) =>
       prev.map((n) => (n.id === id ? { ...n, title: newTitle, updated_at: nowIso } : n)),
     );
@@ -1251,7 +1251,7 @@ export function LabNotesTab({
       // Roll back: restore the original title in the list and (if applicable)
       // in the currently-selected note + form. Reopen the rename dialog so
       // the user lands back in the same modal with their attempted title
-      // preserved — easier than starting over from the row menu.
+      // preserved, easier than starting over from the row menu.
       setNotes((prev) =>
         prev.map((n) => (n.id === id ? { ...n, title: previousTitle } : n)),
       );
@@ -1346,7 +1346,7 @@ export function LabNotesTab({
           <List className="h-4 w-4 pointer-events-none" />
         )}
       </Button>
-      {/* Hairline divider — separates the list toggle from the document
+      {/* Hairline divider, separates the list toggle from the document
           identity, Notion-style: [toggle] | Title */}
       <div aria-hidden className="h-4 w-px shrink-0 bg-border/70" />
       <div className="flex min-w-0 flex-1 items-center gap-1">
@@ -1434,12 +1434,12 @@ export function LabNotesTab({
             data-editor-workspace-shell=""
             className="flex h-full min-h-0 min-w-0 flex-1 flex-row items-stretch overflow-hidden"
           >
-            {/* Notes list — desktop glass rail, Catalyst-history look (hidden on
+            {/* Notes list, desktop glass rail, Catalyst-history look (hidden on
                 mobile; use Sheet instead). Width animates so it slides, not snaps. */}
             <SideRail
               ref={notesAsideRef}
               open={!isMobile && notebookPanelOpen}
-              /* Above editor column (z-0) and TipTap chrome — critical when workspace is fullscreen z-110 */
+              /* Above editor column (z-0) and TipTap chrome, critical when workspace is fullscreen z-110 */
               className={noteEditorFullscreen ? "z-[120]" : "z-10"}
             >
               {!isMobile && (
@@ -1544,7 +1544,7 @@ export function LabNotesTab({
                 <SheetContent
                   side="left"
                   showCloseButton={false}
-                  /* TipTap workspace fullscreen uses z-110 — portal must stack above it */
+                  /* TipTap workspace fullscreen uses z-110, portal must stack above it */
                   overlayClassName="z-[120]"
                   className={cn(
                     "z-[120] flex h-[100dvh] max-h-[100dvh] min-h-0 flex-col gap-0 p-0",
@@ -1806,7 +1806,7 @@ export function LabNotesTab({
                           // Discard: drop the pending autosave, revert the editor
                           // to the committed body, AND clear the persisted draft
                           // so the revert is durable (a reload won't resurrect the
-                          // discarded text). Optimistic — restore on failure.
+                          // discarded text). Optimistic, restore on failure.
                           cancelPendingSave();
                           setFormData((f) => ({ ...f, content: savedContent }));
                           markSynced();

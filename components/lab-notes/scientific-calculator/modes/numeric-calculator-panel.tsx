@@ -341,7 +341,7 @@ export function NumericCalculatorPanel({
           </span>
         </div>
 
-        {/* Memory row — MC / MR / M− / M+ with a live indicator */}
+        {/* Memory row, MC / MR / M− / M+ with a live indicator */}
         <div className="mb-2 flex items-center justify-between gap-1">
           <div
             className={cn(

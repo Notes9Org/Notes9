@@ -294,7 +294,7 @@ export function SampleProteinViewer({
         console.error('[protein-viewer] cleanup dispose/pause:', err)
       }
       // Mol* leaves its <canvas> child in the host even after dispose. Clearing
-      // it lets the GPU release the WebGL context — browsers cap ~16 contexts
+      // it lets the GPU release the WebGL context, browsers cap ~16 contexts
       // and we'd otherwise exhaust them after a few file switches.
       if (host) {
         try {
@@ -512,7 +512,7 @@ export function SampleProteinViewer({
     setResidueSel(next)
     void highlightSelection(next)
   }
-  // Stable mouseup listener — read latest selection through a ref instead of
+  // Stable mouseup listener, read latest selection through a ref instead of
   // re-binding window every selection change. Re-binding on each drag tick
   // could miss the mouseup event and leave dragAnchor stuck.
   useEffect(() => {
@@ -555,7 +555,7 @@ export function SampleProteinViewer({
 
       const structures = plugin.managers.structure.hierarchy.current.structures ?? []
       // If MolStar didn't actually grow the hierarchy on this load, there's
-      // no new index to point at — bail to surface the failure rather than
+      // no new index to point at, bail to surface the failure rather than
       // silently re-pivoting on the prior structure.
       const newIndex = structures.length > before ? structures.length - 1 : -1
       const pivotIndex = 0
@@ -767,7 +767,7 @@ export function SampleProteinViewer({
         <Card className="overflow-hidden p-0">
           <div className="flex items-center justify-between border-b bg-muted/30 px-3 py-1.5">
             <p className="text-xs font-medium text-muted-foreground">
-              Sequence — click and drag to highlight in 3D
+              Sequence, click and drag to highlight in 3D
             </p>
             <div className="flex items-center gap-2">
               {residueSel ? (

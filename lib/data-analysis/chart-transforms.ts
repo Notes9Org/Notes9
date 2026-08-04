@@ -1,5 +1,5 @@
 /**
- * Data transforms for specialized scientific charts — ROC curves, Kaplan–Meier
+ * Data transforms for specialized scientific charts, ROC curves, Kaplan–Meier
  * survival, and Bland–Altman agreement. Kept as pure functions so they can be
  * unit-tested independently of the Plotly rendering layer.
  */

@@ -4,7 +4,7 @@ import { PALETTE_DEFINITIONS, paletteColours, toColorscale } from "./palettes"
 import { rocCurve } from "@/lib/data-analysis/chart-transforms"
 
 /**
- * L5 — the renderer binding: AnalysisSpec + EngineResult → Plotly traces and layout.
+ * L5, the renderer binding: AnalysisSpec + EngineResult → Plotly traces and layout.
  *
  * A pure function, deliberately. The renderer holds no state of its own, so
  * "reload produces an identical figure" (§6.5) is true by construction rather
@@ -16,7 +16,7 @@ import { rocCurve } from "@/lib/data-analysis/chart-transforms"
  *   - Every mark carries `customdata` with its source row id, so the chart can
  *     hit-test back to the spreadsheet. Without this, "open the data behind this
  *     point" is impossible, and it is impossible to add later without rewriting
- *     every trace builder — which is why it goes in from the start.
+ *     every trace builder, which is why it goes in from the start.
  *   - Excluded points are DRAWN, greyed, rather than removed (§8.1). A figure
  *     that silently omits its exclusions is the failure mode the governance
  *     exists to prevent.
@@ -41,7 +41,7 @@ const EXCLUDED_COLOUR = "#b9b2a8"
  *
  * These mirror the families declared in app/layout.tsx. They are written as real
  * family names rather than `var(--font-…)` because Plotly writes font-family on
- * SVG text nodes, where a CSS custom property will not always resolve — and a
+ * SVG text nodes, where a CSS custom property will not always resolve, and a
  * figure that silently falls back to Helvetica stops looking like the product
  * the moment it is exported.
  */
@@ -262,7 +262,7 @@ function groupRows(spec: AnalysisSpec, result: EngineResult) {
   const groups = new Map<string, { y: number[]; rowIds: string[]; excluded: boolean[] }>()
 
   for (const row of result.plotData) {
-    const key = groupCol ? String(row.values[groupCol] ?? "—") : (responseCol ?? "Series")
+    const key = groupCol ? String(row.values[groupCol] ?? "-") : (responseCol ?? "Series")
     const raw = responseCol ? row.values[responseCol] : null
     const value = typeof raw === "number" ? raw : Number(raw)
     if (!Number.isFinite(value)) continue
@@ -313,7 +313,7 @@ function errorValue(
   if (kind === "sem") return sem
 
   // Confidence intervals use the t distribution, not 1.96. At bench n the
-  // normal approximation is materially too narrow — with n = 3 the true
+  // normal approximation is materially too narrow, with n = 3 the true
   // multiplier is 4.30, so a "95% CI" drawn at 1.96 would be less than half
   // the interval it claims to be.
   const level = kind === "ci90" ? 0.9 : kind === "ci99" ? 0.99 : 0.95
@@ -699,8 +699,8 @@ function heatmap(spec: AnalysisSpec, result: EngineResult) {
 
   for (const row of result.plotData) {
     if (row.excluded && !spec.figure.showExcludedPoints) continue
-    const r = String(row.values[rowCol] ?? "—")
-    const c = String(row.values[colCol] ?? "—")
+    const r = String(row.values[rowCol] ?? "-")
+    const c = String(row.values[colCol] ?? "-")
     const v = Number(row.values[valueCol])
     if (!Number.isFinite(v)) continue
     if (!rowLevels.includes(r)) rowLevels.push(r)
@@ -823,7 +823,7 @@ function pieComposition(spec: AnalysisSpec, result: EngineResult) {
   const totals = new Map<string, number>()
   for (const row of result.plotData) {
     if (row.excluded && !spec.figure.showExcludedPoints) continue
-    const key = String(row.values[labelCol] ?? "—")
+    const key = String(row.values[labelCol] ?? "-")
     const add = valueCol ? Number(row.values[valueCol]) : 1
     if (!Number.isFinite(add)) continue
     totals.set(key, (totals.get(key) ?? 0) + add)
@@ -1132,7 +1132,7 @@ function rocChart(spec: AnalysisSpec, result: EngineResult) {
       line: { color: style.colour, width: style.lineWidth, shape: "hv" },
       fill: "tozeroy",
       fillcolor: withAlpha(style.colour, 0.12),
-      name: `ROC (AUC = ${Number.isFinite(roc.auc) ? roc.auc.toFixed(3) : "—"})`,
+      name: `ROC (AUC = ${Number.isFinite(roc.auc) ? roc.auc.toFixed(3) : "-"})`,
       hovertemplate: "FPR %{x:.3f}, TPR %{y:.3f}<extra></extra>",
     },
   ]
@@ -1221,7 +1221,7 @@ function threeD(spec: AnalysisSpec, result: EngineResult, surface: boolean) {
 /**
  * Brackets driven by the post-hoc result, drawn as shapes plus annotations.
  *
- * Only SIGNIFICANT comparisons are drawn by default — a figure carrying a
+ * Only SIGNIFICANT comparisons are drawn by default, a figure carrying a
  * bracket for every pair is unreadable, and the full table is one click away in
  * the results panel. A bracket the user has dragged keeps its offset, because
  * `derived` was cleared when they moved it.

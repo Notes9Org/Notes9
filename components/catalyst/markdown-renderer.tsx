@@ -28,8 +28,9 @@ import {
   type CitationSourceViewerSource,
 } from './citation-source-viewer';
 import '@/styles/html-content.css';
+import { stripEmDashes } from '@/lib/notes9-chat-format';
 
-// Stable across renders (no props/state dependency) — defined once at module
+// Stable across renders (no props/state dependency), defined once at module
 // scope so Streamdown doesn't see a new `plugins` object identity every
 // render. `singleDollarTextMath: true` lets AI answers use `$E=mc^2$` inline
 // math, not just `$$...$$` block math (the common case in chat answers).
@@ -40,10 +41,10 @@ const STREAMDOWN_PLUGINS = {
 
 /**
  * Streamdown's default `a` renderer wraps external links in a "link-safety"
- * component that mounts a `fixed inset-0` warning dialog INLINE — as a DOM
+ * component that mounts a `fixed inset-0` warning dialog INLINE, as a DOM
  * descendant of the markdown `<p>`. That dialog contains `<div>`/`<p>` nodes,
  * so an external-link chip inside a paragraph produces invalid nesting
- * (`<div>`/`<p>` cannot descend from `<p>`) and a React hydration error —
+ * (`<div>`/`<p>` cannot descend from `<p>`) and a React hydration error
  * exactly what our web-source citation anchors (`<a class="notes9-cite--link"
  * href="https://…">`) trigger.
  *
@@ -75,10 +76,10 @@ interface ChipData {
   /** Exact per-claim supporting span (span-level grounding). Preferred over
    * `excerpt` for the hover preview and for the click highlight target. */
   citedText: string;
-  /** Grounding verdict for this specific claim — drives the support badge. */
+  /** Grounding verdict for this specific claim, drives the support badge. */
   supportStatus: 'supported' | 'partial' | 'unsupported' | null;
   provenance: string;
-  /** How the span was located (native / heuristic / none) — drives the
+  /** How the span was located (native / heuristic / none), drives the
    * provenance badge in the hover card and the source viewer. */
   grounding: Grounding;
   /** Advisory char offsets into the stripped source for the cited span. */
@@ -120,7 +121,7 @@ function readChipData(el: HTMLElement): ChipData {
 }
 
 /** Subtle grounding signal shown in the hover card. These are confidence
- * cues, NOT correctness verdicts — phrasing avoids reading as "wrong". */
+ * cues, NOT correctness verdicts, phrasing avoids reading as "wrong". */
 const SUPPORT_BADGE: Record<
   'supported' | 'partial' | 'unsupported',
   { label: string; symbol: string; className: string }
@@ -248,7 +249,7 @@ function CitationHoverCard({
 }) {
   // Position relative to the renderer container (which is `relative`). The card
   // width tracks the container so it's never clipped on a narrow sidebar and
-  // grows when the sidebar widens — capped so it stays a tooltip, not a panel.
+  // grows when the sidebar widens, capped so it stays a tooltip, not a panel.
   const PAD = 8;
   const cardWidth = Math.max(180, Math.min(380, containerRect.width - PAD * 2));
   const half = cardWidth / 2;
@@ -407,12 +408,16 @@ function chipToViewerSource(chip: ChipData): CitationSourceViewerSource {
   };
 }
 function MarkdownRendererImpl({
-  content,
+  content: rawContent,
   className,
   showCursor = false,
   citationsManifest,
   onCitationClick,
 }: MarkdownRendererProps) {
+  // Every model-authored surface routes through this component, so normalizing
+  // here covers them all. The citation viewers render quoted source text and
+  // deliberately bypass MarkdownRenderer, so quotations stay verbatim.
+  const content = useMemo(() => stripEmDashes(rawContent), [rawContent]);
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<{ chip: ChipData; anchor: DOMRect } | null>(null);
@@ -439,13 +444,13 @@ function MarkdownRendererImpl({
 
   // Streamdown's own `parseIncompleteMarkdown` handles the "everything went
   // bold" streaming problem (auto-closing dangling `**`/`` ` ``/fences) that
-  // `completePartialMarkdown` used to paper over by hand — see the
+  // `completePartialMarkdown` used to paper over by hand, see the
   // `parseIncompleteMarkdown={showCursor}` prop below.
   //
   // Security: providing a custom `rehypePlugins` array REPLACES Streamdown's
   // default pipeline rather than extending it, so `raw`/`sanitize`/`harden`
   // must be re-included explicitly (in this order) or model-supplied HTML
-  // would render unsanitized. `rehypeCitations` runs LAST, after `harden` —
+  // would render unsanitized. `rehypeCitations` runs LAST, after `harden`
   // it creates the `.notes9-cite` chip nodes on the ALREADY-sanitized tree,
   // so sanitize/harden never see (and thus never strip) their `data-cite-*`
   // attributes. `harden` is also what adds target="_blank" +
@@ -464,10 +469,10 @@ function MarkdownRendererImpl({
   );
 
   /** Open the source a chip points at: web → new tab; workspace → highlight
-   * deep-link via dispatchDocumentHighlight (no fragile title lookup — the
+   * deep-link via dispatchDocumentHighlight (no fragile title lookup, the
    * manifest now carries source_id). */
   // The one place workspace-source / citation navigation lives (shared with the
-  // Sources panel) — SPA nav, chat docking, lab-note experiment resolution.
+  // Sources panel), SPA nav, chat docking, lab-note experiment resolution.
   const navigateToSource = useSourceNavigation();
 
   const openChip = useCallback(
@@ -503,13 +508,13 @@ function MarkdownRendererImpl({
       if (!chipEl) return;
       const chip = readChipData(chipEl);
       // Host override first (e.g. literature search scrolls to the result card)
-      // — consulted even for anchor chips so a web-sourced citation whose paper
+      // consulted even for anchor chips so a web-sourced citation whose paper
       // is listed in-page stays in-product; host returns false → link opens.
       if (onCitationClick && onCitationClick(chip.label) !== false) {
         e.preventDefault();
         return;
       }
-      // Anchor variants are real links — let the browser handle them.
+      // Anchor variants are real links, let the browser handle them.
       if (chipEl.tagName === 'A') return;
       e.preventDefault();
       // When we have a supporting span/excerpt, open the source viewer so the
@@ -555,7 +560,7 @@ function MarkdownRendererImpl({
       if (!chipEl) return;
       const chip = readChipData(chipEl);
       // Honor the host override (literature summary scrolls to the result card)
-      // so keyboard activation matches a mouse click — anchors included.
+      // so keyboard activation matches a mouse click, anchors included.
       if (onCitationClick && onCitationClick(chip.label) !== false) {
         e.preventDefault();
         return;
@@ -586,7 +591,7 @@ function MarkdownRendererImpl({
       <div
         ref={containerRef}
         className={cn(
-          // Pure Streamdown defaults for typography, spacing and tables — no
+          // Pure Streamdown defaults for typography, spacing and tables, no
           // custom [&_...] overrides and no `.html-content` !important rules.
           // Keep only theme text color, wrapping safety in the narrow sidebar,
           // the streaming cursor, and the caller's passthrough className.

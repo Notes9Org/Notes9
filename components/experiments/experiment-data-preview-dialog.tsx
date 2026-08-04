@@ -71,7 +71,7 @@ type Props = {
  *  - **Text/CSV/MD/JSON/XML** → rendered as monospaced `<pre>`
  *
  * Spreadsheets (xlsx/xls/csv with tabular_format) keep using
- * `ExperimentDataTabularDialog` — Univer needs its own portal handling.
+ * `ExperimentDataTabularDialog`, Univer needs its own portal handling.
  */
 export function ExperimentDataPreviewDialog({ open, onOpenChange, fileUrl, fileName, fileType }: Props) {
   const { toast } = useToast()

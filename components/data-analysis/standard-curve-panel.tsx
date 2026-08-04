@@ -33,7 +33,7 @@ const WEIGHTS: { id: WeightMode; label: string }[] = [
   { id: "1/Y^2", label: "1/Y²" },
 ]
 
-const num = (v: number, d = 3) => (isFinite(v) ? v.toFixed(d) : "—")
+const num = (v: number, d = 3) => (isFinite(v) ? v.toFixed(d) : "-")
 
 type Row = Record<string, number | string>
 
@@ -210,7 +210,7 @@ export function useStandardCurve(table: Table, numericCols: string[], plate: Pla
                     <td className="py-2 pr-4 font-medium">{r.label}</td>
                     <td className="py-2 pr-4 font-mono">{num(r.signal)}</td>
                     {dilKey && <td className="py-2 pr-4 font-mono">{num(r.dil, 0)}×</td>}
-                    <td className="py-2 pr-4 font-mono font-semibold">{isFinite(r.conc) ? num(r.conc) : "—"}</td>
+                    <td className="py-2 pr-4 font-mono font-semibold">{isFinite(r.conc) ? num(r.conc) : "-"}</td>
                     <td className="py-2 pr-4">
                       {!isFinite(r.conc) ? <Tag tone="muted">no fit</Tag> : r.inRange ? <Tag tone="ok">in range</Tag> : <Tag tone="warn">extrapolated</Tag>}
                     </td>
@@ -258,7 +258,7 @@ export function useStandardCurve(table: Table, numericCols: string[], plate: Pla
         </div>
         {source === "plate" ? (
           <p className="mt-1.5 text-[11px] text-muted-foreground">
-            Using the Plate tab layout — {plate.standards.x.length} standards, {plate.samples.length} sample wells. Mark wells there to change this.
+            Using the Plate tab layout, {plate.standards.x.length} standards, {plate.samples.length} sample wells. Mark wells there to change this.
           </p>
         ) : (
           !plateHasStandards && <p className="mt-1.5 text-[11px] text-muted-foreground">Mark ≥2 standards on the Plate tab to source the curve from a plate.</p>
@@ -270,10 +270,10 @@ export function useStandardCurve(table: Table, numericCols: string[], plate: Pla
           <Labeled label="Concentration column (standards)"><Sel cols={numericCols} value={concCol} onChange={setConcKey} /></Labeled>
           <Labeled label="Signal column (OD / RLU)"><Sel cols={numericCols} value={signalCol} onChange={setSignalKey} /></Labeled>
           <Labeled label="Sample label column (optional)">
-            <Sel cols={["", ...table.columns]} value={labelKey} onChange={setLabelKey} placeholder="— none —" />
+            <Sel cols={["", ...table.columns]} value={labelKey} onChange={setLabelKey} placeholder="- none -" />
           </Labeled>
           <Labeled label="Dilution factor column (optional)">
-            <Sel cols={["", ...numericCols]} value={dilKey} onChange={setDilKey} placeholder="— none —" />
+            <Sel cols={["", ...numericCols]} value={dilKey} onChange={setDilKey} placeholder="- none -" />
           </Labeled>
         </>
       )}
@@ -351,7 +351,7 @@ function Sel({ cols, value, onChange, placeholder }: { cols: string[]; value: st
         onChange={(e) => onChange(e.target.value)}
         className="h-9 w-full appearance-none rounded-lg border border-input bg-background pl-3 pr-8 text-sm outline-none transition-colors hover:border-border focus:border-[var(--n9-accent,#965034)]/50 focus:ring-2 focus:ring-[var(--n9-accent,#965034)]/20"
       >
-        {cols.map((c) => (<option key={c} value={c}>{c === "" ? placeholder ?? "— none —" : c}</option>))}
+        {cols.map((c) => (<option key={c} value={c}>{c === "" ? placeholder ?? "- none -" : c}</option>))}
       </select>
       <CaretDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
     </div>

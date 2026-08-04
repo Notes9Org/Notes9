@@ -14,7 +14,7 @@ import type { LiteraturePdfAnnotation } from "@/types/literature-pdf"
 
 /**
  * One annotation row, memoized so deleting/adding an annotation only re-renders
- * the changed row — not every sibling. Also avoids re-running `sanitizeHtml`
+ * the changed row, not every sibling. Also avoids re-running `sanitizeHtml`
  * for untouched rows on each sidebar render. Behavior/markup identical.
  */
 const AnnotationRow = memo(function AnnotationRow({
@@ -123,7 +123,7 @@ export function LiteraturePdfAnnotationSidebar({
   return (
     <div
       className={cn(
-        // Glass-rail shell — same surface as the Catalyst chat-history rail
+        // Glass-rail shell, same surface as the Catalyst chat-history rail
         // (see components/patterns/side-rail.tsx SideRailPanel).
         "flex min-h-0 flex-col gap-4 rounded-2xl border border-[color:var(--glass-border)] bg-sidebar/80 p-4 backdrop-blur-md",
         "shadow-[0_10px_34px_-18px_rgba(20,14,8,0.4)] dark:bg-sidebar/60 dark:shadow-[0_12px_38px_-16px_rgba(0,0,0,0.6)]",

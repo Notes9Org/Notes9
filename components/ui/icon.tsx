@@ -5,7 +5,7 @@
  *
  * Wraps Phosphor Icons (see docs/UI_UX_REVAMP_PLAN.md §3.2) so call sites never
  * import the raw library. Benefits:
- *  - one place controls default size, weight, and stroke — swap the library once, never 151× again;
+ *  - one place controls default size, weight, and stroke, swap the library once, never 151× again;
  *  - the signature "weight-shift on hover" (regular → fill) is opt-in via `interactive`,
  *    driving the platform-wide "every icon is interactive" gesture from the motion tokens;
  *  - decorative-by-default a11y (aria-hidden unless a label is given).
@@ -57,7 +57,7 @@ export function Icon({
   }
 
   // Interactive: stack a resting (regular) and a hover (fill) layer, cross-fade on
-  // `group-hover` using the fast motion token. Pure CSS — no per-icon JS state.
+  // `group-hover` using the fast motion token. Pure CSS, no per-icon JS state.
   return (
     <span
       className={cn("relative inline-flex", BASE, className)}

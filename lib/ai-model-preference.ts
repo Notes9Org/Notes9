@@ -1,7 +1,7 @@
 /**
  * The user's AI model choice (Settings → Preferences → AI model).
  *
- * Stores an ABSTRACT key — "haiku" | "sonnet" | "opus" — never a concrete model
+ * Stores an ABSTRACT key, "haiku" | "sonnet" | "opus", never a concrete model
  * id. The AI service resolves the key against the active provider's manifest
  * (GET /notes9/models is the catalog), so the same stored choice keeps working
  * if the backend switches providers. No stored value = the server default
@@ -44,6 +44,6 @@ export function setPreferredAiModel(key: AiModelKey | null): void {
     if (key === null) window.localStorage.removeItem(STORAGE_KEY);
     else window.localStorage.setItem(STORAGE_KEY, key);
   } catch {
-    // storage unavailable (private mode) — the choice just won't persist
+    // storage unavailable (private mode), the choice just won't persist
   }
 }

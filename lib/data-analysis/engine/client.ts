@@ -17,9 +17,9 @@ import type { WorkerRequest, WorkerResponse } from "./worker"
 /**
  * The engine's client-side face.
  *
- * Everything the architecture requires of a result — the engine stamp, the data
+ * Everything the architecture requires of a result, the engine stamp, the data
  * version it was computed against, the spec hash, and the cache keyed on all
- * three (§6.3) — is applied HERE rather than in the worker, so there is exactly
+ * three (§6.3), is applied HERE rather than in the worker, so there is exactly
  * one place that can mint a result identity. A result that reaches the UI
  * without passing through this file has no provenance, and provenance is what
  * the product sells.
@@ -94,13 +94,13 @@ export function warmUpEngine(onProgress?: (p: EngineProgress) => void): Promise<
  * In-memory result cache, keyed exactly as §6.3 requires: (spec, data version,
  * engine version). Restyling never evicts an entry because the key is built
  * from the computational slice of the spec only, which is what keeps Law 5's
- * two latency budgets separate — a colour change must not trigger a recompute.
+ * two latency budgets separate, a colour change must not trigger a recompute.
  */
 const cache = new Map<string, EngineResult>()
 
 export interface ComputeOptions {
   onProgress?: (p: EngineProgress) => void
-  /** Skip the cache — used by an explicit "re-run" (§3A.3 rule 3). */
+  /** Skip the cache, used by an explicit "re-run" (§3A.3 rule 3). */
   force?: boolean
 }
 

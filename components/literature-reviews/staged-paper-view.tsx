@@ -108,7 +108,7 @@ export function StagedPaperView({
   savingLiteratureId = null,
   onRemove,
 }: StagedPaperViewProps) {
-  // Persisted save state lives in `catalog_placement` (not `status`) — "repository"
+  // Persisted save state lives in `catalog_placement` (not `status`), "repository"
   // means it's in the library, "staging" means it's a transient staged read.
   const isSavedToLibrary = (lit.catalog_placement ?? "repository") === "repository"
   const stagedExpiresAt = (lit as { staged_expires_at?: string | null }).staged_expires_at ?? null
@@ -128,9 +128,9 @@ export function StagedPaperView({
       ? highlightTarget
       : null
 
-  // Same-tree citation click (tab already open, no reroute — see literature-tabs.tsx's
+  // Same-tree citation click (tab already open, no reroute, see literature-tabs.tsx's
   // DOCUMENT_HIGHLIGHT_EVENT listener, which preventDefault()s the reroute for this
-  // case): mirrors the editor views' pattern (e.g. report-detail-view.tsx) — a fresh
+  // case): mirrors the editor views' pattern (e.g. report-detail-view.tsx), a fresh
   // target object lands on every dispatch, so this always overrides the (possibly
   // stale) URL-derived highlight above with the latest click.
   const [inlineHighlight, setInlineHighlight] = useState<HighlightTarget | null>(null)
@@ -160,7 +160,7 @@ export function StagedPaperView({
   useEffect(() => {
     if (!lit.pdf_storage_path) return
     // Single, stable scroll: aligning the section's TOP to the top is unaffected
-    // by the PDF growing below, so one pass lands right — no double-scroll jump.
+    // by the PDF growing below, so one pass lands right, no double-scroll jump.
     const t = setTimeout(
       () => pdfCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
       350,
@@ -168,7 +168,7 @@ export function StagedPaperView({
     return () => clearTimeout(t)
   }, [lit.id, lit.pdf_storage_path])
 
-  // Ask Catalyst — this paper lives in the library/staging, so it attaches as an
+  // Ask Catalyst, this paper lives in the library/staging, so it attaches as an
   // @-mention TAG (via reviewId), identical to dragging it in from the library.
   // The agent resolves the id to the row's metadata + imported full text.
   const askCatalyst = () => {
@@ -217,7 +217,7 @@ export function StagedPaperView({
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            {/* Compact Ask Catalyst — small ghost button so it doesn't crowd the header. */}
+            {/* Compact Ask Catalyst, small ghost button so it doesn't crowd the header. */}
             <Button
               variant="ghost"
               size="sm"
@@ -228,7 +228,7 @@ export function StagedPaperView({
               <FlareIcon className="h-4 w-4" />
               Ask Catalyst
             </Button>
-            {/* Discard a staged paper. Hidden once saved — the library copy is
+            {/* Discard a staged paper. Hidden once saved, the library copy is
                 deleted from the Repository tab, not here. */}
             {onRemove && !isSavedToLibrary ? (
               <Button
@@ -248,7 +248,7 @@ export function StagedPaperView({
           <div className="mt-3 flex items-start gap-2 rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
             <BookmarkPlus className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>
-              You&apos;re just reading this — it isn&apos;t in your library yet.{" "}
+              You&apos;re just reading this, it isn&apos;t in your library yet.{" "}
               <span className="font-medium text-foreground">Save to library</span> to keep it.
             </span>
           </div>

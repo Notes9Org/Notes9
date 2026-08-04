@@ -2,13 +2,13 @@
  * Wire contracts for Catalyst Analysis.
  *
  * SOURCE OF TRUTH: `AI/catalyst/core/analysis/contracts.py`. These two sides are
- * hand-synced with no codegen — if you change a shape here, change the frozen
+ * hand-synced with no codegen, if you change a shape here, change the frozen
  * dataclass there in the same commit (and vice versa). Per-analysis `params`
  * shapes live in `AI/catalyst/core/analysis/catalog.py`; `FigureSpec.meta` keys
  * are produced by `AI/catalyst/core/analysis/figure_builder.py`.
  *
  * `schema_version` is on `AnalysisSpec` and `Results` so a stored analysis
- * written by an older runtime stays readable. FigureSpec deliberately has none —
+ * written by an older runtime stays readable. FigureSpec deliberately has none
  * the Python dataclass does not emit one.
  */
 
@@ -33,7 +33,7 @@ export function isTableType(value: unknown): value is TableType {
  * One reshaping/normalisation step applied to the source data before the test
  * runs. Extra keys are step-specific (e.g. the blank column for subtract_blank).
  *
- * Narrower than Python, which accepts `Tuple[Any, ...]` — this union is the set
+ * Narrower than Python, which accepts `Tuple[Any, ...]`, this union is the set
  * the engine actually implements.
  */
 export type Transform = {
@@ -49,7 +49,7 @@ export type MissingPolicy = "listwise_delete" | "pairwise_delete"
  * (see catalog.py: `assume_equal_variance`, `posthoc`/`correction`/
  * `control_group`, …), so this is an open record with the shared floor typed.
  *
- * Nothing is defaulted on the Python side by design — scipy's defaults and R's
+ * Nothing is defaulted on the Python side by design, scipy's defaults and R's
  * differ, and the spec exists so the same JSON reproduces the same numbers.
  */
 export type AnalysisParams = Record<string, unknown> & {
@@ -75,7 +75,7 @@ export interface AnalysisSpec {
   source: {
     /** experiment_data.id the analysis reads from. */
     data_id: string
-    /** Required by SourceRef.from_dict — send "" when not applicable. */
+    /** Required by SourceRef.from_dict, send "" when not applicable. */
     sheet: string
     range: string
   }
@@ -161,7 +161,7 @@ export interface Results {
     /** Package → version, for reproducibility ("scipy": "1.14.0"). */
     software: Record<string, string>
   }
-  /** Model fits only — the key is omitted entirely (not null) otherwise. */
+  /** Model fits only, the key is omitted entirely (not null) otherwise. */
   fit?: FitResult
 }
 
@@ -169,7 +169,7 @@ export interface Results {
  * Plotly-JSON figure envelope plus the metadata a caption needs. Stored in
  * analyses.figure_spec.
  *
- * NOTE: no schema_version — FigureSpec.to_dict() emits exactly these four keys.
+ * NOTE: no schema_version, FigureSpec.to_dict() emits exactly these four keys.
  */
 export interface FigureSpec {
   data: Record<string, unknown>[]

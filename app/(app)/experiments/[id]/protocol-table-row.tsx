@@ -84,7 +84,7 @@ export function ProtocolTableRow({ protocolLink, selected, onSelect }: ProtocolT
       </TableCell>
       <TableCell>{protocol.version || "1.0"}</TableCell>
       <TableCell>
-        {protocolLink.added_at ? new Date(protocolLink.added_at).toISOString().slice(0, 10) : "—"}
+        {protocolLink.added_at ? new Date(protocolLink.added_at).toISOString().slice(0, 10) : "-"}
       </TableCell>
       <TableCell className="text-right">
         <div className="flex items-center justify-end gap-1">

@@ -1,7 +1,7 @@
 import type { AnalysisSpec } from "@/lib/data-analysis/spec/analysis-spec"
 
 /**
- * L4 — the compute engine's contract.
+ * L4, the compute engine's contract.
  *
  * The engine is a pure function of (spec, data snapshot, engine version). This
  * file defines what it returns and how a result is identified, and it is where
@@ -48,8 +48,8 @@ export const ENGINE_PACKAGES = {
 /**
  * Where the runtime and its wheels are fetched from.
  *
- * Everything else about the engine is local — sandboxed, network-isolated,
- * reproducible — but all of it holds only AFTER this one third-party fetch
+ * Everything else about the engine is local, sandboxed, network-isolated,
+ * reproducible, but all of it holds only AFTER this one third-party fetch
  * succeeds. On a network that blocks the CDN the feature simply does not exist,
  * and a CDN outage is an outage of Data Analysis. Making the origin a
  * deployment decision rather than a compiled-in constant is what turns that
@@ -140,7 +140,7 @@ export interface EffectSize {
  *
  * Factorial ANOVA, regression and mixed-effects models do not have "a" p-value;
  * they have one per term. Collapsing that to a single number forces a choice
- * between an arbitrary term and the smallest p — and the smallest p is the
+ * between an arbitrary term and the smallest p, and the smallest p is the
  * p-hacking the spec author screens requests for. So the engine reports every
  * term and lets the UI show the table.
  */
@@ -240,7 +240,7 @@ export interface SurvivalCurve {
 
 /**
  * The primary statistical result. `reportSentence` is the engine's own wording
- * for the figure legend and methods section — generated HERE, from engine
+ * for the figure legend and methods section, generated HERE, from engine
  * numbers, so that Law 2 holds even for prose the model later paraphrases.
  */
 export interface TestResult {
@@ -321,7 +321,7 @@ export interface EngineResult {
  * `test: null` on its own is ambiguous: "no hypothesis attached, here are the
  * descriptives" and "the calculation raised" arrive looking identical, so a
  * failure could be reported as a finished analysis. The failure also used to
- * travel in `warnings` — the list a scientist is meant to read for caveats —
+ * travel in `warnings`, the list a scientist is meant to read for caveats
  * carrying a Python exception repr, which is not something to put in front of a
  * bench user. Hence: a code to branch on, a sentence to show, and the raw text
  * kept separately for diagnostics.
@@ -333,7 +333,7 @@ export interface EngineError {
   test: string
   /** Shown to the user. Never a Python exception repr. */
   message: string
-  /** `OverflowError: …` as Python raised it — for logs and bug reports only. */
+  /** `OverflowError: …` as Python raised it, for logs and bug reports only. */
   detail: string | null
 }
 

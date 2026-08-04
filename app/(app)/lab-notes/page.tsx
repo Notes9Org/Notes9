@@ -170,7 +170,7 @@ export default function LabNotesPage() {
     setProjectFilter(resolved ?? scopeFallback ?? FILTER_ALL)
   }, [searchParams, projectOptions, scope.projectId])
 
-  // Same URL-sync for `?experiment=` — set when arriving from an experiment
+  // Same URL-sync for `?experiment=`, set when arriving from an experiment
   // page's "Lab notes" sidebar link, so the list opens pre-filtered to the
   // experiment the user was just looking at (clearable via the filter row).
   useEffect(() => {
@@ -284,8 +284,8 @@ export default function LabNotesPage() {
             onClick={handleNewNote}
             data-tour="create-lab-note"
             className="n9-new-btn gap-2"
-            aria-label="New lab note — choose project and experiment"
-            title="New lab note — choose project and experiment"
+            aria-label="New lab note, choose project and experiment"
+            title="New lab note, choose project and experiment"
           >
             <Plus className="size-4" />
             New lab note
@@ -330,7 +330,7 @@ export default function LabNotesPage() {
             </EmptyMedia>
             <EmptyTitle>No lab notes yet</EmptyTitle>
             <EmptyDescription>
-              Lab notes capture what happened in an experiment — observations, deviations from the
+              Lab notes capture what happened in an experiment, observations, deviations from the
               protocol, snapshots of results. Each note lives under an experiment in a project.
             </EmptyDescription>
           </EmptyHeader>

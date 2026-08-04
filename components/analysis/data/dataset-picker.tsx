@@ -22,7 +22,7 @@ import {
 
 /**
  * Picks the analysis' source: which `experiment_data` file, which sheet, which
- * range — i.e. exactly `AnalysisSpec.source` (types/analysis.ts).
+ * range, i.e. exactly `AnalysisSpec.source` (types/analysis.ts).
  *
  * The sheet list comes from the file's stored Univer workbook snapshot, which
  * the Data & Files spreadsheet viewer already maintains, so nothing new has to
@@ -36,7 +36,7 @@ export type DatasetFile = {
   tabular_format?: string | null
 }
 
-/** Mirrors AnalysisSpec.source — `sheet`/`range` are "" when not applicable. */
+/** Mirrors AnalysisSpec.source, `sheet`/`range` are "" when not applicable. */
 export type DatasetSelection = { data_id: string; sheet: string; range: string }
 
 export type ParsedSheet = {
@@ -109,7 +109,7 @@ export function parseWorkbookSheets(snapshot: unknown): ParsedSheet[] {
 
     const maxRow = rowIndices[rowIndices.length - 1]
     const headerRow = readRow(rowIndices[0])
-    // A blank header cell still occupies a column — name it by its letter so
+    // A blank header cell still occupies a column, name it by its letter so
     // the role grid never shows two identical "" columns.
     const header = headerRow.map((h, c) => (h.trim() === "" ? columnLetter(c) : h))
     const rows = rowIndices.slice(1).map(readRow)

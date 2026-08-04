@@ -49,7 +49,7 @@ function rolesFromColumns(columns: ColumnAssignment[]): AnalysisSpec["roles"] {
   const subject = named("subject")
   // xy analyses read the independent variable FIRST: linear_regression takes
   // measurement[0] as x and measurement[1] as y. Appending x after measurement
-  // silently transposes the fit — plotting concentration against response.
+  // silently transposes the fit, plotting concentration against response.
   const x = named("x")
   return {
     measurement: [...x, ...named("measurement")],
@@ -62,7 +62,7 @@ function rolesFromColumns(columns: ColumnAssignment[]): AnalysisSpec["roles"] {
  * Params come from the catalog's own schema, not a hardcoded floor: the Python
  * dataclasses deliberately default nothing (scipy's and R's defaults differ, and
  * the spec exists so the same JSON reproduces the same numbers), and each
- * analysis pins different keys — `tails` is absent for linear_regression, for
+ * analysis pins different keys, `tails` is absent for linear_regression, for
  * instance. So we echo the declared defaults back and override only alpha.
  */
 function paramsFromSchema(entry: CatalogEntry, alpha: number): AnalysisSpec["params"] {
@@ -94,7 +94,7 @@ function dataFromSheet(sheet: ParsedSheet, columns: ColumnAssignment[]) {
 
 /**
  * The workspace before anything has been run. Same two sections as
- * /analysis/[id] — Data sets the source up, Analysis holds the plan — but the
+ * /analysis/[id], Data sets the source up, Analysis holds the plan, but the
  * plan card is authored from the catalog rather than proposed by a model.
  * When POST /api/analyses/propose lands it fills THIS card and presses THIS
  * Run, so nothing here is throwaway.
@@ -235,7 +235,7 @@ export function NewAnalysisClient({
       })
       const body = await res.json().catch(() => null)
       if (!res.ok) throw new Error(body?.error ?? "The analysis could not be run.")
-      // The route answers { analysis: row } — never push a bare body.id, that
+      // The route answers { analysis: row }, never push a bare body.id, that
       // lands on /analysis/undefined with the row already written.
       const id = body?.analysis?.id
       if (typeof id !== "string") throw new Error("The analysis ran but its id was missing.")
@@ -267,7 +267,7 @@ export function NewAnalysisClient({
       </div>
 
       {/* An analysis belongs to an experiment (experiment_id is NOT NULL), so
-          this picker is the first gate — prefilled from project scope. */}
+          this picker is the first gate, prefilled from project scope. */}
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="new-analysis-project">Project</Label>
@@ -349,16 +349,16 @@ export function NewAnalysisClient({
       ) : (
         <div className="space-y-4">
           {/* ponytail: the prompt box is the propose-mode seam (§06). Inert
-              until POST /api/analyses/propose exists — shown, not faked. */}
+              until POST /api/analyses/propose exists, shown, not faked. */}
           <div className="rounded-xl border border-dashed p-4">
             <p className="text-sm text-muted-foreground">
-              Describing the analysis in plain language is not wired up yet — pick it below.
+              Describing the analysis in plain language is not wired up yet, pick it below.
             </p>
           </div>
 
           {!tableType ? (
             <p className="text-sm text-muted-foreground">
-              Assign column roles in the Data section first — the runnable analyses depend on
+              Assign column roles in the Data section first, the runnable analyses depend on
               the table shape they describe.
             </p>
           ) : (

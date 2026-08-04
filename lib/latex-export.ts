@@ -20,7 +20,7 @@ export interface LaTeXExportOptions {
   authors?: string
   /** Optional abstract (extracted from content if not provided) */
   abstract?: string
-  /** Journal template id — defaults to "generic" */
+  /** Journal template id, defaults to "generic" */
   templateId?: string
 }
 
@@ -119,7 +119,7 @@ function convertNode(node: ChildNode, template?: JournalTemplate): string {
       return `\\textsuperscript{${inner()}}`
 
     case "mark":
-      // Highlight — no direct LaTeX equivalent, just pass through
+      // Highlight, no direct LaTeX equivalent, just pass through
       return inner()
 
     case "a": {
@@ -201,7 +201,7 @@ function convertNode(node: ChildNode, template?: JournalTemplate): string {
         const latex = el.getAttribute("data-latex") || ""
         return `\n\\[\n${latex}\n\\]\n\n`
       }
-      // Chemical formula or other spans — pass through
+      // Chemical formula or other spans, pass through
       return inner()
     }
 

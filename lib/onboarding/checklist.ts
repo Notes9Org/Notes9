@@ -4,7 +4,7 @@
  * The Getting Started checklist model, shared by the dashboard server component
  * (which measures the signals) and the client panel (which renders them).
  *
- * Completion is **derived from real workspace rows**, not stored — so the
+ * Completion is **derived from real workspace rows**, not stored, so the
  * checklist can never disagree with what the user has actually built, and it
  * keeps working for someone who did the thing before ever seeing the checklist.
  * The only persisted state is what cannot be derived: manual "Mark as done"
@@ -72,7 +72,7 @@ export const CHECKLIST_TASKS: ChecklistTask[] = [
 /** Raw counts measured against the workspace, used to derive completion. */
 export type ChecklistSignals = {
   welcomeSeen: boolean
-  /** Projects the user made themselves — seeded demo projects are excluded. */
+  /** Projects the user made themselves, seeded demo projects are excluded. */
   ownProjectCount: number
   /** Saved literature outside the seeded demo project. */
   savedLiteratureCount: number
@@ -88,7 +88,7 @@ export type ChecklistState = {
 
 const TASK_IDS = new Set<string>(CHECKLIST_TASKS.map((t) => t.id))
 
-/** Tolerant parse — the column is free-form jsonb and may predate any given shape. */
+/** Tolerant parse, the column is free-form jsonb and may predate any given shape. */
 export function parseChecklistState(raw: unknown): ChecklistState {
   const obj = (raw ?? {}) as Record<string, unknown>
   const done = Array.isArray(obj.done)
@@ -138,7 +138,7 @@ const GOAL_TO_TASK: Record<string, ChecklistTaskId> = {
 /**
  * Orders the list so it reads as advice rather than a fixed form:
  *
- *  1. Creating a project, if still outstanding — nothing else works without one.
+ *  1. Creating a project, if still outstanding, nothing else works without one.
  *  2. Whatever the user said they came here to do, in the order they said it.
  *  3. Everything else still outstanding.
  *  4. Completed tasks, which sink to the bottom.

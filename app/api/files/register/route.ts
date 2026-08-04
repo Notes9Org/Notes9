@@ -7,7 +7,7 @@ import { enforceLimits, checkBodyBytes, checkRegisterItems } from "@/lib/limits/
 // Back-fill chat_attachments rows for files that were uploaded BEFORE a chat
 // session existed (the very first message of a new conversation). The upload
 // route registers files when a session_id is known; this endpoint covers the
-// gap so every chat file ends up with a row — which is what (a) gives it the
+// gap so every chat file ends up with a row, which is what (a) gives it the
 // 7-day TTL the cleanup cron enforces and (b) lets catalyst's read_document
 // tool fetch it in later turns.
 //
@@ -77,7 +77,7 @@ export async function POST(request: Request) {
     }
 
     const supabase = await createClient();
-    // onConflict ignore — duplicates from a retried send are harmless.
+    // onConflict ignore, duplicates from a retried send are harmless.
     const { data, error } = await supabase
       .from("chat_attachments")
       .upsert(rows, { onConflict: "storage_bucket,storage_path", ignoreDuplicates: true })

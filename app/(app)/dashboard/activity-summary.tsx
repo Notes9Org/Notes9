@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react"
 import { useAuthUser } from "@/components/auth/auth-provider"
+import { stripEmDashes } from "@/lib/notes9-chat-format"
 
 /** Per-user cache keys. Scoping by user id is required so that signing into a
  *  different Notes9 account in the same browser never shows the previous
@@ -48,7 +49,7 @@ function writeCache(userId: string, summary: string) {
     const entry: CachedSummary = { summary, cachedAt: Date.now() }
     localStorage.setItem(cacheKey(userId), JSON.stringify(entry))
   } catch {
-    // localStorage full or unavailable — ignore
+    // localStorage full or unavailable, ignore
   }
 }
 
@@ -61,7 +62,7 @@ function writeCache(userId: string, summary: string) {
  * - If cached summary exists and is < 2 days old → show cached immediately.
  * - Every 2 days the cache expires → next mount triggers a fresh fetch.
  * - `sessionStorage` flag ensures a fresh fetch on each new login session.
- * - Gracefully hidden if the API fails — never blocks the dashboard.
+ * - Gracefully hidden if the API fails, never blocks the dashboard.
  */
 export function ActivitySummary() {
   const user = useAuthUser()
@@ -93,7 +94,7 @@ export function ActivitySummary() {
 
   useEffect(() => {
     // The summary is per-user. Without a signed-in user id we have nothing to
-    // show and nothing to cache — clear any stale state and wait.
+    // show and nothing to cache, clear any stale state and wait.
     if (!userId) {
       setSummary(null)
       setIsVisible(false)
@@ -151,7 +152,10 @@ export function ActivitySummary() {
 
   // "Signals": a quiet AI briefing of what's moving in the lab. A soft accent
   // pill with tiny breathing equalizer bars carries the "live" feeling; the
-  // summary itself stays plain, readable prose — two lines max.
+  // summary itself stays plain, readable prose, two lines max.
+  // Rendered as bare text rather than markdown, so it needs the same em dash
+  // normalization MarkdownRenderer applies to every other model-authored surface.
+  const shown = stripEmDashes(summary)
   return (
     <div
       className={`
@@ -183,9 +187,9 @@ export function ActivitySummary() {
       </div>
       <p
         className="mt-1.5 line-clamp-2 min-w-0 text-pretty text-[13px] leading-snug text-muted-foreground"
-        title={summary}
+        title={shown}
       >
-        {summary}
+        {shown}
       </p>
     </div>
   )

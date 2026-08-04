@@ -58,7 +58,7 @@ function getPlainTextFromMessage(msg: {
     if (text) return normalizeContentToPlainText(text);
   }
   // Content may be an array of blocks (AI SDK / Anthropic multi-modal). Keep ONLY
-  // text blocks — never JSON.stringify the payload, or a file/document/image block's
+  // text blocks, never JSON.stringify the payload, or a file/document/image block's
   // base64 bytes leak into the prompt and the model echoes them back to the user.
   if (Array.isArray(msg.content)) {
     const text = (msg.content as Array<{ type?: string; text?: string }>)
@@ -70,7 +70,7 @@ function getPlainTextFromMessage(msg: {
 }
 
 export async function POST(req: Request) {
-  // Auth gate. Previously the route accepted any caller — when a static
+  // Auth gate. Previously the route accepted any caller, when a static
   // service bearer token was set in env, the handler proceeded without
   // verifying the user at all. An unauthenticated attacker could POST here
   // and burn LLM quota billed to the account. We verify the Supabase JWT
@@ -109,8 +109,8 @@ export async function POST(req: Request) {
     rawResponseFormat === 'json' || rawResponseFormat === 'text'
       ? rawResponseFormat
       : undefined;
-  // PII redaction. Previously this logged the full body — including every
-  // user message — to stdout, which on Vercel/CloudWatch persists indefinitely.
+  // PII redaction. Previously this logged the full body, including every
+  // user message, to stdout, which on Vercel/CloudWatch persists indefinitely.
   // We now log only the lightweight envelope so debugging stays possible
   // without retaining user-authored research content.
   console.log('chat POST', {
@@ -147,7 +147,7 @@ export async function POST(req: Request) {
   }));
 
   // C7: For literature sessions, prepend a system message so follow-up turns are
-  // grounded in the papers that were surfaced.  Fail-open — any error is ignored.
+  // grounded in the papers that were surfaced.  Fail-open, any error is ignored.
   // Cast to wider type only for the unshift; downstream build functions still
   // receive the narrowed type and pass the array through to the JSON body as-is.
   try {

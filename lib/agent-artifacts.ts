@@ -11,7 +11,7 @@ export type ArtifactKind = 'image' | 'pdf' | 'word' | 'excel' | 'file';
 // ── Persisted artifact contract ───────────────────────────────────────────────
 
 /**
- * The stable fields persisted per artifact — deliberately excludes `signed_url`
+ * The stable fields persisted per artifact, deliberately excludes `signed_url`
  * (expires ~1 h) which is re-minted on demand by the resign route.
  */
 export interface PersistedArtifact {
@@ -166,7 +166,7 @@ export async function resignArtifact(dataId: string, token: string | null): Prom
     const res = await fetch(`/api/agent/artifacts/${encodeURIComponent(dataId)}/signed-url`, {
       headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     });
-    // 410 Gone ⇒ the draft was swept (TTL) — distinct from a transient failure so
+    // 410 Gone ⇒ the draft was swept (TTL), distinct from a transient failure so
     // the card can show an honest "expired" tombstone instead of retrying forever.
     if (res.status === 410) return { expired: true };
     if (!res.ok) return null;
@@ -284,7 +284,7 @@ export interface ArtifactSource {
 /**
  * Fetch the stored recipe + version chain for an artifact. Returns null when no
  * recipe was stored (has_source false), the draft expired (410), or the artifact
- * is not the user's — callers treat null as "no code to show".
+ * is not the user's, callers treat null as "no code to show".
  */
 export async function fetchArtifactSource(
   dataId: string,

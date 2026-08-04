@@ -48,7 +48,7 @@ function buildLineDiff(prevHtml: string, nextHtml: string): Row[] {
   const rows: Row[] = []
   for (const part of parts) {
     const lines = part.value.split("\n")
-    // diffLines keeps a trailing "" after the final newline — drop it.
+    // diffLines keeps a trailing "" after the final newline, drop it.
     if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop()
     for (const line of lines) {
       if (part.added) rows.push({ kind: "add", text: line })
@@ -80,7 +80,7 @@ export function LabNoteVersionsDialog({
   versions,
   loading,
   error,
-  /** The live, possibly-uncommitted editor body — used as the "current" side of the newest diff. */
+  /** The live, possibly-uncommitted editor body, used as the "current" side of the newest diff. */
   currentContent,
   onRestore,
 }: {
@@ -276,7 +276,7 @@ export function LabNoteVersionsDialog({
             <AlertDialogTitle>Restore v{confirmRestore?.version_no}?</AlertDialogTitle>
             <AlertDialogDescription>
               This replaces the note's current content with the v{confirmRestore?.version_no} snapshot and records it as a
-              new, audited "restore" version. Nothing is deleted — the current content stays in history.
+              new, audited "restore" version. Nothing is deleted, the current content stays in history.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

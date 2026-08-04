@@ -69,12 +69,12 @@ export function ExperimentsPageContent({
   projectContext?: ExperimentsProjectContext | null
   linkProjectId?: string | null
   /** Deep-link tab for experiment rows (e.g. "data" when arriving via the
-   * sidebar's Data link — the row then opens the Data & Files tab directly). */
+   * sidebar's Data link, the row then opens the Data & Files tab directly). */
   detailTab?: string | null
 }) {
   const isMobile = useMediaQuery("(max-width: 768px)")
   const [viewMode, setViewMode] = useState<"grid" | "table">("table")
-  // The sidebar context SEEDS the project filter but never locks it — the
+  // The sidebar context SEEDS the project filter but never locks it, the
   // dropdown stays visible so other projects' experiments are one change away.
   const [projectFilter, setProjectFilter] = useState(projectContext?.id ?? FILTER_ALL)
   const [statusFilter, setStatusFilter] = useState(FILTER_ALL)
@@ -100,7 +100,7 @@ export function ExperimentsPageContent({
       const name = e.project?.name
       if (id && name) m.set(id, name)
     }
-    // The scoped project may have no experiments yet — still offer it.
+    // The scoped project may have no experiments yet, still offer it.
     if (projectContext && !m.has(projectContext.id)) {
       m.set(projectContext.id, projectContext.name)
     }

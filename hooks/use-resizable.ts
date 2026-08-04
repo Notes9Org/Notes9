@@ -22,7 +22,7 @@ export function useResizable({
   persistKey
 }: UseResizableOptions) {
   const [width, setWidth] = useState(initialWidth)
-  // Only persist once the user has actually dragged the handle — otherwise the
+  // Only persist once the user has actually dragged the handle, otherwise the
   // default would be written to storage on first mount and permanently mask any
   // future change to `initialWidth`.
   const userResizedRef = useRef(false)
@@ -37,7 +37,7 @@ export function useResizable({
     if (Number.isFinite(n)) setWidth(Math.min(Math.max(n, minWidth), maxWidth))
   }, [persistKey, minWidth, maxWidth])
 
-  // Persist the width on change — but only after a real user resize.
+  // Persist the width on change, but only after a real user resize.
   useEffect(() => {
     if (!persistKey || typeof window === 'undefined' || !userResizedRef.current) return
     window.localStorage.setItem(persistKey, String(width))

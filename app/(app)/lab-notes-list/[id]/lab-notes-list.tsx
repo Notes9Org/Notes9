@@ -208,12 +208,12 @@ export default function LabNotesList({
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         <span className="truncate inline-block max-w-[180px] align-bottom" title={note.experiment_name ?? undefined}>
-                          {note.experiment_name ?? <span className="italic">—</span>}
+                          {note.experiment_name ?? <span className="italic">-</span>}
                         </span>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         <span className="truncate inline-block max-w-[160px] align-bottom" title={note.project_name ?? undefined}>
-                          {note.project_name ?? <span className="italic">—</span>}
+                          {note.project_name ?? <span className="italic">-</span>}
                         </span>
                       </TableCell>
                       <TableCell className="text-muted-foreground whitespace-nowrap">

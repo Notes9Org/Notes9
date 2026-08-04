@@ -246,7 +246,7 @@ export function shapiroWilk(input: number[]): TestResult | null {
     stat: [{ label: "W", value: W }],
     p: Math.max(0, Math.min(1, p)),
     df: `n = ${n}`,
-    note: p < 0.05 ? "Data deviate from normal — consider a non-parametric test." : "No significant deviation from normality.",
+    note: p < 0.05 ? "Data deviate from normal, consider a non-parametric test." : "No significant deviation from normality.",
   }
 }
 
@@ -741,7 +741,7 @@ export type TwoWayResult = { terms: AnovaTerm[]; note?: string }
 
 /**
  * Two-way ANOVA with interaction. Each cell is one (factor-A level × factor-B
- * level) combination with its replicate values. Uses Type I sums of squares —
+ * level) combination with its replicate values. Uses Type I sums of squares
  * exact for balanced designs (equal replicates per cell).
  */
 export function twoWayAnova(cells: TwoWayCell[]): TwoWayResult | null {

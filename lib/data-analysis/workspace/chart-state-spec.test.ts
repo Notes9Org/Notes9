@@ -297,8 +297,8 @@ describe("driving the rail from a spec", () => {
 describe("the statistics slice survives a round trip", () => {
   it("keeps an explicitly chosen test", () => {
     // The bug this covers: the test used to be recomputed from the chart type
-    // on every derivation, so a chosen test — an AI answering "compare treated
-    // vs control", or the panel — was overwritten on the very next render.
+    // on every derivation, so a chosen test, an AI answering "compare treated
+    // vs control", or the panel, was overwritten on the very next render.
     const chosen = specFromChartState({ ...base, test: "kruskal-wallis" }, table)
     expect(chosen.analysis.test).toBe("kruskal-wallis")
 
@@ -338,7 +338,7 @@ describe("the statistics slice survives a round trip", () => {
   })
 })
 
-// P4 — the bridge: `ChartState` had no field for filters, transforms or
+// P4, the bridge: `ChartState` had no field for filters, transforms or
 // exclusions, so `data.setFilters` / `data.addTransform` landed on the spec
 // and vanished the moment `chartStateFromSpec` diffed it back through the
 // rail. These prove the round trip, and the guard that keeps a stale filter

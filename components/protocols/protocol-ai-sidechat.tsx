@@ -136,7 +136,7 @@ export interface ProtocolAiSidechatProps {
   currentVersion: string
   aiContextPapers: LiteraturePaperItem[]
   aiContextProtocols: ProtocolContextItem[]
-  /** Papers shown in the filtered literature panel — used to resolve @ mentions. */
+  /** Papers shown in the filtered literature panel, used to resolve @ mentions. */
   literatureCandidates?: LiteraturePaperItem[]
   /** Add papers to AI context (drag-drop, @ pick). */
   onAddPapers?: (papers: LiteraturePaperItem[]) => void
@@ -509,7 +509,7 @@ export function ProtocolAiSidechat({
     }
   }, [activeSessionId, loadMessages])
 
-  // Pinned auto-scroll — follows new messages/steps only while the user is at the bottom.
+  // Pinned auto-scroll, follows new messages/steps only while the user is at the bottom.
   const { onScroll } = usePinnedAutoScroll(scrollRef, [messages, steps, error])
 
   const createNewSession = useCallback(() => {
@@ -873,7 +873,7 @@ export function ProtocolAiSidechat({
               <span className="text-xs font-semibold text-muted-foreground">Protocol</span>
             </div>
           )}
-          {/* Header — matches CatalystSidebar (catalyst-sidebar.tsx) */}
+          {/* Header, matches CatalystSidebar (catalyst-sidebar.tsx) */}
           <div className="flex items-center justify-between px-4 py-3">
             <h2 className="font-semibold text-sm">Chat History</h2>
             <div className="flex items-center gap-1">
@@ -1336,11 +1336,11 @@ export function ProtocolAiSidechat({
               dropTargetActive && "ring-2 ring-primary border-primary bg-primary/5"
             )}
           >
-            {/* Context hint — inside container like Catalyst's mode toggle */}
+            {/* Context hint, inside container like Catalyst's mode toggle */}
             {!hasAnyContext && (
               <div className="border-b border-border/50 px-3 py-2">
                 <p className="text-2xs text-amber-700/90 dark:text-amber-400/90">
-                  No context yet — drag papers from Literature, use @ for papers, or add existing protocols.
+                  No context yet, drag papers from Literature, use @ for papers, or add existing protocols.
                 </p>
               </div>
             )}
@@ -1352,7 +1352,7 @@ export function ProtocolAiSidechat({
               </div>
             )}
             <div className="relative">
-              {/* @ mention picker — anchored to composer only */}
+              {/* @ mention picker, anchored to composer only */}
               {mentionMenu && (
                 <div
                   ref={mentionListRef}
@@ -1363,7 +1363,7 @@ export function ProtocolAiSidechat({
                   {mentionMenu.matches.length === 0 ? (
                     <p className="px-2 py-3 text-center text-xs text-muted-foreground">
                       {literatureCandidates.length === 0
-                        ? "No papers in the filtered list — set project/experiment in Literature."
+                        ? "No papers in the filtered list, set project/experiment in Literature."
                         : "No matching papers."}
                     </p>
                   ) : (
@@ -1525,7 +1525,7 @@ export function ProtocolAiSidechat({
                     size="icon"
                     className="size-7 animate-pulse"
                     onClick={() => {
-                      // Stop whichever stream is live — was a no-op for the
+                      // Stop whichever stream is live, was a no-op for the
                       // notes9 / general paths (button appeared but did nothing).
                       if (isStreaming) {
                         abort()
@@ -1773,7 +1773,7 @@ function AssistantMessage({
           size="icon"
           className="size-7 text-muted-foreground hover:text-foreground"
           onClick={handleCopy}
-          title="Copy — Markdown and rich paste for the editor"
+          title="Copy, Markdown and rich paste for the editor"
         >
           {copied ? (
             <Check className="size-3.5 text-green-500" />

@@ -8,7 +8,7 @@ export type ClipboardInfoIconProps = HTMLAttributes<HTMLSpanElement> & {
 }
 
 /**
- * Clipboard with a small info mark — used for Protocols / protocol AI affordances.
+ * Clipboard with a small info mark, used for Protocols / protocol AI affordances.
  */
 export function ClipboardInfoIcon({
   className,

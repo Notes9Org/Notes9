@@ -47,7 +47,7 @@ export type AnalysisRow = {
 type Option = { id: string; name: string }
 type ExperimentOption = Option & { project_id: string | null }
 
-/** analyses.status CHECK — draft | running | ready | failed. */
+/** analyses.status CHECK, draft | running | ready | failed. */
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
   ready: "default",
   running: "secondary",
@@ -126,7 +126,7 @@ export function AnalysisListClient({
   }, [analyses, projectFilter, experimentFilter])
 
   // An analysis always starts from a data file, so "New analysis" hands off to
-  // /analysis/new — the workspace in its unrun state — with the current scope
+  // /analysis/new, the workspace in its unrun state, with the current scope
   // carried over to prefill the experiment picker.
   // ponytail: a link, not a create dialog; /analysis/new holds the spec until
   // Run succeeds, so no draft row is ever written.
@@ -275,7 +275,7 @@ export function AnalysisListClient({
                       className="truncate block"
                       title={analysis.experiment_name ?? undefined}
                     >
-                      {analysis.experiment_name ?? "—"}
+                      {analysis.experiment_name ?? "-"}
                     </span>
                   </TableCell>
                   <TableCell className="hidden lg:table-cell max-w-[160px]">
@@ -283,7 +283,7 @@ export function AnalysisListClient({
                       className="truncate block"
                       title={analysis.project_name ?? undefined}
                     >
-                      {analysis.project_name ?? "—"}
+                      {analysis.project_name ?? "-"}
                     </span>
                   </TableCell>
                   <TableCell className="hidden lg:table-cell whitespace-nowrap text-muted-foreground">

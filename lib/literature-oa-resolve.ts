@@ -8,7 +8,7 @@
  *
  * Server-only. Every candidate URL is passed through `shouldTrySearchCardPdfUrl`
  * (SSRF allowlist/blocklist) before it is returned. Each network call is wrapped in
- * try/catch and returns empty on failure — these run in the background and must stay fast.
+ * try/catch and returns empty on failure, these run in the background and must stay fast.
  */
 import type { SearchPaper } from "@/types/paper-search"
 import { normalizeDoi } from "@/lib/literature-pdf-storage"
@@ -114,7 +114,7 @@ type CoreWork = { doi?: string | null; downloadUrl?: string | null }
 type CoreSearchResponse = { results?: CoreWork[] | null }
 
 /** Pure: pick the download URL of the CORE result whose DOI EXACTLY matches the
- *  requested one — CORE's search is fuzzy and can return neighbouring works, and we
+ *  requested one, CORE's search is fuzzy and can return neighbouring works, and we
  *  must never download a different paper than the one asked for. */
 export function pickCoreDownloadUrl(
   results: CoreWork[] | null | undefined,
@@ -272,7 +272,7 @@ function abstractFromInvertedIndex(
 
 /**
  * OpenAlex-hosted OA PDF endpoint for a work id (e.g. `W1775749144`). The
- * `api_key` is intentionally NOT included here — it is appended by the downloader
+ * `api_key` is intentionally NOT included here, it is appended by the downloader
  * at fetch time so the secret never lands in a stored candidate URL / tried_urls.
  */
 export function openAlexContentPdfUrl(workId: string): string {
@@ -297,7 +297,7 @@ async function resolveFromOpenAlex(
       locations?: Array<{ pdf_url?: string | null }> | null
     }
     // Two independent PDF sources, tried in order:
-    // 1. OpenAlex's own hosted copy at content.openalex.org — bypasses every
+    // 1. OpenAlex's own hosted copy at content.openalex.org, bypasses every
     //    publisher / PMC bot-wall. Short work id (e.g. W123…) from `id`; the
     //    api_key is appended at fetch time so it never lands in a stored URL.
     // 2. External repository PDFs OpenAlex already lists in best_oa_location /
@@ -376,12 +376,12 @@ export type OaSources = { pdfUrls: string[]; oaPackageTgzUrl: string | null; abs
 // Short-lived in-process cache of resolved OA candidates, keyed by paper
 // identity (DOI, else PMID). A paper's OA locations don't change minute to
 // minute, and every attach/read/stage re-resolves live against Unpaywall /
-// OpenAlex / Europe PMC / NCBI — so without this a retry (or a second paper
+// OpenAlex / Europe PMC / NCBI, so without this a retry (or a second paper
 // from the same upstream) re-races those slow calls under a tight budget, which
 // is exactly the "failed first, worked second" flakiness. Positive hits live
 // 30 min; a resolution that found NOTHING is negative-cached only briefly (see
 // OA_CACHE_NEGATIVE_TTL_MS) so a transient miss doesn't pin an OA paper as empty. In-process
-// only (per server instance) and self-bounding — no external store.
+// only (per server instance) and self-bounding, no external store.
 //
 // The negative TTL is deliberately short (1 min): a "found nothing" is often a
 // transient upstream timeout, not a truly non-OA paper, and a 5-min negative cache
@@ -396,7 +396,7 @@ function oaCacheKey(paper: SearchPaper): string | null {
   const doi = normalizeDoi(paper.doi)
   if (doi) return `doi:${doi}`
   if (paper.pmid) return `pmid:${String(paper.pmid).trim()}`
-  return null // title/pdfUrl-only papers aren't stably keyable — skip the cache
+  return null // title/pdfUrl-only papers aren't stably keyable, skip the cache
 }
 
 /**
@@ -438,11 +438,11 @@ export async function resolveOaSourcesUncached(
   // All sources run in parallel (they're independent + free); candidates are
   // merged in priority order and the downloader races them, keeping the first
   // that yields real %PDF bytes and rejecting walls/landing-pages. Priority:
-  //   1. OpenAlex hosted (content.openalex.org) — bypasses every publisher/PMC
+  //   1. OpenAlex hosted (content.openalex.org), bypasses every publisher/PMC
   //      bot-wall; api_key appended at fetch time, never in a stored URL.
   //   2. OpenAlex-tracked repository PDFs (PMC, HAL, university repos, arXiv).
-  //   3. Europe PMC full-text — clean, unblocked PDFs for life-science papers.
-  //   4. CORE — universal green-OA aggregator (needs CORE_API_KEY, else no-op).
+  //   3. Europe PMC full-text, clean, unblocked PDFs for life-science papers.
+  //   4. CORE, universal green-OA aggregator (needs CORE_API_KEY, else no-op).
   //   5. Preprint servers (bioRxiv/medRxiv/arXiv) derived from the DOI.
   //   6. Semantic Scholar openAccessPdf.
   const normalizedDoi = normalizeDoi(paper.doi)

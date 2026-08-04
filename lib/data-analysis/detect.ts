@@ -1,5 +1,5 @@
 /**
- * Lightweight classifier for the active sheet — decides which specialized
+ * Lightweight classifier for the active sheet, decides which specialized
  * analysis tabs are relevant so the workspace can surface Standard curve / Plate
  * only when the data actually looks like a dose-response/ELISA or a microplate.
  * Runs on every edit, so it stays cheap (single pass, no allocations per cell).
@@ -62,7 +62,7 @@ export function detectDataKind(
   const hasSignal = columns.some((c) => SIGNAL_RE.test(c))
 
   // Serial dilution: a numeric column whose sorted-descending consecutive ratios
-  // are near-constant (2-, 3-, 10-fold …) — the signature of a standard series.
+  // are near-constant (2-, 3-, 10-fold …), the signature of a standard series.
   const serialColumns = numericCols.filter((c) => {
     const vals = rows
       .map((r) => Number(r[c]))
@@ -81,7 +81,7 @@ export function detectDataKind(
   /**
    * A serial dilution and an exponential growth curve look identical to the
    * ratio test: both have near-constant ratios between sorted values. The
-   * difference is what the column MEANS — a dilution series is a
+   * difference is what the column MEANS, a dilution series is a
    * concentration, so it is never itself the signal. Requiring that the serial
    * column is not signal-named stops an OD600 growth curve being read as a
    * standard series, which is what put a Standard curve tab on every sheet.

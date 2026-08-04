@@ -5,7 +5,7 @@ import type { Table } from "@/lib/data-analysis/engine/resolver"
 /**
  * The client half of the AI seam: one POST to `/api/data-analysis/spec-author`.
  *
- * The route already promises never to throw — every failure arrives as a legible
+ * The route already promises never to throw, every failure arrives as a legible
  * JSON body. This module extends that promise across the network, where the
  * route cannot: a dropped connection, a proxy's HTML 502, an aborted request are
  * all typed outcomes here, so the workspace has exactly one thing to handle
@@ -20,7 +20,7 @@ const ENDPOINT = "/api/data-analysis/spec-author"
 /**
  * Every reply the route can produce, plus the two only the network can.
  *
- * `patch` is the success case. The route sends it WITHOUT an `outcome` field —
+ * `patch` is the success case. The route sends it WITHOUT an `outcome` field
  * the discriminant is added here so the caller switches on one field for all
  * cases instead of testing `"outcome" in reply`.
  */
@@ -123,7 +123,7 @@ export async function requestSpecPatch(input: SpecPatchRequest): Promise<SpecPat
     }
   }
 
-  // Mutation shapes are not re-validated here — `validateProposal` on the route
+  // Mutation shapes are not re-validated here, `validateProposal` on the route
   // is the single gate, and a second, weaker copy of it would only disagree.
   return {
     outcome: "patch",

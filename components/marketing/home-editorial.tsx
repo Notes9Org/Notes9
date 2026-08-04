@@ -358,7 +358,7 @@ export function ChainSection() {
                            a lot of empty space; centring puts the sentence
                            opposite the middle of the image where the eye moves
                            between them. The text column is also given real room
-                           — it was capped narrower than the column it lived in,
+                           - it was capped narrower than the column it lived in,
                            so it wrapped early while the space went unused. */
                         className="grid items-center gap-8 pb-10 md:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] md:gap-10 lg:gap-14 lg:pl-[3.25rem]"
                       >

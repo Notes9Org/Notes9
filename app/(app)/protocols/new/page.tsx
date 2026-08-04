@@ -291,7 +291,7 @@ function NewProtocolForm() {
       const id = resolveInitialProjectIdParam(projectParam, allowed)
       setReturnProjectId(id)
       // Prefill from the URL param, else the sidebar context. Either way the
-      // picker stays editable — project is optional for protocols.
+      // picker stays editable, project is optional for protocols.
       const prefill =
         id ?? (scopeProjectId && allowed.includes(scopeProjectId) ? scopeProjectId : null)
       if (prefill) {
@@ -422,7 +422,7 @@ function NewProtocolForm() {
         toast({
           title: "Protocol created",
           description:
-            "Saved without project/experiment links — run database migration 030 (project_id / experiment_id on protocols) in Supabase, then edit the protocol to add context.",
+            "Saved without project/experiment links, run database migration 030 (project_id / experiment_id on protocols) in Supabase, then edit the protocol to add context.",
         })
       }
 
@@ -448,7 +448,7 @@ function NewProtocolForm() {
           <div className="min-w-0">
             <PageHeading>New Protocol</PageHeading>
             <p className="text-muted-foreground mt-1 text-sm">
-              Step 1 of 2 — choose how to start
+              Step 1 of 2, choose how to start
             </p>
           </div>
         </div>
@@ -541,7 +541,7 @@ function NewProtocolForm() {
               <h1 className="text-lg font-bold tracking-tight truncate">
                 {formData.name || "New Protocol"}
               </h1>
-              <p className="text-xs text-muted-foreground">Design Mode — Step 2 of 2</p>
+              <p className="text-xs text-muted-foreground">Design Mode, Step 2 of 2</p>
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -820,7 +820,7 @@ function NewProtocolForm() {
         </Button>
         <div className="min-w-0 flex-1">
           <PageHeading>New Protocol</PageHeading>
-          <p className="text-muted-foreground mt-1 text-sm">Step 2 of 2 — fill in details</p>
+          <p className="text-muted-foreground mt-1 text-sm">Step 2 of 2, fill in details</p>
         </div>
         <Button
           variant="outline"
@@ -835,7 +835,7 @@ function NewProtocolForm() {
 
       {/* Template indicator (collapsible) */}
       <Card className="overflow-hidden">
-        {/* Left toggle is a div[role=button] — never a <button> — so "Change" (Button) is never nested in a native button */}
+        {/* Left toggle is a div[role=button], never a <button>, so "Change" (Button) is never nested in a native button */}
         <div className="flex w-full items-center justify-between gap-2 px-4 py-3 transition-colors hover:bg-muted/30">
           <div
             role="button"

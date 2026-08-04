@@ -26,7 +26,7 @@ export interface CitationSourceViewerSource {
   sourceId?: string | null;
   sourceName: string | null;
   sourceUrl: string | null;
-  /** The full source body when available (not currently on the wire — kept so
+  /** The full source body when available (not currently on the wire, kept so
    * a future fetch endpoint can populate it). When absent we highlight inside
    * the excerpt instead. */
   sourceBody?: string | null;
@@ -49,7 +49,7 @@ interface ResolvedSpan {
   body: string;
   start: number;
   end: number;
-  /** Where the highlight came from — drives a tiny note for transparency. */
+  /** Where the highlight came from, drives a tiny note for transparency. */
   via: 'offsets' | 'search' | 'none';
 }
 
@@ -73,7 +73,7 @@ function resolveSpan(source: CitationSourceViewerSource): ResolvedSpan {
 
   if (!body) return { body: '', start: 0, end: 0, via: 'none' };
 
-  // (2) Trust offsets only when they're in range and — if we can verify —
+  // (2) Trust offsets only when they're in range and, if we can verify
   // actually point at the cited text. Offsets are advisory and computed against
   // the *stripped* source, so when we're highlighting inside a short excerpt the
   // raw offsets usually won't apply; the equality check guards against that.
@@ -92,7 +92,7 @@ function resolveSpan(source: CitationSourceViewerSource): ResolvedSpan {
     }
   }
 
-  // (3) Search fallback — case-insensitive, first occurrence.
+  // (3) Search fallback, case-insensitive, first occurrence.
   if (cited) {
     const idx = body.toLowerCase().indexOf(cited.toLowerCase());
     if (idx >= 0) {
@@ -112,7 +112,7 @@ function HighlightedBody({ span }: { span: ResolvedSpan }) {
     );
   }
   if (span.via === 'none' || span.end <= span.start) {
-    // No active highlight span — safe to render as markdown (e.g. an
+    // No active highlight span, safe to render as markdown (e.g. an
     // abstract with **bold**/lists reads better than escaped literal text).
     return (
       <div className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm leading-relaxed text-foreground [&_p]:mb-2 last:[&_p]:mb-0">
@@ -120,7 +120,7 @@ function HighlightedBody({ span }: { span: ResolvedSpan }) {
       </div>
     );
   }
-  // An exact highlight span is active — render as plain text, not markdown.
+  // An exact highlight span is active, render as plain text, not markdown.
   // Correctness of the highlight (the `before`/`hit`/`after` char-offset
   // slice) beats markdown formatting here; running the body through a
   // markdown parser would re-flow/strip characters and could shift or break
@@ -248,7 +248,7 @@ export function CitationSourceViewer({
           {span.via === 'search' && 'Highlighted by locating the cited passage in the source text.'}
           {span.via === 'none' &&
             source?.citedText &&
-            'Could not pinpoint the exact span — showing the available source text.'}
+            'Could not pinpoint the exact span, showing the available source text.'}
           {span.via === 'none' && !source?.citedText && ''}
           {isExcerptOnly && span.via !== 'none' && ' Showing the retrieved excerpt.'}
         </p>

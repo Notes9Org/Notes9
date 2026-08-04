@@ -1,6 +1,6 @@
 // Plain `dompurify` runs in the browser only. All callers of `sanitizeHtml`
 // in this codebase are client components (TipTap previews, protocol design
-// mode, PDF annotation sidebar). Avoid `isomorphic-dompurify` here — it pulls
+// mode, PDF annotation sidebar). Avoid `isomorphic-dompurify` here, it pulls
 // in `jsdom` → `undici` → `node:worker_threads`, which breaks Turbopack's
 // NFT tracer during `next build`. The API route imports only `escapeHtml`,
 // which is a pure string-replace function and doesn't touch DOMPurify.

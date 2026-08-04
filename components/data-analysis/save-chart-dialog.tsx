@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { CaretDown, ChartLine, CircleNotch } from "@phosphor-icons/react/ssr"
 
-/** Native <select> styled to match the workspace — no shadcn. */
+/** Native <select> styled to match the workspace, no shadcn. */
 function NativeSelect({ value, onChange, disabled, id, children }: { value: string; onChange: (v: string) => void; disabled?: boolean; id?: string; children: React.ReactNode }) {
   return (
     <div className="relative">
@@ -150,7 +150,7 @@ export function SaveChartDialog({
               <option value="" disabled>{projectId ? "Choose an experiment" : "Choose a project first"}</option>
               {experimentOptions.map((e) => (<option key={e.id} value={e.id}>{e.name}</option>))}
             </NativeSelect>
-            <p className="text-xs text-muted-foreground">Data files live inside an experiment — both are required.</p>
+            <p className="text-xs text-muted-foreground">Data files live inside an experiment, both are required.</p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="save-chart-name">File name</Label>

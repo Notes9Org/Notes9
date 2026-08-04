@@ -18,7 +18,7 @@ export function HeaderFooterInput({ type, value, onChange, align, page, showPage
     if (!showPageNum) return "right" // irrelevant
     const preferred = pageNumberAlign ?? "right"
     if (preferred !== align) return preferred
-    // collision — pick the best alternative
+    // collision, pick the best alternative
     if (preferred === "center") return "right"
     if (preferred === "left") return "right"
     return "left" // preferred was "right" and collides

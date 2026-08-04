@@ -21,7 +21,7 @@ import { EASE_OUT } from "./motion"
  *   1. it will not submit without a reason;
  *   2. a statistical exclusion must name its method and parameters;
  *   3. it shows the result WITH and WITHOUT the point, side by side, BEFORE the
- *      researcher commits — so the effect of the choice is visible at the moment
+ *      researcher commits, so the effect of the choice is visible at the moment
  *      it is made rather than discoverable afterwards.
  *
  * Point 3 is the one worth building carefully. A researcher who sees that
@@ -47,7 +47,7 @@ export interface ExclusionPreview {
 }
 
 function formatP(p: number | null): string {
-  if (p === null || !Number.isFinite(p)) return "—"
+  if (p === null || !Number.isFinite(p)) return "-"
   return p < 0.0001 ? "< 0.0001" : p.toFixed(4)
 }
 
@@ -180,7 +180,7 @@ export function ExclusionDialog({
               </AnimatePresence>
             </div>
 
-            {/* Reason — required. */}
+            {/* Reason, required. */}
             <fieldset className="px-5 pt-4">
               <legend className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
                 Reason (required)
@@ -213,7 +213,7 @@ export function ExclusionDialog({
               </div>
             </fieldset>
 
-            {/* A statistical exclusion must name its method — the schema rejects it otherwise. */}
+            {/* A statistical exclusion must name its method, the schema rejects it otherwise. */}
             <AnimatePresence initial={false}>
               {needsMethod && (
                 <motion.div

@@ -37,7 +37,7 @@ describe("generateQueryVariants", () => {
 })
 
 describe("meshHintsForQuery (deprecated stub)", () => {
-  it("always returns empty array — PubMed ATM handles MeSH mapping natively", () => {
+  it("always returns empty array, PubMed ATM handles MeSH mapping natively", () => {
     expect(meshHintsForQuery("renal clearance in CKD", 4)).toEqual([])
     expect(meshHintsForQuery("malaria transmission blocking SMFA", 4)).toEqual([])
   })
@@ -129,7 +129,7 @@ describe("literatureApiSearchQuery", () => {
 
   it("works for any unknown acronym without a lookup table", () => {
     const s = literatureApiSearchQuery("efficacy of XYZQ in treating disease")
-    // Structural ALL-CAPS detection — XYZQ is promoted even though it's not in any table
+    // Structural ALL-CAPS detection, XYZQ is promoted even though it's not in any table
     expect(s).toContain("XYZQ")
   })
 })
@@ -155,7 +155,7 @@ describe("expandQueryForLexicalScoring", () => {
   it("returns the normalized query without injecting synonyms", () => {
     const s = expandQueryForLexicalScoring("kidney disease treatment")
     expect(s).toBe("kidney disease treatment")
-    // No synonym injection — BM25 scores on actual token overlap
+    // No synonym injection, BM25 scores on actual token overlap
     expect(s.toLowerCase()).not.toContain("renal")
     expect(s.toLowerCase()).not.toContain("glomerular")
   })

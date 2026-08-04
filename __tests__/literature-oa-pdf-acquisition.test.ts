@@ -16,7 +16,7 @@ import {
 const enc = (s: string) => new TextEncoder().encode(s)
 const PDF_MAGIC = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x35]) // "%PDF-1.5"
 
-describe("buildPmcPdfCandidateUrls — non-gated mirror first", () => {
+describe("buildPmcPdfCandidateUrls, non-gated mirror first", () => {
   const urls = buildPmcPdfCandidateUrls("123456")
 
   it("puts the Europe PMC render mirror before any NLM /pdf URL", () => {
@@ -83,7 +83,7 @@ describe("extractPdfFromUnpaywallPayload", () => {
   })
 })
 
-describe("unpaywallContactEmail — prefer the signed-in user's email", () => {
+describe("unpaywallContactEmail, prefer the signed-in user's email", () => {
   it("uses the caller-supplied (user) email over the env override", () => {
     const prev = process.env.UNPAYWALL_EMAIL
     process.env.UNPAYWALL_EMAIL = "env@notes9.com"
@@ -203,7 +203,7 @@ describe("extractSemanticScholarPdf", () => {
   })
 })
 
-describe("pickCoreDownloadUrl — matches the RIGHT paper by DOI", () => {
+describe("pickCoreDownloadUrl, matches the RIGHT paper by DOI", () => {
   const doi = "10.1234/abc"
 
   it("picks the downloadUrl of the result whose DOI matches exactly", () => {
@@ -230,7 +230,7 @@ describe("pickCoreDownloadUrl — matches the RIGHT paper by DOI", () => {
   })
 })
 
-describe("resolveFromCore — no-op without a key", () => {
+describe("resolveFromCore, no-op without a key", () => {
   it("returns null when CORE_API_KEY is unset (never calls the network)", async () => {
     const prev = process.env.CORE_API_KEY
     delete process.env.CORE_API_KEY

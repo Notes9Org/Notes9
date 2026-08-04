@@ -143,7 +143,7 @@ const labNoteExperimentCache = new Map<string, string | null>();
 
 /**
  * Resolve a lab note's parent experiment id so a citation can deep-link straight
- * to `/experiments/<exp>?tab=notes&noteId=…` via client-side navigation —
+ * to `/experiments/<exp>?tab=notes&noteId=…` via client-side navigation
  * avoiding the `/lab-notes/<id>` server redirect (which re-SSRs the experiment
  * page). Cached per note id; null when not resolvable.
  */
@@ -166,7 +166,7 @@ export async function resolveLabNoteExperimentId(
       expId = rec.experiment_id.trim() || null;
     }
   } catch {
-    /* ignore — caller falls back to the redirect route */
+    /* ignore, caller falls back to the redirect route */
   }
   labNoteExperimentCache.set(noteId, expId);
   return expId;

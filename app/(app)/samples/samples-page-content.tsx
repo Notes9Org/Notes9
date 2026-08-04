@@ -114,7 +114,7 @@ export function SamplesPageContent({ samples, statusCount }: SamplesPageContentP
   }, [samples])
 
   // Seed the project filter from the sidebar context (samples stay an
-  // org-wide library — the seed is editable, never a lock).
+  // org-wide library, the seed is editable, never a lock).
   useEffect(() => {
     if (scope.projectId && projectOptions.some((o) => o.value === scope.projectId)) {
       setProjectFilter(scope.projectId)
@@ -332,7 +332,7 @@ export function SamplesEmptyState() {
               </p>
               <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
                 Circular and linear maps, plus simple workflow tools: custom annotations, selection
-                details, sequence alignment, and CRISPR guide exploration — right from the molecular
+                details, sequence alignment, and CRISPR guide exploration, right from the molecular
                 files tab.
               </p>
             </div>

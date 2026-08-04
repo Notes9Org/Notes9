@@ -14,7 +14,7 @@ const contactSchema = z.object({
 
 // Best-effort per-IP rate limit. This is a public (unauthenticated) marketing
 // endpoint that sends mail through Resend, so without a limit anyone can burn
-// sending quota / get the domain flagged. In-memory is per-instance only — for
+// sending quota / get the domain flagged. In-memory is per-instance only, for
 // multi-instance prod, back this with Upstash/Redis. Still raises the bar.
 const RATE_LIMIT_MAX = 3
 const RATE_LIMIT_WINDOW_MS = 60_000

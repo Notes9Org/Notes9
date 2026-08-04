@@ -32,7 +32,7 @@ type Props = {
 }
 
 /**
- * Spreadsheet viewer for Data & Files — uses a plain portal overlay instead of Radix Dialog.
+ * Spreadsheet viewer for Data & Files, uses a plain portal overlay instead of Radix Dialog.
  * Radix modal dialogs trap focus / pointer behavior in ways that break Univer toolbar
  * dropdowns (menus render via portals under `body`).
  */

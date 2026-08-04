@@ -22,7 +22,7 @@ const HeaderAiContext = createContext<HeaderAiContextValue | null>(null)
 // (always a new element on every parent render) and the function identities
 // (`onToggle` is usually a stable callback but we don't require it) prevents
 // the entire AppLayoutBody from re-rendering when only the JSX identity of
-// the panel changed — which it does on every protocol-page render.
+// the panel changed, which it does on every protocol-page render.
 function isRegistrationEquivalent(
   a: HeaderAiRegistration | null,
   b: HeaderAiRegistration | null,

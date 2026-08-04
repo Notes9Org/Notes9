@@ -1,12 +1,12 @@
 /**
- * Vercel Cron — enforces the 7-day TTL on `chat_attachments`.
+ * Vercel Cron, enforces the 7-day TTL on `chat_attachments`.
  *
  * Two-phase cleanup, identical semantics to the spec used to live in catalyst:
- *   Phase 1 — `expires_at < now() AND deleted_at IS NULL`
+ *   Phase 1, `expires_at < now() AND deleted_at IS NULL`
  *             → delete the storage object, set `deleted_at = now()`,
  *               keep the row as a tombstone so the UI can show
  *               "this file expired" for ~24h before it disappears.
- *   Phase 2 — `deleted_at < now() - 24 hours` → hard-delete the row.
+ *   Phase 2, `deleted_at < now() - 24 hours` → hard-delete the row.
  *
  * Auth: Vercel Cron calls send `Authorization: Bearer $CRON_SECRET`. We
  *       fail closed when the secret is unset.
@@ -14,21 +14,21 @@
  * Schedule: configured in `vercel.json` (see project root). Default once
  *           per day at 03:00 UTC.
  *
- * Idempotent: re-running mid-pass is safe — both phases use small batches
+ * Idempotent: re-running mid-pass is safe, both phases use small batches
  *             backed by partial indexes (`ix_chat_attachments_expires_live`,
  *             `ix_chat_attachments_deleted_at`).
  */
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase-service-role";
 
-// Tuneable via env. Defaults match the catalyst spec — small batches keep
+// Tuneable via env. Defaults match the catalyst spec, small batches keep
 // each Vercel function call well under the 60s execution budget.
 const BATCH_SIZE = Number(process.env.CHAT_ATTACHMENT_CLEANUP_BATCH ?? "500");
 const MAX_ROWS_PER_RUN = Number(
   process.env.CHAT_ATTACHMENT_CLEANUP_MAX_ROWS ?? "5000",
 );
 
-// Node runtime — needs the service-role key + supabase-js storage client.
+// Node runtime, needs the service-role key + supabase-js storage client.
 export const runtime = "nodejs";
 // Belt and braces: explicitly forbid caching of this endpoint.
 export const dynamic = "force-dynamic";
@@ -77,7 +77,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   const supabase = createServiceRoleClient();
   const failures: StorageFailure[] = [];
 
-  // ── Phase 1 — expire & soft-delete storage objects ─────────────────────
+  // ── Phase 1, expire & soft-delete storage objects ─────────────────────
   let expiredSoftDeleted = 0;
   let phase1Touched = 0;
 
@@ -107,7 +107,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     if (!rows || rows.length === 0) break;
 
     // Try to remove the storage objects first. If that fails, we still
-    // tombstone the rows — an orphaned storage object is recoverable
+    // tombstone the rows, an orphaned storage object is recoverable
     // (manual cleanup), but a non-tombstoned expired row would keep
     // serving the file via read_document forever.
     //
@@ -160,7 +160,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     if (rows.length < BATCH_SIZE) break; // caught up
   }
 
-  // ── Phase 2 — hard-delete 24h-old tombstones ───────────────────────────
+  // ── Phase 2, hard-delete 24h-old tombstones ───────────────────────────
   let tombstonesHardDeleted = 0;
   let phase2Touched = 0;
   const twentyFourHoursAgo = new Date(
@@ -210,7 +210,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       } else {
         tombstonesHardDeleted += ids.length;
         // Phase 5: remove any semantic_chunks these attachments produced (they
-        // may have been chunked for retrieval). Best-effort — a failure here
+        // may have been chunked for retrieval). Best-effort, a failure here
         // doesn't undo the row delete, and the transient-chunk TTL sweep in
         // cleanup-staged-literature is the backstop.
         const { error: chunkErr } = await supabase

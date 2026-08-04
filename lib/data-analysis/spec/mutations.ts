@@ -10,10 +10,10 @@ import type {
 } from "./analysis-spec"
 
 /**
- * L6 — the edit layer.
+ * L6, the edit layer.
  *
  * "Every control is a typed mutation on the spec. Full undo/redo. Conflict
- * rules for AI vs manual edits: manual edits are sticky — a subsequent AI
+ * rules for AI vs manual edits: manual edits are sticky, a subsequent AI
  * change must preserve them or explicitly announce the override."
  *
  * Three consequences of taking that literally, all of which this file provides:
@@ -32,7 +32,7 @@ import type {
 /* ── Mutations ─────────────────────────────────────────────────────────────*/
 
 export type SpecMutation =
-  /* Figure — style. These never trigger a recompute (Law 5). */
+  /* Figure, style. These never trigger a recompute (Law 5). */
   | { kind: "figure.setKind"; value: FigureKind }
   | { kind: "figure.setTitle"; value: string | null }
   | { kind: "figure.setCaption"; value: string | null }
@@ -48,11 +48,11 @@ export type SpecMutation =
   | { kind: "figure.removeAnnotation"; id: string }
   | { kind: "figure.moveBracket"; id: string; offsetY: number }
   | { kind: "figure.setShowExcluded"; value: boolean }
-  /* Axes — label/scale/limits. Scale and limits are style; they redraw, not recompute. */
+  /* Axes, label/scale/limits. Scale and limits are style; they redraw, not recompute. */
   | { kind: "axis.set"; axis: "x" | "y" | "y2"; patch: Partial<AnalysisSpec["figure"]["x"]> }
-  /* Error bars — looks like style, changes what is drawn, so it recomputes. */
+  /* Error bars, looks like style, changes what is drawn, so it recomputes. */
   | { kind: "figure.setErrorBars"; value: AnalysisSpec["figure"]["errorBars"] }
-  /* Analysis — always recomputes. */
+  /* Analysis, always recomputes. */
   | { kind: "analysis.setTest"; value: TestKind }
   | { kind: "analysis.setPostHoc"; value: AnalysisSpec["analysis"]["postHoc"] }
   | { kind: "analysis.setTails"; value: AnalysisSpec["analysis"]["tails"] }
@@ -61,13 +61,13 @@ export type SpecMutation =
   | { kind: "analysis.setReferenceLevel"; value: string | null }
   | { kind: "analysis.setMissingValues"; value: AnalysisSpec["analysis"]["missingValues"] }
   | { kind: "analysis.setNonlinear"; patch: Partial<NonNullable<AnalysisSpec["analysis"]["nonlinear"]>> }
-  /* Data — always recomputes. */
+  /* Data, always recomputes. */
   | { kind: "data.addTransform"; transform: Transform }
   | { kind: "data.removeTransform"; index: number }
   | { kind: "data.setFilters"; filters: RowFilter[] }
   | { kind: "data.excludeRow"; exclusion: Exclusion }
   | { kind: "data.restoreRow"; rowId: string }
-  /* Roles and design — the semantic layer (L2). */
+  /* Roles and design, the semantic layer (L2). */
   | { kind: "design.set"; patch: Partial<AnalysisSpec["design"]> }
   | { kind: "roles.set"; roles: AnalysisSpec["roles"] }
 
@@ -109,7 +109,7 @@ export function mutationPath(m: SpecMutation): string {
 
 /**
  * Law 5: "style edits never recompute; data and analysis edits always do."
- * Getting this wrong in either direction is a real defect — a false positive
+ * Getting this wrong in either direction is a real defect, a false positive
  * costs a 2s round trip on a colour change, a false negative shows numbers that
  * no longer match the figure.
  */
@@ -445,7 +445,7 @@ export interface AiPatchResult {
   applied: SpecMutation[]
   /**
    * Mutations that collided with a hand edit. Per L6 the assistant must either
-   * preserve the manual edit or ANNOUNCE the override — so these are surfaced
+   * preserve the manual edit or ANNOUNCE the override, so these are surfaced
    * rather than dropped silently, and the UI turns them into a sentence like
    * "I also changed the Y axis label you set by hand."
    */

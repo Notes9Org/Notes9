@@ -14,7 +14,7 @@ export interface CreateProjectInput {
    * is created. Every current call site wants this except
    * duplicate-project-dialog.tsx, which copies the SOURCE project's existing
    * members instead (conditionally, only when "Copy team members" is
-   * checked) — pass `false` there and let the caller keep handling
+   * checked), pass `false` there and let the caller keep handling
    * membership itself.
    */
   withLeadMembership?: boolean
@@ -23,7 +23,7 @@ export interface CreateProjectInput {
 /**
  * Single writer for creating a project row. Mirrors the shape used by both
  * `projects/new/page.tsx` and the research-folder importer's
- * `ensureProjectId` (now `upsertProjectByName` below), which had drifted —
+ * `ensureProjectId` (now `upsertProjectByName` below), which had drifted
  * import hardcoded status/priority and skipped description/dates. Those are
  * now explicit optional params so each caller's exact prior payload is
  * preserved.
@@ -72,7 +72,7 @@ export interface UpdateProjectFields {
 /**
  * Partial update, used both for the full edit form (edit-project-dialog.tsx)
  * and the status-only quick action (project-status-update-buttons.tsx).
- * Omitted fields are left untouched — only `updated_at` is always set.
+ * Omitted fields are left untouched, only `updated_at` is always set.
  */
 export async function updateProject(
   supabase: SupabaseClient,
@@ -97,7 +97,7 @@ export async function deleteProject(supabase: SupabaseClient, projectId: string)
  * Import-only find-or-create: try `createProject` with the research-folder
  * importer's defaults (status "planning", priority "medium"), and on
  * failure (e.g. a duplicate-name conflict within the org) fall back to the
- * existing row for that org+name — this is `ensureProjectId`'s exact prior
+ * existing row for that org+name, this is `ensureProjectId`'s exact prior
  * control flow, just routed through the shared writer. Normal app create
  * paths always want a fresh row and should call `createProject` directly.
  */

@@ -94,7 +94,7 @@ export function DocumentVersionsDialog({
   versions: DocumentVersion[]
   loading: boolean
   error: string | null
-  /** The live, possibly-uncommitted editor body — used as the "current" side of the newest diff. */
+  /** The live, possibly-uncommitted editor body, used as the "current" side of the newest diff. */
   currentContent: string
   onRestore: (version: DocumentVersion) => Promise<void>
   /** Noun used in copy, e.g. "lab note" or "protocol". */
@@ -284,7 +284,7 @@ export function DocumentVersionsDialog({
             <AlertDialogTitle>Restore v{confirmRestore?.version_no}?</AlertDialogTitle>
             <AlertDialogDescription>
               This replaces the {recordNoun}'s current content with the v{confirmRestore?.version_no} snapshot and records it as a
-              new, audited "restore" version. Nothing is deleted — the current content stays in history.
+              new, audited "restore" version. Nothing is deleted, the current content stays in history.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

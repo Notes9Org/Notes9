@@ -6,7 +6,7 @@
  * Compact, read-only SVG graph rendered inline inside a map_relationships tool
  * card. Parses the ToolCard's `source_names` (node labels) and `summary`
  * (first-200-char preview of the XML tool content) to reconstruct a simplified
- * node+edge layout using dagre — the same layout library used by the full
+ * node+edge layout using dagre, the same layout library used by the full
  * ResearchMapView.
  *
  * Wire shape for map_relationships tool cards:
@@ -20,7 +20,7 @@
  *   2. Parse summary for total counts and any <edge rel="..."> types visible
  *      in the 200-char window.
  *   3. Lay out nodes with dagre (TB direction, compact spacing).
- *   4. Render pure SVG — no ReactFlow overhead for a read-only inline card.
+ *   4. Render pure SVG, no ReactFlow overhead for a read-only inline card.
  *   5. Fall back gracefully to null (caller shows existing text card).
  *
  * Node-count cap: 40 nodes visible max (cap from task spec). Dagre handles up
@@ -79,7 +79,7 @@ interface GraphEdge {
 
 interface ParsedGraph {
   nodes: GraphNode[];
-  /** Edges resolved from the summary XML (subset — limited to 200-char window) */
+  /** Edges resolved from the summary XML (subset, limited to 200-char window) */
   edges: GraphEdge[];
   /** Total node count as reported in the summary header */
   totalNodes: number;
@@ -176,7 +176,7 @@ export function parseRelationshipGraph(card: ToolCard): ParsedGraph | null {
 
   // Build a simplified edge set: connect nodes sequentially when we have
   // relation types but no actual edge endpoints. This gives an approximate
-  // topology that shows connectivity without being misleading — we only draw
+  // topology that shows connectivity without being misleading, we only draw
   // edges between adjacent nodes in the kind-sorted order, colored by the
   // first matching relation type for those kinds.
   const edges: GraphEdge[] = [];
@@ -400,7 +400,7 @@ export function AgentRelationshipGraph({ card, className }: AgentRelationshipGra
                 >
                   {kindLabel(n.kind).toUpperCase()}
                 </text>
-                {/* Display label — truncated to fit node width via SVG text */}
+                {/* Display label, truncated to fit node width via SVG text */}
                 <text
                   x={n.x + 10}
                   y={n.y + 26}
@@ -456,7 +456,7 @@ export function AgentRelationshipGraph({ card, className }: AgentRelationshipGra
         </div>
       )}
 
-      {/* Kind legend — show unique node kinds found in the graph */}
+      {/* Kind legend, show unique node kinds found in the graph */}
       <div className="flex flex-wrap gap-x-3 gap-y-1 border-t border-border/30 px-2.5 py-1.5">
         {Array.from(new Set(parsedNodes.map((n) => n.kind))).map((kind) => (
           <span key={kind} className="inline-flex items-center gap-1 text-2xs text-muted-foreground/70">

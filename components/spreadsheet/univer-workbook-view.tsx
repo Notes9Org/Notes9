@@ -22,7 +22,7 @@ import {
 const UNIVER_COMMAND_TYPE_MUTATION = 2
 
 /**
- * The spreadsheet grid stays light in both themes — deliberately.
+ * The spreadsheet grid stays light in both themes, deliberately.
  *
  * Univer was previously given an inverted palette in dark mode (cells at
  * #1C1D22, text at #E4E6EF). In practice that was close to unreadable: the
@@ -31,8 +31,8 @@ const UNIVER_COMMAND_TYPE_MUTATION = 2
  * (which is what users actually author, and what imported .xlsx files carry)
  * lost its contrast entirely.
  *
- * A light canvas inside a dark shell is the norm for document surfaces — the
- * page in a word processor, the artboard in a design tool — and for a lab
+ * A light canvas inside a dark shell is the norm for document surfaces, the
+ * page in a word processor, the artboard in a design tool, and for a lab
  * notebook it carries the right metaphor besides. It also fixes a latent bug:
  * `isDark` was excluded from the mount effect's deps to avoid destroying
  * unsaved edits on every theme toggle, so the grid's theme silently lagged the
@@ -70,7 +70,7 @@ export type UniverWorkbookViewProps = {
   onPersistSnapshot?: (snapshot: Record<string, unknown>) => void
   readOnly?: boolean
   /**
-   * `embed` — compact sheet (notes). `workspace` — full ribbon (Start / Formulas / …), toolbars, closer to desktop Excel.
+   * `embed`, compact sheet (notes). `workspace`, full ribbon (Start / Formulas / …), toolbars, closer to desktop Excel.
    */
   variant?: "embed" | "workspace"
   /**
@@ -239,11 +239,11 @@ export function UniverWorkbookView({
           ribbonType: "classic",
         }
 
-        // Always the light palette — see the note at the top of this file.
+        // Always the light palette, see the note at the top of this file.
         const theme = defaultTheme
 
         // The `workspace` variant (data-analysis workbench + full-screen data
-        // editor) gets the Excel-grade feature suite — sort, filter, find &
+        // editor) gets the Excel-grade feature suite, sort, filter, find &
         // replace, conditional formatting, data validation, structured tables,
         // notes, threaded comments, hyperlinks, images. The lean `embed`
         // variant used inside note pages stays core-only. Loaded dynamically so
@@ -320,7 +320,7 @@ export function UniverWorkbookView({
               if (encoded === lastSavedEncodedRef.current && snapJson === lastSavedSnapshotJsonRef.current) return
               lastSavedEncodedRef.current = encoded
               lastSavedSnapshotJsonRef.current = snapJson
-              // Avoid setState while the user is typing — re-renders can steal focus from the cell editor.
+              // Avoid setState while the user is typing, re-renders can steal focus from the cell editor.
               isHydratingRef.current = true
               scheduleMicrotask(() => {
                 onPersistEncodedRef.current?.(encoded)

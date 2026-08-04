@@ -39,7 +39,7 @@ import { saveDraft } from "@/lib/data-analysis/saved-analysis"
  *
  * It deliberately owns autosave too (§3A.3 rule 1: autosave continuously, create
  * revisions explicitly). Autosave writes the working draft and never cuts a
- * revision — that stays an explicit act the researcher performs.
+ * revision, that stays an explicit act the researcher performs.
  */
 
 export interface UseAnalysisSpecOptions {
@@ -85,7 +85,7 @@ export interface UseAnalysisSpecValue {
   canRedo: boolean
   history: AppliedMutation[]
 
-  /** Force a recompute — the explicit "re-run" from the reopen screen. */
+  /** Force a recompute, the explicit "re-run" from the reopen screen. */
   recompute: () => Promise<void>
   /** Replace the whole spec, e.g. after opening a stored revision. */
   loadSpec: (spec: AnalysisSpec, result?: EngineResult | null) => void

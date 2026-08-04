@@ -37,7 +37,7 @@ export interface JournalTemplate {
 const GENERIC_ARTICLE: JournalTemplate = {
   id: "generic",
   name: "Generic Article",
-  description: "Standard LaTeX article — works everywhere",
+  description: "Standard LaTeX article, works everywhere",
   documentClass: "article",
   classOptions: ["12pt"],
   extraPackages: [],
@@ -60,7 +60,7 @@ const IEEE: JournalTemplate = {
   abstractEnv: null,
   sectionCommand: "\\section",
   notes:
-    "IEEE format. Requires IEEEtran.cls — available at https://www.ieee.org/conferences/publishing/templates.html",
+    "IEEE format. Requires IEEEtran.cls, available at https://www.ieee.org/conferences/publishing/templates.html",
 }
 
 const ACS: JournalTemplate = {

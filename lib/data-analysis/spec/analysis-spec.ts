@@ -1,7 +1,7 @@
 import { z } from "zod"
 
 /**
- * L3 — The Analysis Spec. The single source of truth.
+ * L3, The Analysis Spec. The single source of truth.
  *
  * From the Data Analysis master document (§3.3 L3), the spec carries:
  *   dataset_ref + version_hash · row filters · exclusions (with reason + author)
@@ -11,13 +11,13 @@ import { z } from "zod"
  * Three of the five architectural laws (§3.2) are enforced by this file existing
  * and being the ONLY thing the UI and the AI mutate:
  *
- *   Law 1 — everything is a spec, nothing is a picture. There is no field here
+ *   Law 1, everything is a spec, nothing is a picture. There is no field here
  *           for a rendered image. Images are produced at export, from the spec.
- *   Law 3 — chat and hand-editing operate on one object, bidirectionally. Both a
+ *   Law 3, chat and hand-editing operate on one object, bidirectionally. Both a
  *           dragged axis and "now make it log scale" become the same typed
  *           mutation on the same object, so the assistant always reads the
  *           user's latest state rather than its own last proposal.
- *   Law 4 — every result is reproducible from (spec + data version). The spec
+ *   Law 4, every result is reproducible from (spec + data version). The spec
  *           therefore pins `dataset.versionHash`; results are never valid
  *           independently of it.
  *
@@ -28,7 +28,7 @@ import { z } from "zod"
  *
  * SCHEMA VERSIONING. `schemaVersion` is mandatory and checked on open. Per §3A.6,
  * an outdated spec must forward-migrate and log the migration, never fail to
- * open — see `migrateSpec`.
+ * open, see `migrateSpec`.
  */
 
 export const ANALYSIS_SPEC_SCHEMA_VERSION = 1 as const
@@ -123,7 +123,7 @@ export const Transform = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("foldChange"), column: z.string().max(256), baseline: z.string().max(256) }),
   z.object({ kind: z.literal("normalise"), column: z.string().max(256), min: z.number(), max: z.number() }),
   /**
-   * "% of vehicle, per plate" — the plate-assay default, and not expressible as
+   * "% of vehicle, per plate", the plate-assay default, and not expressible as
    * `normalise`, which rescales to a fixed range and knows nothing about which
    * wells are the control. A separate member rather than extra fields on
    * `normalise`, because widening that shape would change how every already-saved
@@ -332,7 +332,7 @@ export const AnalysisConfig = z.object({
     .object({
       model: NonlinearModel,
       weighting: z.enum(["none", "1/Y", "1/Y^2"]).default("none"),
-      /** Share parameters across datasets — Prism's global fit. */
+      /** Share parameters across datasets, Prism's global fit. */
       sharedParameters: z.array(z.string().max(64)).default([]),
       constraints: z.record(z.string(), z.object({ min: z.number().nullable(), max: z.number().nullable() })).default({}),
       confidenceBands: z.boolean().default(true),
@@ -356,7 +356,7 @@ export type AnalysisConfig = z.infer<typeof AnalysisConfig>
  * Every chart the product can draw.
  *
  * One list, because a chart the spec cannot name is a chart that cannot be
- * saved, reopened, put in a figure panel or reproduced — Law 1 makes the spec
+ * saved, reopened, put in a figure panel or reproduced, Law 1 makes the spec
  * the only description of a figure, so anything missing here is unreachable
  * from a saved analysis.
  */
@@ -444,7 +444,7 @@ export type SeriesStyle = z.infer<typeof SeriesStyle>
  * A significance bracket. Generated from the post-hoc result, then draggable and
  * restylable (§2). `derived` marks brackets the engine produced: those are
  * recomputed when the analysis changes, whereas a user-authored bracket is not
- * silently replaced. The p-value is NOT stored here — the renderer reads it from
+ * silently replaced. The p-value is NOT stored here, the renderer reads it from
  * the results object, so Law 2 holds even for annotations.
  */
 export const SignificanceBracket = z.object({
@@ -570,8 +570,8 @@ export const AnalysisSpec = z.object({
   figure: FigureSpec,
   export: ExportSettings,
   /**
-   * Where the engine runs. Today there is only one answer — a Pyodide worker in
-   * the browser — and nothing reads this field yet. It exists now because the
+   * Where the engine runs. Today there is only one answer, a Pyodide worker in
+   * the browser, and nothing reads this field yet. It exists now because the
    * field is free to add before any analysis has been saved without it, and a
    * migration afterwards; declaring it up front makes a future server tier a
    * routing decision rather than a change to the contract every stored spec was

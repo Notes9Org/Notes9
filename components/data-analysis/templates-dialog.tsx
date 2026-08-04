@@ -222,7 +222,7 @@ export function TemplatesDialog({
           </section>
         </div>
 
-        {/* Save current — footer */}
+        {/* Save current, footer */}
         <div className="flex items-center gap-2 border-t border-border bg-muted/20 px-6 py-3">
           <Plus className="h-4 w-4 shrink-0 text-muted-foreground" />
           <Input

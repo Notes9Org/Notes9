@@ -31,8 +31,8 @@ import { WorkspaceToolbar, type ToolbarCounts } from "./workspace-toolbar"
  * (Chart · Statistics · Standard curve · Plate), which meant reading the
  * statistics required losing sight of the figure they describe. The master
  * document is explicit that the mental model must be "one thing, three views,
- * not three tools", and every comparable product that gets this right — Mixpanel,
- * Hex, Elicit — keeps the result visible beside the thing it explains.
+ * not three tools", and every comparable product that gets this right, Mixpanel,
+ * Hex, Elicit, keeps the result visible beside the thing it explains.
  *
  * So the figure holds the centre and the three supporting surfaces dock around
  * it: data to the left, chart and test settings to the right, statistics along

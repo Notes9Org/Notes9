@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils"
 
 const SPRING = { type: "spring", stiffness: 320, damping: 30, mass: 0.8 } as const
 
-/** Expo-style ease-out curve — decisive, no overshoot/bounce. Shared by the
+/** Expo-style ease-out curve, decisive, no overshoot/bounce. Shared by the
  *  result-card entrance and the hover/press micro-interactions. */
 const EASE_OUT = [0.22, 1, 0.36, 1] as const
 
@@ -129,7 +129,7 @@ export function MotionTabPanel({
   )
 }
 
-/** Spring scale-in with hover/tap feedback — for floating action buttons. */
+/** Spring scale-in with hover/tap feedback, for floating action buttons. */
 export function MotionFloating({
   children,
   className,
@@ -182,7 +182,7 @@ export function MotionResultCard({
 
 /**
  * Hover-lift + press feedback for cards that manage their own mount animation
- * (or none). No entrance/exit — safe to drop into any list. Transform-only.
+ * (or none). No entrance/exit, safe to drop into any list. Transform-only.
  */
 export function MotionHoverCard({
   children,

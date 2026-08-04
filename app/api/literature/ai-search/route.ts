@@ -6,7 +6,7 @@ import { searchPapersWithMeta } from '@/lib/paper-search'
 import { tryCatalystBaseUrl } from '@/lib/catalyst-client'
 
 /**
- * Dedicated AI literature-search endpoint — proxies the catalyst orchestrator
+ * Dedicated AI literature-search endpoint, proxies the catalyst orchestrator
  * `POST /literature/ai-search/stream` and pipes its SSE through unchanged.
  *
  * This is intentionally SEPARATE from `/api/chat`: literature search no longer
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
       : typeof body.recentYears === 'number'
         ? body.recentYears
         : undefined
-  // Dedupe keys of papers the client has already shown — a non-empty list marks a
+  // Dedupe keys of papers the client has already shown, a non-empty list marks a
   // "load more" continuation page. Bounded so the forwarded payload stays sane.
   const rawExclude = body.exclude_ids ?? body.excludeIds
   const excludeIds = Array.isArray(rawExclude)
@@ -134,7 +134,7 @@ export async function POST(request: NextRequest) {
               enc.encode(
                 sse('error', {
                   error:
-                    'AI summary is temporarily unavailable — showing database results only.',
+                    'AI summary is temporarily unavailable, showing database results only.',
                 }),
               ),
             )

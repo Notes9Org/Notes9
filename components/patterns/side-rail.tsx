@@ -7,7 +7,7 @@ import { MotionItem, MotionList } from "@/components/literature-reviews/motion"
 import { cn } from "@/lib/utils"
 
 /**
- * SideRail — the shared "floating glass rail" pattern, extracted from the
+ * SideRail, the shared "floating glass rail" pattern, extracted from the
  * Catalyst full-page chat-history sidebar (components/layout/right-sidebar.tsx,
  * expanded-history aside). Every docked list rail (lab notes, protocols,
  * papers, reports, …) composes these parts so the whole platform shares one
@@ -33,11 +33,11 @@ import { cn } from "@/lib/utils"
  * header/list parts) directly.
  */
 
-/** Default rail width — matches the Catalyst history rail (14rem outer → 13rem panel). */
+/** Default rail width, matches the Catalyst history rail (14rem outer → 13rem panel). */
 export const SIDE_RAIL_WIDTH = 224
 
 interface SideRailProps extends React.HTMLAttributes<HTMLElement> {
-  /** Rail visibility — width animates to 0 when closed; content stays mounted and clips. */
+  /** Rail visibility, width animates to 0 when closed; content stays mounted and clips. */
   open: boolean
   /** Outer width in px (the glass panel floats inside with an 8px inset). */
   width?: number
@@ -67,7 +67,7 @@ export const SideRail = React.forwardRef<HTMLElement, SideRailProps>(function Si
       {...rest}
     >
       {/* Fixed-width inner content so the rail is clipped (not reflowed) while
-          the aside collapses to 0 — the same slide the Catalyst rail has. */}
+          the aside collapses to 0, the same slide the Catalyst rail has. */}
       <div className="flex h-full min-h-0 flex-col" style={{ width }}>
         <SideRailPanel className={panelClassName}>{children}</SideRailPanel>
       </div>
@@ -75,7 +75,7 @@ export const SideRail = React.forwardRef<HTMLElement, SideRailProps>(function Si
   )
 })
 
-/** The floating glass card itself — reusable standalone (e.g. inside a Sheet). */
+/** The floating glass card itself, reusable standalone (e.g. inside a Sheet). */
 export function SideRailPanel({ className, children }: { className?: string; children: React.ReactNode }) {
   return (
     <div
@@ -155,7 +155,7 @@ export function SideRailSearch({
 
 /**
  * Scrollable list region with the rail scroll pattern:
- * - no permanent scrollbar gutter — a thin ghost thumb fades in on hover/focus
+ * - no permanent scrollbar gutter, a thin ghost thumb fades in on hover/focus
  *   (`.n9-scrollbar-ghost`, globals.css)
  * - edge fades signal overflow: content melts into the panel at the bottom
  *   (and top, once scrolled) so "there's more" reads at a glance without chrome.
@@ -225,7 +225,7 @@ export function SideRailList({ className, children }: { className?: string; chil
 
 interface SideRailRowProps extends Omit<React.HTMLAttributes<HTMLDivElement>, "onSelect"> {
   active?: boolean
-  /** Row activation — rendered as a keyboard-reachable button-like row. */
+  /** Row activation, rendered as a keyboard-reachable button-like row. */
   onSelect?: () => void
   /** Optional leading identity icon (size-4). */
   icon?: React.ReactNode
@@ -235,7 +235,7 @@ interface SideRailRowProps extends Omit<React.HTMLAttributes<HTMLDivElement>, "o
 }
 
 /**
- * One rail row — the exact interaction grammar of the Catalyst history rows:
+ * One rail row, the exact interaction grammar of the Catalyst history rows:
  * hover = warm color-mix fill, press = scale 0.985, active = sidebar-accent
  * fill + 1×20px primary pill on the left edge, actions fade in on hover/focus.
  */
@@ -280,7 +280,7 @@ export function SideRailRow({ active, onSelect, icon, actions, title, className,
   )
 }
 
-/** Shimmer loading rows — mirrors the Catalyst rail skeleton. */
+/** Shimmer loading rows, mirrors the Catalyst rail skeleton. */
 export function SideRailSkeleton({ rows = 5, label = "Loading…" }: { rows?: number; label?: string }) {
   return (
     <div className="flex flex-col gap-0.5 pr-1" aria-hidden aria-label={label}>

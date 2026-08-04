@@ -36,7 +36,7 @@ export interface ColumnProfile {
   type: ColumnType
   /** Distinct non-null values. */
   cardinality: number
-  /** Distinct values, capped — used for level lists and 2x2 detection. */
+  /** Distinct values, capped, used for level lists and 2x2 detection. */
   levels: string[]
   count: number
   missing: number
@@ -223,7 +223,7 @@ export function inferRoles(table: Table, existing: ColumnRole[] = []): InferredR
       const named = NAME_PATTERNS.find((p) => p.pattern.test(name))
       // A factor has levels; a measurement has values. "Treated OD600" matches
       // the treatment pattern on its name alone, but it is eight distinct
-      // readings, not eight treatments — and taking it as the factor puts the
+      // readings, not eight treatments, and taking it as the factor puts the
       // measurements on the x axis. So a name match for a factor role is
       // refused when the column is numeric with every value distinct, which is
       // what a measurement looks like and what a real dose column never does.
@@ -375,7 +375,7 @@ export interface TestCapability {
  * The column the comparison runs across, when the spec has not named one.
  *
  * `time` is in the list because in a before/after or a timecourse it IS the
- * within-subject factor being compared — leaving it out makes a correctly
+ * within-subject factor being compared, leaving it out makes a correctly
  * detected paired design report that it has no groups to pair.
  *
  * Exported so the capability matrix, the resolver's callers and the UI all
@@ -398,8 +398,8 @@ interface Shape {
    *
    * A comparison test needs at least two per group to have any spread to
    * compare. Without this the matrix happily recommends a one-way ANOVA over a
-   * wide-format sheet — where the "groups" are eight timepoints with one
-   * reading each — and the resolver then refuses it, which is the offer-then-
+   * wide-format sheet, where the "groups" are eight timepoints with one
+   * reading each, and the resolver then refuses it, which is the offer-then-
    * refuse the matrix exists to prevent.
    */
   minGroupSize: number
@@ -454,7 +454,7 @@ function readShape(spec: AnalysisSpec, table: Table, profiles: ColumnProfile[]):
     secondFactor: Boolean(spec.analysis.secondFactorColumn) || factors.length > 1,
     numericColumns: profiles.filter((p) => p.type === "numeric").length,
     // A subject id repeats, so it profiles as categorical, but cross-tabulating
-    // subjects against a condition is not a contingency table — it is the
+    // subjects against a condition is not a contingency table, it is the
     // design. Only columns that describe a row count here.
     categoricalColumns: profiles.filter((p) => {
       if (p.type !== "categorical") return false
@@ -468,7 +468,7 @@ function readShape(spec: AnalysisSpec, table: Table, profiles: ColumnProfile[]):
  * Which tests this data and design can actually support.
  *
  * The UI uses it so the test menu never offers something the resolver will
- * refuse — an option that produces "this cannot be computed" when chosen is
+ * refuse, an option that produces "this cannot be computed" when chosen is
  * worse than no option, because the user has to discover the constraint by
  * hitting it. The AI seam uses the same function, which is what stops the model
  * proposing a paired t-test on data with no subject column.

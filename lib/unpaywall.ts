@@ -2,13 +2,13 @@
  * Unpaywall OA PDF resolution (server-only).
  *
  * Unpaywall (https://unpaywall.org/products/api) is the canonical "where is the
- * free, legally-hosted PDF for this DOI" service — it aggregates OA copies across
+ * free, legally-hosted PDF for this DOI" service, it aggregates OA copies across
  * every publisher and repository, so it routinely finds a non-gated mirror when
  * OpenAlex / Europe PMC / a guessed publisher URL do not. This is the single most
  * reliable locator for "the paper is open access but we still couldn't fetch it".
  *
  * Unpaywall requires a real contact email (it rejects placeholders and 422s
- * without one) — but it does NOT need a *registered* address: any reachable email
+ * without one), but it does NOT need a *registered* address: any reachable email
  * identifies the caller to their polite pool. So the caller passes the signed-in
  * user's own email (we already have it from Supabase auth); `UNPAYWALL_EMAIL` is
  * only an optional override. When no email is available at all, every function
@@ -90,12 +90,12 @@ export function extractPdfFromUnpaywallPayload(data: UnpaywallResponse): string 
  * Harvest EVERY OA PDF URL Unpaywall knows for a work, ordered by how likely the
  * host is to serve the PDF without a bot-wall:
  *   1. `best_oa_location` (Unpaywall's own pick)
- *   2. repository / green-OA copies (institutional repos, PMC, arXiv, Zenodo) —
+ *   2. repository / green-OA copies (institutional repos, PMC, arXiv, Zenodo)
  *      these almost never bot-wall, so they rescue papers whose publisher does
  *      (Elsevier/Cell 403, Nature Cloudflare, etc.)
  *   3. everything else (publisher gold-OA: Frontiers, PLOS, MDPI, …)
  * Deduped, order-preserving. Returning many candidates lets the downloader race
- * them and keep the first that actually yields PDF bytes — the core of robust,
+ * them and keep the first that actually yields PDF bytes, the core of robust,
  * publisher-agnostic OA retrieval.
  */
 export function extractAllPdfUrlsFromUnpaywallPayload(data: UnpaywallResponse): string[] {
@@ -129,11 +129,11 @@ export function extractAllPdfUrlsFromUnpaywallPayload(data: UnpaywallResponse): 
 
 /**
  * Raw Unpaywall lookup by (already-normalized) DOI + contact email. Timed out
- * via AbortController — same pattern as lib/supabase/middleware.ts — so one
+ * via AbortController, same pattern as lib/supabase/middleware.ts, so one
  * slow/hanging Unpaywall response can't stall a request indefinitely.
  */
 // Throws on any non-result (network error, not OA, no PDF) so the caller's cache
-// wrapper never stores a negative — a transient Unpaywall timeout must not
+// wrapper never stores a negative, a transient Unpaywall timeout must not
 // suppress a real OA PDF for the whole cache window.
 async function fetchUnpaywallPdfUrlsOrThrow(normalizedDoi: string, email: string): Promise<string[]> {
   const controller = new AbortController()
@@ -166,7 +166,7 @@ const cachedFetchUnpaywallPdfUrls = unstable_cache(
 
 /**
  * Resolve a DOI to ALL known OA PDF URLs via Unpaywall, ordered best/repository
- * first. Returns `[]` on any failure (no email, network error, not OA) — best-effort.
+ * first. Returns `[]` on any failure (no email, network error, not OA), best-effort.
  */
 export async function resolveUnpaywallPdfUrls(
   doi: string | null | undefined,

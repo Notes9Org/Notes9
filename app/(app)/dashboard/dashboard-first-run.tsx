@@ -12,17 +12,17 @@ import {
 import { StartTourButton } from "@/components/tour/start-tour-button"
 
 /**
- * First-run dashboard surface — rendered in place of Schedule/Tasks/Whiteboard
+ * First-run dashboard surface, rendered in place of Schedule/Tasks/Whiteboard
  * when the user has no project of their own. The bench panels are useless
  * without a project to ground them, so this teaches the entity hierarchy upfront
  * and routes the user to the canonical first action: create a project.
  *
  * This is the backstop for the required create-project step in the welcome
- * wizard. Anyone who gets past the wizard without a project — closed the tab
- * mid-flow, or deleted their only one — lands here until they make one.
+ * wizard. Anyone who gets past the wizard without a project, closed the tab
+ * mid-flow, or deleted their only one, lands here until they make one.
  *
  * The four item rows mirror the entities the user will see inside a project
- * workspace — this is the same vocabulary they'll encounter once they create
+ * workspace, this is the same vocabulary they'll encounter once they create
  * one, so the mental model is primed before they get there.
  *
  * `hasStarterContent` is true once the seeded demo project exists, which changes
@@ -43,7 +43,7 @@ export function DashboardFirstRun({
         <EmptyTitle>Create your first project</EmptyTitle>
         <EmptyDescription>
           Projects are the home for your research. Each one holds the experiments you run, the
-          samples and protocols you use, and the lab notes you write — all in one place.
+          samples and protocols you use, and the lab notes you write, all in one place.
           {hasStarterContent && (
             <>
               {" "}
@@ -69,7 +69,7 @@ export function DashboardFirstRun({
           <HierarchyRow
             icon={<TestTube className="size-4" aria-hidden />}
             title="Samples"
-            description="Reagents, cells, constructs — linked from experiments."
+            description="Reagents, cells, constructs, linked from experiments."
           />
           <HierarchyRow
             icon={<ClipboardList className="size-4" aria-hidden />}

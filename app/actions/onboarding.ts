@@ -19,7 +19,7 @@ export type WelcomeAnswers = {
  *
  * These two steps are deliberately in one server action rather than split
  * between a client write and a background job. The demo pack is chosen from
- * `research_field`, so seeding must observe the answers — doing the write and
+ * `research_field`, so seeding must observe the answers, doing the write and
  * the seed in sequence here removes the race that previously made personalised
  * starter content impossible.
  *
@@ -72,7 +72,7 @@ export async function completeWelcomeAction(
       seeded = outcome === "seeded"
     }
   } catch (err) {
-    // Never block the user on seeding — ensureUserProfile retries later.
+    // Never block the user on seeding, ensureUserProfile retries later.
     console.error("[onboarding] starter seed failed", err)
   }
 

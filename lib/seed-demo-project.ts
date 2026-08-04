@@ -10,7 +10,7 @@ export { DEMO_PROJECT_NAMES, resolveDemoPack } from "@/lib/onboarding/demo-packs
  * → samples → literature) for a new user, so their first moment in Notes9 has
  * real content to explore and Catalyst can answer from *their* project.
  *
- * The content comes from a `DemoPack` chosen by the user's research field — see
+ * The content comes from a `DemoPack` chosen by the user's research field, see
  * lib/onboarding/demo-packs.ts. This function is deliberately field-agnostic:
  * it knows the shape, not the science.
  *
@@ -44,13 +44,13 @@ export async function seedDemoProject(
     .single()
 
   if (projRes.error) {
-    // 23505 = already seeded (concurrent run or retry) — nothing to do.
+    // 23505 = already seeded (concurrent run or retry), nothing to do.
     if (projRes.error.code === "23505") return
     throw new Error(`seed project failed: ${projRes.error.message}`)
   }
   const projectId = projRes.data.id as string
 
-  // 2) Experiments — insert in pack order so index refs below stay meaningful.
+  // 2) Experiments, insert in pack order so index refs below stay meaningful.
   const expRes = await admin
     .from("experiments")
     .insert(
@@ -97,7 +97,7 @@ export async function seedDemoProject(
     }))
   )
 
-  // 5) Samples (sample_code is globally UNIQUE — namespaced per user)
+  // 5) Samples (sample_code is globally UNIQUE, namespaced per user)
   await admin.from("samples").insert(
     pack.samples.map((sample) => ({
       created_by: userId,

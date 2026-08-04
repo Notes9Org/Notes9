@@ -13,7 +13,7 @@ export default async function ProtocolsPage({
 }) {
   const user = await requireUser()
   const supabase = await createClient()
-  // `profile` and the protocols list are independent — fan out in parallel.
+  // `profile` and the protocols list are independent, fan out in parallel.
   // `orgProjects` still has to wait for `profile.organization_id` below.
   const [profileRes, protocolsRes] = await Promise.all([
     supabase
@@ -56,7 +56,7 @@ export default async function ProtocolsPage({
 
   let projectContext: ProtocolsProjectContext | null = null
   if (projectParam) {
-    // `proj` and `exps` both depend only on projectParam — fan out in parallel.
+    // `proj` and `exps` both depend only on projectParam, fan out in parallel.
     const [projRes, expsRes] = await Promise.all([
       supabase.from("projects").select("id, name").eq("id", projectParam).single(),
       supabase.from("experiments").select("id").eq("project_id", projectParam),
@@ -97,7 +97,7 @@ export default async function ProtocolsPage({
         }))
       }
     } catch (err) {
-      // migration not yet applied — show protocols without context
+      // migration not yet applied, show protocols without context
       console.error("protocols_enrichment_failed", err)
     }
   }

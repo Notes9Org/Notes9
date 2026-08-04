@@ -20,7 +20,7 @@ import { Columns } from "@phosphor-icons/react/ssr"
 
 /**
  * THE key screen: every column in the picked sheet gets a role, and the roles
- * are what make an analysis possible — `AnalysisSpec.roles` (types/analysis.ts)
+ * are what make an analysis possible, `AnalysisSpec.roles` (types/analysis.ts)
  * and the derived table type both come from here.
  *
  * The dtype is DETECTED from the cell values but stays overridable: a numeric
@@ -79,7 +79,7 @@ export type ColumnAssignment = {
 const BOOLEAN_WORDS = new Set(["true", "false", "yes", "no"])
 
 /**
- * Detects a column's type from its raw cell values. Blank cells are ignored —
+ * Detects a column's type from its raw cell values. Blank cells are ignored
  * a column with a few gaps is still numeric. An all-blank column is text.
  */
 export function detectDtype(values: unknown[]): ColumnDtype {
@@ -118,7 +118,7 @@ export function ColumnRoleGrid({
           </EmptyMedia>
           <EmptyTitle>No columns to assign</EmptyTitle>
           <EmptyDescription>
-            Pick a data file and a sheet above — its header row becomes the list of
+            Pick a data file and a sheet above, its header row becomes the list of
             columns you assign roles to.
           </EmptyDescription>
         </EmptyHeader>
@@ -147,7 +147,7 @@ export function ColumnRoleGrid({
               </TableCell>
               <TableCell className="hidden md:table-cell max-w-[240px]">
                 <span className="truncate block text-muted-foreground text-xs">
-                  {column.sample.length > 0 ? column.sample.join(", ") : "—"}
+                  {column.sample.length > 0 ? column.sample.join(", ") : "-"}
                 </span>
               </TableCell>
               <TableCell>

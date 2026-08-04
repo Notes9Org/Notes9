@@ -25,7 +25,7 @@ export interface PlotlyFigureProps {
 }
 
 /**
- * Thin Plotly host. Deliberately NOT `react-plotly.js` — that wrapper is barely
+ * Thin Plotly host. Deliberately NOT `react-plotly.js`, that wrapper is barely
  * maintained and all it buys us is the ~40 lines below.
  *
  * The bundle is imported *inside* the effect so `plotly.min.js` (~3 MB) never
@@ -33,7 +33,7 @@ export interface PlotlyFigureProps {
  * `next/dynamic({ ssr: false })` so it isn't pulled into the server graph.
  *
  * Updates go through `Plotly.react`, which diffs against the live figure and
- * mutates in place — that in-place diff is what makes Format-panel and JSON
+ * mutates in place, that in-place diff is what makes Format-panel and JSON
  * edits feel instant instead of a full teardown/redraw per keystroke.
  */
 export function PlotlyFigure({ spec, onRelayout, onRestyle, className }: PlotlyFigureProps) {
@@ -81,7 +81,7 @@ export function PlotlyFigure({ spec, onRelayout, onRestyle, className }: PlotlyF
     }
   }, [spec])
 
-  // Purge only on unmount — Plotly leaks its WebGL contexts and resize
+  // Purge only on unmount, Plotly leaks its WebGL contexts and resize
   // listeners otherwise.
   React.useEffect(() => {
     const node = nodeRef.current

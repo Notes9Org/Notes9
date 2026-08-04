@@ -38,13 +38,13 @@ export type WelcomeResult = {
 /**
  * Question phases are skippable; `project` is not. A user must leave onboarding
  * with a project of their own, because every experiment, note and paper in
- * Notes9 hangs off one — landing on an empty workspace has nowhere to put work.
+ * Notes9 hangs off one, landing on an empty workspace has nowhere to put work.
  */
 type Phase = "role" | "field" | "goal" | "seeding" | "project"
 
 const QUESTION_PHASES: Phase[] = ["role", "field", "goal", "project"]
 
-/** House easing — matches `--n9-ease` and the shared EASE_OUT constant. */
+/** House easing, matches `--n9-ease` and the shared EASE_OUT constant. */
 const EASE = [0.22, 1, 0.36, 1] as const
 
 type OptionCard = { value: string; label: string; icon: PhosphorIcon; hint?: string }
@@ -106,7 +106,7 @@ export function WelcomeDialog({
   const reduceMotion = useReducedMotion()
   const [phase, setPhase] = useState<Phase>("role")
   const [jobTitle, setJobTitle] = useState("")
-  // Field and goal accept several answers — researchers rarely sit in one field,
+  // Field and goal accept several answers, researchers rarely sit in one field,
   // and most arrive wanting to do more than one thing. Stored comma-separated
   // (first choice first) so the existing text columns still work and
   // `resolveDemoPack` can honour the user's ordering.
@@ -138,7 +138,7 @@ export function WelcomeDialog({
    */
   const runSeeding = useCallback(async () => {
     setPhase("seeding")
-    // Counts only — never the free-text field the user typed.
+    // Counts only, never the free-text field the user typed.
     recordRumEvent(AnalyticsEvent.ONBOARDING_QUESTION_ANSWERED, {
       hasRole: Boolean(jobTitle),
       fieldCount: fields.length + (customField.trim() ? 1 : 0),
@@ -152,7 +152,7 @@ export function WelcomeDialog({
         primaryGoal,
       })
     } catch (err) {
-      // A failed seed must never trap the user — ensureUserProfile retries later.
+      // A failed seed must never trap the user, ensureUserProfile retries later.
       console.error("[welcome] seeding failed", err)
     }
     const elapsed = Date.now() - started
@@ -172,7 +172,7 @@ export function WelcomeDialog({
       const supabase = getSupabase()
       const { data: auth } = await supabase.auth.getUser()
       const userId = auth.user?.id
-      if (!userId) throw new Error("Your session expired — please sign in again.")
+      if (!userId) throw new Error("Your session expired, please sign in again.")
 
       const { data: profile } = await supabase
         .from("profiles")
@@ -267,7 +267,7 @@ export function WelcomeDialog({
             <Panel key="field" reduceMotion={reduceMotion}>
               <Heading
                 title="What do you work on?"
-                subtitle="Pick as many as apply — your first choice decides the starter content."
+                subtitle="Pick as many as apply, your first choice decides the starter content."
               />
               <div className="mt-5 flex flex-wrap justify-center gap-2">
                 {FIELD_SUGGESTIONS.map((f) => (
@@ -300,7 +300,7 @@ export function WelcomeDialog({
             <Panel key="goal" reduceMotion={reduceMotion}>
               <Heading
                 title="What would you like to do?"
-                subtitle="Pick as many as apply — we'll order your getting-started list around them."
+                subtitle="Pick as many as apply, we'll order your getting-started list around them."
               />
               <CardGrid
                 options={GOALS}
@@ -329,7 +329,7 @@ export function WelcomeDialog({
               <Heading
                 icon={FolderPlus}
                 title="Create your first project"
-                subtitle="Experiments, notes, protocols and papers all live inside a project — so you'll need one to start."
+                subtitle="Experiments, notes, protocols and papers all live inside a project, so you'll need one to start."
               />
 
               <form
@@ -359,12 +359,12 @@ export function WelcomeDialog({
                 <label className="block">
                   <span className="mb-1.5 block text-xs font-medium text-foreground">
                     First experiment{" "}
-                    <span className="font-normal text-muted-foreground">— optional</span>
+                    <span className="font-normal text-muted-foreground">- optional</span>
                   </span>
                   <Input
                     value={experimentName}
                     onChange={(e) => setExperimentName(e.target.value)}
-                    placeholder="e.g. Pilot run — conditions A vs B"
+                    placeholder="e.g. Pilot run, conditions A vs B"
                     aria-label="First experiment name"
                   />
                 </label>
@@ -403,7 +403,7 @@ export function WelcomeDialog({
                 </button>
 
                 <p className="text-center text-xs text-muted-foreground">
-                  We&apos;ve also added a sample project so you have something to explore — you can
+                  We&apos;ve also added a sample project so you have something to explore, you can
                   delete it any time.
                 </p>
               </form>
@@ -523,7 +523,7 @@ function Chip({
 }
 
 /**
- * Renders single- and multi-select alike — the caller decides by whether its
+ * Renders single- and multi-select alike, the caller decides by whether its
  * `onSelect` replaces the selection or toggles it. `selected` is always a list
  * so the checked state stays one code path.
  */
@@ -589,7 +589,7 @@ function CardGrid({
 /**
  * Shown while `completeWelcomeAction` persists answers and seeds starter
  * content. The staggered ticks are honest about what is happening rather than a
- * generic spinner — the work really is those four things.
+ * generic spinner, the work really is those four things.
  */
 function SeedingPanel({
   field,
@@ -652,7 +652,7 @@ function SeedingPanel({
 
 /**
  * Back / Skip / Continue row. There is intentionally no `onSkip` on the project
- * phase — that step is required, so it renders its own submit button instead.
+ * phase, that step is required, so it renders its own submit button instead.
  */
 function NavRow({
   onBack,

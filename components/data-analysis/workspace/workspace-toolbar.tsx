@@ -29,7 +29,7 @@ import { EASE_OUT } from "./motion"
  * The workspace toolbar.
  *
  * Carries forward every import/save/template affordance the previous workspace
- * had — nothing was dropped in the restructure, because these are the paths a
+ * had, nothing was dropped in the restructure, because these are the paths a
  * returning user already has muscle memory for:
  *
  *   Import  → Upload from computer · From your data files

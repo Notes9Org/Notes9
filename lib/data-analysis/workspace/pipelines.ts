@@ -1,7 +1,7 @@
 /**
  * Analysis pipelines: several independent analyses open at once.
  *
- * A pipeline is one complete analysis — its own data sheet, its own Analysis
+ * A pipeline is one complete analysis, its own data sheet, its own Analysis
  * Spec, its own engine result. Keeping more than one open is not a convenience
  * feature: a figure panel almost always draws on more than one experiment (the
  * dose-response beside the timecourse beside the plate), and forcing the user
@@ -9,8 +9,8 @@
  * matter of memory rather than of looking.
  *
  * Everything here is pure. The reducer takes state and an action and returns
- * new state, which is what lets the tab behaviour — what happens to the
- * selection when you close the active tab, what a duplicate is named — be
+ * new state, which is what lets the tab behaviour, what happens to the
+ * selection when you close the active tab, what a duplicate is named, be
  * tested without mounting a component.
  *
  * Only the SPEC is persisted, never the result. §3A.3 rule 3 is explicit that

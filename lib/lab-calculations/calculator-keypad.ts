@@ -75,13 +75,13 @@ function opPressCaption(op: KeypadBinaryOp): string {
 
 /** Human-readable description of the current expression (what is being built). */
 export function getKeypadWorkingSummary(state: KeypadState, scientificMode = false): string {
-  if (state.hasError) return "—"
+  if (state.hasError) return "-"
   const raw = state.display
   if (state.accumulator !== null && state.pendingOp !== null) {
     const fa = formatKeypadNumber(state.accumulator)
     if (state.pendingOp === "logBase") {
       if (state.replaceEntry) {
-        return `Log base ${fa} — enter the argument next, then =`
+        return `Log base ${fa}, enter the argument next, then =`
       }
       return `log(${raw}) ÷ log(${fa})   (meaning: log base ${fa} of ${raw})`
     }

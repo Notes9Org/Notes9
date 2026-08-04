@@ -8,7 +8,7 @@ export default function AgentStudioPage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Agent Studio</h1>
         <p className="mt-1 text-muted-foreground">
-          Visualize and configure your research agent workflows — enable agents, set guardrails, and chain end-to-end runs.
+          Visualize and configure your research agent workflows, enable agents, set guardrails, and chain end-to-end runs.
         </p>
       </div>
 

@@ -14,7 +14,7 @@ import { PlotlyFigure } from "./plotly-figure"
 import { useFigureSpec, type FigurePatchOp } from "./use-figure-spec"
 
 const JSON_DIRTY_REASON =
-  "Editing raw JSON — formatting controls resume when the editor loses focus."
+  "Editing raw JSON, formatting controls resume when the editor loses focus."
 
 /**
  * Plotly reports edits with flat, dotted keys (`xaxis.range[0]`,
@@ -45,7 +45,7 @@ function restyleOps(event: PlotRestyleEvent): FigurePatchOp[] {
       path: plotlyKeyToPointer(key, `/data/${traceIndex}/`),
       // ponytail: Plotly's restyle convention is one array entry per affected
       // trace, cycling if short. A trace property whose own value is an array
-      // (per-point `marker.color`) would be misread here — switch on the key if
+      // (per-point `marker.color`) would be misread here, switch on the key if
       // that ever ships.
       value: Array.isArray(value) ? value[position % value.length] : value,
     })),
@@ -82,10 +82,10 @@ export interface AnalysisWorkspaceProps {
   figureSpec?: FigureSpec | null
   /**
    * Alias for `figureSpec`. Both names exist only because the page and this
-   * component were built in parallel — collapse to one once the page settles.
+   * component were built in parallel, collapse to one once the page settles.
    */
   initialSpec?: FigureSpec | null
-  /** The analysis being viewed — used for the canvas empty state. */
+  /** The analysis being viewed, used for the canvas empty state. */
   spec?: AnalysisSpec
   /** Statistical output; `null` until the run completes. */
   results?: Results | null
@@ -94,7 +94,7 @@ export interface AnalysisWorkspaceProps {
   children?: React.ReactNode
   /** Source-data table, rendered in the drawer under the canvas. */
   dataDrawer?: React.ReactNode
-  /** Fired on every committed figure edit — persistence lives in the page. */
+  /** Fired on every committed figure edit, persistence lives in the page. */
   onFigureSpecChange?: (spec: FigureSpec) => void
   className?: string
 }
@@ -171,7 +171,7 @@ export function AnalysisWorkspace({
   )
 
   return (
-    // The drawer sits BELOW the three columns, not inside the canvas column —
+    // The drawer sits BELOW the three columns, not inside the canvas column
     // it describes the whole figure, so it spans the whole width.
     <div className={cn("flex min-h-0 flex-col gap-4", className)}>
       <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)_minmax(18rem,24rem)]">

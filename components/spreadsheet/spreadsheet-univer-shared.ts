@@ -271,7 +271,7 @@ let embedWheelIsolationHandler: ((e: WheelEvent) => void) | null = null
 
 /**
  * TipTap embeds: the grid is mostly a canvas (no native overflow scroll), so wheel "defaults"
- * can scroll the **editor** instead — especially at the top/bottom edge (scroll chaining).
+ * can scroll the **editor** instead, especially at the top/bottom edge (scroll chaining).
  *
  * One `document` listener in the **bubble** phase runs after Univer's handlers on the canvas,
  * then `preventDefault()` cancels only the browser default (parent scroll), without synthetic

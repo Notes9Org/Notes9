@@ -17,7 +17,7 @@ const seededThisInstance = new Set<string>()
 
 /**
  * Safety net for starter content, run AFTER the response is sent (so it never
- * delays the first page — e.g. the auto-run literature search).
+ * delays the first page, e.g. the auto-run literature search).
  *
  * The common path is `seedStarterContentAction`, fired the moment the welcome
  * wizard completes, because the demo pack is chosen from the research field the
@@ -35,7 +35,7 @@ function scheduleDemoSeed(userId: string, organizationId: string): void {
           userId,
           organizationId
         )
-        // Only stop re-checking once the question is settled — a user still
+        // Only stop re-checking once the question is settled, a user still
         // inside the wizard must be re-evaluated on their next page load.
         if (outcome === "seeded" || outcome === "already-seeded") {
           seededThisInstance.add(userId)
@@ -45,7 +45,7 @@ function scheduleDemoSeed(userId: string, organizationId: string): void {
       }
     })
   } catch {
-    // after() unavailable outside a request scope — skip.
+    // after() unavailable outside a request scope, skip.
   }
 }
 
@@ -59,8 +59,8 @@ function scheduleDemoSeed(userId: string, organizationId: string): void {
  * returns a reason string suitable for logging; downstream UI should fall
  * back to an empty-workspace state.
  *
- * Wrapped in React `cache()` — same dedup technique as `requireUser()` in
- * lib/auth/current-user.ts — so every page in a request that needs
+ * Wrapped in React `cache()`, same dedup technique as `requireUser()` in
+ * lib/auth/current-user.ts, so every page in a request that needs
  * `organization_id` can call this instead of re-querying `profiles`
  * independently; within one render pass they share the same result as long
  * as they're called with the same (cached) `user` object.
@@ -127,7 +127,7 @@ export const ensureUserProfile = cache(async (user: User): Promise<EnsureResult>
       .select("id")
       .single()
     if (insertOrg.error) {
-      // Concurrent bootstrap (duplicate email) — refetch.
+      // Concurrent bootstrap (duplicate email), refetch.
       if (insertOrg.error.code === "23505" || insertOrg.error.message?.includes("duplicate")) {
         const dup = await supabase
           .from("organizations")

@@ -195,7 +195,7 @@ function cssStringEscape(s: string): string {
 /**
  * Build the content + stylesheet for the Paged.js renderer. Paged.js lays the
  * document into real page boxes and renders the header/footer + page numbers into
- * the @page margin boxes (which browsers ignore on their own) — giving true
+ * the @page margin boxes (which browsers ignore on their own), giving true
  * "Page X of Y" running footers with NO browser date/URL chrome. The header/footer
  * are NOT in the body flow; they live entirely in the @page margin boxes.
  */
@@ -235,7 +235,7 @@ export function buildPagedExportAssets(options: {
     boxes.push(makeBox("bottom", footer.align, `"${cssStringEscape(footer.text.trim())}"`))
   }
 
-  // Page numbers — placed in their own slot. If the slot collides with text,
+  // Page numbers, placed in their own slot. If the slot collides with text,
   // append the counter to the text box instead of creating a duplicate.
   if (numZone !== "none") {
     const numEdge = numZone === "header" ? "top" : "bottom"
@@ -295,14 +295,14 @@ export function buildPrintDocumentHtml(options: {
   const safeTitle = escapeHtml((options.title || "Document").trim() || "Document")
   // Pull document header/footer out of the flow so they can repeat on every page.
   const { header, footer, body } = splitHeaderFooter(options.bodyHtml)
-  // No title heading / running title is rendered — the document content stands on
+  // No title heading / running title is rendered, the document content stands on
   // its own (the title duplicated against the browser/page chrome).
   const headerHtml = header ? `<div class="print-running-header">${header}</div>` : ""
   const footerHtml = footer ? `<div class="print-running-footer">${footer}</div>` : ""
   // Margins are produced by a thead/tfoot table that repeats a top/bottom spacer on
   // every page (left/right come from body padding). Combined with `@page{margin:0}`
   // this gives clean per-page margins WITHOUT the browser's print header/footer
-  // (date, document title, URL) — those only render when @page has a margin.
+  // (date, document title, URL), those only render when @page has a margin.
   const inner = `<table class="print-paged"><thead><tr><td><div class="print-mtop">${headerHtml}</div></td></tr></thead><tbody><tr><td>${body}${
     options.commentsBlockHtml ?? ""
   }</td></tr></tbody><tfoot><tr><td><div class="print-mbottom">${footerHtml}</div></td></tr></tfoot></table>`

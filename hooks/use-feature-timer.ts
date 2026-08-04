@@ -13,11 +13,11 @@
  * every route change is captured without polluting individual page components.
  *
  * Route-to-feature mapping is intentionally a small explicit map rather than
- * a regex taxonomy — the set of features is stable and known. Adding a new
+ * a regex taxonomy, the set of features is stable and known. Adding a new
  * feature requires one line here.
  *
  * PII: no user content is captured. The `feature` field is derived from the
- * URL path segment — never from query strings or content the user typed.
+ * URL path segment, never from query strings or content the user typed.
  */
 
 import { useEffect, useRef, useCallback } from 'react'
@@ -128,7 +128,7 @@ export function useFeatureTimer(): void {
         // Reset enter time so we don't double-count when the tab refocuses.
         enterTimeRef.current = Date.now()
       } else if (document.visibilityState === 'visible') {
-        // Tab came back into focus — restart the timer.
+        // Tab came back into focus, restart the timer.
         enterTimeRef.current = Date.now()
       }
     }

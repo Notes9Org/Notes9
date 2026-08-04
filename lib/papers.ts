@@ -6,7 +6,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
  * NOTE: `collaboration-server/src/database.ts` (a separate Node process
  * backing the realtime editor) also writes `papers.content` directly via
  * PostgREST, out-of-process from this app. That is intentional and out of
- * scope here — client-side autosave (`updatePaperContent`) is disabled
+ * scope here, client-side autosave (`updatePaperContent`) is disabled
  * whenever a collaboration session is connected (see
  * `paper-workspace.tsx`'s `enabled: !loading && !!paper &&
  * !collaborationConnected`), so the two writers never race.
@@ -28,7 +28,7 @@ export interface UpdatePaperMetaFields {
 /**
  * Partial metadata update, merging the title-commit-on-blur path
  * (paper-workspace.tsx) and the status quick action (paper-actions.tsx).
- * Omitted fields are left untouched — only `updated_at` is always set.
+ * Omitted fields are left untouched, only `updated_at` is always set.
  */
 export async function updatePaperMeta(
   supabase: SupabaseClient,

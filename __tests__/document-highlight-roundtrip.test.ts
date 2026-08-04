@@ -24,7 +24,7 @@ describe('document-highlight roundtrip', () => {
     const target: HighlightTarget = {
       sourceType: 'protocol',
       sourceId: 'p-1',
-      excerpt: 'α β γ — 蛋白质 — 🧪',
+      excerpt: 'α β γ, 蛋白质, 🧪',
     }
     const encoded = encodeHighlightParam(target)
     const decoded = decodeHighlightParam(encoded)

@@ -83,7 +83,7 @@ export async function POST(req: Request) {
       ? (rest.literature_sources as Notes9LiteratureSource[])
       : undefined,
     // What the user has open on screen (URL → entity). Same silent-drop trap as
-    // attachments/literature above — must be named here or it never reaches the
+    // attachments/literature above, must be named here or it never reaches the
     // backend FocusEnvelope.
     focus:
       rest.focus && typeof rest.focus === 'object' && !Array.isArray(rest.focus)
@@ -118,7 +118,7 @@ export async function POST(req: Request) {
   try {
     new URL(NOTES9_API_BASE);
   } catch {
-    // Do NOT log the raw value — a Function URL can embed credentials/keys.
+    // Do NOT log the raw value, a Function URL can embed credentials/keys.
     console.error('[agent/stream] CHAT_API_URL is not a valid URL (value redacted)');
     return new Response(
       JSON.stringify({ error: 'Notes9 API URL is misconfigured. CHAT_API_URL is not a valid URL.' }),
@@ -177,7 +177,7 @@ export async function POST(req: Request) {
     // as fast as they arrive and enqueues them immediately. `pull(controller)`
     // (the alternative we tried first) only reads when downstream asks for
     // more, and on Node runtime that demand can arrive in coalesced batches
-    // — which is why SSE events were piling up at the upstream side and
+    // which is why SSE events were piling up at the upstream side and
     // dumping at the end. With `start`, every Anthropic text_delta crosses
     // the proxy the moment it lands.
     const upstreamReader = response.body.getReader();
@@ -193,7 +193,7 @@ export async function POST(req: Request) {
             controller.close();
           } catch (err) {
             // Client disconnect / navigation-away aborts the reader. That is a
-            // NORMAL end-of-stream, not an error — close quietly instead of
+            // NORMAL end-of-stream, not an error, close quietly instead of
             // surfacing it as a stream error (which logged ECONNRESET /
             // "uncaughtException: aborted" noise and could destabilize the dev
             // server). Only real upstream failures propagate.

@@ -53,7 +53,7 @@ export function useBreadcrumb() {
   return ctx
 }
 
-/** Call from pages to set the path shown in the header. Omit "Dashboard" — it is filtered out. */
+/** Call from pages to set the path shown in the header. Omit "Dashboard", it is filtered out. */
 export function SetPageBreadcrumb({ segments }: { segments: BreadcrumbSegment[] }) {
   const { setSegments } = useBreadcrumb()
   const lastKeyRef = useRef<string | null>(null)

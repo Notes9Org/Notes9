@@ -4,7 +4,7 @@ import type { SpecMutation } from "./mutations"
 import { MUTATION_CONTRACT, parseMutation, SpecMutationSchema } from "./mutation-schema"
 
 /**
- * P1 — the contract.
+ * P1, the contract.
  *
  * These tests guard the one property the whole file exists for: that the zod
  * schema and the `SpecMutation` TS union never quietly drift apart, and that a
@@ -13,7 +13,7 @@ import { MUTATION_CONTRACT, parseMutation, SpecMutationSchema } from "./mutation
  */
 
 // One valid example per kind, keyed by kind, covering every branch of the
-// union — including the three FORBIDDEN kinds, whose SHAPE is still legal
+// union, including the three FORBIDDEN kinds, whose SHAPE is still legal
 // even though `spec-author.ts` never lets the model author one.
 const VALID_EXAMPLES: Record<SpecMutation["kind"], SpecMutation> = {
   "figure.setKind": { kind: "figure.setKind", value: "bar-scatter-error" },
@@ -92,7 +92,7 @@ describe("SpecMutationSchema / parseMutation", () => {
   // Anti-drift: every kind in the schema must appear in exactly one of the
   // two gating sets `spec-author.ts` uses, and every kind in those sets must
   // exist in the schema. This is the test that catches "added a branch to
-  // `SpecMutation` and forgot to gate it" — the `figure.setCaption` gap this
+  // `SpecMutation` and forgot to gate it", the `figure.setCaption` gap this
   // very patch closes.
   it("has a kind list that exactly matches ALLOWED ∪ FORBIDDEN in spec-author.ts", () => {
     const schemaKinds = new Set(
@@ -104,8 +104,8 @@ describe("SpecMutationSchema / parseMutation", () => {
 
   // Regression: before `parseMutation` existed, `validateProposal` cast the raw
   // JSON straight to `SpecMutation` (`candidate as unknown as SpecMutation`),
-  // so `{ kind: "data.setFilters", value: [...] }` — a plausible mistake, since
-  // every other kind uses "value" — sailed through with no `filters` array at
+  // so `{ kind: "data.setFilters", value: [...] }`, a plausible mistake, since
+  // every other kind uses "value", sailed through with no `filters` array at
   // all. `describeMutation` then read `m.filters.length` (mutations.ts:190)
   // and threw. It must be rejected here, not discovered downstream.
   it("rejects data.setFilters sent with the wrong field name", () => {
@@ -148,7 +148,7 @@ describe("MUTATION_CONTRACT", () => {
   })
 })
 
-// Type-level only — this block runs no assertions; a `tsc` failure here IS the
+// Type-level only, this block runs no assertions; a `tsc` failure here IS the
 // test. It confirms the zod-inferred type is assignable to the hand-written
 // `SpecMutation` union, so a schema branch that diverges in shape from its TS
 // counterpart fails the build instead of surfacing as a silent runtime gap.

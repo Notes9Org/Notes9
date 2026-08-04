@@ -22,7 +22,7 @@ export default async function AppGroupLayout({
   // of re-running create-on-miss logic in the navigation chrome.
   const profileResult = await ensureUserProfile(user)
   if (!profileResult.ok) {
-    // Don't block render — sidebar will show an empty-workspace state and a
+    // Don't block render, sidebar will show an empty-workspace state and a
     // retry affordance. Emit a structured event so the failure is queryable
     // in server logs / CloudWatch Logs Insights.
     console.error(JSON.stringify({

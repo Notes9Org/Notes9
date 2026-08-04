@@ -10,7 +10,7 @@ const UNDO_LIMIT = 50
 /**
  * Which of the three writers is currently driving the spec. The workspace uses
  * it to decide what to grey out (a focused JSON editor owns the spec until it
- * blurs) and nothing else — it is UI state, not part of the wire contract.
+ * blurs) and nothing else, it is UI state, not part of the wire contract.
  */
 export type FigureEditSource = "format" | "json" | "canvas" | null
 
@@ -23,7 +23,7 @@ export type FigurePatchOp =
 export type FigureAction =
   /** Immutable set at a JSON pointer, e.g. `/layout/yaxis/type`. */
   | { type: "SET_PATH"; path: string; value: unknown }
-  /** Wholesale swap — the JSON panel's commit path. */
+  /** Wholesale swap, the JSON panel's commit path. */
   | { type: "REPLACE_SPEC"; spec: FigureSpec }
   | { type: "APPLY_PATCH"; ops: FigurePatchOp[] }
   | { type: "UNDO" }
@@ -54,7 +54,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  * This is load-bearing: the JSON panel renders `JSON.stringify(spec)`, so if a
  * Format-panel or canvas write reordered or rebuilt any object, the editor text
  * would reflow under the user's cursor. Object spread keeps an existing key in
- * its original slot and only appends genuinely new keys — never rebuild, sort,
+ * its original slot and only appends genuinely new keys, never rebuild, sort,
  * or round-trip these objects.
  */
 function setAtPath<T>(node: T, segs: string[], value: unknown): T {
@@ -107,7 +107,7 @@ function removeAtPath<T>(node: T, segs: string[]): T {
 }
 
 /**
- * RFC 6902 `add`. Only the LEAF is an insert — the walk down has to recurse
+ * RFC 6902 `add`. Only the LEAF is an insert, the walk down has to recurse
  * structurally, otherwise `/layout/shapes/-` would overwrite `shapes` instead
  * of appending to it.
  */
@@ -212,7 +212,7 @@ export interface UseFigureSpec {
 /**
  * Single store for the figure, shared by three writers: the Format panel, the
  * JSON panel, and canvas (relayout/restyle) events. `useReducer` rather than a
- * store library — this is one screen, and zustand isn't a dependency here.
+ * store library, this is one screen, and zustand isn't a dependency here.
  */
 export function useFigureSpec(initial: FigureSpec): UseFigureSpec {
   const [state, dispatch] = React.useReducer(figureSpecReducer, {

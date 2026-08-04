@@ -417,7 +417,7 @@ export function UserTrendGraph({
   }, [open])
 
   const noDataTitle =
-    "Relationship graph is not available yet—chat themes will populate this when ready."
+    "Relationship graph is not available yet-chat themes will populate this when ready."
 
   return (
     <>
@@ -440,7 +440,7 @@ export function UserTrendGraph({
             overlayClassName="z-[125]"
             className={cn(
               "flex h-[100dvh] max-h-[100dvh] w-screen max-w-none flex-col gap-0 overflow-hidden rounded-none border-0 p-0 shadow-none",
-              /* Dialog default includes sm:max-w-lg — without this, desktop width stays ~32rem (~30% of screen). */
+              /* Dialog default includes sm:max-w-lg, without this, desktop width stays ~32rem (~30% of screen). */
               "sm:max-w-none",
               "!inset-0 !left-0 !top-0 !z-[130] !translate-x-0 !translate-y-0",
               "data-[state=closed]:zoom-out-100",

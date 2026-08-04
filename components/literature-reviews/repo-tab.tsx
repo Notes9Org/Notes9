@@ -78,7 +78,7 @@ const INDICATOR_SPRING = { type: "spring", stiffness: 500, damping: 40, mass: 0.
 /**
  * Shared-layout active-tab pill. Only the active trigger renders it; framer's
  * `layoutId` glides the single pill between triggers on switch. Reduced-motion
- * users get a static span. Decorative — pointer-events-none, sits behind content.
+ * users get a static span. Decorative, pointer-events-none, sits behind content.
  */
 function TabPill({ reduce }: { reduce: boolean | null }) {
   if (reduce) {
@@ -484,7 +484,7 @@ export function RepoTab({
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <div className="relative group transition-all">
           <div className="flex items-stretch bg-muted/15 rounded-lg overflow-hidden">
-          {/* Pinned "All References" — always visible; only the paper tabs scroll. */}
+          {/* Pinned "All References", always visible; only the paper tabs scroll. */}
           <TabsList scrollable={false} className="bg-transparent h-auto border-none rounded-none flex items-center flex-shrink-0 px-1 pt-0 pb-1.5">
             <TabsTrigger
               value="list"
@@ -518,7 +518,7 @@ export function RepoTab({
                     <span className="relative z-10 flex min-w-0 items-center gap-2">
                       <FileText className="h-4 w-4 opacity-50 flex-shrink-0" />
                       <span className="truncate text-xs font-semibold">{lit?.title ? decodeHtmlEntities(lit.title) : "Paper"}</span>
-                      {/* role="button" span (not <button>) — a TabsTrigger is itself a
+                      {/* role="button" span (not <button>), a TabsTrigger is itself a
                           <button>, and nesting <button> inside it is invalid HTML and
                           causes a hydration error. stopPropagation on pointer-down keeps
                           the close click from also activating/switching the tab. */}

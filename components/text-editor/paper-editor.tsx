@@ -57,7 +57,7 @@ interface PaperEditorProps {
   onAcceptInlineDiff?: () => void
   /** Called when user dismisses the inline diff */
   onDismissInlineDiff?: () => void
-  /** Inline fullscreen title (when page title is covered) — same pattern as protocol design. */
+  /** Inline fullscreen title (when page title is covered), same pattern as protocol design. */
   onDocumentTitleChange?: (value: string) => void
   onDocumentTitleCommit?: () => void | Promise<void>
   /** Yjs document instance for collaborative editing */
@@ -72,7 +72,7 @@ interface PaperEditorProps {
   userColor?: string
   /** Wrapping element (list + editor) that editor fullscreen should expand. */
   fullscreenWorkspaceRef?: RefObject<HTMLElement | null>
-  /** Prepended to the editor toolbar (e.g. the list-sidebar toggle) — stays
+  /** Prepended to the editor toolbar (e.g. the list-sidebar toggle), stays
    *  visible in fullscreen since it lives in the editor's own toolbar. */
   leadingToolbarSlot?: ReactNode
   /** Appended after the fullscreen control (doc actions), same as lab notes/protocols. */

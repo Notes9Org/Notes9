@@ -5,7 +5,7 @@
  * for Notes9 (traffic, WAU/MAU, retention, feature usage, per-user activity,
  * and geo-IP location). It replaces the old custom `usage_events` pipeline.
  *
- * The project key (`phc_...`) is a PUBLIC client-side key by design — it is
+ * The project key (`phc_...`) is a PUBLIC client-side key by design, it is
  * safe to ship in the browser bundle. Everything is inert when the key is
  * unset, so local dev / preview without keys never breaks.
  */
@@ -22,7 +22,7 @@ export const POSTHOG_HOST =
   _host && _host.length > 0 ? _host : 'https://us.i.posthog.com'
 
 /**
- * UI host — where the PostHog app itself lives (toolbar, links, session-replay
+ * UI host, where the PostHog app itself lives (toolbar, links, session-replay
  * playback). Only meaningful when POSTHOG_HOST points at a managed reverse
  * proxy (e.g. https://r.notes9.com); PostHog then needs this to resolve app
  * URLs. Defaults to the US app host to match the US ingestion region.

@@ -142,7 +142,7 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
   const collaborationConnected = collaborationStatus === "connected"
   // Mount the collab editor only after the provider has actually connected at
   // least once (latched). Mounting on mere ydoc/provider EXISTENCE meant an
-  // unreachable collab server produced an empty, never-seeded Yjs doc — the
+  // unreachable collab server produced an empty, never-seeded Yjs doc, the
   // paper looked wiped after every refresh even though the DB had the content.
   // Until the latch flips, the solo editor shows the DB content; once it
   // flips it stays collab for the session (reconnects keep local Yjs edits).
@@ -200,7 +200,7 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
     [debouncedSave]
   )
 
-  // Switch to the collab editor only once connected — flushing any pending
+  // Switch to the collab editor only once connected, flushing any pending
   // solo edits to the DB first so the server-side doc fetch can include them.
   useEffect(() => {
     if (!collaborationConnected || !collaborationReady || collabEditorActive) return
@@ -214,7 +214,7 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
     }
   }, [collaborationConnected, collaborationReady, collabEditorActive, forceSave])
 
-  // Refresh/close with a pending debounce would drop the last ~2s of typing —
+  // Refresh/close with a pending debounce would drop the last ~2s of typing
   // flush when the tab is hidden or the page is being torn down.
   useEffect(() => {
     const flush = () => {
@@ -235,7 +235,7 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
     editorRef.current = editor
   }, [])
 
-  // Org-wide @-mention candidates — same data the lab-notes/protocol editors get.
+  // Org-wide @-mention candidates, same data the lab-notes/protocol editors get.
   const { protocols: mentionProtocols, samples: mentionSamples } = useMentionEntities()
 
   const commitTitle = useCallback(async () => {
@@ -408,7 +408,7 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
     [debouncedSave]
   )
 
-  // Generic document import (PDF, Word, Markdown, plain text, HTML) — the same
+  // Generic document import (PDF, Word, Markdown, plain text, HTML), the same
   // converter used by lab notes / protocols / reports, so behavior is consistent.
   const handleDocImport = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -462,7 +462,7 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
   const status = String(paper.status || "draft")
   const breadcrumbTitle = (titleInput.trim() || (paper.title as string) || "Untitled Paper").slice(0, 60)
 
-  // Print / import / export cluster — rendered in the page header and, in
+  // Print / import / export cluster, rendered in the page header and, in
   // editor fullscreen (where the header is covered), in the toolbar's trailing
   // slot, matching the lab-notes/protocol pattern.
   const paperDocActions = (
@@ -495,7 +495,7 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
             <Upload className="mr-2 h-4 w-4" />
             <div className="flex flex-col gap-0.5">
               <span className="text-sm">Import document…</span>
-              <span className="text-xs text-muted-foreground">PDF, Word, Markdown, text, HTML — insert at cursor</span>
+              <span className="text-xs text-muted-foreground">PDF, Word, Markdown, text, HTML, insert at cursor</span>
             </div>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
@@ -611,7 +611,7 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
     // document name take all free space instead of clipping at ~18rem.
     <div className="flex min-w-0 w-full flex-1 items-center gap-1.5 sm:gap-2">
       {leftControls}
-      {/* Hairline divider — separates the list toggle from the document
+      {/* Hairline divider, separates the list toggle from the document
           identity, Notion-style: [toggle] | Title */}
       <div aria-hidden className="h-4 w-px shrink-0 bg-border/70" />
       <div className="min-w-0 flex-1 pl-1.5 sm:pl-2">
@@ -637,7 +637,7 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
           { label: breadcrumbTitle },
         ]}
       />
-      {/* Header hides in editor fullscreen — list toggle + title + doc actions
+      {/* Header hides in editor fullscreen, list toggle + title + doc actions
           merge into the Tiptap toolbar row, same pattern as lab notes/protocols. */}
       {!editorFullscreen && (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
