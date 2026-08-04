@@ -20,6 +20,10 @@ import {
   ChartLineUp,
   Waveform,
   GridNine,
+  GridFour,
+  Copy,
+  SlidersHorizontal,
+  PushPin,
   Sigma,
   TrendUp,
   CaretLeft,
@@ -30,7 +34,6 @@ import {
   Palette,
   Ruler,
   TextAa,
-  DotsThree,
   FolderOpen,
   FloppyDisk,
   MagnifyingGlass,
@@ -41,6 +44,7 @@ import {
   ArrowUp,
   Plus,
   Check,
+  Sparkle,
 } from "@phosphor-icons/react/ssr"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -67,6 +71,44 @@ import { usePlate, usePlateModel } from "@/components/data-analysis/plate-view"
 import { TemplatesDialog } from "@/components/data-analysis/templates-dialog"
 import { SaveChartDialog } from "@/components/data-analysis/save-chart-dialog"
 import { detectDataKind } from "@/lib/data-analysis/detect"
+import {
+  PALETTE_DEFINITIONS,
+  getPalette,
+  palettesByKind,
+  sampleRamp,
+  type PaletteKind,
+} from "@/lib/data-analysis/render/palettes"
+import { ERROR_BAR_LABEL, ERROR_BAR_OPTIONS } from "@/lib/data-analysis/render/plotly-adapter"
+import { Dock, DockTab, useDockLayout } from "@/components/data-analysis/workspace/docks"
+import { LayoutCanvas } from "@/components/data-analysis/workspace/layout-canvas"
+import { PipelineTabs } from "@/components/data-analysis/workspace/pipeline-tabs"
+import { ResultsCard } from "@/components/data-analysis/workspace/results-card"
+import {
+  RESULTS_SHEET_NAME,
+  buildResultsSheet,
+  resultsSheetColumnWidths,
+} from "@/lib/data-analysis/render/results-sheet"
+import {
+  LAYOUT_PRESETS,
+  assignPanel,
+  layoutFromPreset,
+  type FigureLayout,
+} from "@/lib/data-analysis/render/figure-layout"
+import {
+  specFromChartState,
+  tableFromChartRows,
+  recomputeSignature,
+  type ChartState,
+} from "@/lib/data-analysis/workspace/chart-state-spec"
+import { requestSpecPatch, type SpecPatchOutcome } from "@/lib/data-analysis/ai/spec-author-client"
+import { applyAiPatch, applyMutation, describeMutation, initHistory, type SpecMutation } from "@/lib/data-analysis/spec/mutations"
+import type { AnalysisSpec } from "@/lib/data-analysis/spec/analysis-spec"
+import { aiNotice, canExecuteProposal, railEditsFromSpec } from "@/lib/data-analysis/workspace/spec-prompt"
+import { PipelineBar } from "@/components/data-analysis/pipeline-bar"
+import { computeAnalysis } from "@/lib/data-analysis/engine/client"
+import type { EngineResult } from "@/lib/data-analysis/engine/contract"
+import type { Table as SpecTable } from "@/lib/data-analysis/engine/resolver"
+import type { AnalysisPipeline } from "@/lib/data-analysis/workspace/pipelines"
 import { BUILTIN_TEMPLATES, ELISA_AOA, type AnalysisTemplate } from "@/lib/data-analysis/templates"
 import {
   buildSpreadsheetWorkbookSnapshot,
@@ -108,7 +150,7 @@ function snapshotToTable(snapshot: UniverWorkbookSnapshot): Table {
 }
 
 /** Error-bar representation for aggregated replicates. */
-type ErrorMode = "none" | "sd" | "sem" | "ci95"
+type ErrorMode = "none" | "sd" | "sem" | "ci90" | "ci95" | "ci99" | "range" | "iqr" | "mad"
 
 /**
  * Aggregate rows sharing an X value into mean ± error, preserving first-seen
@@ -119,7 +161,7 @@ function aggregateByX(
   rows: Record<string, number | string>[],
   xKey: string,
   yKey: string,
-  errKind: "sd" | "sem" | "ci95",
+  errKind: Exclude<ErrorMode, "none">,
 ): { cats: (string | number)[]; mean: number[]; err: number[]; points: { x: string | number; y: number }[] } {
   const order: (string | number)[] = []
   const groups = new Map<string, number[]>()
@@ -144,11 +186,135 @@ function aggregateByX(
     if (!ys.length) continue
     const d = describeStats(ys)
     cats.push(xv)
-    mean.push(d.mean)
-    err.push(errKind === "sd" ? d.sd : errKind === "sem" ? d.sem : d.ci95[1] - d.mean)
+    // Robust bars are drawn around the median, since that is the centre they
+    // describe; quoting an IQR around a mean would place the bar off the
+    // statistic it belongs to.
+    mean.push(errKind === "iqr" || errKind === "mad" ? d.median : d.mean)
+    err.push(errorBarValue(ys, d, errKind))
     for (const y of ys) points.push({ x: xv, y })
   }
   return { cats, mean, err, points }
+}
+
+/**
+ * The half-length of one error bar.
+ *
+ * Confidence intervals come from `describeStats`, which computes them from the
+ * t distribution — at bench n the normal approximation is materially too
+ * narrow, so a "95% CI" drawn at 1.96·SEM would understate the interval it
+ * claims to be.
+ */
+function errorBarValue(
+  ys: number[],
+  d: ReturnType<typeof describeStats>,
+  kind: Exclude<ErrorMode, "none">,
+): number {
+  const n = ys.length
+  switch (kind) {
+    case "sd":
+      return d.sd
+    case "sem":
+      return d.sem
+    case "ci95":
+      return d.ci95[1] - d.mean
+    case "ci90":
+    case "ci99": {
+      if (n < 2) return 0
+      const level = kind === "ci90" ? 0.9 : 0.99
+      // describeStats only carries the 95% interval, so the other levels are
+      // rescaled through the t multipliers rather than re-deriving the SEM.
+      const t95 = studentT(n - 1, 0.95)
+      const t = studentT(n - 1, level)
+      return t95 > 0 ? ((d.ci95[1] - d.mean) / t95) * t : 0
+    }
+    case "range":
+      return Math.max(...ys) - d.mean
+    case "iqr": {
+      const sorted = [...ys].sort((a, b) => a - b)
+      const q = (p: number) => {
+        const idx = (sorted.length - 1) * p
+        const lo = Math.floor(idx)
+        const hi = Math.ceil(idx)
+        return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo)
+      }
+      return q(0.75) - q(0.25)
+    }
+    case "mad": {
+      const deviations = ys.map((v) => Math.abs(v - d.median)).sort((a, b) => a - b)
+      const mid = (deviations.length - 1) / 2
+      const mad =
+        deviations.length % 2
+          ? deviations[mid]
+          : (deviations[Math.floor(mid)] + deviations[Math.ceil(mid)]) / 2
+      // Scaled so a robust bar is comparable with the SD bar it replaces.
+      return mad * 1.4826
+    }
+  }
+}
+
+/** Two-sided t critical value, by bisection on the normal-inverse-seeded CDF. */
+function studentT(df: number, level: number): number {
+  if (df <= 0) return 0
+  const target = 1 - (1 - level) / 2
+  let lo = 0
+  let hi = 100
+  for (let i = 0; i < 120; i++) {
+    const mid = (lo + hi) / 2
+    if (studentCdf(mid, df) < target) lo = mid
+    else hi = mid
+  }
+  return (lo + hi) / 2
+}
+
+function studentCdf(t: number, df: number): number {
+  // Regularised incomplete beta via its continued fraction (Lentz).
+  const x = df / (df + t * t)
+  const a = df / 2
+  const b = 0.5
+  const p = 0.5 * regularisedBeta(a, b, x)
+  return t > 0 ? 1 - p : p
+}
+
+function regularisedBeta(a: number, b: number, x: number): number {
+  if (x <= 0) return 0
+  if (x >= 1) return 1
+  if (x >= (a + 1) / (a + b + 2)) return 1 - regularisedBeta(b, a, 1 - x)
+  const front =
+    Math.exp(lnGamma(a + b) - lnGamma(a) - lnGamma(b) + a * Math.log(x) + b * Math.log(1 - x)) / a
+  let f = 1
+  let c = 1
+  let dd = 0
+  for (let i = 0; i <= 300; i++) {
+    const m = Math.floor(i / 2)
+    const numerator =
+      i === 0
+        ? 1
+        : i % 2 === 0
+          ? (m * (b - m) * x) / ((a + 2 * m - 1) * (a + 2 * m))
+          : -((a + m) * (a + b + m) * x) / ((a + 2 * m) * (a + 2 * m + 1))
+    dd = 1 + numerator * dd
+    if (Math.abs(dd) < 1e-30) dd = 1e-30
+    dd = 1 / dd
+    c = 1 + numerator / c
+    if (Math.abs(c) < 1e-30) c = 1e-30
+    const delta = c * dd
+    f *= delta
+    if (Math.abs(1 - delta) < 1e-12) break
+  }
+  return front * (f - 1)
+}
+
+function lnGamma(z: number): number {
+  const g = [
+    676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059,
+    12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7,
+  ]
+  if (z < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * z)) - lnGamma(1 - z)
+  const zz = z - 1
+  let x = 0.99999999999980993
+  for (let i = 0; i < g.length; i++) x += g[i] / (zz + i + 1)
+  const t = zz + g.length - 0.5
+  return 0.5 * Math.log(2 * Math.PI) + (zz + 0.5) * Math.log(t) - t + Math.log(x)
 }
 
 /** Pearson r between two paired numeric arrays (for correlation matrices). */
@@ -183,6 +349,9 @@ type ChartType =
   | "heatmap" | "corrMatrix"
   | "volcano" | "blandAltman" | "roc" | "km" | "forest"
   | "scatter3d" | "mesh3d"
+
+/** The order chart groups are offered in, in the picker and the context menu. */
+const CHART_GROUP_ORDER: string[] = ["XY", "Categorical", "Distribution", "Matrix", "Scientific", "3D"]
 
 const CHART_TYPES: { id: ChartType; label: string; Icon: React.ComponentType<{ className?: string; weight?: "bold" | "fill" }>; group: string }[] = [
   { id: "line", label: "Line", Icon: ChartLine, group: "XY" },
@@ -222,11 +391,98 @@ const BINDING_HINTS: Partial<Record<ChartType, string>> = {
   corrMatrix: "Y = columns to correlate (defaults to all numeric)",
 }
 
-const PALETTES: Record<string, string[]> = {
-  "Okabe–Ito": ["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9", "#F0E442"],
-  Notes9: ["#965034", "#c07b5a", "#8f9f86", "#7a8fa7", "#c5a46d", "#9b4722"],
-  Viridis: ["#440154", "#3b528b", "#21908d", "#5dc863", "#fde725", "#27ad81"],
-  Grayscale: ["#111111", "#555555", "#888888", "#aaaaaa", "#cccccc"],
+/**
+ * The palette catalogue, shared with the spec-driven renderer so a colour
+ * chosen here means the same thing there. Keyed by id; `getPalette` also
+ * accepts the display names saved by earlier versions of this workspace.
+ */
+const PALETTES: Record<string, string[]> = Object.fromEntries(
+  PALETTE_DEFINITIONS.map((p) => [p.id, p.colours])
+)
+
+/**
+ * The palette picker.
+ *
+ * Grouped by what each family is FOR, because the distinction is not cosmetic:
+ * a sequential ramp on unordered groups implies a ranking the data does not
+ * have. Colour-blind-safe sets are marked rather than merely listed first, so
+ * the choice is informed instead of accidental.
+ */
+function PalettePicker({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (id: string) => void
+}) {
+  const groups = palettesByKind()
+  const current = getPalette(value)
+  const sections: { kind: PaletteKind; label: string; hint: string }[] = [
+    { kind: "qualitative", label: "Categories", hint: "Separate groups with no order" },
+    { kind: "sequential", label: "Magnitude", hint: "Low to high, for heatmaps" },
+    { kind: "diverging", label: "Diverging", hint: "Distance either side of a midpoint" },
+  ]
+
+  return (
+    <Field label="Palette">
+      <div className="space-y-3">
+        {sections.map((section) => (
+          <div key={section.kind}>
+            <p className="mb-1 flex items-baseline gap-1.5 text-[10.5px] font-medium uppercase tracking-wide text-muted-foreground/80">
+              {section.label}
+              <span className="font-normal normal-case tracking-normal text-muted-foreground/60">
+                {section.hint}
+              </span>
+            </p>
+            <div className="grid grid-cols-2 gap-1.5">
+              {groups[section.kind].map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => onChange(p.id)}
+                  title={`${p.note}${p.cvdSafe ? " Colour-blind safe." : ""}${p.print ? " Reads in greyscale." : ""}`}
+                  className={cn(
+                    "flex flex-col gap-1 rounded-lg border px-2 py-1.5 text-left transition-colors",
+                    current.id === p.id
+                      ? "border-[var(--n9-accent,#965034)]/50 bg-[var(--n9-accent,#965034)]/10"
+                      : "border-border hover:bg-muted/40",
+                  )}
+                >
+                  <span className="flex overflow-hidden rounded-[3px]">
+                    {(p.kind === "qualitative" ? p.colours.slice(0, 6) : sampleRamp(p.id, 6)).map(
+                      (c, i) => (
+                        <span key={i} className="h-3 flex-1" style={{ background: c }} />
+                      ),
+                    )}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span
+                      className={cn(
+                        "truncate text-[11px]",
+                        current.id === p.id
+                          ? "font-semibold text-[var(--n9-accent,#965034)]"
+                          : "font-medium",
+                      )}
+                    >
+                      {p.label}
+                    </span>
+                    {p.cvdSafe && (
+                      <span
+                        title="Colour-blind safe"
+                        className="shrink-0 rounded-sm bg-emerald-500/15 px-1 text-[9px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400"
+                      >
+                        CVD
+                      </span>
+                    )}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Field>
+  )
 }
 
 /** Per-series appearance overrides (default from the palette). */
@@ -292,13 +548,17 @@ function SheetHost({
   )
 }
 
-type Phase = "chart" | "stats" | "curve" | "plate"
+type Phase = "chart" | "stats" | "curve" | "plate" | "workspace"
 
 const PHASES: { id: Phase; label: string; Icon: React.ComponentType<{ className?: string; weight?: "regular" | "bold" | "fill" }> }[] = [
   { id: "chart", label: "Chart", Icon: ChartLine },
   { id: "stats", label: "Statistics", Icon: Sigma },
   { id: "curve", label: "Standard curve", Icon: TrendUp },
   { id: "plate", label: "Plate", Icon: GridNine },
+  // Multi-panel figure assembly (Prism's "Layouts", Tier 1 #8). Panels draw
+  // from the spec this workspace derives, so a figure composed here is the same
+  // figure the Chart phase shows.
+  { id: "workspace", label: "Figure layout", Icon: GridFour },
 ]
 
 export function DataAnalysisWorkspace({
@@ -321,8 +581,10 @@ export function DataAnalysisWorkspace({
 
   const fileRef = useRef<HTMLInputElement>(null)
   const [phase, setPhase] = useState<Phase>("chart")
-  const [dataOpen, setDataOpen] = useState(true)
-  const [settingsOpen, setSettingsOpen] = useState(true)
+  // Dock geometry (open/closed and width) is shared with the spec-driven
+  // workspace and persists per browser, so a layout set once survives reloads.
+  const docks = useDockLayout("n9.data-analysis.docks")
+  const { setOpen: setDockOpen } = docks
   const [dataMax, setDataMax] = useState(false)
   const [sheetSel, setSheetSel] = useState<SheetSelection | null>(null)
   const wide = useIsWide()
@@ -337,6 +599,16 @@ export function DataAnalysisWorkspace({
   }, [])
 
   const table = useMemo(() => snapshotToTable(liveSnapshot), [liveSnapshot])
+
+  const sheetFileName =
+    typeof liveSnapshot.name === "string" && liveSnapshot.name ? liveSnapshot.name : "analysis.xlsx"
+  /** The live sheet, in the shape the spec layer resolves against. */
+  const specTable = useMemo<SpecTable>(
+    () => tableFromChartRows(table.columns, table.rows),
+    [table]
+  )
+
+
   const numericCols = useMemo(() => table.columns.filter((c) => table.rows.some((r) => typeof r[c] === "number")), [table])
 
   // Raw sheet grid (header row included) — the plate mirrors this 1:1, live.
@@ -354,24 +626,12 @@ export function DataAnalysisWorkspace({
   // Data-aware tabs: Chart + Statistics always show; Standard curve / Plate
   // appear only when the data looks like a dose-response/ELISA or a microplate.
   const detected = useMemo(() => detectDataKind(table.columns, table.rows, grid), [table.columns, table.rows, grid])
-  const [showAllTabs, setShowAllTabs] = useState(false)
-  const visiblePhases = useMemo(
-    () =>
-      PHASES.filter(
-        (p) =>
-          p.id === "chart" ||
-          p.id === "stats" ||
-          showAllTabs ||
-          (p.id === "curve" && detected.standardCurve) ||
-          (p.id === "plate" && detected.plate),
-      ),
-    [detected, showAllTabs],
-  )
-  useEffect(() => {
-    if (!visiblePhases.some((p) => p.id === phase)) setPhase("chart")
-  }, [visiblePhases, phase])
+  /** Pinning keeps the standard curve offered on a sheet that does not look like one. */
+  const [curvePinned, setCurvePinned] = useState(false)
 
   /* chart config */
+  /** The author's figure legend. Null means "use the generated wording". */
+  const [caption, setCaption] = useState<string | null>(null)
   const [chartType, setChartType] = useState<ChartType>("line")
   const [xKey, setXKey] = useState("")
   const [yKeys, setYKeys] = useState<string[]>([])
@@ -383,10 +643,12 @@ export function DataAnalysisWorkspace({
   const [yLabel, setYLabel] = useState("OD₄₅₀")
   const [yUnit, setYUnit] = useState("")
   const [yLog, setYLog] = useState(false)
+  /** A log x is what a dose-response needs; concentration spans decades. */
+  const [xLog, setXLog] = useState(false)
   const [showGrid, setShowGrid] = useState(true)
   const [showLegend, setShowLegend] = useState(true)
   const [markers, setMarkers] = useState(true)
-  const [paletteName, setPaletteName] = useState("Okabe–Ito")
+  const [paletteName, setPaletteName] = useState("okabe-ito")
 
   // Granular per-element editing
   const [seriesStyles, setSeriesStyles] = useState<Record<string, SeriesStyle>>({})
@@ -407,6 +669,28 @@ export function DataAnalysisWorkspace({
   const [hlines, setHlines] = useState("")
   const [vlines, setVlines] = useState("")
   const [chartH, setChartH] = useState(560)
+  /**
+   * The statistics the spec chooses rather than the chart implies.
+   *
+   * Undefined is the state this rail has always been in: the test comes from
+   * the chart type and the rest from the schema's defaults. They exist as state
+   * because a spec can now arrive with a deliberate choice in it — from a
+   * template, a reopened analysis, or the assistant — and a choice that is not
+   * held anywhere is recomputed away on the next derivation.
+   */
+  const [statTest, setStatTest] = useState<ChartState["test"]>(undefined)
+  const [statPostHoc, setStatPostHoc] = useState<ChartState["postHoc"]>(undefined)
+  const [statAlpha, setStatAlpha] = useState<number | undefined>(undefined)
+  const [statTails, setStatTails] = useState<ChartState["tails"]>(undefined)
+  const [statReferenceLevel, setStatReferenceLevel] = useState<string | null | undefined>(undefined)
+  // The data pipeline: filters, transforms and exclusions. Same reasoning as
+  // the statistics slice above — a spec-authored patch (`data.setFilters`,
+  // `data.addTransform`, `data.excludeRow`) is a deliberate choice that has to
+  // be held somewhere, or the next `derivedSpec` recompute drops it back to
+  // empty. Defaulting to `[]` keeps today's behaviour when nothing has set it.
+  const [dataFilters, setDataFilters] = useState<ChartState["filters"]>([])
+  const [dataTransforms, setDataTransforms] = useState<ChartState["transforms"]>([])
+  const [dataExclusions, setDataExclusions] = useState<ChartState["exclusions"]>([])
   const setStyle = useCallback((series: string, patch: Partial<SeriesStyle>) => {
     setSeriesStyles((prev) => ({ ...prev, [series]: { ...prev[series], ...patch } }))
   }, [])
@@ -416,7 +700,7 @@ export function DataAnalysisWorkspace({
   const chartImageRef = useRef<(() => Promise<string | null>) | null>(null)
   const chartBoxRef = useRef<HTMLDivElement | null>(null)
   const [saveChartOpen, setSaveChartOpen] = useState(false)
-  const runExport = useCallback(async (opts: { format: ExportFormat; dpi: number; filename: string }) => {
+  const runExport = useCallback(async (opts: Parameters<ChartExportFn>[0]) => {
     if (chartExportRef.current) await chartExportRef.current(opts)
   }, [])
   const getChartSize = useCallback(() => {
@@ -432,7 +716,125 @@ export function DataAnalysisWorkspace({
     setYKeys(numericCols.filter((c) => c !== table.columns[0]).slice(0, 2))
   }
 
-  const palette = PALETTES[paletteName] ?? PALETTES["Okabe–Ito"]
+  // `getPalette` also accepts the display names saved by earlier versions, so a
+  // chart saved before the catalogue existed still opens with its own colours.
+  const palette = getPalette(paletteName).colours
+
+  /**
+   * The chart rail's settings, as an Analysis Spec.
+   *
+   * Derived rather than dispatched: every control keeps the behaviour it has,
+   * and the spec becomes the record underneath. This is what lets one figure be
+   * saved, reopened, reproduced, dropped into a figure panel, and checked
+   * against the data version it was computed from.
+   */
+  const derivedSpec = useMemo(() => {
+    try {
+      return specFromChartState(
+        {
+          chartType, xKey, yKeys, zKey, sizeKey, title, subtitle, xLabel, xUnit, yLabel, yUnit,
+          yLog, xLog, showGrid, showLegend, legendPos, paletteName, errorMode, fontFamily,
+          titleSize, axisTitleSize, xMin, xMax, yMin, yMax, nticks, seriesStyles, caption,
+          test: statTest, postHoc: statPostHoc, alpha: statAlpha, tails: statTails,
+          referenceLevel: statReferenceLevel,
+          filters: dataFilters, transforms: dataTransforms, exclusions: dataExclusions,
+        },
+        specTable,
+        { fileName: sheetFileName }
+      )
+    } catch {
+      // A spec that will not derive must never take the figure down with it.
+      return null
+    }
+  }, [
+    chartType, xKey, yKeys, zKey, sizeKey, title, subtitle, xLabel, xUnit, yLabel, yUnit,
+    yLog, xLog, showGrid, showLegend, legendPos, paletteName, errorMode, fontFamily,
+    titleSize, axisTitleSize, xMin, xMax, yMin, yMax, nticks, seriesStyles, caption,
+    statTest, statPostHoc, statAlpha, statTails, statReferenceLevel,
+    dataFilters, dataTransforms, dataExclusions,
+    specTable, sheetFileName,
+  ])
+
+  const visiblePhases = useMemo(
+    () =>
+      PHASES.filter((p) => {
+        // The plate map is hidden for now. The model behind it still runs — the
+        // standard curve reads the plate layout to know which wells are
+        // standards — so this hides the tab, it does not remove the feature.
+        if (p.id === "plate") return false
+        /**
+         * Standard curve is the one phase with a structural precondition: it
+         * needs standards (a known concentration against a signal) before it
+         * can fit anything, so offering it on a sheet that has none is offering
+         * a dead end. Three independent signals earn it:
+         *
+         *   structure — a concentration-like column beside a signal column, or
+         *               a numeric column whose ratios form a serial dilution;
+         *   intent    — the chart or the test already asks for a fit, so the
+         *               panel that performs it should be reachable;
+         *   memory    — pinned, and pinning sticks (§Tier 1.3).
+         */
+        if (p.id === "curve") {
+          return (
+            detected.standardCurve ||
+            derivedSpec?.figure.kind === "dose-response" ||
+            derivedSpec?.analysis.test === "nonlinear-regression" ||
+            curvePinned
+          )
+        }
+        // Everything else is offered outright. Hiding a view you have used
+        // because the next sheet looks different is worse than one tab too many.
+        return true
+      }),
+    [detected, derivedSpec, curvePinned],
+  )
+  useEffect(() => {
+    if (!visiblePhases.some((p) => p.id === phase)) setPhase("chart")
+  }, [visiblePhases, phase])
+
+  /**
+   * The engine's answer for that spec.
+   *
+   * Debounced, because Pyodide is a real round trip and the rail can change on
+   * every keystroke. `attemptedRef` stops a spec the engine refuses from being
+   * retried forever.
+   */
+  const [engineResult, setEngineResult] = useState<EngineResult | null>(null)
+  const [engineBusy, setEngineBusy] = useState(false)
+  const [engineNote, setEngineNote] = useState<string | null>(null)
+  const attemptedRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!derivedSpec || specTable.rows.length === 0) return
+    const signature = recomputeSignature(derivedSpec)
+    if (attemptedRef.current === signature) return
+    const timer = setTimeout(async () => {
+      attemptedRef.current = signature
+      setEngineBusy(true)
+      setEngineNote(null)
+      try {
+        const outcome = await computeAnalysis(derivedSpec, specTable, { force: true })
+        if (outcome.ok) setEngineResult(outcome.result)
+        else if ("blocked" in outcome) {
+          setEngineResult(null)
+          setEngineNote(outcome.blocked.map((b) => b.message).join(" "))
+        } else {
+          setEngineResult(null)
+          setEngineNote(outcome.question.question)
+        }
+      } catch (err) {
+        setEngineNote(err instanceof Error ? err.message : String(err))
+      } finally {
+        setEngineBusy(false)
+      }
+    }, 700)
+    return () => clearTimeout(timer)
+  }, [derivedSpec, specTable])
+
+  const [figureLayout, setFigureLayout] = useState<FigureLayout>(() => {
+    const preset = LAYOUT_PRESETS.find((p) => p.id === "single")!
+    const base = layoutFromPreset(preset, "Figure 1")
+    return assignPanel(base, base.panels[0].id, "current")
+  })
   const activeY = yKeys.filter((k) => table.columns.includes(k))
   const editKey = activeY.includes(editSeries) ? editSeries : activeY[0] ?? ""
   const editIdx = Math.max(0, activeY.indexOf(editKey))
@@ -654,7 +1056,7 @@ export function DataAnalysisWorkspace({
       xaxis: {
         title: { text: horizontal ? yAxisLabel : xAxisLabel, font: { size: axisTitleSize } },
         showgrid: showGrid, gridcolor: gridColor, zeroline: false,
-        type: (chartType === "bar" || chartType === "barStacked") ? "category" : horizontal && yLog ? "log" : "-",
+        type: (chartType === "bar" || chartType === "barStacked") ? "category" : horizontal && yLog ? "log" : xLog && !horizontal ? "log" : "-",
         ...(xRange ? { range: xRange, autorange: false } : {}),
         ...(tickN ? { nticks: tickN } : {}),
       },
@@ -694,7 +1096,7 @@ export function DataAnalysisWorkspace({
           }
         : {}),
     }
-  }, [title, ink, palette, xAxisLabel, yAxisLabel, showGrid, gridColor, chartType, yLog, showLegend, xMin, xMax, yMin, yMax, nticks, fontFamily, titleSize, axisTitleSize, zKey, activeY, seriesStyles, subtitle, legendPos, hlines, vlines, isDark])
+  }, [title, ink, palette, xAxisLabel, yAxisLabel, showGrid, gridColor, chartType, yLog, xLog, showLegend, xMin, xMax, yMin, yMax, nticks, fontFamily, titleSize, axisTitleSize, zKey, activeY, seriesStyles, subtitle, legendPos, hlines, vlines, isDark])
 
   // Edits made directly on the chart (double-click title / axis) flow back here.
   const handleChartEdit = useCallback((e: PlotlyEdits) => {
@@ -706,6 +1108,58 @@ export function DataAnalysisWorkspace({
   // Right-click "Edit ▸ <element>" (or double-click an element) opens the
   // inspector scrolled to that section; a clicked series selects itself.
   const [flashId, setFlashId] = useState<string | null>(null)
+  /**
+   * Which rail section is showing. "all" stacks them as before.
+   *
+   * Filtering rather than scrolling: an automatic scroll moves the content out
+   * from under the pointer and leaves you unsure whether you arrived, and it
+   * still leaves everything else to scroll past. Showing one section at a time
+   * means the thing you asked for is simply there, at the top, with nothing
+   * below it to wade through.
+   */
+  /** The workspace given the whole viewport. */
+  const [fullscreen, setFullscreen] = useState(false)
+  useEffect(() => {
+    if (!fullscreen) return
+    const onKey = (e: KeyboardEvent) => {
+      // Escape is what people try first, and without it a full-screen surface
+      // with no browser chrome feels like a trap.
+      if (e.key === "Escape") setFullscreen(false)
+    }
+    window.addEventListener("keydown", onKey)
+    // The page behind must not scroll while the overlay is up.
+    const previous = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    return () => {
+      window.removeEventListener("keydown", onKey)
+      document.body.style.overflow = previous
+    }
+  }, [fullscreen])
+
+  const [railSection, setRailSection] = useState<string>("all")
+  /**
+   * Sections that belong to the same idea.
+   *
+   * Titles and typography are both "text on the figure"; palette and per-series
+   * styling are both "colour". Splitting them made two jump-bar entries for one
+   * decision. They keep their own blocks and headings — this only makes them
+   * filter together, so choosing Text shows both, adjacent, with everything
+   * between hidden.
+   */
+  const RAIL_GROUPS: Record<string, string> = useMemo(
+    () => ({ "cs-type-face": "cs-title", "cs-series": "cs-palette" }),
+    [],
+  )
+  const showRail = useCallback(
+    (id: string) => railSection === "all" || railSection === (RAIL_GROUPS[id] ?? id),
+    [railSection, RAIL_GROUPS],
+  )
+
+  /** Used by the chart's context menu to open the rail at a given section. */
+  const jumpToSection = useCallback((id: string) => {
+    setRailSection(id)
+  }, [])
+
   const onEditElement = useCallback(
     (el: ChartElement, detail?: { series?: string }) => {
       const section: Record<ChartElement, string> = {
@@ -713,7 +1167,9 @@ export function DataAnalysisWorkspace({
         series: "cs-series", legend: "cs-toggles", annotation: "cs-toggles",
       }
       if (el === "series" && detail?.series) setEditSeries(detail.series)
-      setSettingsOpen(true)
+      // Clicking a chart element jumps to its control, so the settings dock has
+      // to be open for the scroll target to exist.
+      setDockOpen("right", true)
       const id = section[el]
       setFlashId(id)
       requestAnimationFrame(() =>
@@ -721,7 +1177,7 @@ export function DataAnalysisWorkspace({
       )
       window.setTimeout(() => setFlashId(null), 1500)
     },
-    [],
+    [setDockOpen],
   )
 
   // Fire an AI request straight from the chart's right-click menu.
@@ -743,6 +1199,12 @@ export function DataAnalysisWorkspace({
     [table.columns, table.rows, chartType, activeY, xKey, title],
   )
 
+  // The statistics actions are defined below (they need the derived spec), so
+  // the menu reaches them through refs rather than forcing a declaration order.
+  const addStatsSheetRef = useRef<() => void>(() => undefined)
+  const copyStatsRef = useRef<() => void>(() => undefined)
+  const exportStatsRef = useRef<() => void>(() => undefined)
+
   const chartMenuGroups = useMemo<ChartMenuGroup[]>(
     () => [
       {
@@ -754,13 +1216,72 @@ export function DataAnalysisWorkspace({
           { label: "Which statistical test?", onClick: () => askCatalyst("stats") },
         ],
       },
-      { label: "Change chart type", items: CHART_TYPES.map((t) => ({ label: t.label, onClick: () => setChartType(t.id) })) },
-      { label: "Palette", items: Object.keys(PALETTES).map((p) => ({ label: p, onClick: () => setPaletteName(p) })) },
+      // One entry per intent, not one per category. The menu was twelve rows
+      // deep before the built-in zoom and export items even began; grouping by
+      // what you are trying to do keeps the first screen readable, and the
+      // headings inside each submenu carry the finer structure.
+      {
+        label: "Chart type",
+        items: CHART_GROUP_ORDER.flatMap((group) =>
+          CHART_TYPES.filter((t) => t.group === group).map((t) => ({
+            label: t.label,
+            section: group,
+            checked: chartType === t.id,
+            onClick: () => setChartType(t.id),
+          })),
+        ),
+      },
+      {
+        label: "Style",
+        items: [
+          ...ERROR_BAR_OPTIONS.map((o) => ({
+            label: o.id === "none" ? "No error bars" : ERROR_BAR_LABEL[o.id],
+            section: "Error bars",
+            checked: errorMode === o.id,
+            onClick: () => setErrorMode(o.id),
+          })),
+          ...PALETTE_DEFINITIONS.map((p) => ({
+            label: p.label,
+            section: "Palette",
+            hint: p.cvdSafe ? "CVD" : undefined,
+            checked: paletteName === p.id,
+            onClick: () => setPaletteName(p.id),
+          })),
+          { label: "Gridlines", section: "Show", checked: showGrid, onClick: () => setShowGrid(!showGrid) },
+          { label: "Legend", section: "Show", checked: showLegend, onClick: () => setShowLegend(!showLegend) },
+          { label: "Markers", section: "Show", checked: markers, onClick: () => setMarkers(!markers) },
+          { label: "Log X axis", section: "Show", checked: xLog, onClick: () => setXLog(!xLog) },
+          { label: "Log Y axis", section: "Show", checked: yLog, onClick: () => setYLog(!yLog) },
+          { label: "Individual points", section: "Show", checked: showPoints, onClick: () => setShowPoints(!showPoints) },
+        ],
+      },
+      {
+        label: "Statistics",
+        items: [
+          { label: "Add to the sheet", onClick: () => addStatsSheetRef.current() },
+          { label: "Copy", onClick: () => copyStatsRef.current() },
+          { label: "Export (.xlsx)", onClick: () => exportStatsRef.current() },
+        ],
+      },
+      {
+        label: "Open settings",
+        items: RAIL_SECTIONS.map((sec) => ({
+          label: sec.label,
+          onClick: () => {
+            setDockOpen("right", true)
+            jumpToSection(sec.id)
+          },
+        })),
+      },
     ],
-    [askCatalyst],
+    [
+      askCatalyst, chartType, errorMode, paletteName, showGrid, showLegend, markers, yLog, xLog,
+      showPoints, jumpToSection, setDockOpen,
+    ],
   )
 
   const hasPlot = activeY.length > 0 && plotData.length > 0
+
 
   // Feature hooks (called unconditionally; each renders lazily where placed).
   // The plate model is shared so the plate layout drives the standard curve.
@@ -768,6 +1289,96 @@ export function DataAnalysisWorkspace({
   const stats = useStatsPanel(table, numericCols)
   const curve = useStandardCurve(table, numericCols, plateModel)
   const plate = usePlate(plateModel)
+
+  /* ── Analyses (tabs) ──────────────────────────────────────────────────────
+     Several analyses of the same sheet, open at once. Each is a saved chart
+     configuration — the very object `.n9a` export already serialises — so a tab
+     costs nothing new to persist and everything the rail can express travels
+     with it. Switching tabs stores the configuration you are leaving and
+     applies the one you are entering. */
+  const [analyses, setAnalyses] = useState<{ id: string; name: string; config: unknown }[]>([])
+  const [activeAnalysisId, setActiveAnalysisId] = useState<string>("a1")
+  const analysisSeq = useRef(1)
+  const buildConfigRef = useRef<() => unknown>(() => ({}))
+
+  /**
+   * Tab handlers work off a ref of the list, and apply the incoming
+   * configuration OUTSIDE the state updater.
+   *
+   * `applyConfig` is thirty `setState` calls. Running it inside an updater
+   * makes it a side effect of computing state, which React may invoke twice and
+   * may discard — which is exactly how switching tabs left the previous tab's
+   * settings on screen.
+   */
+  const analysesRef = useRef(analyses)
+  analysesRef.current = analyses
+
+  /** Fold the current rail state back into the active tab before leaving it. */
+  const captureActive = useCallback(
+    () =>
+      analysesRef.current.map((a) =>
+        a.id === activeAnalysisId ? { ...a, config: buildConfigRef.current() } : a
+      ),
+    [activeAnalysisId]
+  )
+
+  const switchAnalysis = useCallback(
+    (id: string) => {
+      if (id === activeAnalysisId) return
+      const saved = captureActive()
+      const target = saved.find((a) => a.id === id)
+      if (!target) return
+      setAnalyses(saved)
+      setActiveAnalysisId(id)
+      applyConfigRef.current(target.config)
+    },
+    [activeAnalysisId, captureActive]
+  )
+
+  const newAnalysis = useCallback(() => {
+    const id = `a${++analysisSeq.current}`
+    setAnalyses([
+      ...captureActive(),
+      { id, name: `Analysis ${analysisSeq.current}`, config: buildConfigRef.current() },
+    ])
+    setActiveAnalysisId(id)
+  }, [captureActive])
+
+  const duplicateAnalysis = useCallback(
+    (id: string) => {
+      const saved = captureActive()
+      const index = saved.findIndex((a) => a.id === id)
+      if (index === -1) return
+      const newId = `a${++analysisSeq.current}`
+      const copy = { id: newId, name: `${saved[index].name} (copy)`, config: saved[index].config }
+      const next = [...saved]
+      next.splice(index + 1, 0, copy)
+      setAnalyses(next)
+      setActiveAnalysisId(newId)
+      applyConfigRef.current(copy.config)
+    },
+    [captureActive]
+  )
+
+  const closeAnalysis = useCallback(
+    (id: string) => {
+      const list = analysesRef.current
+      // Never close the last one: an empty workspace has no affordance to start
+      // a new analysis from.
+      if (list.length <= 1) return
+      const index = list.findIndex((a) => a.id === id)
+      const next = list.filter((a) => a.id !== id)
+      setAnalyses(next)
+      if (id === activeAnalysisId) {
+        const neighbour = next[index] ?? next[index - 1]
+        if (neighbour) {
+          setActiveAnalysisId(neighbour.id)
+          applyConfigRef.current(neighbour.config)
+        }
+      }
+    },
+    [activeAnalysisId]
+  )
 
   /* ── Import (local + from Notes9 library) · Save ──────────────────────────── */
   const [libraryOpen, setLibraryOpen] = useState(false)
@@ -782,11 +1393,65 @@ export function DataAnalysisWorkspace({
     [files],
   )
 
+  // Refs, not values: `buildConfig` closes over ~30 pieces of rail state and is
+  // rebuilt every render, so a tab handler capturing it directly would save a
+  // stale configuration.
+  useEffect(() => {
+    buildConfigRef.current = buildConfig
+    applyConfigRef.current = applyConfig as (c: unknown) => void
+  })
+
+  useEffect(() => {
+    if (analyses.length === 0) {
+      setAnalyses([{ id: "a1", name: title || "Analysis 1", config: buildConfigRef.current() }])
+    }
+  }, [analyses.length, title])
+
+  /**
+   * Every open analysis, as a figure-layout panel source.
+   *
+   * Each tab's stored configuration derives its own spec, so a panel can draw
+   * any of them — which is the point of layouts: a published figure's panels
+   * come from different analyses, not different views of one.
+   */
+  const layoutPipelines = useMemo<AnalysisPipeline[]>(() => {
+    const out: AnalysisPipeline[] = []
+    for (const a of analyses) {
+      // The active tab's spec comes from the live rail; the others from the
+      // configuration they were left in.
+      const spec =
+        a.id === activeAnalysisId
+          ? derivedSpec
+          : (() => {
+              try {
+                return specFromChartState(a.config as never, specTable, { fileName: sheetFileName })
+              } catch {
+                return null
+              }
+            })()
+      if (!spec) continue
+      out.push({
+        id: a.id,
+        name: a.name,
+        spec,
+        table: specTable,
+        result: a.id === activeAnalysisId ? engineResult : null,
+        stale: a.id === activeAnalysisId ? engineResult === null : true,
+      })
+    }
+    return out
+  }, [analyses, activeAnalysisId, derivedSpec, specTable, engineResult, sheetFileName])
+
   const loadSnapshot = useCallback((snap: UniverWorkbookSnapshot) => {
     seededRef.current = false
     setLiveSnapshot(snap)
     setMountSnapshot(snap)
     setMountKey((k) => k + 1)
+    // New sheet data invalidates any pending or shown AI turn: a proposal was
+    // computed against the spec that just got replaced, and a reply about it
+    // would be talking about data that's gone.
+    setAiReply(null)
+    setAiProposal(null)
   }, [])
 
   // Serialize / restore the full analysis config (chart + plate) for .n9a save
@@ -794,10 +1459,16 @@ export function DataAnalysisWorkspace({
   const buildConfig = () => ({
     chartType, xKey, yKeys, zKey, sizeKey, title, xLabel, xUnit, yLabel, yUnit, yLog, showGrid, showLegend, markers, paletteName,
     seriesStyles, xMin, xMax, yMin, yMax, nticks, fontFamily, titleSize, axisTitleSize,
-    errorMode, showPoints, subtitle, legendPos, hlines, vlines, chartH,
+    errorMode, showPoints, subtitle, legendPos, hlines, vlines, chartH, caption, xLog,
+    test: statTest, postHoc: statPostHoc, alpha: statAlpha, tails: statTails,
+    referenceLevel: statReferenceLevel,
+    filters: dataFilters, transforms: dataTransforms, exclusions: dataExclusions,
     plate: { format: plateModel.format, originRow: plateModel.originRow, originCol: plateModel.originCol, roleOverrides: plateModel.roleOverrides, annOverrides: plateModel.annOverrides },
     phase,
   })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const applyConfigRef = useRef<(c: unknown) => void>(() => undefined)
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const applyConfig = useCallback((c: any) => {
     if (!c || typeof c !== "object") return
@@ -812,6 +1483,7 @@ export function DataAnalysisWorkspace({
     if (typeof c.yLabel === "string") setYLabel(c.yLabel)
     if (typeof c.yUnit === "string") setYUnit(c.yUnit)
     if (typeof c.yLog === "boolean") setYLog(c.yLog)
+    if (typeof c.xLog === "boolean") setXLog(c.xLog)
     if (typeof c.showGrid === "boolean") setShowGrid(c.showGrid)
     if (typeof c.showLegend === "boolean") setShowLegend(c.showLegend)
     if (typeof c.markers === "boolean") setMarkers(c.markers)
@@ -828,10 +1500,24 @@ export function DataAnalysisWorkspace({
     if (typeof c.errorMode === "string") setErrorMode(c.errorMode)
     if (typeof c.showPoints === "boolean") setShowPoints(c.showPoints)
     if (typeof c.subtitle === "string") setSubtitle(c.subtitle)
+    setCaption(typeof c.caption === "string" ? c.caption : null)
     if (typeof c.legendPos === "string") setLegendPos(c.legendPos)
     if (typeof c.hlines === "string") setHlines(c.hlines)
     if (typeof c.vlines === "string") setVlines(c.vlines)
     if (typeof c.chartH === "number") setChartH(c.chartH)
+    // The statistics slice. Null on the reference level is a value ("compare
+    // against no baseline"), so it is accepted alongside a column name.
+    if (typeof c.test === "string") setStatTest(c.test)
+    if (typeof c.postHoc === "string") setStatPostHoc(c.postHoc)
+    if (typeof c.alpha === "number") setStatAlpha(c.alpha)
+    if (typeof c.tails === "string") setStatTails(c.tails)
+    if (c.referenceLevel === null || typeof c.referenceLevel === "string") setStatReferenceLevel(c.referenceLevel)
+    // The data pipeline. Read back symmetrically with buildConfig above: the
+    // AI patch path merges `{...buildConfig(), ...edits}` before calling this,
+    // so a key written there and not read here is silently dropped on merge.
+    if (Array.isArray(c.filters)) setDataFilters(c.filters)
+    if (Array.isArray(c.transforms)) setDataTransforms(c.transforms)
+    if (Array.isArray(c.exclusions)) setDataExclusions(c.exclusions)
     if (c.plate) {
       if (c.plate.format) plateModel.setFormat(c.plate.format)
       if (typeof c.plate.originRow === "number") plateModel.setOriginRow(c.plate.originRow)
@@ -841,6 +1527,131 @@ export function DataAnalysisWorkspace({
     if (c.phase) setPhase(c.phase)
     seededRef.current = true // config supplies the mappings; don't auto-seed over them
   }, [plateModel])
+
+  /* ── Ask for a change, in words ────────────────────────────────────────────
+     A sentence and a control are the same edit: both end as typed mutations on
+     the spec, so what arrives here moves the rail the user is looking at rather
+     than opening a conversation about it. That is the difference from the
+     Catalyst composer at the top of the page, which answers questions and
+     changes nothing — and the reason this is a second, narrower entry point
+     rather than a second use of that one.
+
+     Nothing below is load-bearing for the deterministic path. If the assistant
+     is off, every control, the engine and the statistics still work. */
+  const [aiPrompt, setAiPrompt] = useState("")
+  const [aiBusy, setAiBusy] = useState(false)
+  const [aiReply, setAiReply] = useState<{ outcome: SpecPatchOutcome; applied: string[] } | null>(null)
+  const aiAbortRef = useRef<AbortController | null>(null)
+
+  /** The hard precondition, mirrored from the route: no resolved rows, no ask. */
+  const aiReady = derivedSpec !== null && specTable.rows.length > 0
+
+  /* P3 — propose then execute. The model's reply is a PLAN, not an action: the
+     spec it would produce, computed and held here, is not handed to
+     `applyConfig` until the researcher reads the rationale and presses
+     Execute. `patchedSpec` is exactly what `executeProposal` needs to derive
+     the rail edits — nothing else, so a stale proposal cannot smuggle in a
+     spec field discardProposal never touched. */
+  interface AiProposal {
+    patchedSpec: AnalysisSpec
+    mutationCount: number
+    clarificationNeeded: string | null
+  }
+  const [aiProposal, setAiProposal] = useState<AiProposal | null>(null)
+
+  const askForChange = useCallback(async () => {
+    const prompt = aiPrompt.trim()
+    if (!prompt || !derivedSpec || specTable.rows.length === 0) return
+
+    // A new request supersedes the one in flight. The old one resolves as
+    // "aborted", which is deliberately silent: it was replaced, not failed.
+    aiAbortRef.current?.abort()
+    const controller = new AbortController()
+    aiAbortRef.current = controller
+    setAiBusy(true)
+    try {
+      const outcome = await requestSpecPatch({
+        prompt,
+        spec: derivedSpec,
+        table: specTable,
+        signal: controller.signal,
+      })
+      if (outcome.outcome === "aborted") return
+
+      let applied: string[] = []
+      if (outcome.outcome === "patch" && outcome.mutations.length > 0) {
+        // `initHistory` starts with an empty sticky set on purpose: this rail
+        // holds its settings in React state rather than dispatching mutations,
+        // so there is no record of which paths were edited by hand and nothing
+        // for a patch to collide with. The patch still goes through
+        // `applyAiPatch` so the spec and the sentences describing it come from
+        // the one code path the rest of L6 uses.
+        //
+        // This only COMPUTES the patch — `applyMutation` underneath is pure
+        // and never touches `derivedSpec` — and stops. Nothing is applied
+        // until the researcher presses Execute (`executeProposal`, below).
+        const patched = applyAiPatch(initHistory(derivedSpec), outcome.mutations)
+        applied = patched.applied.map(describeMutation)
+        setAiProposal({
+          patchedSpec: patched.history.spec,
+          mutationCount: patched.applied.length,
+          clarificationNeeded: outcome.clarificationNeeded,
+        })
+      } else {
+        setAiProposal(null)
+      }
+      setAiReply({ outcome, applied })
+      // The box empties only when the request is finished with. A question back
+      // means the user is about to rephrase, and deleting what they wrote would
+      // make them type it again.
+      if (outcome.outcome === "patch" && !outcome.clarificationNeeded) setAiPrompt("")
+    } finally {
+      // A superseded request no longer owns the busy flag — the one that
+      // replaced it does.
+      if (aiAbortRef.current === controller) {
+        aiAbortRef.current = null
+        setAiBusy(false)
+      }
+    }
+  }, [aiPrompt, derivedSpec, specTable])
+
+  /** What a clicked rail control already does: turn a spec change into rail
+      edits and hand them to `applyConfig`. Moved verbatim out of `askForChange`
+      — the only thing that changed is who calls it and when. */
+  const executeProposal = useCallback(() => {
+    if (!aiProposal || !derivedSpec) return
+    const edits = railEditsFromSpec(derivedSpec, aiProposal.patchedSpec, specTable)
+    // Merged over the current configuration, not applied alone: `applyConfig`
+    // is a total setter, and handing it a partial config would reset the
+    // fields the patch never mentioned.
+    if (Object.keys(edits).length > 0) {
+      applyConfigRef.current({ ...(buildConfigRef.current() as object), ...edits })
+    }
+    setAiProposal(null)
+  }, [aiProposal, derivedSpec, specTable])
+
+  /** Never touches the spec — clearing the pending proposal is the entire
+      effect, which is what makes "byte-identical afterwards" true by
+      construction rather than by careful bookkeeping. */
+  const discardProposal = useCallback(() => {
+    setAiProposal(null)
+  }, [])
+
+  /** The pipeline bar's removal path (P5): a typed mutation through the exact
+      pure function AI patches use (`applyMutation`), turned into rail edits
+      the same way `executeProposal` does. One code path for "this pipeline
+      step is gone," whether a patch, a control or a chip's × removed it. */
+  const applySpecMutation = useCallback(
+    (mutation: SpecMutation) => {
+      if (!derivedSpec) return
+      const next = applyMutation(derivedSpec, mutation)
+      const edits = railEditsFromSpec(derivedSpec, next, specTable)
+      if (Object.keys(edits).length > 0) {
+        applyConfigRef.current({ ...(buildConfigRef.current() as object), ...edits })
+      }
+    },
+    [derivedSpec, specTable]
+  )
 
   // Import: local spreadsheet/CSV, or a saved .n9a analysis bundle.
   const onImport = useCallback(
@@ -982,6 +1793,74 @@ export function DataAnalysisWorkspace({
 
   const chartSettings = (
     <div className="space-y-4">
+      {/* Section jump bar.
+          The rail is eight sections deep, and the ones people reach for most
+          (axes, typography, export) were the furthest down. This puts every
+          section one click away instead of one scroll, and highlights the one
+          you land on so the jump is legible rather than a silent scroll. */}
+      <div className="sticky top-0 z-10 -mx-4 mb-1 border-b border-border/50 bg-card/95 px-4 py-1.5 backdrop-blur-sm">
+        <div className="flex items-center gap-0.5 overflow-x-auto">
+          <button
+            type="button"
+            onClick={() => setRailSection("all")}
+            title="Show every setting"
+            className={cn(
+              "shrink-0 rounded-md px-2 py-1 text-[11.5px] font-medium transition-colors",
+              railSection === "all"
+                ? "bg-[var(--n9-accent,#965034)]/12 text-[var(--n9-accent,#965034)]"
+                : "text-muted-foreground/70 hover:bg-muted hover:text-foreground",
+            )}
+          >
+            All
+          </button>
+          {RAIL_SECTIONS.map((sec) => (
+            <button
+              key={sec.id}
+              type="button"
+              onClick={() => setRailSection(sec.id)}
+              title={sec.label}
+              aria-label={sec.label}
+              aria-pressed={railSection === sec.id}
+              className={cn(
+                "shrink-0 rounded-md p-1.5 transition-colors",
+                railSection === sec.id
+                  ? "bg-[var(--n9-accent,#965034)]/12 text-[var(--n9-accent,#965034)]"
+                  : "text-muted-foreground/70 hover:bg-muted hover:text-foreground",
+              )}
+            >
+              <sec.Icon className="h-3.5 w-3.5" />
+            </button>
+          ))}
+        </div>
+        {railSection !== "all" && (
+          <p className="mt-1 text-[11px] text-muted-foreground/80">
+            <span className="font-semibold text-foreground">
+              {RAIL_SECTIONS.find((sec) => sec.id === railSection)?.label}
+            </span>
+            <span className="mx-1 opacity-50">·</span>
+            <button type="button" onClick={() => setRailSection("all")} className="underline underline-offset-2 hover:text-foreground">
+              show all
+            </button>
+          </p>
+        )}
+      </div>
+
+      <div id="cs-type" className={cn(!showRail("cs-type") && "!hidden", "scroll-mt-3 rounded-lg transition-shadow", flashId === "cs-type" && "ring-2 ring-[var(--n9-accent,#965034)]/40")}>
+        <SectionLabel><FnIcon className="h-3.5 w-3.5" /> Chart type</SectionLabel>
+        <div className="grid grid-cols-4 gap-1.5">
+          {CHART_TYPES.map((t) => (
+            <button key={t.id} onClick={() => setChartType(t.id)} title={t.label}
+              className={cn("flex flex-col items-center gap-1 rounded-lg border p-2 text-[10px] transition-colors",
+                chartType === t.id
+                  ? "border-[var(--n9-accent,#965034)]/40 bg-[var(--n9-accent,#965034)]/10 font-semibold text-[var(--n9-accent,#965034)]"
+                  : "border-border text-muted-foreground hover:text-foreground")}>
+              <t.Icon className="h-4 w-4" weight="bold" /> {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div id="cs-data" className={cn(!showRail("cs-data") && "!hidden", "scroll-mt-3 space-y-4 rounded-lg transition-shadow", flashId === "cs-data" && "ring-2 ring-[var(--n9-accent,#965034)]/40")}>
+      <SectionLabel><TableIcon className="h-3.5 w-3.5" /> Data</SectionLabel>
       {/* Bind the selected sheet cell → chart title / axis / series.
           Two clearly-separated intents: use the cell's TEXT as a title, or
           plot its COLUMN as data. */}
@@ -1037,18 +1916,6 @@ export function DataAnalysisWorkspace({
           </motion.div>
         )}
       </AnimatePresence>
-      <div>
-        <SectionLabel><FnIcon className="h-3.5 w-3.5" /> Chart type</SectionLabel>
-        <div className="grid grid-cols-4 gap-1.5">
-          {CHART_TYPES.map((t) => (
-            <button key={t.id} onClick={() => setChartType(t.id)} title={t.label}
-              className={cn("flex flex-col items-center gap-1 rounded-lg border p-2 text-[10px] transition-colors",
-                chartType === t.id ? "border-[var(--n9-accent,#965034)]/40 bg-[var(--n9-accent,#965034)]/10 text-[var(--n9-accent,#965034)]" : "border-border text-muted-foreground hover:text-foreground")}>
-              <t.Icon className="h-4 w-4" weight="bold" /> {t.label}
-            </button>
-          ))}
-        </div>
-      </div>
       <Field label={`Columns — assign axes${is3D(chartType) ? " (X · Y · Z)" : ""}`}>
         <div className="space-y-1 rounded-md border border-input bg-background p-1.5">
           {table.columns.map((c) => {
@@ -1079,7 +1946,8 @@ export function DataAnalysisWorkspace({
           </NativeSelect>
         </Field>
       )}
-      <div id="cs-title" className={cn("space-y-4 rounded-lg transition-shadow", flashId === "cs-title" && "ring-2 ring-[var(--n9-accent,#965034)]/40")}>
+      </div>
+      <div id="cs-title" className={cn(!showRail("cs-title") && "!hidden", "scroll-mt-3 space-y-4 rounded-lg transition-shadow", flashId === "cs-title" && "ring-2 ring-[var(--n9-accent,#965034)]/40")}>
         <Field label="Chart title"><Input className="h-9" value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
         <Field label="Subtitle"><Input className="h-9" value={subtitle} onChange={(e) => setSubtitle(e.target.value)} placeholder="optional" /></Field>
         <div className="grid grid-cols-2 gap-2">
@@ -1089,29 +1957,9 @@ export function DataAnalysisWorkspace({
           <Field label="Y unit"><Input className="h-9" value={yUnit} onChange={(e) => setYUnit(e.target.value)} /></Field>
         </div>
       </div>
-      <Field label="Palette">
-        <div className="grid grid-cols-2 gap-1.5">
-          {Object.entries(PALETTES).map(([name, colors]) => (
-            <button
-              key={name}
-              onClick={() => setPaletteName(name)}
-              className={cn(
-                "flex items-center gap-2 rounded-lg border px-2 py-1.5 transition-colors",
-                paletteName === name ? "border-[var(--n9-accent,#965034)]/50 bg-[var(--n9-accent,#965034)]/10" : "border-border hover:bg-muted/40",
-              )}
-            >
-              <span className="flex">
-                {colors.slice(0, 5).map((c, i) => (
-                  <span key={i} className="-ml-0.5 h-3.5 w-3.5 rounded-full border border-background first:ml-0" style={{ background: c }} />
-                ))}
-              </span>
-              <span className="truncate text-[11px] font-medium">{name}</span>
-            </button>
-          ))}
-        </div>
-      </Field>
-      <div id="cs-toggles" className={cn("flex flex-col gap-2.5 border-t border-border pt-3 text-sm transition-shadow", flashId === "cs-toggles" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
+      <div id="cs-toggles" className={cn(!showRail("cs-toggles") && "!hidden", "scroll-mt-3 flex flex-col gap-2.5 border-t border-border pt-3 text-sm transition-shadow", flashId === "cs-toggles" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
         <Toggle label="Show markers" checked={markers} onChange={setMarkers} />
+        <Toggle label="Log X axis" checked={xLog} onChange={setXLog} />
         <Toggle label="Log Y axis" checked={yLog} onChange={setYLog} />
         <Toggle label="Gridlines" checked={showGrid} onChange={setShowGrid} />
         <Toggle label="Legend" checked={showLegend} onChange={setShowLegend} />
@@ -1131,15 +1979,21 @@ export function DataAnalysisWorkspace({
       </div>
 
       {/* Error bars, individual points & reference lines (Prism-style) */}
-      <div className="flex flex-col gap-2.5 border-t border-border pt-3">
+      <div id="cs-error" className={cn(!showRail("cs-error") && "!hidden", "flex scroll-mt-3 flex-col gap-2.5 border-t border-border pt-3 transition-shadow", flashId === "cs-error" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
         <SectionLabel><TrendUp className="h-3.5 w-3.5" /> Error &amp; annotations</SectionLabel>
         <Field label="Error bars (aggregate replicate rows sharing an X value)">
           <NativeSelect value={errorMode} onChange={(v) => setErrorMode(v as ErrorMode)}>
-            <option value="none">None</option>
-            <option value="sd">Mean ± SD</option>
-            <option value="sem">Mean ± SEM</option>
-            <option value="ci95">Mean ± 95% CI</option>
+            {ERROR_BAR_OPTIONS.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.id === "none" ? "None" : ERROR_BAR_LABEL[o.id]}
+              </option>
+            ))}
           </NativeSelect>
+          {errorMode !== "none" && (
+            <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+              {ERROR_BAR_OPTIONS.find((o) => o.id === errorMode)?.note}
+            </p>
+          )}
         </Field>
         {errorMode !== "none" && <Toggle label="Overlay individual points" checked={showPoints} onChange={setShowPoints} />}
         <div className="grid grid-cols-2 gap-2">
@@ -1151,7 +2005,7 @@ export function DataAnalysisWorkspace({
 
       {/* Per-series style inspector */}
       {activeY.length > 0 && (
-        <div id="cs-series" className={cn("border-t border-border pt-3 transition-shadow", flashId === "cs-series" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
+        <div id="cs-series" className={cn(!showRail("cs-series") && "!hidden", "scroll-mt-3 border-t border-border pt-3 transition-shadow", flashId === "cs-series" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
           <SectionLabel><Palette className="h-3.5 w-3.5" /> Series style</SectionLabel>
           {activeY.length > 1 && (
             <div className="mb-2.5 flex flex-wrap gap-1">
@@ -1196,9 +2050,12 @@ export function DataAnalysisWorkspace({
           </div>
         </div>
       )}
+      <div id="cs-palette" className={cn(!showRail("cs-palette") && "!hidden", "scroll-mt-3 rounded-lg transition-shadow", flashId === "cs-palette" && "ring-2 ring-[var(--n9-accent,#965034)]/40")}>
+        <PalettePicker value={paletteName} onChange={setPaletteName} />
+      </div>
 
       {/* Axes */}
-      <div id="cs-axes" className={cn("border-t border-border pt-3 transition-shadow", flashId === "cs-axes" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
+      <div id="cs-axes" className={cn(!showRail("cs-axes") && "!hidden", "scroll-mt-3 border-t border-border pt-3 transition-shadow", flashId === "cs-axes" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
         <SectionLabel><Ruler className="h-3.5 w-3.5" /> Axes</SectionLabel>
         <div className="grid grid-cols-2 gap-2">
           <Field label="X min"><Input className="h-9" value={xMin} onChange={(e) => setXMin(e.target.value)} placeholder="auto" /></Field>
@@ -1212,7 +2069,7 @@ export function DataAnalysisWorkspace({
       </div>
 
       {/* Fonts */}
-      <div className="border-t border-border pt-3">
+      <div id="cs-type-face" className={cn(!showRail("cs-type-face") && "!hidden", "scroll-mt-3 border-t border-border pt-3 transition-shadow", flashId === "cs-type-face" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
         <SectionLabel><TextAa className="h-3.5 w-3.5" /> Typography</SectionLabel>
         <Field label="Font family">
           <NativeSelect value={fontFamily} onChange={setFontFamily}>
@@ -1226,22 +2083,297 @@ export function DataAnalysisWorkspace({
       </div>
 
       {/* Publication export — same advanced menu as the chart header */}
-      <div className="border-t border-border pt-3">
+      <div id="cs-export" className={cn(!showRail("cs-export") && "!hidden", "scroll-mt-3 border-t border-border pt-3 transition-shadow", flashId === "cs-export" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
         <SectionLabel><DownloadSimple className="h-3.5 w-3.5" /> Export figure</SectionLabel>
-        <ExportMenu variant="solid" disabled={!hasPlot} defaultName={title} onExport={runExport} getPng={getChartPng} getCanvasSize={getChartSize} onSaveToLibrary={() => setSaveChartOpen(true)} />
-        <p className="mt-1.5 text-[11px] text-muted-foreground">Pick a format, type any DPI, and copy or save straight to your data files.</p>
+        {/* Inline, not a button that opens a panel: this section IS the export
+            panel, and making it a trigger meant two clicks and two surfaces for
+            one job. */}
+        <ExportMenu variant="inline" disabled={!hasPlot} defaultName={title} onExport={runExport} getPng={getChartPng} getCanvasSize={getChartSize} onSaveToLibrary={() => setSaveChartOpen(true)} />
       </div>
     </div>
   )
 
-  const canvasForPhase = phase === "chart" ? chartCanvas : phase === "stats" ? stats.canvas : phase === "curve" ? curve.canvas : plate.canvas
-  const settingsForPhase = phase === "chart" ? chartSettings : phase === "stats" ? stats.settings : phase === "curve" ? curve.settings : plate.settings
+  /**
+   * The Statistics phase, with the validated engine's answer above the
+   * workspace's own summaries.
+   *
+   * The engine is the authority: it runs the same scipy/statsmodels code the
+   * validation corpus is asserted against, so its result leads. The existing
+   * panel stays beneath it because it carries per-column summaries and the
+   * exploratory tables the engine result does not replace.
+   */
+  /**
+   * Put the statistics into the spreadsheet as their own sheet.
+   *
+   * The result stops being something you can only look at: it becomes cells you
+   * can sort, format, paste and export with the data it came from. Written as a
+   * new sheet rather than over the data, and regenerated on every press, so it
+   * is a report and never an input.
+   */
+  const addStatsSheet = useCallback(() => {
+    if (!derivedSpec) return
+    try {
+      const wb = snapshotToXlsxWorkbook(liveRef.current)
+      const rows = buildResultsSheet(derivedSpec, engineResult, { analysisName: title })
+      const ws = XLSX.utils.aoa_to_sheet(rows)
+      ws["!cols"] = resultsSheetColumnWidths(rows)
+      // A fresh name each time, so pressing it twice does not overwrite the
+      // sheet the user may already have annotated.
+      let name = RESULTS_SHEET_NAME
+      let n = 2
+      while (wb.SheetNames.includes(name)) name = `${RESULTS_SHEET_NAME} ${n++}`
+      XLSX.utils.book_append_sheet(wb, ws, name)
+      loadSnapshot(buildSpreadsheetWorkbookSnapshot(sheetFileName, wb))
+      toast.success(`Statistics added to the sheet as "${name}"`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not add the statistics sheet")
+    }
+  }, [derivedSpec, engineResult, title, sheetFileName, loadSnapshot])
+
+  /** The statistics as tab-separated text, for pasting anywhere. */
+  const copyStats = useCallback(async () => {
+    if (!derivedSpec) return
+    const rows = buildResultsSheet(derivedSpec, engineResult, { analysisName: title })
+    const text = rows.map((r) => r.map((c) => (c === null ? "" : String(c))).join("\t")).join("\n")
+    try {
+      await navigator.clipboard.writeText(text)
+      toast.success("Statistics copied")
+    } catch {
+      toast.error("The clipboard is blocked; use Export instead")
+    }
+  }, [derivedSpec, engineResult, title])
+
+  /** The statistics as their own workbook, alongside the data they describe. */
+  const exportStats = useCallback(() => {
+    if (!derivedSpec) return
+    const wb = XLSX.utils.book_new()
+    const dataAoa: (string | number)[][] = [
+      table.columns,
+      ...table.rows.map((r) => table.columns.map((c) => (r[c] ?? "") as string | number)),
+    ]
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(dataAoa), "Data")
+    const rows = buildResultsSheet(derivedSpec, engineResult, { analysisName: title })
+    const ws = XLSX.utils.aoa_to_sheet(rows)
+    ws["!cols"] = resultsSheetColumnWidths(rows)
+    XLSX.utils.book_append_sheet(wb, ws, RESULTS_SHEET_NAME)
+    XLSX.writeFile(wb, `${(title || "analysis").replace(/[^\w-]+/g, "-")}-statistics.xlsx`)
+  }, [derivedSpec, engineResult, title, table])
+
+  useEffect(() => {
+    addStatsSheetRef.current = addStatsSheet
+    copyStatsRef.current = copyStats
+    exportStatsRef.current = exportStats
+  }, [addStatsSheet, copyStats, exportStats])
+
+  const statsCanvas = (
+    <div className="flex flex-col gap-3">
+      {derivedSpec && (
+        <div className="flex flex-wrap items-center gap-2">
+          {/* The platform's own Button, the same one Import / Save / Templates
+              use, rather than three hand-rolled lookalikes. */}
+          <Button variant="outline" size="sm" onClick={addStatsSheet}>
+            <TableIcon className="mr-1.5 h-4 w-4" /> Add to sheet
+          </Button>
+          <Button variant="outline" size="sm" onClick={copyStats}>
+            <Copy className="mr-1.5 h-4 w-4" /> Copy
+          </Button>
+          <Button variant="outline" size="sm" onClick={exportStats}>
+            <DownloadSimple className="mr-1.5 h-4 w-4" /> Export (.xlsx)
+          </Button>
+          <span className="text-[11.5px] text-muted-foreground/70">
+            Every number here came from the engine, not from this page.
+          </span>
+        </div>
+      )}
+      {derivedSpec && (
+        <ResultsCard
+          spec={derivedSpec}
+          result={engineResult}
+          computing={engineBusy}
+          onEditCaption={setCaption}
+        />
+      )}
+      {engineNote && !engineBusy && (
+        <p className="rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[12.5px] text-amber-800 dark:text-amber-300">
+          {engineNote}
+        </p>
+      )}
+      {stats.canvas}
+    </div>
+  )
+
+  const curveSettings = (
+    <div className="flex flex-col gap-3">
+      <label className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/20 p-2.5 text-[12.5px]">
+        <input
+          type="checkbox"
+          checked={curvePinned}
+          onChange={(e) => setCurvePinned(e.target.checked)}
+          className="mt-0.5 accent-[var(--n9-accent,#965034)]"
+        />
+        <span>
+          <span className="font-medium">Always offer this tab</span>
+          <span className="mt-0.5 block text-[11.5px] leading-snug text-muted-foreground">
+            {detected.standardCurve
+              ? "This sheet already looks like a standard curve, so the tab is offered anyway."
+              : "This sheet has no concentration-and-signal pair, so the tab is normally hidden. Pin it to keep it."}
+          </span>
+        </span>
+      </label>
+      {curve.settings}
+    </div>
+  )
+
+  const aiNote = aiReply ? aiNotice(aiReply.outcome) : null
+
+  /* One line to ask, the answer underneath. The answer is capped rather than
+     unbounded: a long rationale must not push the sheet off the screen. */
+  const specPrompt = (
+    <div className="rounded-2xl border border-border bg-card/80 shadow-sm backdrop-blur-sm">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          void askForChange()
+        }}
+        aria-label="Change this analysis by describing it"
+        className="flex items-center gap-2 px-3 py-2"
+      >
+        <Sparkle className="h-4 w-4 shrink-0 text-[var(--n9-accent,#965034)]" weight="fill" aria-hidden />
+        <Input
+          value={aiPrompt}
+          onChange={(e) => setAiPrompt(e.target.value)}
+          disabled={!aiReady}
+          aria-label="Describe the change you want"
+          placeholder={
+            aiReady
+              ? "Describe a change — “log the Y axis”, “colour-blind-safe palette”, “compare the groups with a Mann-Whitney”"
+              : "Import or type some data, then describe a change"
+          }
+          className="h-8 min-w-0 flex-1 border-0 bg-transparent px-0 text-[13px] shadow-none focus-visible:ring-0"
+        />
+        <Button
+          type="submit"
+          variant="outline"
+          size="sm"
+          disabled={!aiReady || aiBusy || aiPrompt.trim().length === 0}
+        >
+          {aiBusy ? "Working…" : "Apply"}
+        </Button>
+      </form>
+
+      {aiReply && (
+        <div className="max-h-56 overflow-y-auto border-t border-border/60 px-3 py-2 text-[12.5px] leading-relaxed">
+          {aiReply.outcome.outcome === "patch" ? (
+            <div className="flex flex-col gap-2">
+              {aiReply.outcome.rationale && <p className="text-foreground/90">{aiReply.outcome.rationale}</p>}
+              {aiReply.applied.length > 0 ? (
+                <ul className="list-disc space-y-0.5 pl-4 text-muted-foreground">
+                  {aiReply.applied.map((description, i) => (
+                    <li key={i}>{description}</li>
+                  ))}
+                </ul>
+              ) : aiReply.outcome.clarificationNeeded ? null : (
+                <p className="text-muted-foreground">Nothing needed changing — the figure already matches.</p>
+              )}
+              {aiReply.outcome.clarificationNeeded && (
+                // A question, not an error. Whatever was applied still stands;
+                // this is the assistant asking for the one thing it lacks.
+                <p className="rounded-lg border border-[var(--n9-accent,#965034)]/25 bg-[var(--n9-accent,#965034)]/[0.06] px-2.5 py-1.5 text-foreground/90">
+                  {aiReply.outcome.clarificationNeeded}
+                </p>
+              )}
+              {aiReply.outcome.rejected.length > 0 && (
+                // A rejection is information: something was proposed, left out,
+                // and the reason is worth reading. It is not a failure.
+                <div className="text-muted-foreground">
+                  <span className="font-medium text-foreground/80">Left out of the change:</span>
+                  <ul className="list-disc space-y-0.5 pl-4">
+                    {aiReply.outcome.rejected.map((r, i) => (
+                      <li key={i}>{r.reason || "No reason given."}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {aiProposal && (
+                // P3 — the plan sits here, read before it runs. Execute is
+                // withheld for a bare clarifying question: there is nothing
+                // to run yet, only something to answer.
+                <div className="flex items-center gap-2 pt-1">
+                  {canExecuteProposal(aiProposal) && (
+                    <Button type="button" variant="outline" size="sm" onClick={executeProposal}>
+                      Execute
+                    </Button>
+                  )}
+                  <Button type="button" variant="ghost" size="sm" onClick={discardProposal}>
+                    Discard
+                  </Button>
+                </div>
+              )}
+            </div>
+          ) : aiNote ? (
+            <div className="flex flex-col gap-1">
+              <p className="font-medium text-foreground/90">{aiNote.title}</p>
+              <p className="text-muted-foreground">{aiNote.body}</p>
+            </div>
+          ) : null}
+        </div>
+      )}
+      <PipelineBar
+        filters={derivedSpec?.filters ?? []}
+        transforms={derivedSpec?.transforms ?? []}
+        exclusions={derivedSpec?.exclusions ?? []}
+        onSetFilters={(filters) => applySpecMutation({ kind: "data.setFilters", filters })}
+        onRemoveTransform={(index) => applySpecMutation({ kind: "data.removeTransform", index })}
+        onRestoreRow={(rowId) => applySpecMutation({ kind: "data.restoreRow", rowId })}
+      />
+    </div>
+  )
+
+  const canvasForPhase = phase === "chart" ? chartCanvas : phase === "stats" ? statsCanvas : phase === "curve" ? curve.canvas : plate.canvas
+  const settingsForPhase = phase === "chart" ? chartSettings : phase === "stats" ? stats.settings : phase === "curve" ? curveSettings : plate.settings
   const activePhase = PHASES.find((p) => p.id === phase)!
   const ActiveIcon = activePhase.Icon
 
   return (
-    <div className="flex flex-col gap-4">
-      <CatalystSectionHero scope="lab" placeholder="Ask Catalyst to analyze your data, pick a chart, or explain a result…" />
+    <div
+      className={cn(
+        "flex flex-col gap-4",
+        // Full screen is a container change, not a different tree: the same
+        // workspace, given the whole viewport. Rendering a second copy would
+        // remount Univer and Plotly and lose the user's cursor and zoom.
+        fullscreen &&
+          "fixed inset-0 z-50 overflow-auto bg-[color:var(--background)] p-4 md:p-6",
+      )}
+    >
+      {!fullscreen && (
+        <CatalystSectionHero scope="lab" placeholder="Ask Catalyst to analyze your data, pick a chart, or explain a result…" />
+      )}
+
+      {/* Analyses. Several views of one sheet: the dose-response beside the
+          timecourse beside the plate, each keeping its own chart, statistics and
+          settings, and each available as a panel in a figure layout. */}
+      <PipelineTabs
+        pipelines={analyses.map((a) => ({
+          id: a.id,
+          name: a.name,
+          spec: derivedSpec!,
+          table: specTable,
+          result: a.id === activeAnalysisId ? engineResult : null,
+          stale: a.id === activeAnalysisId ? engineResult === null : true,
+        }))}
+        activeId={activeAnalysisId}
+        onActivate={switchAnalysis}
+        onNew={newAnalysis}
+        onClose={closeAnalysis}
+        onDuplicate={duplicateAnalysis}
+        onRename={(id, name) =>
+          setAnalyses((list) => list.map((a) => (a.id === id ? { ...a, name } : a)))
+        }
+      />
+
+      {/* Scoped to the analysis above it, and deliberately below the tabs: what
+          it changes is this analysis, not the page. */}
+      {specPrompt}
 
       {/* Tabs + toolbar */}
       <div className="flex flex-wrap items-center gap-2">
@@ -1266,10 +2398,16 @@ export function DataAnalysisWorkspace({
                     <TabsTrigger value={p.id} className="gap-1.5">
                       <p.Icon className="h-4 w-4" weight={phase === p.id ? "fill" : "regular"} />
                       {p.label}
-                      {auto && !showAllTabs && (
+                      {auto && (
                         <span
-                          title="Surfaced automatically for your data"
+                          title="Your data suits this view"
                           className="ml-0.5 h-1.5 w-1.5 rounded-full bg-[var(--n9-accent,#965034)]"
+                        />
+                      )}
+                      {p.id === "curve" && curvePinned && !detected.standardCurve && (
+                        <PushPin
+                          className="ml-0.5 h-3 w-3 text-muted-foreground/60"
+                          weight="fill"
                         />
                       )}
                     </TabsTrigger>
@@ -1279,15 +2417,7 @@ export function DataAnalysisWorkspace({
             </AnimatePresence>
           </TabsList>
         </Tabs>
-        {visiblePhases.length < PHASES.length && (
-          <button
-            onClick={() => setShowAllTabs(true)}
-            title="Show all analysis tools"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          >
-            <DotsThree className="h-4 w-4" weight="bold" />
-          </button>
-        )}
+
         <input ref={fileRef} type="file" accept=".csv,.tsv,.xlsx,.xls,.n9a,.json" className="hidden" onChange={(e) => { if (e.target.files?.[0]) onImport(e.target.files[0]); e.target.value = "" }} />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -1325,6 +2455,18 @@ export function DataAnalysisWorkspace({
           </DropdownMenuContent>
         </DropdownMenu>
         <Button variant="outline" size="sm" onClick={() => setTemplatesOpen(true)}><SquaresFour className="mr-1.5 h-4 w-4" /> Templates</Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setFullscreen((v) => !v)}
+          title={fullscreen ? "Leave full screen (Esc)" : "Use the whole window"}
+        >
+          {fullscreen ? (
+            <><ArrowsInSimple className="mr-1.5 h-4 w-4" /> Exit full screen</>
+          ) : (
+            <><ArrowsOutSimple className="mr-1.5 h-4 w-4" /> Full screen</>
+          )}
+        </Button>
         <span className="ml-auto text-xs text-muted-foreground">{table.rows.length} rows · {table.columns.length} cols</span>
       </div>
 
@@ -1345,27 +2487,71 @@ export function DataAnalysisWorkspace({
         </div>
       )}
 
-      {/* 3-pane: Data rail (left) · canvas (center) · settings rail (right) */}
-      {!dataMax && (
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
-        {/* Data rail — sheet stays mounted; only the rail width animates */}
-        <motion.aside
-          initial={false}
-          animate={{ width: wide ? (dataOpen ? DATA_W : 0) : "100%", opacity: dataOpen || !wide ? 1 : 0 }}
-          transition={{ type: "spring", stiffness: 320, damping: 36 }}
-          className="shrink-0 overflow-hidden"
-        >
-          <div style={{ width: wide ? DATA_W : "100%" }} className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card/80 shadow-sm backdrop-blur-sm">
+      {/* The spec-driven workspace takes the whole area: it brings its own docks
+          (data, statistics, settings) and its own analysis tabs, so nesting it
+          inside this page's rails would give two sets of the same chrome. It
+          reads the sheet loaded above, so both phases analyse one dataset. */}
+      {!dataMax && phase === "workspace" && (
+        <div className="flex min-h-[calc(100vh-24rem)] flex-col">
+          <LayoutCanvas
+            layout={figureLayout}
+            pipelines={layoutPipelines}
+            onChange={setFigureLayout}
+            className="flex-1"
+          />
+        </div>
+      )}
+
+      {/* Data dock (left) · canvas (centre) · settings dock (right).
+          The docks are the shared primitive from the spec-driven workspace, so
+          both surfaces collapse, drag-resize and remember their widths the same
+          way. On a narrow viewport `wide` is false and they stack full-width,
+          where dragging a rail edge would be meaningless. */}
+      {!dataMax && phase !== "workspace" && (
+      <div className={cn("flex min-h-0 flex-col gap-1.5", wide && "xl:flex-row xl:items-stretch")}>
+        {wide && !docks.layout.left.open && (
+          <DockTab
+            side="left"
+            label="Data"
+            icon={<TableIcon className="h-3.5 w-3.5" />}
+            onOpen={() => docks.setOpen("left", true)}
+          />
+        )}
+        {wide ? (
+          <Dock
+            side="left"
+            open={docks.layout.left.open}
+            size={docks.layout.left.size}
+            onToggle={() => docks.toggle("left")}
+            onResize={(s) => docks.resize("left", s)}
+            title="Data"
+            icon={<TableIcon className="h-3.5 w-3.5 text-muted-foreground" />}
+            /* This page scrolls rather than filling the viewport, so the dock
+               has to state its own height; without one the sheet inside it
+               stretches to its full row count and the page grows to match. */
+            className="h-[620px]"
+            bodyClassName="overflow-hidden"
+            actions={
+              <button
+                onClick={toggleDataMax}
+                title="Maximize data editor"
+                className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <ArrowsOutSimple className="h-4 w-4" />
+              </button>
+            }
+          >
+            {/* The sheet stays mounted through a collapse: remounting Univer
+                would drop the user's cursor and selection. */}
+            <div className="h-full p-2">
+              <SheetHost mountSnapshot={mountSnapshot} mountKey={mountKey} onPersist={setLiveSnapshot} onSelectionChange={setSheetSel} heightClass="h-full" compact />
+            </div>
+          </Dock>
+        ) : (
+          <div className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card/80 shadow-sm backdrop-blur-sm">
             <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
-              {wide ? (
-                <button onClick={() => setDataOpen(false)} title="Hide data" className="-ml-1 flex items-center gap-2 rounded-md px-1 py-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
-                  <TableIcon className="h-4 w-4" />
-                  <span className="text-sm font-semibold text-foreground">Data</span>
-                  <CaretLeft className="h-3.5 w-3.5" />
-                </button>
-              ) : (
-                <><TableIcon className="h-4 w-4 text-muted-foreground" /><span className="text-sm font-semibold">Data</span></>
-              )}
+              <TableIcon className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-semibold">Data</span>
               <button onClick={toggleDataMax} title="Maximize data editor" className="ml-auto rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
                 <ArrowsOutSimple className="h-4 w-4" />
               </button>
@@ -1374,15 +2560,6 @@ export function DataAnalysisWorkspace({
               <SheetHost mountSnapshot={mountSnapshot} mountKey={mountKey} onPersist={setLiveSnapshot} onSelectionChange={setSheetSel} heightClass="h-[560px]" compact />
             </div>
           </div>
-        </motion.aside>
-
-        {/* Collapsed Data rail — the data symbol reopens it */}
-        {wide && !dataOpen && (
-          <button onClick={() => setDataOpen(true)} className="group flex h-[620px] shrink-0 flex-col items-center gap-2 rounded-2xl border border-border bg-card/70 px-2 py-3 text-muted-foreground shadow-sm transition-colors hover:bg-card hover:text-foreground" title="Show data">
-            <TableIcon className="h-5 w-5 text-[var(--n9-accent,#965034)]" />
-            <CaretRight className="h-4 w-4" />
-            <span className="mt-1 text-[11px] font-medium [writing-mode:vertical-rl]">Data</span>
-          </button>
         )}
 
         {/* Canvas — always visible */}
@@ -1392,34 +2569,36 @@ export function DataAnalysisWorkspace({
           </motion.div>
         </div>
 
-        {/* Settings rail — collapsible */}
-        {wide && !settingsOpen && (
-          <button onClick={() => setSettingsOpen(true)} className="flex h-[620px] shrink-0 flex-col items-center gap-2 rounded-2xl border border-border bg-card/70 px-2 py-3 text-muted-foreground shadow-sm transition-colors hover:bg-card hover:text-foreground" title={`Show ${activePhase.label} settings`}>
-            <ActiveIcon className="h-5 w-5 text-[var(--n9-accent,#965034)]" weight="fill" />
-            <CaretLeft className="h-4 w-4" />
-            <span className="mt-1 text-[11px] font-medium [writing-mode:vertical-rl]">Settings</span>
-          </button>
-        )}
-        <motion.aside
-          initial={false}
-          animate={{ width: wide ? (settingsOpen ? SET_W : 0) : "100%", opacity: settingsOpen || !wide ? 1 : 0 }}
-          transition={{ type: "spring", stiffness: 320, damping: 36 }}
-          className={cn("shrink-0 overflow-hidden", !settingsOpen && wide && "pointer-events-none")}
-        >
-          <div style={{ width: wide ? SET_W : "100%" }} className="flex h-[620px] flex-col overflow-hidden rounded-2xl border border-border bg-card/80 shadow-sm backdrop-blur-sm xl:sticky xl:top-4">
-            <div className="flex items-center gap-2 border-b border-border bg-[var(--n9-accent,#965034)]/[0.06] px-4 py-3">
-              <ActiveIcon className="h-4 w-4 text-[var(--n9-accent,#965034)]" weight="fill" />
-              <span className="text-sm font-semibold">{activePhase.label}</span>
-              <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">settings</span>
-              {wide && (
-                <button onClick={() => setSettingsOpen(false)} className="ml-auto rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"><CaretRight className="h-4 w-4" /></button>
-              )}
+        {wide ? (
+          <Dock
+            side="right"
+            open={docks.layout.right.open}
+            size={docks.layout.right.size}
+            onToggle={() => docks.toggle("right")}
+            onResize={(s) => docks.resize("right", s)}
+            title={`${activePhase.label} settings`}
+            icon={<ActiveIcon className="h-3.5 w-3.5 text-muted-foreground" weight="fill" />}
+            className="h-[620px] xl:sticky xl:top-4"
+          >
+            <div className="p-4">{settingsForPhase}</div>
+          </Dock>
+        ) : (
+          <div className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card/80 shadow-sm backdrop-blur-sm">
+            <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+              <ActiveIcon className="h-4 w-4 text-muted-foreground" weight="fill" />
+              <span className="text-sm font-semibold">{activePhase.label} settings</span>
             </div>
-            <div className="flex-1 overflow-y-auto p-4">
-              {settingsForPhase}
-            </div>
+            <div className="p-4">{settingsForPhase}</div>
           </div>
-        </motion.aside>
+        )}
+        {wide && !docks.layout.right.open && (
+          <DockTab
+            side="right"
+            label="Settings"
+            icon={<ActiveIcon className="h-3.5 w-3.5" weight="fill" />}
+            onOpen={() => docks.setOpen("right", true)}
+          />
+        )}
       </div>
       )}
 
@@ -1494,6 +2673,18 @@ function PaneHeader({ Icon, title, children }: { Icon: React.ComponentType<{ cla
     </div>
   )
 }
+/** The rail's sections, in the order they appear, for the jump bar. */
+const RAIL_SECTIONS: { id: string; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
+  { id: "cs-type", label: "Chart type", Icon: FnIcon },
+  { id: "cs-data", label: "Data and axes assignment", Icon: TableIcon },
+  { id: "cs-title", label: "Text — titles, labels and typography", Icon: TextAa },
+  { id: "cs-palette", label: "Colour — palette and series style", Icon: Palette },
+  { id: "cs-toggles", label: "Display", Icon: SlidersHorizontal },
+  { id: "cs-error", label: "Error bars and annotations", Icon: TrendUp },
+  { id: "cs-axes", label: "Axes", Icon: Ruler },
+  { id: "cs-export", label: "Export figure", Icon: DownloadSimple },
+]
+
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/80">{children}</div>
 }

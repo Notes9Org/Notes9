@@ -159,7 +159,7 @@ function SignUpContent() {
         // success page so it can forward to login (which honors `next`).
         router.push(hasNext ? `/auth/sign-up-success?next=${encodeURIComponent(nextPath)}` : "/auth/sign-up-success")
       } else if (data.user && data.session) {
-        // Auto-signed-in — go straight to the intended destination.
+        // Auto-signed-in, go straight to the intended destination.
         router.push(nextPath)
       } else {
         router.push(hasNext ? `/auth/sign-up-success?next=${encodeURIComponent(nextPath)}` : "/auth/sign-up-success")
@@ -215,7 +215,7 @@ function SignUpContent() {
   return (
     <AuthShell
       title="Join Notes9"
-      subtitle="Create your research lab account — free credits to start"
+      subtitle="Create your research lab account, free credits to start"
       aside={
         <>
           By continuing you agree to our{" "}

@@ -42,12 +42,12 @@ export function Notes9LoaderGif({
         className="tour-mascot-animate relative z-10 aspect-square w-full overflow-hidden rounded-full bg-transparent"
         style={{ contain: "layout style" }}
       >
-        {/* Dark mode: soft halo — same box as mascot, centered */}
+        {/* Dark mode: soft halo, same box as mascot, centered */}
         <div
           className="notes9-loader-dark-white-halo pointer-events-none absolute left-1/2 top-1/2 z-0 hidden aspect-square w-[118%] max-w-none -translate-x-1/2 -translate-y-1/2 rounded-full bg-white dark:block"
           aria-hidden
         />
-        {/* Blurred duplicate — centered; object-center matches the crisp layer */}
+        {/* Blurred duplicate, centered; object-center matches the crisp layer */}
         <img
           src={MASCOT_SRC}
           alt=""

@@ -17,7 +17,7 @@ import { createClient } from "@/lib/supabase/client"
 // which already verified the JWT via supabase.auth.getUser() on the server
 // (and that call itself is request-deduped by React.cache in
 // lib/auth/current-user.ts). After hydration we keep state fresh by
-// subscribing to onAuthStateChange — that is an event-driven push from
+// subscribing to onAuthStateChange, that is an event-driven push from
 // supabase-js, NOT a poll, so it does not generate extra /auth/v1/user
 // traffic.
 //
@@ -54,14 +54,14 @@ export function AuthProvider({
         setUser(nextUser)
       } else if (nextUser && user && nextUser !== user) {
         // Same id but supabase-js gave us a fresher object (token refresh,
-        // user_metadata update). Update silently — no id flip.
+        // user_metadata update). Update silently, no id flip.
         setUser(nextUser)
       }
     })
     return () => {
       sub.subscription.unsubscribe()
     }
-    // Intentionally empty deps — we only ever want one subscription per mount.
+    // Intentionally empty deps, we only ever want one subscription per mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -83,13 +83,13 @@ export function useAuthUser(): User | null {
 }
 
 // Convenience for the common pattern: assume the user is present because the
-// component is rendered inside the protected (app) tree. Throws if missing —
+// component is rendered inside the protected (app) tree. Throws if missing,
 // callers don't have to handle null.
 export function useRequiredUser(): User {
   const user = useAuthUser()
   if (!user) {
     throw new Error(
-      "useRequiredUser called outside an authenticated tree — wrap in <AuthProvider initialUser={...}>",
+      "useRequiredUser called outside an authenticated tree, wrap in <AuthProvider initialUser={...}>",
     )
   }
   return user

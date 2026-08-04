@@ -93,23 +93,24 @@ export default function RootLayout({
         className="font-sans antialiased"
         style={{
           // Map global styles to CSS variables so Tailwind classes still function correctly.
-          // Journal-grounded product typeface system (see docs/UI_UX_REVAMP_PLAN.md §3.1):
-          //   body/UI + headings → Merriweather Sans (Nature's web UI face)
-          //   display/serif       → Source Serif 4 (scientific-publishing serif)
-          //   mono                → IBM Plex Mono (sequences, IDs, measurements)
-          // Legacy var names are kept to avoid churn; their resolved faces changed.
           //
-          // These must NOT be written as `var(--font-x, fallback)` referencing
-          // their own name. A custom property whose value references itself is
-          // invalid at computed-value time, so the property resolves to nothing —
-          // and every `font-family: var(--font-ibm-serif), ...` built on it is
-          // then dropped entirely, silently falling the whole site back to the
-          // browser's system stacks. That bug made every `font-serif` headline on
-          // the marketing site render sans.
-          "--font-ibm-sans": "'Merriweather Sans', system-ui, sans-serif",
-          "--font-ibm-serif": "'Source Serif 4', Georgia, ui-serif, serif",
-          "--font-familjen": "'Merriweather Sans', system-ui, sans-serif",
-          "--font-jetbrains-mono": "'IBM Plex Mono', ui-monospace, monospace",
+          // The platform runs on the native system UI stack. docs/UI_UX_REVAMP_PLAN.md
+          // §3.1 specifies a webfont trio (Merriweather Sans / Source Serif 4 /
+          // IBM Plex Mono), and for a while these variables were written as
+          // `var(--font-ibm-sans, 'Merriweather Sans', ...)` — self-referential,
+          // therefore invalid at computed-value time, therefore silently dropped
+          // along with every `font-family` rule built on them. The whole product
+          // rendered in the system stack as a result. Wiring the webfonts up
+          // "correctly" changed typography across every surface at once, which is
+          // not the look this product wants, so the system stack is now the
+          // deliberate choice rather than an accident.
+          //
+          // Write literal stacks here. A custom property that references its own
+          // name resolves to nothing and takes its dependents down with it.
+          "--font-ibm-sans": "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+          "--font-ibm-serif": "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+          "--font-familjen": "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+          "--font-jetbrains-mono": "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
         } as React.CSSProperties}
       >
         <ThemeProvider

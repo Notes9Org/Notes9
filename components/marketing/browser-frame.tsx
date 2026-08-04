@@ -28,19 +28,24 @@ export function BrowserFrame({
         <span className="h-3 w-3 rounded-full bg-[#febc2e]" />
         <span className="h-3 w-3 rounded-full bg-[#28c840]" />
       </div>
-      {/* screenshot */}
+      {/* Screenshot.
+          Decoded eagerly on purpose. These sit behind a disclosure, and a lazy
+          image starts loading only as the row opens — so `height: auto` is
+          measured against a zero-height image and then jumps when it arrives,
+          mid-animation. There are a handful of them and they are already on the
+          page, so eager decoding costs little and removes the reflow. */}
       <img
         src={`/demo/light/${src}.png`}
         alt={alt}
-        loading="lazy"
-        decoding="async"
+        loading="eager"
+        decoding="sync"
         className="block w-full dark:hidden"
       />
       <img
         src={`/demo/dark/${src}.png`}
         alt={alt}
-        loading="lazy"
-        decoding="async"
+        loading="eager"
+        decoding="sync"
         className="hidden w-full dark:block"
       />
     </div>

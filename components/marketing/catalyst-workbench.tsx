@@ -15,7 +15,7 @@ import {
 
 /**
  * Interactive proof that Catalyst is an agent across the whole research
- * workflow — not a literature search box. The visitor picks a task type and
+ * workflow, not a literature search box. The visitor picks a task type and
  * watches Catalyst produce the actual kind of output: a cited answer, a
  * protocol, an experiment plan, a generated chart, a spreadsheet edit, or a
  * project plan. All in-page (no data/sign-up needed to feel it).
@@ -61,8 +61,8 @@ const CAPS: Cap[] = [
     render: () => (
       <div className="space-y-2 text-[14px] leading-relaxed text-foreground">
         <p>
-          Condition B used a <strong>3:1 PEI:DNA ratio</strong> — the top-yield setting in your
-          HEK293T screen — and it matches the ratio in two papers you saved.
+          Condition B used a <strong>3:1 PEI:DNA ratio</strong>, the top-yield setting in your
+          HEK293T screen, and it matches the ratio in two papers you saved.
         </p>
         <SourceChips items={["Expt #14", "Lab note · 2026-05-02", "Backliwal et al., 2008"]} />
       </div>

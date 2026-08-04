@@ -254,7 +254,7 @@
 
 /* ── Hero: modern effect revamp ──────────────────────────────────────────
    CSS-driven so entrance reveals always play (even if a browser extension
-   breaks React hydration on the client subtree — JS-driven opacity could
+   breaks React hydration on the client subtree, JS-driven opacity could
    otherwise stick at 0). Aurora + conic search aura + shimmering headline. */
 
 /* Robust staggered entrance reveal. */
@@ -338,7 +338,7 @@
    moments that should read as a research institute rather than a SaaS app.
    ────────────────────────────────────────────────────────────────────────── */
 
-/* Organic colour field — layered wide radial gradients under a heavy blur, so
+/* Organic colour field, layered wide radial gradients under a heavy blur, so
    the edges are genuinely out of focus rather than a flat vector shape. Warm
    terracotta and sage, the two ends of the brand palette. Purely decorative;
    always render behind content with aria-hidden. */
@@ -348,7 +348,7 @@
   filter: blur(72px) saturate(122%);
   opacity: 0.9;
   background:
-    /* Directional key light from the top — a single implied light source reads
+    /* Directional key light from the top, a single implied light source reads
        as photographed depth, where evenly-scattered blobs read as CSS. */
     radial-gradient(58% 38% at 50% -6%, color-mix(in oklab, #f6e4cf 62%, transparent), transparent 72%),
     radial-gradient(38% 52% at 22% 30%, color-mix(in oklab, var(--n9-accent) 46%, transparent), transparent 68%),
@@ -375,7 +375,7 @@
 }
 .dark .marketing-theme .n9-grain-overlay { opacity: 0.22; }
 
-/* Fine technical grid — a faint drafting-paper substrate under the colour.
+/* Fine technical grid, a faint drafting-paper substrate under the colour.
    Much tighter than the existing dot-grid, so it reads as precision rather than
    as decoration. */
 .marketing-theme .n9-grid-fine {
@@ -407,7 +407,7 @@
   mask-image: radial-gradient(78% 74% at 50% 44%, #000 22%, transparent 82%);
 }
 
-/* Monospace section label with a small accent tick — the "▪ PLATFORM OVERVIEW"
+/* Monospace section label with a small accent tick, the "▪ PLATFORM OVERVIEW"
    device. Uppercase and widely tracked so it reads as an index marker, not a
    badge. */
 .marketing-theme .n9-label {
@@ -437,12 +437,43 @@
 }
 
 /* Oversized closing wordmark. Clamped so it always fills the measure without
-   overflowing on mobile. */
-.marketing-theme .n9-wordmark {
+   overflowing on mobile.
+
+   Deliberately NOT scoped to `.marketing-theme`: the wordmark now lives in the
+   footer, which renders on routes that never wrap themselves in that class. A
+   scoped rule left it at body size there, which reads as a bug rather than a
+   sign-off. */
+.n9-wordmark {
   font-size: clamp(3.5rem, 17vw, 15rem);
   line-height: 0.82;
   letter-spacing: -0.035em;
   font-weight: 600;
+}
+
+/* The footer watermark runs larger than the in-flow version ever could: it sits
+   behind the link columns rather than beside them, so it is free to overrun the
+   right gutter (its wrapper clips it) and only the left edge has to line up. */
+.n9-wordmark-footer {
+  /* Sized to sit behind the footer columns rather than compete with them. The
+     earlier 26vw / 23rem ran the wordmark past the content it backs, which
+     reads as a mistake rather than as a watermark. */
+  font-size: clamp(3rem, 14vw, 12rem);
+}
+
+/* Hero scroll cue. The caret nudges down on a long, shallow loop: enough
+   movement to read as "keep going", not enough to pull the eye off the search
+   box above it. The pill itself never moves. */
+@keyframes n9-scroll-nudge {
+  0%, 62%, 100% { transform: translateY(0); }
+  78% { transform: translateY(3px); }
+}
+
+.n9-scroll-cue-caret {
+  animation: n9-scroll-nudge 2.4s cubic-bezier(0.33, 1, 0.68, 1) infinite;
+}
+
+.n9-scroll-cue:hover .n9-scroll-cue-caret {
+  animation-duration: 1.1s;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -451,6 +482,7 @@
   .marketing-theme .n9-search-aura,
   .marketing-theme .n9-organic,
   .marketing-theme .n9-aurora { animation: none; }
+  .n9-scroll-cue-caret { animation: none; }
 }
 
 /* Apple-style scroll reveal: each section rises, unblurs, and settles as it
@@ -484,7 +516,7 @@
    Full-screen sticky "pages" that lock over one another as you scroll. Each
    card pins under the header; the next rises up and covers it. A luminous top
    hairline + deep shadow separate the layers without rounded corners. */
-/* Content-height layered panels — NOT full-screen pinned. Full-screen pinning
+/* Content-height layered panels, NOT full-screen pinned. Full-screen pinning
    clips any content taller than the viewport (which changes with zoom/device),
    so every section here is its natural height and always scrolls fully into
    view at any zoom, browser, or device. The layered look comes from the opaque
@@ -515,7 +547,7 @@
 .dark .marketing-theme .n9-stack-card {
   box-shadow: 0 -34px 90px -34px rgba(0, 0, 0, 0.7);
 }
-/* NOTE: no scroll-driven (animation-timeline: view()) transform here — those
+/* NOTE: no scroll-driven (animation-timeline: view()) transform here, those
    FREEZE mid-value on a sticky element once it pins, permanently displacing the
    card so it never reaches the top and the layer beneath shows through. Motion
    is added via a one-shot IntersectionObserver reveal on the inner content
@@ -542,7 +574,7 @@
   }
 }
 
-/* Warm-highlight band (stays LIGHT) — a soft amber-tinted backdrop with a top
+/* Warm-highlight band (stays LIGHT), a soft amber-tinted backdrop with a top
    glow so a product moment (Catalyst) stands out against the cream narrative
    without introducing any dark surface in light mode. */
 .marketing-theme .n9-stack-card.n9-highlight {
@@ -559,7 +591,7 @@
   );
 }
 
-/* Fine film grain over the whole marketing surface — adds richness/depth that
+/* Fine film grain over the whole marketing surface, adds richness/depth that
    flat fills lack. Fixed, non-interactive, very low opacity. */
 .marketing-theme::after {
   content: "";
@@ -592,125 +624,103 @@
 
 /* ── Hero deck ─────────────────────────────────────────────────────────────
    The right half of the hero is one claim made twice: an answer, held still
-   and legible, and beside it the records that answer is built from, cycling
-   so each takes its turn in front. Nothing has to be hovered for the point to
-   land — the deck circulates on its own.
+   and legible, and across its corner the records that answer is built from,
+   circulating so each takes its turn in front. Nothing has to be hovered for
+   the point to land. The citation the front card belongs to is marked inside
+   the answer, and clicking any citation deals its card to the front.
 
-   Three nested elements per card, because three different things move and
-   collapsing them fights:
+   Position is a single number, --n9-deck-pos, 0 for the front through 3 for
+   the back, set from React. Every card reads its transform, its opacity and
+   its stacking order off that one value, and a transition covers the change.
+   The mark on the citation is driven by the same state, so the two cannot
+   drift: there is only one source of truth rather than two animations trusted
+   to stay in phase.
 
-     .n9-deck-card   the slot. Never moves. Owns the hover target and the
-                     raised z-index, so picking a card cannot move it out from
-                     under the cursor and start a flicker loop.
-     .n9-deck-orbit  the circulation. Owns the keyframes.
-     .n9-deck-face   the pick. Scales about its own centre, so any point
-                     inside the card stays inside it.
+   z-index deliberately does not transition. A card leaving the front drops
+   behind the stack the instant it starts moving and slides down into the back
+   still visible, which reads as a hand pushing the top card underneath.       */
+/* The deck lies over the answer's corner, so it must be transparent to the
+   pointer or it would swallow clicks meant for the citations underneath. */
+.n9-deck {
+  pointer-events: none;
+}
 
-   The slot carries no z-index of its own, so the orbit's stacking order reads
-   against the whole deck; on hover the slot takes z-index 50, which makes it a
-   stacking context and lifts the card above every other regardless of where
-   the animation had it.                                                      */
 .n9-deck-card {
   position: absolute;
   inset: 0;
 }
 
-.n9-deck-card:hover {
-  z-index: 50;
-}
-
 .n9-deck-orbit {
   position: absolute;
   inset: 0;
-  /* Cards keep their natural height and hang from a common top edge.
-     Stretching them all to the slot leaves the shorter screens — the protocol
-     list — with a blank lower half, which reads as a broken panel rather than
-     a card; centring them instead makes the headers disagree, so a card coming
-     forward looks like a second window opening rather than a card being
-     turned. Aligned at the top, the headers stack and the ragged bottom edges
-     become the depth cue. */
   display: flex;
-  align-items: flex-start;
+  align-items: stretch;
   transform-origin: 50% 50%;
-  animation: n9-deck-cycle 18s linear calc(var(--n9-deck-i, 0) * -4.5s) infinite;
+  transform:
+    translate3d(calc(var(--n9-deck-pos, 0) * 5.3%), calc(var(--n9-deck-pos, 0) * 4.3%), 0)
+    scale(calc(1 - var(--n9-deck-pos, 0) * 0.047))
+    rotate(calc(var(--n9-deck-pos, 0) * 2.7deg));
+  opacity: calc(1 - var(--n9-deck-pos, 0) * 0.18);
+  z-index: calc(40 - var(--n9-deck-pos, 0) * 10);
+  transition:
+    transform 720ms cubic-bezier(0.34, 1.16, 0.64, 1),
+    opacity 620ms var(--n9-ease, cubic-bezier(0.22, 1, 0.36, 1));
   will-change: transform, opacity;
+  backface-visibility: hidden;
 }
 
-/* Stop the carousel while it is being read. */
-.n9-deck:hover .n9-deck-orbit {
-  animation-play-state: paused;
+/* The citation the front card belongs to: an accent bar down the left edge and
+   a wash across the row. Both are overlays rather than changes to the row's own
+   border and background, so the row keeps its real styling and only cheap
+   properties move.
+
+   The rows crossfade, because both transitions run at once off the same state
+   change, so the mark appears to travel down the source list rather than blink
+   from one row to the next. */
+.n9-cite-row::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: color-mix(in oklab, var(--n9-accent) 9%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--n9-accent) 42%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 520ms var(--n9-ease, cubic-bezier(0.22, 1, 0.36, 1));
 }
 
-.n9-deck-face {
-  transform-origin: 50% 50%;
-  transition: transform 380ms var(--n9-ease, cubic-bezier(0.22, 1, 0.36, 1));
-  will-change: transform;
+.n9-cite-row::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  z-index: 1;
+  width: 2px;
+  height: 62%;
+  border-radius: 0 2px 2px 0;
+  background: var(--n9-accent);
+  transform: translateY(-50%) scaleY(0);
+  pointer-events: none;
+  transition: transform 520ms cubic-bezier(0.34, 1.28, 0.64, 1);
 }
 
-.n9-deck-card:hover .n9-deck-face {
-  transform: translateY(-0.75rem) scale(1.06);
+.n9-cite-row.is-active::after {
+  opacity: 1;
 }
 
-/* Four positions, front to back. The stack recedes away from the answer, so
-   the card in front is the one nearest it. Leaving the front is a lift and a
-   dissolve rather than a slide, which avoids the card crossing the answer on
-   its way round. */
-@keyframes n9-deck-cycle {
-  0%,
-  18% {
-    transform: translate(0, 0) scale(1) rotate(0deg);
-    opacity: 1;
-    z-index: 40;
-  }
-  21.5% {
-    transform: translate(0, -4%) scale(1.06) rotate(0deg);
-    opacity: 0;
-    z-index: 40;
-  }
-  23% {
-    transform: translate(-16%, 13%) scale(0.86) rotate(-8deg);
-    opacity: 0;
-    z-index: 10;
-  }
-  25%,
-  43% {
-    transform: translate(-16%, 13%) scale(0.86) rotate(-8deg);
-    opacity: 0.46;
-    z-index: 10;
-  }
-  50%,
-  68% {
-    transform: translate(-10.5%, 8.5%) scale(0.91) rotate(-5.3deg);
-    opacity: 0.64;
-    z-index: 20;
-  }
-  75%,
-  93% {
-    transform: translate(-5.2%, 4.2%) scale(0.955) rotate(-2.6deg);
-    opacity: 0.84;
-    z-index: 30;
-  }
-  100% {
-    transform: translate(0, 0) scale(1) rotate(0deg);
-    opacity: 1;
-    z-index: 30;
-  }
+.n9-cite-row.is-active::before {
+  transform: translateY(-50%) scaleY(1);
 }
 
-/* Reduced motion gets the same stack, just held still: index 0 in front. */
+/* Clicking is the interaction; hovering only says the row is clickable. */
+.n9-cite-row:hover::after {
+  opacity: 0.55;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .n9-deck-orbit {
-    animation: none;
-    transform:
-      translate(calc(var(--n9-deck-i, 0) * -5.3%), calc(var(--n9-deck-i, 0) * 4.3%))
-      scale(calc(1 - var(--n9-deck-i, 0) * 0.047))
-      rotate(calc(var(--n9-deck-i, 0) * -2.7deg));
-    opacity: calc(1 - var(--n9-deck-i, 0) * 0.18);
-    z-index: calc(40 - var(--n9-deck-i, 0) * 10);
-  }
-
-  .n9-deck-face,
-  .n9-deck-card:hover .n9-deck-face {
+  .n9-deck-orbit,
+  .n9-cite-row::after,
+  .n9-cite-row::before {
     transition: none;
   }
 }

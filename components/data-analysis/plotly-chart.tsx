@@ -1,13 +1,34 @@
 "use client"
 
-import { useEffect, useRef, useState, type MutableRefObject } from "react"
+import { Fragment, useEffect, useRef, useState, type MutableRefObject } from "react"
 import { createPortal } from "react-dom"
 import { exportChartImage, type ExportFormat } from "@/lib/data-analysis/chart-export"
 
 export type PlotlyEdits = { title?: string; xLabel?: string; yLabel?: string }
-export type ChartExportFn = (opts: { format: ExportFormat; dpi: number; filename: string }) => Promise<void>
+export type ChartExportFn = (opts: {
+  format: ExportFormat
+  dpi: number
+  filename: string
+  /** Raster only: leave the page showing through the figure. */
+  transparent?: boolean
+  /** CMYK is written for TIFF only, and is an uncalibrated separation. */
+  colourSpace?: "rgb" | "cmyk"
+  /** Exact output size in px; without it the on-screen size is scaled by DPI. */
+  width?: number | null
+  height?: number | null
+}) => Promise<void>
 export type ChartElement = "title" | "xaxis" | "yaxis" | "series" | "legend" | "annotation"
-export type ChartMenuGroup = { label: string; items: { label: string; onClick: () => void }[] }
+export type ChartMenuItem = {
+  label: string
+  onClick: () => void
+  /** Heading shown above this item, when it starts a new run. Keeps one long
+   *  submenu legible without splitting it into several top-level entries. */
+  section?: string
+  /** Renders a tick, so the menu shows the current value rather than only offering others. */
+  checked?: boolean
+  hint?: string
+}
+export type ChartMenuGroup = { label: string; items: ChartMenuItem[] }
 
 /**
  * SSR-safe Plotly wrapper. Plotly.js touches `window`, so it's dynamically
@@ -242,8 +263,30 @@ export function PlotlyChart({
           >
             {extraGroups.map((g) => (
               <SubMenu key={g.label} label={g.label} open={openSub === g.label} onToggle={() => setOpenSub((s) => (s === g.label ? null : g.label))}>
-                {g.items.map((it) => (
-                  <MenuItem key={it.label} onClick={() => { it.onClick(); setMenu(null); setOpenSub(null) }}>{it.label}</MenuItem>
+                {g.items.map((it, i) => (
+                  <Fragment key={it.label}>
+                    {it.section && it.section !== g.items[i - 1]?.section && (
+                      <div className="px-2.5 pb-0.5 pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70">
+                        {it.section}
+                      </div>
+                    )}
+                    <MenuItem onClick={() => { it.onClick(); setMenu(null); setOpenSub(null) }}>
+                      <span className="flex w-full items-center gap-2">
+                        <span className="w-3 shrink-0 text-[var(--n9-accent,#965034)]">{it.checked ? "✓" : ""}</span>
+                        {/* The selected item is bold as well as ticked: a tick
+                            is easy to miss in a long list, weight is not. */}
+                        <span
+                          className={
+                            "flex-1 truncate" +
+                            (it.checked ? " font-semibold text-[var(--n9-accent,#965034)]" : "")
+                          }
+                        >
+                          {it.label}
+                        </span>
+                        {it.hint && <span className="shrink-0 text-[10px] text-muted-foreground/70">{it.hint}</span>}
+                      </span>
+                    </MenuItem>
+                  </Fragment>
                 ))}
               </SubMenu>
             ))}
