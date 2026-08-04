@@ -345,6 +345,11 @@ describe("transforms and exclusions", () => {
   it("yields null rather than a number when a bucket has no control", () => {
     // A plate silently normalised against nothing is the error worth blocking:
     // a missing reference is not a reference of zero.
+    //
+    // "leave" so the assertion is about the transform. Under the default
+    // listwise strategy the null row is now dropped from the computation
+    // outright — that is what listwise means, and it is only visible here
+    // because the strategy stopped being decorative.
     const t = table([
       { plate: "P1", cond: "Vehicle", v: 100 },
       { plate: "P1", cond: "Drug", v: 50 },
@@ -352,7 +357,7 @@ describe("transforms and exclusions", () => {
     ])
     const out = resolvePayload(
       spec(
-        { test: "descriptives", responseColumns: ["v"] },
+        { test: "descriptives", responseColumns: ["v"], missingValues: "leave" },
         {
           transforms: [
             { kind: "normaliseToControl", column: "v", groupColumn: "cond", controlLevel: "Vehicle", per: ["plate"], as: "ratio" },
@@ -412,5 +417,218 @@ describe("an analysis with no test chosen still resolves", () => {
     expect(outcome.ok).toBe(true)
     if (!outcome.ok) return
     expect(outcome.payload.plotRows).toHaveLength(3)
+  })
+})
+
+describe("a named level is a level, not a column", () => {
+  // A blank group and a fold-change baseline name a LEVEL — "Blank", "Ctrl" —
+  // and the column that holds it is resolved from the spec. Reading the level as
+  // a column name matches every row, which silently averages the whole table and
+  // returns a grand mean wearing a baseline's name.
+  const plate = table([
+    { cond: "Blank", od: 100 },
+    { cond: "Blank", od: 300 },
+    { cond: "Sample", od: 1000 },
+    { cond: "Sample", od: 1400 },
+  ])
+
+  it("subtracts the blank group's mean, not the whole table's", () => {
+    const out = resolvePayload(
+      spec(
+        { test: "descriptives", responseColumns: ["od"], groupColumn: "cond" },
+        { transforms: [{ kind: "baselineSubtract", column: "od", blankGroup: "Blank", blankValue: null }] }
+      ),
+      plate
+    )
+    expect(out.ok).toBe(true)
+    if (!out.ok || out.payload.shape !== "columns") return
+    // Blank mean is 200. The grand mean is 700, which would report the samples
+    // as 300 and 700 and push both blanks far below zero.
+    expect(out.payload.columns.od).toEqual([-100, 100, 800, 1200])
+  })
+
+  it("divides a fold-change by the baseline level's mean, not every row's", () => {
+    const out = resolvePayload(
+      spec(
+        { test: "descriptives", responseColumns: ["v"], groupColumn: "g" },
+        { transforms: [{ kind: "foldChange", column: "v", baseline: "Ctrl" }] }
+      ),
+      table([
+        { g: "Ctrl", v: 10 }, { g: "Ctrl", v: 10 },
+        { g: "Drug", v: 30 }, { g: "Drug", v: 50 },
+      ])
+    )
+    expect(out.ok).toBe(true)
+    if (!out.ok || out.payload.shape !== "columns") return
+    // Control mean 10. Against the grand mean of 25 the drug rows read 1.2 and
+    // 2.0 — an effect divided into itself, and plausible enough to publish.
+    expect(out.payload.columns.v).toEqual([1, 1, 3, 5])
+  })
+
+  it("finds the level through a role-tagged column when no group column is declared", () => {
+    const out = resolvePayload(
+      spec(
+        { test: "descriptives", responseColumns: ["od"] },
+        {
+          roles: [{ column: "cond", role: "treatment", unit: null, source: "user", confidence: null }],
+          transforms: [{ kind: "baselineSubtract", column: "od", blankGroup: "Blank", blankValue: null }],
+        }
+      ),
+      plate
+    )
+    expect(out.ok).toBe(true)
+    if (!out.ok || out.payload.shape !== "columns") return
+    expect(out.payload.columns.od).toEqual([-100, 100, 800, 1200])
+  })
+
+  it("blocks rather than falling back to a table-wide mean", () => {
+    // "treatment" is a column name here, not a level — exactly the mistake the
+    // old code accepted and answered with the grand mean of all 24 rows.
+    const out = resolvePayload(
+      spec(
+        { test: "descriptives", responseColumns: ["value"], groupColumn: "treatment" },
+        { transforms: [{ kind: "baselineSubtract", column: "value", blankGroup: "treatment", blankValue: null }] }
+      ),
+      twoGroups
+    )
+    expect(out.ok).toBe(false)
+    if (out.ok || !("blocked" in out)) throw new Error("expected blocked")
+    expect(out.blocked[0].code).toBe("level-not-found")
+  })
+})
+
+describe("an exclusion is reported as applied only when it applied", () => {
+  const excl = (rowId: string) => ({
+    rowId,
+    reasonKind: "technical-failure" as const,
+    reasonText: "edge effect",
+    method: null,
+    excludedBy: "u1",
+    excludedAt: new Date("2026-07-31T09:00:00Z").toISOString(),
+  })
+
+  it("does not claim an exclusion that a reshape orphaned", () => {
+    const t = table([
+      { sample: "S1", v: 10 }, { sample: "S1", v: 90 },
+      { sample: "S2", v: 20 }, { sample: "S2", v: 22 },
+    ])
+    const out = resolvePayload(
+      spec(
+        { test: "descriptives", responseColumns: ["v"] },
+        {
+          transforms: [{ kind: "collapseReplicates", by: ["sample"], statistic: "mean" }],
+          exclusions: [excl("r2")],
+        }
+      ),
+      t
+    )
+    expect(out.ok).toBe(true)
+    if (!out.ok || out.payload.shape !== "columns") return
+    // collapseReplicates rewrote "r2" to "r1+r2", so the outlier is still in the
+    // mean. Saying "1 point excluded" here is the false statement §8.1 cannot
+    // afford; the honest answer names what did not happen.
+    expect(out.payload.columns.v).toEqual([50, 21])
+    expect(out.payload.plotRows.every((r) => !r.excluded)).toBe(true)
+    expect(out.warnings.join(" ")).not.toContain("point excluded")
+    expect(out.warnings.join(" ")).toContain("NOT applied")
+  })
+
+  it("counts the ones that applied separately from the ones that did not", () => {
+    const out = resolvePayload(
+      spec({ test: "descriptives", responseColumns: ["value"] }, { exclusions: [excl("r1"), excl("gone")] }),
+      twoGroups
+    )
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+    expect(out.warnings.join(" ")).toContain("1 point excluded")
+    expect(out.warnings.join(" ")).toContain("1 exclusion was NOT applied")
+  })
+})
+
+describe("the declared missing-value strategy is the one that runs", () => {
+  // Provenance and the exported results sheet both print this setting. Two
+  // strategies returning identical numbers made that print a falsehood.
+  const holed = table([{ v: 10 }, { v: null }, { v: 20 }])
+  const withStrategy = (missingValues: AnalysisSpec["analysis"]["missingValues"]) =>
+    resolvePayload(spec({ test: "descriptives", responseColumns: ["v"], missingValues }), holed)
+
+  it("drops the row under listwise and says so", () => {
+    const out = withStrategy("listwise")
+    expect(out.ok).toBe(true)
+    if (!out.ok || out.payload.shape !== "columns") return
+    expect(out.payload.columns.v).toEqual([10, 20])
+    expect(out.warnings.join(" ")).toContain("listwise deletion")
+  })
+
+  it("fills the hole under mean-impute instead of dropping it", () => {
+    const out = withStrategy("mean-impute")
+    expect(out.ok).toBe(true)
+    if (!out.ok || out.payload.shape !== "columns") return
+    expect(out.payload.columns.v).toEqual([10, 15, 20])
+    expect(out.warnings.join(" ")).toContain("filled with the column mean")
+  })
+
+  it("fills with the median under median-impute", () => {
+    const out = resolvePayload(
+      spec({ test: "descriptives", responseColumns: ["v"], missingValues: "median-impute" }),
+      table([{ v: 1 }, { v: 2 }, { v: 9 }, { v: null }])
+    )
+    expect(out.ok).toBe(true)
+    if (!out.ok || out.payload.shape !== "columns") return
+    // Median of 1, 2, 9 is 2 — the mean would be 4 and would drag the centre
+    // toward the outlier, which is the reason to pick this strategy at all.
+    expect(out.payload.columns.v).toEqual([1, 2, 9, 2])
+  })
+
+  it("drops a whole row under listwise where pairwise keeps the value that was present", () => {
+    const t = table([{ x: 1, y: 5 }, { x: 2, y: null }])
+    const cols = (s: AnalysisSpec["analysis"]["missingValues"]) => {
+      const out = resolvePayload(spec({ test: "descriptives", responseColumns: ["x", "y"], missingValues: s }), t)
+      if (!out.ok || out.payload.shape !== "columns") throw new Error("expected columns")
+      return out.payload.columns
+    }
+    // Listwise takes x=2 down with the missing y; pairwise keeps it.
+    expect(cols("listwise")).toEqual({ x: [1], y: [5] })
+    expect(cols("pairwise")).toEqual({ x: [1, 2], y: [5, null] })
+  })
+})
+
+describe("a curve fit needs distinct concentrations, not just points", () => {
+  const fourPl = {
+    model: "4pl" as const,
+    weighting: "none" as const,
+    sharedParameters: [],
+    constraints: {},
+    confidenceBands: true,
+    interpolate: false,
+  }
+
+  it("blocks sixteen points sitting at two concentrations", () => {
+    // Replicates buy precision, not identifiability. This passed the point count
+    // and then died inside the optimiser as `OverflowError: Result not
+    // representable`, which tells a bench scientist nothing.
+    const rows: Record<string, number>[] = []
+    for (let i = 0; i < 8; i++) rows.push({ c: 1, s: 0.1 + i / 100 }, { c: 100, s: 0.9 + i / 100 })
+    const out = resolvePayload(
+      spec({ test: "nonlinear-regression", responseColumns: ["c", "s"], nonlinear: fourPl }),
+      table(rows)
+    )
+    expect(out.ok).toBe(false)
+    if (out.ok || !("blocked" in out)) throw new Error("expected blocked")
+    expect(out.blocked[0].code).toBe("too-few-concentrations")
+    expect(out.blocked[0].message).toContain("only 2")
+    expect(out.blocked[0].fix).toContain("replicates")
+  })
+
+  it("accepts a real dose–response with four doses in duplicate", () => {
+    const rows: Record<string, number>[] = []
+    for (const c of [1, 10, 100, 1000]) rows.push({ c, s: Math.log10(c) }, { c, s: Math.log10(c) + 0.1 })
+    const out = resolvePayload(
+      spec({ test: "nonlinear-regression", responseColumns: ["c", "s"], nonlinear: fourPl }),
+      table(rows)
+    )
+    expect(out.ok).toBe(true)
+    if (!out.ok || out.payload.shape !== "curve") return
+    expect(new Set(out.payload.x).size).toBe(4)
   })
 })

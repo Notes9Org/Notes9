@@ -109,8 +109,158 @@ function matches(value: unknown, op: string, target: unknown): boolean {
   }
 }
 
-/** Transforms applied in array order — blank-subtract-then-log ≠ log-then-blank-subtract. */
-function applyTransform(rows: TableRow[], t: Transform): TableRow[] {
+/** Middle value; the mean of the two middle values on an even count. */
+function median(sorted: number[]): number {
+  const mid = Math.floor(sorted.length / 2)
+  return sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
+}
+
+/**
+ * The mean of `column` over the rows belonging to a named LEVEL.
+ *
+ * Two transforms reference a level rather than a column — `foldChange.baseline`
+ * and `baselineSubtract.blankGroup` — and, unlike `normaliseToControl`, neither
+ * carries the column that level lives in. So the column is resolved from the
+ * spec, in declaration order, and never guessed:
+ *
+ *   1. `analysis.groupColumn`, the declared condition column;
+ *   2. a column the semantic layer (L2) tagged `group` or `treatment`;
+ *   3. failing both, the one and only column in which the level appears.
+ *
+ * If no column holds the level — or several do and none was declared — this
+ * blocks. Averaging every row instead produces a grand mean and presents it as
+ * a baseline: a number wrong by exactly the treatment effect, and one that
+ * looks entirely plausible on the way out.
+ */
+function resolveReference(
+  rows: TableRow[],
+  spec: AnalysisSpec,
+  level: string,
+  column: string
+): { ok: true; value: number } | { ok: false; blocked: PreconditionFailure } {
+  const holds = (c: string) => rows.some((r) => toLabel(r.values[c]) === level)
+  const declared = [
+    spec.analysis.groupColumn,
+    ...spec.roles.filter((r) => r.role === "group" || r.role === "treatment").map((r) => r.column),
+  ].filter((c): c is string => c !== null)
+
+  let found = declared.find(holds) ?? null
+  if (found === null) {
+    const anywhere = [...new Set(rows.flatMap((r) => Object.keys(r.values)))].filter(holds)
+    if (anywhere.length > 1) {
+      return {
+        ok: false,
+        blocked: {
+          code: "ambiguous-level",
+          message: `"${level}" appears in more than one column (${anywhere.join(", ")}), so which one holds the reference group is not decidable.`,
+          fix: "Set the grouping column to the one that holds it.",
+        },
+      }
+    }
+    found = anywhere[0] ?? null
+  }
+  if (found === null) {
+    return {
+      ok: false,
+      blocked: {
+        code: "level-not-found",
+        message: `No group named "${level}" was found in the data.`,
+        fix: "Name the reference group exactly as it appears in the condition column.",
+      },
+    }
+  }
+
+  const levelColumn = found
+  const vals = rows
+    .filter((r) => toLabel(r.values[levelColumn]) === level)
+    .map((r) => toNumber(r.values[column]))
+    .filter((v): v is number => v !== null)
+  if (vals.length === 0) {
+    return {
+      ok: false,
+      blocked: {
+        code: "empty-reference",
+        message: `The "${level}" rows carry no usable ${column} value, so there is nothing to reference against.`,
+        fix: `Check that ${column} is filled in for the ${level} rows.`,
+      },
+    }
+  }
+  return { ok: true, value: vals.reduce((a, b) => a + b, 0) / vals.length }
+}
+
+/**
+ * `analysis.missingValues`, applied.
+ *
+ * The provenance card and the exported results sheet both print this setting as
+ * though it governed the computation, so it has to. It bites only on the numeric
+ * columns the chosen test consumes — a categorical exposure has no missing
+ * *value* to impute — and every strategy states what it did, because a filled
+ * hole a reader cannot see is the same failure as a wrong baseline:
+ *
+ *   listwise  drop the whole row when any consumed column is missing, so a
+ *             column that WAS present is dropped along with it. This was the
+ *             de-facto behaviour before, unstated and uncounted.
+ *   pairwise  keep every row; each statistic uses the rows where its own
+ *             variables are present — what the shaping below already does.
+ *   *-impute  fill the holes with the column's mean/median over the rows that
+ *             have one.
+ *   leave     touch nothing; the engine omits non-finite values, because there
+ *             is no finite arithmetic that includes them.
+ */
+function applyMissingValues(rows: TableRow[], spec: AnalysisSpec, warnings: string[]): TableRow[] {
+  const declared = spec.analysis.responseColumns
+  const pool = declared.length ? declared : [...new Set(rows.flatMap((r) => Object.keys(r.values)))]
+  const cols = pool.filter((c) => rows.some((r) => toNumber(r.values[c]) !== null))
+  const holes = rows.reduce((n, r) => n + cols.filter((c) => toNumber(r.values[c]) === null).length, 0)
+  if (holes === 0) return rows
+  const missing = `${holes} missing value${holes === 1 ? "" : "s"}`
+
+  switch (spec.analysis.missingValues) {
+    case "listwise": {
+      const kept = rows.filter((r) => cols.every((c) => toNumber(r.values[c]) !== null))
+      const dropped = rows.length - kept.length
+      warnings.push(
+        `${dropped} row${dropped === 1 ? "" : "s"} dropped whole: a value was missing in ${cols.join(", ")} (listwise deletion).`
+      )
+      return kept
+    }
+    case "mean-impute":
+    case "median-impute": {
+      const useMean = spec.analysis.missingValues === "mean-impute"
+      const fill = new Map<string, number>()
+      for (const c of cols) {
+        const vals = rows.map((r) => toNumber(r.values[c])).filter((v): v is number => v !== null)
+        if (vals.length === 0) continue
+        fill.set(c, useMean ? vals.reduce((a, b) => a + b, 0) / vals.length : median([...vals].sort((a, b) => a - b)))
+      }
+      warnings.push(
+        `${missing} filled with the column ${useMean ? "mean" : "median"}; n is unchanged but the spread is narrower than the measured data.`
+      )
+      return rows.map((r) => {
+        const values = { ...r.values }
+        for (const c of cols) {
+          const f = fill.get(c)
+          if (f !== undefined && toNumber(values[c]) === null) values[c] = f
+        }
+        return { ...r, values }
+      })
+    }
+    case "pairwise":
+      warnings.push(`${missing} kept in place; each comparison uses the rows where its own variables are present.`)
+      return rows
+    case "leave":
+      warnings.push(`${missing} left as-is; they are omitted from the computation.`)
+      return rows
+  }
+}
+
+/**
+ * Transforms applied in array order — blank-subtract-then-log ≠ log-then-blank-subtract.
+ *
+ * `reference` is the level mean the caller resolved for the two transforms that
+ * name a level (see `resolveReference`); null for every other kind.
+ */
+function applyTransform(rows: TableRow[], t: Transform, reference: number | null): TableRow[] {
   const num = (r: TableRow, c: string) => toNumber(r.values[c])
 
   switch (t.kind) {
@@ -140,14 +290,14 @@ function applyTransform(rows: TableRow[], t: Transform): TableRow[] {
       })
     }
     case "foldChange": {
-      const base = rows
-        .filter((r) => toLabel(r.values[t.baseline]) !== "—")
-        .map((r) => num(r, t.column))
-        .filter((v): v is number => v !== null)
-      const mean = base.reduce((a, b) => a + b, 0) / (base.length || 1)
+      // `t.baseline` is a LEVEL, not a column: the divisor is the mean of the
+      // baseline group, resolved by the caller against the condition column. A
+      // fold-change taken against the whole table's mean is not a fold-change —
+      // it divides the effect into itself and lands everything near 1.
+      // A baseline that read zero yields null, not Infinity.
       return rows.map((r) => {
         const v = num(r, t.column)
-        return { ...r, values: { ...r.values, [t.column]: v !== null && mean !== 0 ? v / mean : null } }
+        return { ...r, values: { ...r.values, [t.column]: v !== null && reference ? v / reference : null } }
       })
     }
     case "normalise": {
@@ -206,15 +356,11 @@ function applyTransform(rows: TableRow[], t: Transform): TableRow[] {
       )
     }
     case "baselineSubtract": {
-      let blank = t.blankValue
-      if (blank === null && t.blankGroup) {
-        const vals = rows
-          .filter((r) => toLabel(r.values[t.blankGroup as string]) !== "—")
-          .map((r) => num(r, t.column))
-          .filter((v): v is number => v !== null)
-        blank = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0
-      }
-      const b = blank ?? 0
+      // An explicit `blankValue` wins. Otherwise `t.blankGroup` is a LEVEL —
+      // the wells labelled "Blank" — and the subtrahend is that level's mean,
+      // resolved by the caller. Neither present means there is nothing to
+      // subtract, which is a no-op rather than a subtraction of the whole plate.
+      const b = t.blankValue ?? reference ?? 0
       return rows.map((r) => {
         const v = num(r, t.column)
         return { ...r, values: { ...r.values, [t.column]: v !== null ? v - b : null } }
@@ -269,8 +415,23 @@ export function resolvePayload(spec: AnalysisSpec, table: Table): ResolveOutcome
   const filteredOut = table.rows.length - rows.length
   if (filteredOut > 0) warnings.push(`${filteredOut} row${filteredOut === 1 ? "" : "s"} removed by filters.`)
 
-  /* 2 — transform, in order */
-  for (const t of spec.transforms) rows = applyTransform(rows, t)
+  /* 2 — transform, in order. Two kinds reference a named level, which has to be
+        resolved against a column before the transform can run; that happens
+        here, where failing to find it can block rather than quietly widen into
+        a table-wide mean. */
+  for (const t of spec.transforms) {
+    let reference: number | null = null
+    if (t.kind === "foldChange") {
+      const ref = resolveReference(rows, spec, t.baseline, t.column)
+      if (!ref.ok) return { ok: false, blocked: [ref.blocked] }
+      reference = ref.value
+    } else if (t.kind === "baselineSubtract" && t.blankValue === null && t.blankGroup !== null) {
+      const ref = resolveReference(rows, spec, t.blankGroup, t.column)
+      if (!ref.ok) return { ok: false, blocked: [ref.blocked] }
+      reference = ref.value
+    }
+    rows = applyTransform(rows, t, reference)
+  }
 
   /* 3 — exclusions: partitioned, never dropped. Both sides are kept so the
         with/without comparison (§8.1) is always computable. */
@@ -280,12 +441,28 @@ export function resolvePayload(spec: AnalysisSpec, table: Table): ResolveOutcome
     values: r.values,
     excluded: excludedIds.has(r.rowId),
   }))
-  const included = rows.filter((r) => !excludedIds.has(r.rowId))
-  if (excludedIds.size > 0) {
+  const kept = rows.filter((r) => !excludedIds.has(r.rowId))
+  // Report what was APPLIED, not what the spec lists. collapseReplicates and
+  // pivotLonger rewrite row ids, so an exclusion recorded before a reshape names
+  // a row that no longer exists; saying "1 point excluded" while that point is
+  // still inside the mean is a false statement about the one operation §8.1 asks
+  // a reader to trust. Nothing enforces the ordering the transform comments
+  // recommend, so the count has to be measured rather than assumed.
+  const applied = rows.length - kept.length
+  const orphaned = excludedIds.size - applied
+  if (applied > 0) {
+    warnings.push(`${applied} point${applied === 1 ? "" : "s"} excluded; the result is computed without them.`)
+  }
+  if (orphaned > 0) {
     warnings.push(
-      `${excludedIds.size} point${excludedIds.size === 1 ? "" : "s"} excluded; the result is computed without them.`
+      `${orphaned} exclusion${orphaned === 1 ? " was" : "s were"} NOT applied: ` +
+        `the row${orphaned === 1 ? " it names no longer exists" : "s they name no longer exist"} after a reshape — ` +
+        `collapsing replicates or folding wide columns rewrites row ids. Re-exclude those points on the current table.`
     )
   }
+
+  /* 3b — missing values, per the declared strategy. */
+  const included = applyMissingValues(kept, spec, warnings)
 
   if (included.length === 0) {
     return { ok: false, blocked: [{ code: "no-rows", message: "No rows remain after filters and exclusions." }] }
@@ -649,6 +826,20 @@ export function resolvePayload(spec: AnalysisSpec, table: Table): ResolveOutcome
       const minPoints = nl.model === "3pl" ? 3 : nl.model === "5pl" ? 5 : 4
       if (x.length < minPoints) {
         blocked.push({ code: "too-few-points", message: `A ${nl.model.toUpperCase()} fit needs at least ${minPoints} points; ${x.length} available.` })
+        break
+      }
+      // Points are not the constraint — DISTINCT concentrations are. Replicates
+      // at one dose buy precision, not identifiability: a model with `minPoints`
+      // free parameters fitted through two doses is under-determined, and the
+      // optimiser reports that as an OverflowError from deep inside the solver
+      // rather than as anything a bench scientist can act on.
+      const levels = new Set(x).size
+      if (levels < minPoints) {
+        blocked.push({
+          code: "too-few-concentrations",
+          message: `A ${nl.model.toUpperCase()} fit estimates ${minPoints} parameters and needs at least ${minPoints} different concentrations; these ${x.length} points cover only ${levels}.`,
+          fix: "Add more concentration levels — extra replicates at the same concentration do not constrain the curve.",
+        })
         break
       }
       return {
