@@ -4,12 +4,13 @@ import type { AnalysisSpec } from "@/lib/data-analysis/spec/analysis-spec"
 import type { Table } from "@/lib/data-analysis/engine/resolver"
 
 /**
- * The two pure pieces behind the workspace's natural-language prompt: what a
- * proposed spec means for the rail's controls, and what every reply that is not
- * a patch says to the user.
+ * The pure pieces behind the workspace's natural-language prompt: what a
+ * proposed spec means for the rail's controls, what every reply that is not a
+ * patch says to the user, and whether a computed-but-not-yet-approved proposal
+ * (P3) may be executed.
  *
  * They live here rather than in the workspace component because neither needs
- * React and both are worth reading — and testing — on their own.
+ * React and all are worth reading — and testing — on their own.
  */
 
 /** Axis limits and the tick count are text in the rail and numbers in the spec. */
@@ -95,4 +96,18 @@ export function aiNotice(outcome: SpecPatchOutcome): { title: string; body: stri
     case "error":
       return { title: "The assistant didn't answer", body: outcome.reason }
   }
+}
+
+/**
+ * P3 — propose then execute. Execute is offered only for a proposal that would
+ * actually do something and is not itself a question: a `clarificationNeeded`
+ * reply is the assistant asking whether it understood, and a button offering
+ * to act on a guess it just admitted might be wrong would undercut the ask.
+ */
+export function canExecuteProposal(
+  proposal: { mutationCount: number; clarificationNeeded: string | null } | null
+): boolean {
+  if (!proposal) return false
+  if (proposal.clarificationNeeded) return false
+  return proposal.mutationCount > 0
 }

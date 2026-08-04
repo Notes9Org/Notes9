@@ -100,8 +100,10 @@ import {
   type ChartState,
 } from "@/lib/data-analysis/workspace/chart-state-spec"
 import { requestSpecPatch, type SpecPatchOutcome } from "@/lib/data-analysis/ai/spec-author-client"
-import { applyAiPatch, describeMutation, initHistory } from "@/lib/data-analysis/spec/mutations"
-import { aiNotice, railEditsFromSpec } from "@/lib/data-analysis/workspace/spec-prompt"
+import { applyAiPatch, applyMutation, describeMutation, initHistory, type SpecMutation } from "@/lib/data-analysis/spec/mutations"
+import type { AnalysisSpec } from "@/lib/data-analysis/spec/analysis-spec"
+import { aiNotice, canExecuteProposal, railEditsFromSpec } from "@/lib/data-analysis/workspace/spec-prompt"
+import { PipelineBar } from "@/components/data-analysis/pipeline-bar"
 import { computeAnalysis } from "@/lib/data-analysis/engine/client"
 import type { EngineResult } from "@/lib/data-analysis/engine/contract"
 import type { Table as SpecTable } from "@/lib/data-analysis/engine/resolver"
@@ -1434,6 +1436,11 @@ export function DataAnalysisWorkspace({
     setLiveSnapshot(snap)
     setMountSnapshot(snap)
     setMountKey((k) => k + 1)
+    // New sheet data invalidates any pending or shown AI turn: a proposal was
+    // computed against the spec that just got replaced, and a reply about it
+    // would be talking about data that's gone.
+    setAiReply(null)
+    setAiProposal(null)
   }, [])
 
   // Serialize / restore the full analysis config (chart + plate) for .n9a save
@@ -1521,6 +1528,19 @@ export function DataAnalysisWorkspace({
   /** The hard precondition, mirrored from the route: no resolved rows, no ask. */
   const aiReady = derivedSpec !== null && specTable.rows.length > 0
 
+  /* P3 — propose then execute. The model's reply is a PLAN, not an action: the
+     spec it would produce, computed and held here, is not handed to
+     `applyConfig` until the researcher reads the rationale and presses
+     Execute. `patchedSpec` is exactly what `executeProposal` needs to derive
+     the rail edits — nothing else, so a stale proposal cannot smuggle in a
+     spec field discardProposal never touched. */
+  interface AiProposal {
+    patchedSpec: AnalysisSpec
+    mutationCount: number
+    clarificationNeeded: string | null
+  }
+  const [aiProposal, setAiProposal] = useState<AiProposal | null>(null)
+
   const askForChange = useCallback(async () => {
     const prompt = aiPrompt.trim()
     if (!prompt || !derivedSpec || specTable.rows.length === 0) return
@@ -1548,15 +1568,19 @@ export function DataAnalysisWorkspace({
         // for a patch to collide with. The patch still goes through
         // `applyAiPatch` so the spec and the sentences describing it come from
         // the one code path the rest of L6 uses.
+        //
+        // This only COMPUTES the patch — `applyMutation` underneath is pure
+        // and never touches `derivedSpec` — and stops. Nothing is applied
+        // until the researcher presses Execute (`executeProposal`, below).
         const patched = applyAiPatch(initHistory(derivedSpec), outcome.mutations)
         applied = patched.applied.map(describeMutation)
-        const edits = railEditsFromSpec(derivedSpec, patched.history.spec, specTable)
-        // Merged over the current configuration, not applied alone: `applyConfig`
-        // is a total setter, and handing it a partial config would reset the
-        // fields the patch never mentioned.
-        if (Object.keys(edits).length > 0) {
-          applyConfigRef.current({ ...(buildConfigRef.current() as object), ...edits })
-        }
+        setAiProposal({
+          patchedSpec: patched.history.spec,
+          mutationCount: patched.applied.length,
+          clarificationNeeded: outcome.clarificationNeeded,
+        })
+      } else {
+        setAiProposal(null)
       }
       setAiReply({ outcome, applied })
       // The box empties only when the request is finished with. A question back
@@ -1572,6 +1596,44 @@ export function DataAnalysisWorkspace({
       }
     }
   }, [aiPrompt, derivedSpec, specTable])
+
+  /** What a clicked rail control already does: turn a spec change into rail
+      edits and hand them to `applyConfig`. Moved verbatim out of `askForChange`
+      — the only thing that changed is who calls it and when. */
+  const executeProposal = useCallback(() => {
+    if (!aiProposal || !derivedSpec) return
+    const edits = railEditsFromSpec(derivedSpec, aiProposal.patchedSpec, specTable)
+    // Merged over the current configuration, not applied alone: `applyConfig`
+    // is a total setter, and handing it a partial config would reset the
+    // fields the patch never mentioned.
+    if (Object.keys(edits).length > 0) {
+      applyConfigRef.current({ ...(buildConfigRef.current() as object), ...edits })
+    }
+    setAiProposal(null)
+  }, [aiProposal, derivedSpec, specTable])
+
+  /** Never touches the spec — clearing the pending proposal is the entire
+      effect, which is what makes "byte-identical afterwards" true by
+      construction rather than by careful bookkeeping. */
+  const discardProposal = useCallback(() => {
+    setAiProposal(null)
+  }, [])
+
+  /** The pipeline bar's removal path (P5): a typed mutation through the exact
+      pure function AI patches use (`applyMutation`), turned into rail edits
+      the same way `executeProposal` does. One code path for "this pipeline
+      step is gone," whether a patch, a control or a chip's × removed it. */
+  const applySpecMutation = useCallback(
+    (mutation: SpecMutation) => {
+      if (!derivedSpec) return
+      const next = applyMutation(derivedSpec, mutation)
+      const edits = railEditsFromSpec(derivedSpec, next, specTable)
+      if (Object.keys(edits).length > 0) {
+        applyConfigRef.current({ ...(buildConfigRef.current() as object), ...edits })
+      }
+    },
+    [derivedSpec, specTable]
+  )
 
   // Import: local spreadsheet/CSV, or a saved .n9a analysis bundle.
   const onImport = useCallback(
@@ -2214,6 +2276,21 @@ export function DataAnalysisWorkspace({
                   </ul>
                 </div>
               )}
+              {aiProposal && (
+                // P3 — the plan sits here, read before it runs. Execute is
+                // withheld for a bare clarifying question: there is nothing
+                // to run yet, only something to answer.
+                <div className="flex items-center gap-2 pt-1">
+                  {canExecuteProposal(aiProposal) && (
+                    <Button type="button" variant="outline" size="sm" onClick={executeProposal}>
+                      Execute
+                    </Button>
+                  )}
+                  <Button type="button" variant="ghost" size="sm" onClick={discardProposal}>
+                    Discard
+                  </Button>
+                </div>
+              )}
             </div>
           ) : aiNote ? (
             <div className="flex flex-col gap-1">
@@ -2223,6 +2300,14 @@ export function DataAnalysisWorkspace({
           ) : null}
         </div>
       )}
+      <PipelineBar
+        filters={derivedSpec?.filters ?? []}
+        transforms={derivedSpec?.transforms ?? []}
+        exclusions={derivedSpec?.exclusions ?? []}
+        onSetFilters={(filters) => applySpecMutation({ kind: "data.setFilters", filters })}
+        onRemoveTransform={(index) => applySpecMutation({ kind: "data.removeTransform", index })}
+        onRestoreRow={(rowId) => applySpecMutation({ kind: "data.restoreRow", rowId })}
+      />
     </div>
   )
 
