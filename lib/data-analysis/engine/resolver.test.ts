@@ -276,6 +276,26 @@ describe("transforms and exclusions", () => {
     expect(out.payload.columns.v).toEqual([11, 21])
   })
 
+  it("collapses an even number of replicates to the midpoint, not the upper value", () => {
+    // Two technical replicates is the common case, and it is exactly where
+    // picking sorted[n/2] goes wrong: it returns the larger reading, biasing
+    // every collapsed row upward. S1 must be 11, not 12.
+    const t = table([
+      { sample: "S1", rep: 1, v: 10 }, { sample: "S1", rep: 2, v: 12 },
+      { sample: "S2", rep: 1, v: 20 }, { sample: "S2", rep: 2, v: 30 },
+    ])
+    const out = resolvePayload(
+      spec(
+        { test: "descriptives", responseColumns: ["v"] },
+        { transforms: [{ kind: "collapseReplicates", by: ["sample"], statistic: "median" }] }
+      ),
+      t
+    )
+    expect(out.ok).toBe(true)
+    if (!out.ok || out.payload.shape !== "columns") return
+    expect(out.payload.columns.v).toEqual([11, 25])
+  })
+
   it("folds a wide plate layout into long form", () => {
     // A plate reader writes one column per plate column. Everything below the
     // resolver is long, so without this the raw export is unanalysable.

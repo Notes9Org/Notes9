@@ -387,7 +387,11 @@ function applyTransform(rows: TableRow[], t: Transform, reference: number | null
           if (vals.length === 0) continue
           values[c] =
             t.statistic === "median"
-              ? [...vals].sort((a, b) => a - b)[Math.floor(vals.length / 2)]
+              ? // The shared helper, not an inline pick of the upper-middle value:
+                // on an even count — two technical replicates being the common
+                // case — picking sorted[n/2] returns the larger reading rather
+                // than the midpoint, biasing every collapsed row upward.
+                median([...vals].sort((a, b) => a - b))
               : vals.reduce((a, b) => a + b, 0) / vals.length
         }
         return { rowId: group.map((r) => r.rowId).join("+"), values }
