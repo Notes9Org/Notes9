@@ -213,6 +213,8 @@ const FIXTURE_RESULT: EngineResult = {
   },
   curveFit: null,
   survival: null,
+  testRan: null,
+  error: null,
   exclusionImpact: null,
   plotData: PREVIEW_ROWS.map((r) => ({
     rowId: r.well,

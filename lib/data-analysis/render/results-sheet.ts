@@ -250,6 +250,14 @@ export function buildResultsSheet(
     }
   }
 
+  // A failed run has no numbers to report, so the sheet must say so outright.
+  // Left among the warnings it read as a caveat on a result that never existed.
+  if (result.error) {
+    section("Error")
+    rows.push(["Analysis", result.error.test])
+    rows.push([result.error.message])
+  }
+
   if (result.warnings.length > 0) {
     section("Warnings")
     for (const w of result.warnings) rows.push([w])
@@ -258,6 +266,11 @@ export function buildResultsSheet(
   /* ── How it was produced ───────────────────────────────────────────────── */
   section("Method")
   rows.push(["Test requested", spec.analysis.test])
+  // The engine substitutes when the request does not fit the data. Recording
+  // only the request would credit the numbers to a test nobody ran.
+  if (result.testRan && result.testRan !== spec.analysis.test) {
+    rows.push(["Test performed", result.testRan])
+  }
   rows.push(["Post-hoc correction", spec.analysis.postHoc])
   rows.push(["Tails", spec.analysis.tails])
   rows.push(["Missing values", spec.analysis.missingValues])

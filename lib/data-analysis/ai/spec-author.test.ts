@@ -227,6 +227,8 @@ describe("context bundle (§11 decision 10: what the model sees)", () => {
         },
         curveFit: null,
         survival: null,
+        testRan: null,
+        error: null,
         exclusionImpact: null,
         plotData: [],
         warnings: [],

@@ -634,9 +634,11 @@ def run_contingency(p) -> dict:
         # The statistic slot is for the test statistic; Fisher has none, and the
         # odds ratio is already reported above as the effect size it is.
         label, stat, dfv = "Fisher's exact test", None, None
+        ran = "fisher-exact"
         note = " Fisher's exact used because an expected cell was below 5." if escalate else ""
     else:
         label = "Chi-square test" + (" (Yates corrected)" if is_2x2 else "")
+        ran = "chi-square"
         stat, dfv, pv = float(chi2), int(dof), float(p_chi)
         note = ""
         if small:
@@ -655,6 +657,9 @@ def run_contingency(p) -> dict:
     out = _result(label, stat, dfv, float(pv), effects, [], [],
                   {f"row {i + 1}": int(r.sum()) for i, r in enumerate(table)},
                   f"{label}: {_fmt_p(float(pv))} (n = {int(table.sum())}).{note}{ors}")
+    # The substitution above is reasonable; letting the record keep saying
+    # "fisher-exact" afterwards is not.
+    out["_test_ran"] = ran
     out["_warnings"] = warnings
     return out
 
@@ -988,13 +993,22 @@ def run(payload: dict) -> dict:
     elif shape == "groups":
         descriptives = [describe_column(n, v) for n, v in (payload.get("groups") or {}).items()]
 
-    test_result, curve_fit, survival = None, None, None
+    test_result, curve_fit, survival, error = None, None, None, None
+    test_ran = None
     fn = REGISTRY.get(test)
     if fn is None:
-        warnings.append(f"No engine routine for '{test}'.")
+        error = {
+            "code": "no-routine",
+            "test": test,
+            "message": f"This engine has no routine for '{test}'.",
+            "detail": None,
+        }
     else:
         try:
             out = fn(payload)
+            # A routine may substitute a test the data can actually support; it
+            # says so here so the record names what ran, not what was asked for.
+            test_ran = out.pop("_test_ran", None) or test
             if "curveFit" in out:
                 curve_fit = out["curveFit"]
                 warnings.extend(out.get("warnings") or [])
@@ -1004,14 +1018,25 @@ def run(payload: dict) -> dict:
                 warnings.extend(out.pop("_warnings", None) or [])
                 survival = out.pop("_survival", None)
                 test_result = out
-        except Exception as exc:  # surfaced to the user, never swallowed
-            warnings.append(f"Engine error in {test}: {type(exc).__name__}: {exc}")
+        except Exception as exc:
+            # Reported, never swallowed — but as a failure, not a caveat. Filed
+            # under `warnings` this returned as a successful run with nothing to
+            # report, and put "OverflowError: (68, 'Result not representable')"
+            # in front of a bench scientist. The repr stays, in `detail`.
+            error = {
+                "code": "test-failed",
+                "test": test,
+                "message": f"The {test} calculation could not be completed on this data.",
+                "detail": f"{type(exc).__name__}: {exc}",
+            }
 
     return _scrub({
         "descriptives": descriptives,
         "test": test_result,
         "curveFit": curve_fit,
         "survival": survival,
+        "testRan": test_ran,
+        "error": error,
         "warnings": warnings,
         "durationMs": int((time.time() - started) * 1000),
     })

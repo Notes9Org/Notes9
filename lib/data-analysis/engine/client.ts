@@ -160,6 +160,8 @@ export async function computeAnalysis(
     test: raw.test ?? null,
     curveFit: raw.curveFit ?? null,
     survival: raw.survival ?? null,
+    testRan: raw.testRan ?? null,
+    error: raw.error ?? null,
     exclusionImpact: null,
     // The figure draws what the analysis actually saw: post-filter,
     // post-transform, with excluded points still present and flagged (§8.1).

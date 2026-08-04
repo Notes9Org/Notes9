@@ -41,6 +41,8 @@ function result(overrides: Partial<EngineResult> = {}): EngineResult {
     test: null,
     curveFit: null,
     survival: null,
+    testRan: null,
+    error: null,
     exclusionImpact: null,
     plotData: [
       { rowId: "r1", values: { treatment: "Control", viability: 100 }, excluded: false },
@@ -115,6 +117,17 @@ describe("the error-bar choice is stated on the figure (§2)", () => {
     )
     const title = (figure.layout.title as { text: string }).text
     expect(title).not.toContain("mean ±")
+  })
+
+  it("keeps the note subordinate on an untitled figure rather than promoting it", () => {
+    const figure = buildFigure(
+      spec({ figure: { kind: "bar-scatter-error", x: {}, y: {}, errorBars: "sd", title: null } }),
+      result()
+    )
+    const title = (figure.layout.title as { text: string }).text
+    expect(title).toContain("mean ± SD")
+    // Wrapped in the small, dimmed span — not sitting bare at title weight.
+    expect(title).toMatch(/^<span style="font-size:\d+px;opacity:0\.65">/)
   })
 })
 

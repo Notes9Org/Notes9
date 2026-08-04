@@ -74,6 +74,8 @@ const anovaResult: EngineResult = {
   },
   curveFit: null,
   survival: null,
+  testRan: null,
+  error: null,
   exclusionImpact: null,
   plotData: [],
   warnings: [],

@@ -390,6 +390,17 @@ export function ResultsCard({
         </div>
       )}
 
+      {/* A failure is not a caveat. Amber alongside the convergence notes is how
+          a run that produced nothing came to look like a run that produced a
+          result; the raw exception stays in `error.detail`, out of sight. */}
+      {result.error && (
+        <div className="border-t border-red-500/20 bg-red-500/[0.06] px-4 py-2.5">
+          <p className="text-[12.5px] leading-relaxed text-red-800 dark:text-red-300">
+            {result.error.message}
+          </p>
+        </div>
+      )}
+
       {result.warnings.length > 0 && (
         <div className="border-t border-amber-500/20 bg-amber-500/[0.06] px-4 py-2.5">
           {result.warnings.map((w) => (
