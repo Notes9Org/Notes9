@@ -1,7 +1,13 @@
 import { describe, it, expect } from "vitest"
-import { parseSpec, type AnalysisSpec } from "@/lib/data-analysis/spec/analysis-spec"
+import { bracketId, parseSpec, type AnalysisSpec } from "@/lib/data-analysis/spec/analysis-spec"
 import { ENGINE_VERSION, type EngineResult } from "@/lib/data-analysis/engine/contract"
-import { buildFigure, significanceStars, PALETTES } from "./plotly-adapter"
+import {
+  buildFigure,
+  bracketMoveFromRelayout,
+  rowIdAtPoint,
+  significanceStars,
+  PALETTES,
+} from "./plotly-adapter"
 import { PALETTE_DEFINITIONS, paletteColours, sampleRamp } from "./palettes"
 
 function spec(overrides: Record<string, unknown> = {}): AnalysisSpec {
@@ -201,6 +207,43 @@ describe("significance brackets are driven by the post-hoc result", () => {
     const annotations = figure.layout.annotations as Record<string, unknown>[]
     // Display preference respected: the numeric p rather than stars.
     expect(annotations.some((a) => String(a.text).startsWith("p ="))).toBe(true)
+  })
+
+  it("names each drawn bracket by the comparison it spans", () => {
+    const figure = buildFigure(spec(), withPairwise)
+    // Index-aligned with the leading shapes, so a drag reported as
+    // `shapes[0].y0` can be turned back into a mutation.
+    expect(figure.brackets).toHaveLength(1)
+    expect(figure.brackets![0].id).toBe(bracketId("Control", "Treated"))
+    const shapes = figure.layout.shapes as Record<string, number>[]
+    // baseY is the auto-placed position, i.e. the offset's origin.
+    expect(shapes[0].y0).toBeCloseTo(figure.brackets![0].baseY, 6)
+  })
+
+  it("keeps a dragged bracket's stored offset off its own base", () => {
+    const dragged = spec({
+      figure: {
+        kind: "bar-scatter-error",
+        x: {},
+        y: {},
+        errorBars: "sd",
+        brackets: [
+          {
+            id: bracketId("Control", "Treated"),
+            fromGroup: "Control",
+            toGroup: "Treated",
+            offsetY: 25,
+            derived: false,
+            display: "stars",
+          },
+        ],
+      },
+    })
+    const figure = buildFigure(dragged, withPairwise)
+    const shapes = figure.layout.shapes as Record<string, number>[]
+    // Drawn 25 above the auto position, and the base reported for the next drag
+    // is still the auto position, so offsets do not compound.
+    expect(shapes[0].y0 - figure.brackets![0].baseY).toBeCloseTo(25, 6)
   })
 
   it("maps p-values to the conventional star count", () => {
@@ -897,5 +940,38 @@ describe("every chart kind the spec names can be drawn", () => {
       xy
     )
     expect((figure.data[0].error_x as { symmetric: boolean }).symmetric).toBe(false)
+  })
+})
+
+describe("reading pointer events back (§2 Tier 0)", () => {
+  it("names the source row of a per-row mark, and only of a per-row mark", () => {
+    const r = result()
+    expect(rowIdAtPoint([{ customdata: "r4" }], r)).toBe("r4")
+    // A bar carries its GROUP in customdata, not a row. Treating that as a row
+    // id would open the exclusion dialog for a row called "Control".
+    expect(rowIdAtPoint([{ customdata: "Control" }], r)).toBeNull()
+    expect(rowIdAtPoint([{ customdata: 3 }], r)).toBeNull()
+    expect(rowIdAtPoint(undefined, r)).toBeNull()
+    expect(rowIdAtPoint([{ customdata: "r4" }], null)).toBeNull()
+  })
+
+  it("turns a dragged shape into the bracket it belongs to", () => {
+    const brackets = [
+      { id: "a", baseY: 100, y: 100 },
+      { id: "b", baseY: 120, y: 120 },
+    ]
+    expect(bracketMoveFromRelayout({ "shapes[1].y0": 133, "shapes[1].y1": 133 }, brackets)).toEqual({
+      id: "b",
+      offsetY: 13,
+    })
+    // A relayout that is not a shape drag (a zoom, an autorange) must not be
+    // recorded as an edit to the figure.
+    expect(bracketMoveFromRelayout({ "xaxis.range[0]": 2 }, brackets)).toBeNull()
+    // A shape that is not a bracket -- a volcano threshold line, drawn after
+    // them -- has no identity to move.
+    expect(bracketMoveFromRelayout({ "shapes[7].y0": 5 }, brackets)).toBeNull()
+    expect(bracketMoveFromRelayout({ "shapes[0].y0": 5 }, undefined)).toBeNull()
+    // A sideways drag leaves y0 alone: nothing moved, so nothing is recorded.
+    expect(bracketMoveFromRelayout({ "shapes[1].x0": 3, "shapes[1].y0": 120 }, brackets)).toBeNull()
   })
 })

@@ -9,9 +9,19 @@
  *   - JPEG  → JFIF APP0 density (dots-per-inch)
  *   - TIFF  → XResolution / YResolution tags (encoded here from the pixels)
  *   - SVG   → vector, resolution-independent (DPI not applicable)
+ *
+ * PDF and EPS are the same SVG, translated: `lib/data-analysis/svg-vector.ts`
+ * reads Plotly's own SVG and re-emits it as vector art with live text. There is
+ * no second rendering path, so a PDF cannot disagree with what is on screen,
+ * and a journal that asks for "vector, editable, fonts not outlined" gets it.
  */
 
-export type ExportFormat = "png" | "jpeg" | "tiff" | "svg"
+import { parseSvg, vectorToEps, vectorToPdf } from "./svg-vector"
+
+export type ExportFormat = "png" | "jpeg" | "tiff" | "svg" | "pdf" | "eps"
+
+/** Formats that carry geometry rather than pixels: DPI does not apply to them. */
+export const VECTOR_FORMATS: ReadonlySet<ExportFormat> = new Set<ExportFormat>(["svg", "pdf", "eps"])
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Plotly = any
@@ -254,13 +264,28 @@ export async function exportChartImage(
   const size =
     opts.width && opts.height ? { width: opts.width, height: opts.height, scale: 1 } : { scale }
 
-  if (format === "svg") {
+  if (VECTOR_FORMATS.has(format)) {
     // Plotly returns svg as a URI-encoded (not base64) data URL.
     const url: string = await plotly.toImage(gd, { format: "svg" })
     const comma = url.indexOf(",")
     const body = url.slice(comma + 1)
     const svg = url.slice(0, comma).includes("base64") ? atob(body) : decodeURIComponent(body)
-    triggerDownload(new Blob([svg], { type: "image/svg+xml" }), `${filename}.svg`)
+    if (format === "svg") {
+      triggerDownload(new Blob([svg], { type: "image/svg+xml" }), `${filename}.svg`)
+      return
+    }
+    const figure = parseSvg(svg)
+    if (format === "pdf") {
+      triggerDownload(
+        toBlob(vectorToPdf(figure, { title: filename }), "application/pdf"),
+        `${filename}.pdf`
+      )
+    } else {
+      triggerDownload(
+        new Blob([vectorToEps(figure, { title: filename })], { type: "application/postscript" }),
+        `${filename}.eps`
+      )
+    }
     return
   }
 

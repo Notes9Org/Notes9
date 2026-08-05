@@ -171,13 +171,37 @@ export async function commitRevision(input: {
   const supabase = createClient()
   const { specHash } = await computeCacheKey(input.spec)
 
+  /**
+   * The bind. A revision may only carry the result its OWN spec produced.
+   *
+   * The workspace hands these two in from separate places: `derivedSpec` is
+   * recomputed on every render, `engineResult` trails it by a 700ms debounce and
+   * a Pyodide round trip, and nothing between them holds them together. Save
+   * during that window — or after a compute that threw, which used to leave the
+   * previous spec's numbers on screen — and the row written is a spec beside a
+   * p-value it never produced, in a table that is append-only. That is the
+   * retraction-class pair `openRevision`'s own doc comment says the reopen path
+   * exists to prevent; it was arriving through the save door instead.
+   *
+   * `EngineResult.specHash` is stamped by `computeAnalysis` from this same
+   * `computeCacheKey`, so the comparison is exact and costs one string compare.
+   *
+   * The result is dropped rather than the save refused: the spec, the snapshot
+   * and the conversation are the researcher's work and must not be lost because
+   * the engine was mid-flight. `results: null` is a state the reopen already
+   * models ("nothing stored, re-run to get numbers"), whereas a wrong number
+   * stored at full confidence is not recoverable. Callers compare
+   * `revision.results` against what they passed to tell the user.
+   */
+  const results = input.results?.specHash === specHash ? input.results : null
+
   const { data, error } = await supabase.rpc("commit_analysis_revision", {
     p_analysis_id: input.analysisId,
     p_spec: input.spec,
     p_spec_hash: specHash,
     p_data_version_hash: input.spec.dataset.versionHash,
-    p_engine_version: input.results?.engineVersion ?? ENGINE_VERSION,
-    p_results: input.results,
+    p_engine_version: results?.engineVersion ?? ENGINE_VERSION,
+    p_results: results,
     p_data_snapshot: input.dataSnapshot,
     p_name: input.name ?? null,
     p_change_summary: input.changeSummary ?? null,
@@ -250,6 +274,28 @@ export async function openRevision(
 
   const revision = toRevision(data)
 
+  /**
+   * Which spec the stored RESULT actually answers.
+   *
+   * `commitRevision` now refuses to write a mismatched pair, but this table is
+   * append-only and rows written before that guard existed are still here, so
+   * the check has to hold on the way out too. Falling back to `revision.specHash`
+   * for a row with no result keeps `checkResultIntegrity` reading "unchanged"
+   * for the ordinary case of a revision that simply stored no numbers.
+   *
+   * Branching on the RESULT, not on `results?.specHash`, is the difference
+   * between "no result to check" and "a result that carries no hash". The second
+   * is a row whose numbers cannot prove which spec produced them, and on a
+   * retraction-class path an unprovable claim is drift, not clean.
+   */
+  const resultSpecHash = revision.results ? revision.results.specHash : revision.specHash
+  /**
+   * The result is withheld, not shown with a caveat. Every branch below returns
+   * this instead of `revision.results`, including `detached`, which has no
+   * integrity check of its own and would otherwise be the one door left open.
+   */
+  const results = resultSpecHash === revision.specHash ? revision.results : null
+
   // §3A.6: a spec on an older schema forward-migrates on open and logs it. It
   // must never fail to open.
   const migrated = migrateSpec(revision.spec)
@@ -269,7 +315,7 @@ export async function openRevision(
       state: "detached",
       revision,
       spec,
-      results: revision.results,
+      results,
       message:
         "The source file for this analysis is no longer available. It has opened from its stored data snapshot and is detached from its source.",
     }
@@ -279,7 +325,11 @@ export async function openRevision(
     {
       engineVersion: revision.engineVersion,
       dataVersionHash: revision.dataVersionHash,
-      specHash: revision.specHash,
+      // The STORED RESULT's own spec hash, not the row's. Passing
+      // `revision.specHash` on both sides made `specChanged` a no-op by
+      // construction: the one comparison that catches a result stored beside a
+      // spec that never produced it was comparing a value against itself.
+      specHash: resultSpecHash,
     },
     {
       engineVersion: ENGINE_VERSION,
@@ -289,7 +339,7 @@ export async function openRevision(
   )
 
   if (integrity.valid) {
-    return { state: "clean", revision, spec, results: revision.results }
+    return { state: "clean", revision, spec, results }
   }
 
   // The message the document writes out almost verbatim in §3A.3.
@@ -302,13 +352,24 @@ export async function openRevision(
   ]
   if (integrity.engineChanged) parts.push(`The engine is now ${ENGINE_VERSION}.`)
   if (integrity.dataChanged) parts.push("The source file has changed since it was saved.")
-  parts.push("Keep the stored result, or re-run against the current data?")
+  // "Keep the stored result" is not on offer when the stored result belongs to a
+  // different spec: keeping it is precisely the retraction. So it is stated, and
+  // `results` above is already null.
+  if (integrity.specChanged)
+    parts.push(
+      "The stored result was produced by a different version of this analysis, so it has not been loaded."
+    )
+  parts.push(
+    integrity.specChanged
+      ? "Re-run against the current data to get numbers for the analysis as saved."
+      : "Keep the stored result, or re-run against the current data?"
+  )
 
   return {
     state: "drifted",
     revision,
     spec,
-    results: revision.results,
+    results,
     engineChanged: integrity.engineChanged,
     dataChanged: integrity.dataChanged,
     message: parts.join(" "),
@@ -429,6 +490,31 @@ export function buildPortableBundle(
 }
 
 /* ── The library view (§3A.5) ──────────────────────────────────────────────*/
+
+/** One analysis, by id. Returns null rather than throwing when RLS hides it. */
+export async function getAnalysis(analysisId: string): Promise<SavedAnalysis | null> {
+  const supabase = createClient()
+  const { data, error } = await supabase.from("analyses").select("*").eq("id", analysisId).maybeSingle()
+  if (error) throw new Error(`Could not open this analysis: ${error.message}`)
+  return data ? toAnalysis(data) : null
+}
+
+/**
+ * The reachable set, newest first. No scope filter and none needed: the
+ * `analyses_select` policy already limits this to the caller's own analyses
+ * plus those in projects they are a member of, so adding a user_id filter here
+ * would narrow the collaborative case without making anything safer.
+ */
+export async function listRecentAnalyses(limit = 20): Promise<SavedAnalysis[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from("analyses")
+    .select("*")
+    .order("updated_at", { ascending: false })
+    .limit(limit)
+  if (error) throw new Error(`Could not load analyses: ${error.message}`)
+  return (data ?? []).map(toAnalysis)
+}
 
 export async function listAnalysesForExperiment(experimentId: string): Promise<SavedAnalysis[]> {
   const supabase = createClient()

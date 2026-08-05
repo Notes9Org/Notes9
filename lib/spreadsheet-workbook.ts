@@ -29,6 +29,11 @@ export function isSpreadsheetFile(file: File): boolean {
     lower.endsWith(".xlsx") ||
     lower.endsWith(".xls") ||
     lower.endsWith(".csv") ||
+    // Deliberately NOT .tsv/.txt. This predicate gates the experiment upload
+    // dialog and the lab-note editor's drop/paste handlers app-wide, so
+    // widening it turns every plain text file in the ELN into a spreadsheet.
+    // The data-analysis workspace reads .tsv/.txt through its own file input
+    // and `readSpreadsheetWorkbook`, and never asks this question.
     file.type.includes("spreadsheet") ||
     file.type.includes("excel") ||
     file.type.includes("csv")
@@ -37,17 +42,38 @@ export function isSpreadsheetFile(file: File): boolean {
 
 export function inferTabularFormatFromFileName(fileName: string): TabularFormat | null {
   const lower = fileName.toLowerCase()
+  // Only extensions the product is willing to REWRITE belong here. A non-null
+  // return is a licence to overwrite the stored file: it sets
+  // `experiment_data.tabular_format`, which opens the row in the editable
+  // spreadsheet dialog and arms the `sync_storage` branch of the workbook
+  // PATCH route, which uploads a re-serialised buffer over the original bytes.
+  // Widening this to `.txt`/`.tsv` once meant one save turned a user's text
+  // file into a CSV. Parsing those for read-only analysis needs nothing from
+  // here — `readSpreadsheetWorkbook` handles the separator itself.
   if (lower.endsWith(".csv")) return "csv"
   if (lower.endsWith(".xlsx")) return "xlsx"
   if (lower.endsWith(".xls")) return "xls"
   return null
 }
 
+/**
+ * Read a workbook, or throw.
+ *
+ * Callers must handle the throw: SheetJS raises on a truncated or non-workbook
+ * buffer, and a swallowed rejection here shows the user an empty sheet with no
+ * explanation for it.
+ */
 export function readSpreadsheetWorkbook(arrayBuffer: ArrayBuffer, fileName: string): XlsxWorkBook {
+  const lower = fileName.toLowerCase()
   return XLSX.read(arrayBuffer, {
     type: "array",
     cellFormula: true,
     cellDates: true,
+    // The separator is otherwise guessed from the first line, which picks the
+    // wrong one as soon as a cell in that line contains a comma. The extension
+    // already says what it is, so say it. `.txt` is deliberately left to the
+    // guess: it names no separator of its own.
+    ...(lower.endsWith(".tsv") ? { FS: "\t" } : {}),
   })
 }
 

@@ -75,6 +75,44 @@ describe("Law 2, no statistic may originate from the model", () => {
     expect(containsFabricatedStatistic("There are 3 groups, so ANOVA is appropriate.")).toBe(false)
   })
 
+  // The gate used to be a list of known statistic phrasings, so anything phrased
+  // around the list reached the screen. Each probe below is a phrasing that got
+  // through; they are asserted one by one so a regression names the shape it lost.
+  it.each([
+    ["a p value spelled with a space", "The p value of 0.03 means the effect is real."],
+    ["a fold change", "Treated cells show a 3.4-fold increase over vehicle."],
+    ["a mean difference", "The mean difference is 4.7 units; did you want that comparison?"],
+    ["a confidence interval", "The 95% CI is 1.2 to 4.5, which arm did you mean?"],
+    ["a bare significance level", "This is significant at 0.03."],
+    ["r squared written out", "r squared is 0.91 here."],
+    ["a difference with a unit", "The difference of 12.6 nM is what I based this on."],
+    ["a sample size and an effect size", "n = 8 per group, and the effect size came out at 0.82."],
+    ["a p value with an operator", "The result is significant, p = 0.03."],
+    ["a half-maximal concentration", "EC50 of 120 nM."],
+  ])("catches %s", (_label, prose) => {
+    expect(containsFabricatedStatistic(prose)).toBe(true)
+  })
+
+  // The inverted gate defaults to removing, so these prove it did not swallow
+  // everything: prose the researcher should still get to read.
+  it.each([
+    ["a plain count", "There are 3 groups, so ANOVA is appropriate."],
+    ["a sample size on a figure label", "n = 8 wells"],
+    ["a column name carrying digits", "Plotting OD600 against time."],
+    ["a plate format", "Rows come from a 384-well plate."],
+    ["a year", "Filtered to the 2024 batch."],
+    ["no digits at all", "Switched to Welch because the equal-variance check failed."],
+  ])("lets %s through", (_label, prose) => {
+    expect(containsFabricatedStatistic(prose)).toBe(false)
+  })
+
+  it("holds the rationale to the same standard as the clarification", () => {
+    const { text, removed } = sanitiseRationale("Switched to Welch. The p value of 0.03 supports it.")
+    expect(removed).toBe(true)
+    expect(text).toContain("Switched to Welch.")
+    expect(text).not.toContain("0.03")
+  })
+
   it("strips the offending sentence but keeps the reasoning", () => {
     const { text, removed } = sanitiseRationale(
       "I chose a paired t-test because the same subjects appear twice. The result is significant, p = 0.03."
@@ -83,6 +121,21 @@ describe("Law 2, no statistic may originate from the model", () => {
     expect(text).toContain("paired t-test")
     expect(text).not.toContain("0.03")
     expect(text).toContain("results panel")
+  })
+
+  it("says so when the explanation is replaced whole", () => {
+    // The sentence carrying the reasoning is the sentence carrying the number,
+    // so nothing survives. The replacement used to be a bare "See the results
+    // panel for the computed values." — which reads as the assistant having
+    // nothing to say, on the one surface whose entire job is saying why. A
+    // researcher who is not told the explanation went missing cannot ask for it
+    // again.
+    const { text, removed } = sanitiseRationale(
+      "Filtered to concentrations above 0.5 uM, where the assay is linear."
+    )
+    expect(removed).toBe(true)
+    expect(text).not.toContain("0.5")
+    expect(text).toMatch(/withheld/i)
   })
 
   it("leaves a clean rationale untouched", () => {

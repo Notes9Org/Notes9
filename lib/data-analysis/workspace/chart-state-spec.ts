@@ -125,6 +125,33 @@ export interface ChartState {
   exclusions?: Exclusion[]
 }
 
+/**
+ * What the pipeline is when the sheet underneath it is replaced: nothing.
+ *
+ * `tableFromChartRows` mints `rowId` from POSITION (`row-${i + 2}`, the sheet's
+ * own row number), so `row-7` exists in every sheet that has seven rows. Carry
+ * an exclusion across an import and it does not fail to resolve, it resolves
+ * against a DIFFERENT measurement while still naming the original author, the
+ * original reason and the original timestamp. §8.1 exists to prevent exactly
+ * that: a falsified provenance record is worse than a lost one. Filters and
+ * transforms go the same way, one rung down -- they name columns the new sheet
+ * need not have.
+ *
+ * Minting `rowId` with the dataset's identity folded in was considered and
+ * rejected. Those ids are persisted inside every saved analysis and every
+ * exported `.n9a`, so re-minting them re-points or orphans every exclusion
+ * already on file (`snapshot-table.ts` documents the same hazard for the header
+ * row). That trades a falsified record for a lost one across the whole corpus.
+ * There is also nothing to mint them FROM: an identity stable enough to survive
+ * someone fixing a typo in a cell, yet different after an import, does not exist
+ * anywhere in this data model, and the sheet is editable in place.
+ * The decision lives here instead of inline in the workspace shell so it is one
+ * value, testable, with the reasoning attached to it.
+ */
+export const PIPELINE_FOR_NEW_SHEET: Required<
+  Pick<ChartState, "filters" | "transforms" | "exclusions">
+> = { filters: [], transforms: [], exclusions: [] }
+
 function num(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null
   const n = Number(value)
@@ -331,9 +358,15 @@ export function chartStateFromSpec(spec: AnalysisSpec, table: Table): Partial<Ch
     // Null is a value here, not an absence: it is what "use the generated
     // wording" looks like, so it has to overwrite an inherited caption.
     caption: figure.caption,
-    subtitle: figure.subtitle ?? undefined,
-    xUnit: figure.x.unit ?? undefined,
-    yUnit: figure.y.unit ?? undefined,
+    // Same reasoning as caption, in the rail's own vocabulary: these three are
+    // strings there, so "" is how the rail spells absent. Mapping them to
+    // undefined made a spec that simply has no subtitle look silent about it,
+    // and railFromConfig skips silent keys, so a reopen inherited the previous
+    // analysis's subtitle and units while reporting nothing unrestored.
+    // specFromChartState reads them back with `|| null`, so "" round-trips.
+    subtitle: figure.subtitle ?? "",
+    xUnit: figure.x.unit ?? "",
+    yUnit: figure.y.unit ?? "",
     xLog: figure.x.scale === "log10",
     yLog: figure.y.scale === "log10",
     xMin: figure.x.min,

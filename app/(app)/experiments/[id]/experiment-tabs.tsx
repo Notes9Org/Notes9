@@ -9,6 +9,7 @@ import { Plus } from "@phosphor-icons/react/ssr"
 import { HtmlContent } from '@/components/html-content'
 import { LabNotesTab } from './lab-notes-tab'
 import { DataFilesTab } from './data-files-tab'
+import { SavedAnalysesList } from '@/components/data-analysis/saved-analyses-list'
 import { LinkProtocolDialog } from './link-protocol-dialog'
 import { ProtocolTableRow } from './protocol-table-row'
 import { ExperimentStepsTab } from './experiment-steps-tab'
@@ -472,6 +473,22 @@ export function ExperimentTabs({ experiment, initialTab, experimentPageHref }: E
       </TabsContent>
 
       <TabsContent value="data" id="tab-content-data" className="flex flex-col gap-3 min-h-0 flex-1">
+        {/* §3A.5. Until now the only thing an analysis left on an experiment was
+            a PNG in the file list below — an image of a figure, with no spec,
+            no rows and no result. These are the analyses themselves, and each
+            one reopens with the numbers it was published with. */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-foreground text-base">Analyses</CardTitle>
+            <CardDescription>Saved analyses of this experiment&rsquo;s data, newest first.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SavedAnalysesList
+              experimentId={experiment.id}
+              emptyText="No saved analyses yet. Open a data file in Data analysis and save it there."
+            />
+          </CardContent>
+        </Card>
         <DataFilesTab experimentId={experiment.id} />
       </TabsContent>
 

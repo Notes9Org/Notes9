@@ -262,15 +262,24 @@ export interface TestResult {
 }
 
 /**
- * Both sides of every exclusion (§6.7: "'with vs without excluded points'
- * comparison always available"). The engine computes both rather than leaving
- * the UI to ask twice, which is what makes the comparison impossible to omit.
+ * Both sides of ONE exclusion — the most recently added (§6.7: "'with vs
+ * without excluded points' comparison always available"). The engine computes
+ * both rather than leaving the UI to ask twice, which is what makes the
+ * comparison impossible to omit.
+ *
+ * The counterfactual holds every OTHER exclusion applied, so the delta belongs
+ * to the newest point alone. A baseline with no exclusions at all would credit
+ * that one point with the combined effect of all of them, and the exclusion
+ * preview renders this delta as "Effect of this exclusion".
  */
 export interface ExclusionImpact {
+  /** Points excluded in total by the analysis, not just the one compared. */
   excludedCount: number
+  /** The newest exclusion applied, alongside all the others. */
   withExclusions: { pValue: number | null; statistic: number | null }
+  /** The newest exclusion lifted; all the others still applied. */
   withoutExclusions: { pValue: number | null; statistic: number | null }
-  /** True when including the excluded points flips significance at the spec's alpha. */
+  /** True when restoring that one point flips significance at the spec's alpha. */
   changesSignificance: boolean
 }
 

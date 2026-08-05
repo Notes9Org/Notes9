@@ -5,6 +5,8 @@ import {
   ENGINE_VERSION,
   computeCacheKey,
   type EngineResult,
+  type ExclusionImpact,
+  type TestResult,
 } from "./contract"
 import {
   resolvePayload,
@@ -72,10 +74,43 @@ function ensureWorker(): Worker {
   return worker
 }
 
+/**
+ * How long a request may go unanswered before it is called dead.
+ *
+ * A worker that never replies is worse than one that fails: the caller's
+ * promise never settles, so the workspace's `finally { setEngineBusy(false) }`
+ * never runs, the spec is already marked attempted, and the researcher is left
+ * with a spinner and no retry. The deadline converts that into the same kind of
+ * `Error` every other engine failure arrives as (see `worker.onerror` below),
+ * which the workspace already renders as an engine note.
+ *
+ * ponytail: one flat ceiling, generous enough for a cold Pyodide boot plus the
+ * scipy/statsmodels wheels on a slow link. Make it per-request only if a
+ * genuinely long analysis ever trips it.
+ */
+export const ENGINE_TIMEOUT_MS = 120_000
+
 function send(request: WorkerRequest, onProgress?: (p: EngineProgress) => void, warmup = false) {
   const w = ensureWorker()
   return new Promise<unknown>((resolve, reject) => {
-    const entry: Pending & { warmup?: boolean } = { resolve, reject, onProgress, warmup }
+    const timer = setTimeout(() => {
+      // Drop it first: a reply that arrives after the deadline must find
+      // nothing to settle rather than resolve an already-rejected promise.
+      pending.delete(request.id)
+      reject(new Error("The statistics engine stopped responding. Try running the analysis again."))
+    }, ENGINE_TIMEOUT_MS)
+    const entry: Pending & { warmup?: boolean } = {
+      resolve: (value) => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      reject: (error) => {
+        clearTimeout(timer)
+        reject(error)
+      },
+      onProgress,
+      warmup,
+    }
     pending.set(request.id, entry)
     w.postMessage(request)
   })
@@ -102,6 +137,16 @@ export interface ComputeOptions {
   onProgress?: (p: EngineProgress) => void
   /** Skip the cache, used by an explicit "re-run" (§3A.3 rule 3). */
   force?: boolean
+  /**
+   * Also answer §6.7's "with vs without excluded points".
+   *
+   * Off by default because it is a SECOND Pyodide compute, and the workspace's
+   * recompute runs on every settled spec edit with `force: true`. Paying twice
+   * per keystroke-settled recompute for a field nothing on that screen renders
+   * is pure latency. Only the caller that actually shows the comparison, the
+   * pre-commit exclusion preview, asks for it.
+   */
+  withExclusionImpact?: boolean
 }
 
 /**
@@ -117,6 +162,100 @@ export type ComputeOutcome =
   | { ok: true; result: EngineResult }
   | { ok: false; blocked: PreconditionFailure[] }
   | { ok: false; question: ClarificationNeeded }
+
+/**
+ * §6.7's "with vs without the excluded point", computed rather than merely
+ * offered.
+ *
+ * §8.1 has the assistant refuse "remove points until it comes out significant"
+ * and hand the user a governed sensitivity analysis instead. That refusal is a
+ * dead end unless the alternative actually exists, so the engine can answer the
+ * question: the SAME resolve+compute path, run once more against a spec
+ * identical but for the ONE exclusion being weighed. Nothing else moves — every
+ * other exclusion stays applied on both sides — so the delta is attributable to
+ * that point and to nothing else, which is what the preview screen claims it is.
+ *
+ * The second run is a second Pyodide compute, so it is spent only when someone
+ * asked for it (`ComputeOptions.withExclusionImpact`) AND it can say something:
+ *
+ *   - the exclusion under consideration landed on no row, the overwhelmingly
+ *     common case being that there is none, means both runs see byte-identical
+ *     data;
+ *   - no test means there is no statistic or p-value for this shape to carry,
+ *     so the run could only produce nulls on both sides.
+ *
+ * Either way the answer is null and the cost stays at exactly one compute.
+ */
+async function computeExclusionImpact(
+  spec: AnalysisSpec,
+  table: Table,
+  plotRows: EngineResult["plotData"],
+  withExclusions: TestResult | null,
+  warnings: string[]
+): Promise<ExclusionImpact | null> {
+  // The exclusion under consideration is the LAST one: `data.excludeRow`
+  // appends (dropping any earlier entry for the same row), so the preview's
+  // probe spec always carries the point being weighed at the end.
+  const isolated = spec.exclusions.at(-1)
+  // What the resolver could APPLY, not what the spec asked for. An exclusion
+  // naming a row that a filter dropped or a reshape renamed moves no number, and
+  // re-running against it would just compute the same result twice.
+  const excludedCount = plotRows.filter((r) => r.excluded).length
+  if (!isolated || !withExclusions) return null
+  if (!plotRows.some((r) => r.rowId === isolated.rowId && r.excluded)) return null
+
+  // (all exclusions including this one) vs (all exclusions EXCEPT this one).
+  // Comparing against no exclusions at all would hand this one point the
+  // combined effect of every earlier exclusion, and the preview renders the
+  // delta as "Effect of this exclusion" — a wrong attribution on the one
+  // screen §8.1 built to be trusted.
+  const bare = resolvePayload({ ...spec, exclusions: spec.exclusions.slice(0, -1) }, table)
+  if (!bare.ok) {
+    // Putting points back should not break a precondition that held without
+    // them, but if it does, say so rather than quietly showing one side.
+    warnings.push("The with/without-exclusions comparison could not be computed.")
+    return null
+  }
+
+  let withoutExclusions: TestResult | null = null
+  try {
+    const raw = (await send({
+      id: `run-${++seq}`,
+      type: "compute",
+      payload: bare.payload,
+    })) as { test?: TestResult | null }
+    withoutExclusions = raw.test ?? null
+  } catch (err) {
+    // Additive by construction: the primary result is what the user asked for
+    // and must survive a failure of the comparison alongside it.
+    warnings.push(
+      `The with/without-exclusions comparison could not be computed (${
+        err instanceof Error ? err.message : String(err)
+      }).`
+    )
+    return null
+  }
+
+  const significant = (p: number | null | undefined) =>
+    typeof p === "number" ? p < spec.analysis.alpha : null
+  const before = significant(withExclusions.pValue)
+  const after = significant(withoutExclusions?.pValue)
+
+  return {
+    excludedCount,
+    withExclusions: {
+      pValue: withExclusions.pValue,
+      statistic: withExclusions.statistic,
+    },
+    withoutExclusions: {
+      pValue: withoutExclusions?.pValue ?? null,
+      statistic: withoutExclusions?.statistic ?? null,
+    },
+    // Only a real flip counts. A missing p-value on either side is an unknown,
+    // and an unknown must not render as a clean bill of health.
+    changesSignificance: before !== null && after !== null && before !== after,
+  }
+}
 
 /**
  * Resolve the spec against the data and run it.
@@ -136,8 +275,13 @@ export async function computeAnalysis(
   if (!resolved.ok) return resolved
 
   const { specHash, cacheKey } = await computeCacheKey(spec)
+  // The comparison is a variant of the same result, so it gets a variant key.
+  // Sharing one key would let a plain recompute cache `exclusionImpact: null`
+  // and hand that back to the preview, which cannot tell "no impact" from
+  // "nobody computed it".
+  const key = options.withExclusionImpact ? `${cacheKey}|impact` : cacheKey
   if (!options.force) {
-    const hit = cache.get(cacheKey)
+    const hit = cache.get(key)
     if (hit) return { ok: true, result: hit }
   }
 
@@ -150,28 +294,38 @@ export async function computeAnalysis(
     "engineVersion" | "dataVersionHash" | "specHash" | "computedAt" | "plotData" | "exclusionImpact"
   > & { durationMs?: number }
 
+  // Read before the sensitivity run below, so the primary result keeps
+  // reporting its own compute time rather than the pair's (Law 5's budget is
+  // about the number the user waited for).
+  const durationMs = raw.durationMs ?? Math.round(performance.now() - started)
+  const test = raw.test ?? null
+  const warnings = [...resolved.warnings, ...(raw.warnings ?? [])]
+  const exclusionImpact = options.withExclusionImpact
+    ? await computeExclusionImpact(spec, table, resolved.payload.plotRows, test, warnings)
+    : null
+
   const result: EngineResult = {
     engineVersion: ENGINE_VERSION,
     dataVersionHash: spec.dataset.versionHash,
     specHash,
     computedAt: new Date().toISOString(),
-    durationMs: raw.durationMs ?? Math.round(performance.now() - started),
+    durationMs,
     descriptives: raw.descriptives ?? [],
-    test: raw.test ?? null,
+    test,
     curveFit: raw.curveFit ?? null,
     survival: raw.survival ?? null,
     testRan: raw.testRan ?? null,
     error: raw.error ?? null,
-    exclusionImpact: null,
+    exclusionImpact,
     // The figure draws what the analysis actually saw: post-filter,
     // post-transform, with excluded points still present and flagged (§8.1).
     // Re-deriving these from the raw columns here would let the chart and the
     // statistics disagree the moment a transform is applied.
     plotData: resolved.payload.plotRows,
-    warnings: [...resolved.warnings, ...(raw.warnings ?? [])],
+    warnings,
   }
 
-  cache.set(cacheKey, result)
+  cache.set(key, result)
   return { ok: true, result }
 }
 
@@ -179,6 +333,11 @@ export async function computeAnalysis(
 export function disposeEngine() {
   worker?.terminate()
   worker = null
-  pending.clear()
+  // Terminating strands anything in flight. Reject rather than drop, or the
+  // caller waits out the full deadline for a worker that no longer exists.
+  for (const [id, entry] of pending) {
+    pending.delete(id)
+    entry.reject(new Error("The statistics engine was shut down."))
+  }
   cache.clear()
 }
