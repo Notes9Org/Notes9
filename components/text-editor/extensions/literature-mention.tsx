@@ -209,7 +209,9 @@ export const LiteratureMention = Mention.extend({
                 "data-literature-id": node.attrs.id,
                 class: "mention-literature",
             },
-            `@${node.attrs.label ?? node.attrs.id}`,
+            // No "@" sigil. This node is inserted with [[ and is a citation,
+            // not a person mention; the link styling already marks it up.
+            `${node.attrs.label ?? node.attrs.id}`,
         ]
     },
 })
@@ -223,7 +225,7 @@ export function createLiteratureMentionExtension(
         },
         suggestion: createLiteratureSuggestion(literatureRef),
         renderLabel({ node }: { node: any }) {
-            return `@${node.attrs.label ?? node.attrs.id}`
+            return `${node.attrs.label ?? node.attrs.id}`
         },
     })
 }

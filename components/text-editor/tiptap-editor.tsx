@@ -25,7 +25,8 @@ import { Superscript } from "@tiptap/extension-superscript"
 import Mention from "@tiptap/extension-mention"
 import { createEntitySuggestion, EntityItem, EntityMention } from "./extensions/entity-mention"
 import { createLabNoteSuggestion, LabNoteItem, LabNoteMention } from "./extensions/labnote-mention"
-import { createLiteratureSuggestion, LiteratureItem, LiteratureMention } from "./extensions/literature-mention"
+import { createLiteratureMentionExtension, LiteratureItem } from "./extensions/literature-mention"
+import { createSlashCommandExtension, SlashCommandActions } from "./extensions/slash-command"
 import Collaboration from "@tiptap/extension-collaboration"
 import type { HocuspocusProvider } from "@hocuspocus/provider"
 import type * as Y from "yjs"
@@ -2450,6 +2451,9 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
   ])
   const labNotesRef = useRef<LabNoteItem[]>(labNotes || [])
   const literatureRef = useRef<LiteratureItem[]>(literatureItems || [])
+  // Slash-menu host actions (image/spreadsheet/equation open dialogs defined
+  // further down); populated by the effect next to those handlers.
+  const slashActionsRef = useRef<SlashCommandActions>({})
 
   // Keep the refs in sync with props
   useEffect(() => {
@@ -2582,10 +2586,12 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
           return `#${node.attrs.label ?? node.attrs.id}`
         },
       }),
-      // LiteratureMention is available but omitted here to avoid conflicting with
-      // ProtocolMention on the '@' trigger. Literature citations are inserted
-      // as raw HTML via the ProtocolLiteraturePanel (drag-and-drop / checkbox insert),
-      // and rendered with the .mention-literature CSS class.
+      // LiteratureMention now triggers on '[[' (not '@'), so it no longer collides
+      // with EntityMention. Literature citations can still be inserted as raw HTML
+      // via the ProtocolLiteraturePanel (drag-and-drop / checkbox insert); both
+      // paths render with the .mention-literature CSS class.
+      createLiteratureMentionExtension(literatureRef),
+      createSlashCommandExtension(slashActionsRef),
       Indent,
       Comment,
       NodeId,
@@ -4525,6 +4531,15 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     }
     input.click()
   }, [editor])
+
+  // Slash menu reuses the exact same insert handlers as the toolbar/context menu.
+  useEffect(() => {
+    slashActionsRef.current = {
+      insertImage: openImageDialog,
+      insertSpreadsheet: handleSpreadsheetPicker,
+      insertEquation: enableMath ? () => setMathEdit({ pos: -1, latex: "", block: false }) : undefined,
+    }
+  }, [openImageDialog, handleSpreadsheetPicker, enableMath])
 
   if (!editor) {
     return null

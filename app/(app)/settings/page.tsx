@@ -26,7 +26,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { SignOut as LogOut, Sun, Moon, Monitor, CircleNotch as Loader2 } from "@phosphor-icons/react/ssr"
+import { SignOut as LogOut, Sun, Moon, Monitor, CircleNotch as Loader2, Keyboard } from "@phosphor-icons/react/ssr"
+import { useShortcuts } from "@/contexts/shortcuts-context"
 import { ChangePasswordDialog } from "@/components/change-password-dialog"
 import { UsagePanel } from "@/components/settings/usage-panel"
 import { PermissionsPanel } from "@/components/settings/permissions-panel"
@@ -118,6 +119,7 @@ export default function SettingsPage(): ReactNode {
   const user = useAuthUser();
   const router = useRouter()
   const { theme, setTheme } = useTheme()
+  const { openCheatSheet } = useShortcuts()
   const [aiModel, setAiModel] = useState<AiModelKey | null>(null)
   const [byokKeyDraft, setByokKeyDraft] = useState("")
   const [byokSaved, setByokSaved] = useState(false)
@@ -659,6 +661,16 @@ export default function SettingsPage(): ReactNode {
                 description="Bring the getting-started checklist back to your dashboard"
               >
                 <RestoreChecklistButton />
+              </SettingsRow>
+
+              <SettingsRow
+                title="Keyboard shortcuts"
+                description="Every shortcut Notes9 listens for, in one searchable list"
+              >
+                <Button variant="outline" className="h-10 text-sm" onClick={openCheatSheet}>
+                  <Keyboard className="mr-2 size-4" aria-hidden />
+                  Show shortcuts
+                </Button>
               </SettingsRow>
 
               <SettingsRow
