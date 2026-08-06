@@ -30,7 +30,7 @@ export const APP_ROUTE_CRUMBS: RouteCrumbConfig[] = [
   { path: "/reports", title: "Reports", icon: FileText, detailLabel: "Report" },
   { path: "/catalyst", title: "Catalyst", icon: Sparkles, detailLabel: "Conversation" },
   { path: "/papers", title: "Writing", icon: FileEdit, newLabel: "New Paper", detailLabel: "Paper" },
-  { path: "/data", title: "Data", icon: Database },
+  { path: "/data", title: "Data files", icon: Database },
   { path: "/org", title: "Organization", icon: Building, children: { setup: { label: "Setup" } } },
 ].sort((a, b) => b.path.length - a.path.length)
 
