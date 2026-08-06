@@ -452,8 +452,6 @@ export function DataFilesListClient({
                   <TableRow>
                     <TableHead className="min-w-[260px]">File Name</TableHead>
                     <TableHead className="min-w-[120px]">Type</TableHead>
-                    <TableHead className="min-w-[180px]">Experiment</TableHead>
-                    <TableHead className="min-w-[160px]">Project</TableHead>
                     <TableHead className="min-w-[100px]">Size</TableHead>
                     <TableHead className="min-w-[120px]">Uploaded</TableHead>
                     <TableHead className="text-right min-w-[80px]">Actions</TableHead>
@@ -484,22 +482,6 @@ export function DataFilesListClient({
                         ) : (
                           <span className="text-muted-foreground italic">-</span>
                         )}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        <span
-                          className="truncate inline-block max-w-[180px] align-bottom"
-                          title={file.experiment_name ?? undefined}
-                        >
-                          {file.experiment_name ?? <span className="italic">-</span>}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        <span
-                          className="truncate inline-block max-w-[160px] align-bottom"
-                          title={file.project_name ?? undefined}
-                        >
-                          {file.project_name ?? <span className="italic">-</span>}
-                        </span>
                       </TableCell>
                       <TableCell className="text-muted-foreground whitespace-nowrap">
                         {formatFileSize(file.file_size)}

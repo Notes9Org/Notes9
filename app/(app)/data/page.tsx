@@ -1,71 +1,19 @@
-import { createClient } from "@/lib/supabase/server"
-import { requireUser } from "@/lib/auth/current-user"
-import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
-import { CatalystSectionHero } from "@/components/catalyst/catalyst-section-hero"
-import { DataFilesListClient, type DataFileRow } from "@/components/data-analysis/data-files-list"
+import { redirect } from "next/navigation"
 
 /**
- * Data files: every file across the user's experiments, in the same layout
- * grammar as Lab notes and Protocols — AI composer on top, then the toolbar,
- * the filters, and the grid/table list. The "experiments" scope is the right
- * one for the composer because data files live inside experiments.
- *
- * This is the visible half of the Data section. The analysis workspace at
- * /data-analysis is shelved for now (see that route's note); when it comes
- * back, this page and it are the two sections of one hub again.
+ * The standalone Data files page has been folded into the unified /data-analysis
+ * page (Analysis | Data files toggle). Redirect here, preserving any
+ * ?project=/?experiment= context so deep links keep working.
  */
-export default async function DataFilesPage() {
-  await requireUser()
-  const supabase = await createClient()
-
-  const [filesRes, projectsRes, experimentsRes] = await Promise.all([
-    supabase
-      .from("experiment_data")
-      .select(
-        `
-        id, file_name, file_type, file_size, data_type, created_at,
-        experiment_id, project_id, file_url, tabular_format,
-        experiment:experiments(id, name),
-        project:projects(id, name)
-      `,
-      )
-      .order("created_at", { ascending: false })
-      .limit(500),
-    supabase.from("projects").select("id, name").order("name"),
-    supabase.from("experiments").select("id, name, project_id").order("name"),
-  ])
-
-  const files: DataFileRow[] = (filesRes.data ?? []).map((row) => {
-    const experiment = Array.isArray(row.experiment) ? row.experiment[0] : row.experiment
-    const project = Array.isArray(row.project) ? row.project[0] : row.project
-    return {
-      id: row.id,
-      file_name: row.file_name,
-      file_type: row.file_type,
-      file_size: row.file_size,
-      data_type: row.data_type,
-      created_at: row.created_at,
-      experiment_id: row.experiment_id,
-      project_id: row.project_id,
-      file_url: row.file_url,
-      tabular_format: row.tabular_format ?? null,
-      experiment_name: experiment?.name ?? null,
-      project_name: project?.name ?? null,
-    }
-  })
-
-  const projects = (projectsRes.data ?? []).map((p) => ({ id: p.id, name: p.name }))
-  const experiments = (experimentsRes.data ?? []).map((e) => ({
-    id: e.id,
-    name: e.name,
-    project_id: e.project_id as string | null,
-  }))
-
-  return (
-    <div className="space-y-6">
-      <SetPageBreadcrumb segments={[]} />
-      <CatalystSectionHero size="sm" scope="experiments" shrinkOnScroll />
-      <DataFilesListClient files={files} projects={projects} experiments={experiments} />
-    </div>
-  )
+export default async function DataFilesRedirect({
+  searchParams,
+}: {
+  searchParams?: Promise<{ project?: string; experiment?: string }>
+}) {
+  const params = (await searchParams) ?? {}
+  const qs = new URLSearchParams()
+  if (params.project) qs.set("project", params.project)
+  if (params.experiment) qs.set("experiment", params.experiment)
+  const query = qs.toString()
+  redirect(`/data-analysis${query ? `?${query}` : ""}`)
 }

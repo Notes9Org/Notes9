@@ -93,7 +93,7 @@ export function ExportMenu({
   const [copied, setCopied] = useState(false)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
-  const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
+  const [pos, setPos] = useState<{ left: number; top: number; maxHeight: number } | null>(null)
 
   const cleanBase = useMemo(
     () => (defaultName || "figure").trim().replace(/\s+/g, "-").toLowerCase().replace(/[^a-z0-9._-]/g, "") || "figure",
@@ -117,10 +117,32 @@ export function ExportMenu({
     const t = triggerRef.current
     if (!t) return
     const r = t.getBoundingClientRect()
-    const left = Math.max(8, Math.min(r.right - PANEL_W, window.innerWidth - PANEL_W - 8))
-    let top = r.bottom + 6
-    if (top + PANEL_H > window.innerHeight - 8) top = Math.max(8, r.top - PANEL_H - 6)
-    setPos({ left, top })
+    const M = 8
+    const GAP = 6
+    const left = Math.max(M, Math.min(r.right - PANEL_W, window.innerWidth - PANEL_W - M))
+
+    // Measure, don't assume. The panel's height depends on which controls the
+    // chosen format shows, so the old fixed PANEL_H guess flipped it upward by
+    // the wrong amount and pushed its top off-screen — with no way to scroll
+    // back to it, because the panel had no max-height either. `scrollHeight`
+    // is the natural height even once maxHeight starts clamping the box.
+    const natural = panelRef.current?.scrollHeight ?? PANEL_H
+    const below = window.innerHeight - r.bottom - GAP - M
+    const above = r.top - GAP - M
+    const dropDown = natural <= below || below >= above
+    const maxHeight = Math.max(200, Math.round(dropDown ? below : above))
+    const top = dropDown
+      ? r.bottom + GAP
+      : Math.max(M, r.top - GAP - Math.min(natural, maxHeight))
+
+    // Only commit a genuine change: maxHeight resizes the panel, which the
+    // observer below reports back here, and an unconditional setState would
+    // ping-pong between the two.
+    setPos((prev) =>
+      prev && prev.left === left && prev.top === top && prev.maxHeight === maxHeight
+        ? prev
+        : { left, top, maxHeight },
+    )
   }, [])
 
   useEffect(() => {
@@ -142,6 +164,19 @@ export function ExportMenu({
       window.removeEventListener("scroll", place, true)
     }
   }, [open, place])
+
+  // The first `place()` runs before the panel exists, so it measures the
+  // PANEL_H fallback. Re-place once it mounts, and again whenever its content
+  // changes height (switching format shows or hides the resolution block).
+  const placed = pos !== null
+  useEffect(() => {
+    if (!open || !placed) return
+    const panel = panelRef.current
+    if (!panel || typeof ResizeObserver === "undefined") return
+    const ro = new ResizeObserver(place)
+    ro.observe(panel)
+    return () => ro.disconnect()
+  }, [open, placed, place])
 
   const doDownload = async () => {
     setBusy("export")
@@ -425,8 +460,8 @@ export function ExportMenu({
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -6, scale: 0.98 }}
                 transition={{ duration: 0.14, ease: "easeOut" }}
-                className="fixed z-[200] w-[300px] rounded-xl border border-border bg-popover/95 p-3 text-sm shadow-2xl backdrop-blur-md"
-                style={{ left: pos.left, top: pos.top }}
+                className="fixed z-[200] w-[300px] overflow-y-auto overscroll-contain rounded-xl border border-border bg-popover/95 p-3 text-sm shadow-2xl backdrop-blur-md"
+                style={{ left: pos.left, top: pos.top, maxHeight: pos.maxHeight }}
               >
                 {panelBody}
               </motion.div>

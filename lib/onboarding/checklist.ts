@@ -62,10 +62,10 @@ export const CHECKLIST_TASKS: ChecklistTask[] = [
   },
   {
     id: "chart_data",
-    title: "Bring your data in",
-    description: "Upload spreadsheets, images and raw output to an experiment and find them all in one place.",
-    cta: "Open Data files",
-    href: "/data",
+    title: "Chart your data",
+    description: "Drop in a spreadsheet and build a publication-ready figure with statistics.",
+    cta: "Open Data",
+    href: "/data-analysis",
   },
 ]
 

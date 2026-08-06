@@ -117,7 +117,7 @@ const goTo: ShortcutDef[] = (
     ['o', 'Protocols', '/protocols'],
     ['s', 'Samples', '/samples'],
     ['w', 'Writing', '/papers'],
-    ['a', 'Data files', '/data'],
+    ['a', 'Data analysis', '/data-analysis'],
     ['r', 'Reports', '/reports'],
     ['c', 'Catalyst', '/catalyst'],
     ['m', 'Research map', '/research-map'],

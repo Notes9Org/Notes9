@@ -1,7 +1,7 @@
 import type { ComponentType } from "react"
 import {
   BookOpen,
-  Database,
+  ChartLine,
   FileText,
   Flask as FlaskConical,
   Folder,
@@ -63,11 +63,10 @@ export const APP_PRIMARY_NAV: NavItem[] = [
   },
   { name: "Samples", href: "/samples", icon: TestTube },
   { name: "Writing", href: "/papers", icon: PenNib },
-  // Data files only, for now. The analysis surface (sheet, charts, statistics
-  // and the AI seam) is shelved while it is finished off — its page is kept
-  // unrouted in app/(app)/data-analysis/data-analysis-page.tsx, and this entry
-  // goes back to "Data analysis" → /data-analysis when it ships.
-  { name: "Data files", href: "/data", icon: Database },
+  // The one analysis surface: sheet, charts, statistics and the AI seam, plus
+  // the data files browser. The former standalone /analysis route was a second
+  // way to do the same job and was removed rather than kept in parallel.
+  { name: "Data analysis", href: "/data-analysis", icon: ChartLine },
   { name: "Reports", href: "/reports", icon: FileText },
   // Concave four-point flare (custom SVG), Catalyst's glyph after ruling
   // out sparkles, brain/head-circuit, lightning, atom and galaxy: a single

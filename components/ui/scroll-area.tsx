@@ -13,12 +13,17 @@ function ScrollArea({
   return (
     <ScrollAreaPrimitive.Root
       data-slot="scroll-area"
-      className={cn('relative', className)}
+      // A flex column, not a plain block, so the viewport can be sized by flex
+      // rather than by `height: 100%`. A percentage height only resolves against
+      // a parent with a *specified* height, and the common case here is a root
+      // sized by its own `flex-1` (specified height: auto) — there the viewport
+      // fell back to content height, grew past the root, and scrolled nothing.
+      className={cn('relative flex flex-col', className)}
       {...props}
     >
       <ScrollAreaPrimitive.Viewport
         data-slot="scroll-area-viewport"
-        className="focus-visible:ring-ring/50 size-full min-h-0 min-w-0 max-w-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:outline-1"
+        className="focus-visible:ring-ring/50 w-full min-h-0 min-w-0 max-w-full flex-1 rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:outline-1"
       >
         {children}
       </ScrollAreaPrimitive.Viewport>
