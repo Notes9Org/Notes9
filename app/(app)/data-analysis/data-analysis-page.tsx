@@ -1,20 +1,25 @@
 import { createClient } from "@/lib/supabase/server"
 import { requireUser } from "@/lib/auth/current-user"
+import { PageHeading } from "@/components/ui/page-heading"
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
-import { CatalystSectionHero } from "@/components/catalyst/catalyst-section-hero"
-import { DataFilesListClient, type DataFileRow } from "@/components/data-analysis/data-files-list"
+import { DataHub } from "@/components/data-analysis/data-hub"
+import type { DataFileRow } from "@/components/data-analysis/data-files-list"
 
 /**
- * Data files: every file across the user's experiments, in the same layout
- * grammar as Lab notes and Protocols — AI composer on top, then the toolbar,
- * the filters, and the grid/table list. The "experiments" scope is the right
- * one for the composer because data files live inside experiments.
+ * The unified Data hub: an **Analysis** workspace (live spreadsheet → charts,
+ * statistics, standard curves, plate maps) and a **Data files** browser behind
+ * one toggle. Files/projects/experiments are fetched here (RLS-scoped) and
+ * handed to the client hub.
  *
- * This is the visible half of the Data section. The analysis workspace at
- * /data-analysis is shelved for now (see that route's note); when it comes
- * back, this page and it are the two sections of one hub again.
+ * SHELVED, NOT DELETED. This file is deliberately not named `page.tsx`, so the
+ * App Router does not route it and the analysis surface ships hidden while it
+ * is still being finished. Data files are served on their own at /data instead.
+ * To bring the hub back: rename this file to `page.tsx` (replacing the redirect
+ * that currently sits there), restore the "Data analysis" entry in
+ * `lib/app-primary-nav.tsx`, and point the Analyses card in the project
+ * workspace back at /data-analysis.
  */
-export default async function DataFilesPage() {
+export default async function DataAnalysisPage() {
   await requireUser()
   const supabase = await createClient()
 
@@ -62,10 +67,15 @@ export default async function DataFilesPage() {
   }))
 
   return (
-    <div className="space-y-6">
-      <SetPageBreadcrumb segments={[]} />
-      <CatalystSectionHero size="sm" scope="experiments" shrinkOnScroll />
-      <DataFilesListClient files={files} projects={projects} experiments={experiments} />
+    <div className="space-y-4 md:space-y-6">
+      <SetPageBreadcrumb segments={[{ label: "Data" }]} />
+      <div>
+        <PageHeading>Data</PageHeading>
+        <p className="text-muted-foreground mt-1 text-sm">
+          Analyze data in a live spreadsheet, charts, statistics, standard curves and plate maps, or browse every data file across your experiments.
+        </p>
+      </div>
+      <DataHub files={files} projects={projects} experiments={experiments} />
     </div>
   )
 }

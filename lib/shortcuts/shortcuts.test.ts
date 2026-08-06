@@ -239,7 +239,7 @@ describe('registry integrity', () => {
       '/protocols',
       '/samples',
       '/papers',
-      '/data-analysis',
+      '/data',
       '/reports',
       '/catalyst',
       '/research-map',
