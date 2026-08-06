@@ -72,7 +72,7 @@ export function PlotlyChart({
   const boundRef = useRef(false)
   const lastClickRef = useRef(0)
   const [ready, setReady] = useState(false)
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
+  const [menu, setMenu] = useState<{ x: number; y: number; maxHeight: number } | null>(null)
   const [openSub, setOpenSub] = useState<string | null>(null)
 
   useEffect(() => {
@@ -191,12 +191,21 @@ export function PlotlyChart({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") close()
     }
+    // Close when the page scrolls out from under the menu — but NOT when the
+    // menu itself is the thing being scrolled. This listener is capture-phase
+    // on window, so it also sees scrolls originating inside the menu, and
+    // closing on those made a scrollable menu impossible to actually scroll.
+    const onScroll = (e: Event) => {
+      const t = e.target as Node | null
+      if (t && menuRef.current?.contains(t)) return
+      close()
+    }
     window.addEventListener("mousedown", onDown)
-    window.addEventListener("scroll", close, true)
+    window.addEventListener("scroll", onScroll, true)
     window.addEventListener("keydown", onKey)
     return () => {
       window.removeEventListener("mousedown", onDown)
-      window.removeEventListener("scroll", close, true)
+      window.removeEventListener("scroll", onScroll, true)
       window.removeEventListener("keydown", onKey)
     }
   }, [menu])
@@ -232,12 +241,25 @@ export function PlotlyChart({
     e.preventDefault()
     setOpenSub(null)
     // Viewport coordinates: the menu renders in a portal on <body> so it's never
-    // clipped by the chart card's overflow-hidden. Clamp to stay on-screen.
+    // clipped by the chart card's overflow-hidden.
+    //
+    // Height can't be guessed — opening a submenu expands the menu inline — and
+    // the old fixed 360px clamp left the bottom of the menu (and every expanded
+    // submenu) below the fold with nothing to scroll. Give it the real space
+    // between the click and the bottom edge instead, and if that is too little
+    // to be useful, lift it so a usable slab is always on screen. The menu's
+    // own `overflow-y-auto` then scrolls whatever doesn't fit.
+    const M = 8
+    const MIN_H = 240
     const mw = 210
-    const mh = 360
-    const x = Math.min(e.clientX, window.innerWidth - mw - 8)
-    const y = Math.min(e.clientY, window.innerHeight - mh - 8)
-    setMenu({ x: Math.max(8, x), y: Math.max(8, y) })
+    const x = Math.max(M, Math.min(e.clientX, window.innerWidth - mw - M))
+    let y = Math.max(M, e.clientY)
+    let maxHeight = window.innerHeight - y - M
+    if (maxHeight < MIN_H) {
+      y = Math.max(M, window.innerHeight - M - MIN_H)
+      maxHeight = window.innerHeight - y - M
+    }
+    setMenu({ x, y, maxHeight })
   }
 
   const EDIT_ITEMS: { el: ChartElement; label: string }[] = [
@@ -257,8 +279,8 @@ export function PlotlyChart({
         createPortal(
           <div
             ref={menuRef}
-            className="fixed z-[200] max-h-[80vh] min-w-[200px] overflow-y-auto rounded-xl border border-border bg-popover/95 p-1 text-sm shadow-2xl backdrop-blur-md"
-            style={{ left: menu.x, top: menu.y }}
+            className="fixed z-[200] min-w-[200px] overflow-y-auto overscroll-contain rounded-xl border border-border bg-popover/95 p-1 text-sm shadow-2xl backdrop-blur-md"
+            style={{ left: menu.x, top: menu.y, maxHeight: menu.maxHeight }}
             onContextMenu={(e) => e.preventDefault()}
           >
             {extraGroups.map((g) => (

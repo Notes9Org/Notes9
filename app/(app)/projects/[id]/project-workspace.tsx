@@ -1,8 +1,9 @@
 import type { ReactNode } from "react"
 import Link from "next/link"
 import type { Icon as LucideIcon } from "@phosphor-icons/react"
-import { BookOpen, Database, Flask as FlaskConical, PencilSimpleLine as PenLine, ChartBar as BarChart3, ArrowRight, Sparkle as Sparkles } from "@phosphor-icons/react/ssr"
+import { BookOpen, Database, Flask as FlaskConical, PencilSimpleLine as PenLine, ChartBar as BarChart3, ChartLineUp, ArrowRight, Sparkle as Sparkles } from "@phosphor-icons/react/ssr"
 import { Button } from "@/components/ui/button"
+import { SavedAnalysesList } from "@/components/data-analysis/saved-analyses-list"
 
 export type ProjectWorkspaceLiterature = { id: string; title: string; status: string | null }
 export type ProjectWorkspaceProtocol = { id: string; name: string; version: string | null }
@@ -293,10 +294,22 @@ export function ProjectWorkspace({
             : null}
         </WorkspaceCard>
 
-        {/* §3A.5. The Analyses card used to sit here, opening the analysis
-            workspace. It comes back with that workspace — see the note in
-            app/(app)/data-analysis/data-analysis-page.tsx. Until then it would
-            be the one remaining door into a shelved surface. */}
+        {/* §3A.5. The analyses themselves, not pictures of them. Counted
+            client-side inside the list rather than fetched here, because RLS on
+            `analyses` already answers "which of these may this person see" and
+            a second count computed server-side could disagree with it. */}
+        <WorkspaceCard
+          href="/data-analysis"
+          icon={ChartLineUp}
+          tone="leaf"
+          name="Analyses"
+        >
+          <SavedAnalysesList
+            projectId={projectId}
+            limit={3}
+            emptyText="No saved analyses in this project yet."
+          />
+        </WorkspaceCard>
 
         <WorkspaceCard
           href={`/reports?project=${projectId}`}
