@@ -20,7 +20,7 @@ const NOTES9_API_BASE = tryCatalystBaseUrl();
 
 function byokHeaders(request: Request): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const h of ['x-byok-provider', 'x-byok-api-key', 'x-byok-model']) {
+  for (const h of ['x-byok-provider', 'x-byok-api-key']) {
     const v = request.headers.get(h);
     if (v) out[h] = v;
   }

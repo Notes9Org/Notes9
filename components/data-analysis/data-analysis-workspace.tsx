@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import * as XLSX from "xlsx"
 import { AnimatePresence, motion } from "framer-motion"
@@ -31,6 +31,8 @@ import {
   CaretDown,
   ArrowsOutSimple,
   ArrowsInSimple,
+  ArrowsOut,
+  ArrowsIn,
   Palette,
   Ruler,
   TextAa,
@@ -49,6 +51,7 @@ import {
   ArrowUUpRight,
   ClockCounterClockwise,
   Prohibit,
+  DotsThree,
 } from "@phosphor-icons/react/ssr"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -65,6 +68,9 @@ import { CatalystSectionHero } from "@/components/catalyst/catalyst-section-hero
 import { PlotlyChart, type PlotlyEdits, type ChartExportFn, type ChartElement, type ChartMenuGroup } from "@/components/data-analysis/plotly-chart"
 import { ExportMenu } from "@/components/data-analysis/export-menu"
 import { openCatalystPanel } from "@/lib/catalyst-launch"
+import { useCatalystPanelState } from "@/contexts/catalyst-panel-state"
+import { useSidebar } from "@/components/ui/sidebar"
+import { FlareIcon } from "@/components/ui/flare-icon"
 import type { ExportFormat } from "@/lib/data-analysis/chart-export"
 import { useStatsPanel, type Table } from "@/components/data-analysis/stats-panel"
 import { describe as describeStats } from "@/lib/data-analysis/statistics"
@@ -87,7 +93,6 @@ import { Dock, DockTab, useDockLayout } from "@/components/data-analysis/workspa
 import { LayoutCanvas } from "@/components/data-analysis/workspace/layout-canvas"
 import { PipelineTabs } from "@/components/data-analysis/workspace/pipeline-tabs"
 import { ResultsCard } from "@/components/data-analysis/workspace/results-card"
-import { ProvenancePanel } from "@/components/data-analysis/workspace/provenance-panel"
 import { ExclusionDialog, type ExclusionPreview } from "@/components/data-analysis/workspace/exclusion-dialog"
 import { useAuthUser } from "@/components/auth/auth-provider"
 import { Exclusion, parseSpec } from "@/lib/data-analysis/spec/analysis-spec"
@@ -152,7 +157,6 @@ import {
   canUndo as canUndoOf,
   commit as commitEdit,
   emptyHistory,
-  historyMutations,
   redo as redoEdit,
   undo as undoEdit,
   type ConfigHistory,
@@ -1249,6 +1253,72 @@ export function DataAnalysisWorkspace({
     }
   }, [fullscreen])
 
+  // ——— Full-screen bounds ————————————————————————————————————————————————
+  // Full screen used to be `fixed inset-0`, which covered the entire viewport
+  // including the left rail and the Catalyst panel — so once you were in it,
+  // neither could be reached. Instead bound the shell to SidebarInset, exactly
+  // as the lab-note and protocol editors do: it still covers the app header and
+  // runs the full height, but the collapsed left rail stays clickable on one
+  // side and an open Catalyst panel stays usable on the other.
+  const shellRef = useRef<HTMLDivElement>(null)
+  const [fullscreenStyle, setFullscreenStyle] = useState<CSSProperties | undefined>(undefined)
+  const sidebar = useSidebar()
+  const catalystState = useCatalystPanelState()
+
+  const syncFullscreenBounds = useCallback(() => {
+    const inset = shellRef.current?.closest('[data-slot="sidebar-inset"]') as HTMLElement | null
+    if (!inset) {
+      // Embedded or mobile: no inset to measure, so fall back to the viewport.
+      setFullscreenStyle({ position: "fixed", inset: 0, zIndex: 50 })
+      return
+    }
+    const rect = inset.getBoundingClientRect()
+    setFullscreenStyle({
+      position: "fixed",
+      top: 0,
+      left: Math.round(rect.left),
+      width: Math.round(rect.width),
+      height: "100vh",
+      zIndex: 50,
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!fullscreen) {
+      setFullscreenStyle(undefined)
+      return
+    }
+    syncFullscreenBounds()
+    window.addEventListener("resize", syncFullscreenBounds)
+    // The sidebar animates open and closed, so track the inset's own box rather
+    // than measuring once and drifting out of alignment mid-transition.
+    const inset = shellRef.current?.closest('[data-slot="sidebar-inset"]')
+    let ro: ResizeObserver | undefined
+    if (inset && typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver(syncFullscreenBounds)
+      ro.observe(inset)
+    }
+    return () => {
+      window.removeEventListener("resize", syncFullscreenBounds)
+      ro?.disconnect()
+    }
+  }, [fullscreen, syncFullscreenBounds])
+
+  // Collapse the left sidebar ONCE on entering full screen, to hand the canvas
+  // the width. The user can expand it again from the rail; re-collapsing on
+  // every state change would make it impossible to reopen.
+  const collapsedForFullscreenRef = useRef(false)
+  useEffect(() => {
+    if (!fullscreen) {
+      collapsedForFullscreenRef.current = false
+      return
+    }
+    if (!collapsedForFullscreenRef.current) {
+      collapsedForFullscreenRef.current = true
+      if (sidebar.state === "expanded") sidebar.setOpen(false)
+    }
+  }, [fullscreen, sidebar])
+
   const [railSection, setRailSection] = useState<string>("all")
   /**
    * Sections that belong to the same idea.
@@ -1898,13 +1968,6 @@ export function DataAnalysisWorkspace({
     [derivedSpec, specTable, commitEdits, aiOverlay]
   )
 
-
-  /* ── Provenance (§10.5) ────────────────────────────────────────────────────
-     One panel, opened from the figure and from beside the results card, because
-     "one click away from any figure" has to be true from wherever the figure is
-     being looked at. It reads the derived spec, the engine's own result and the
-     edit history above, so nothing on it is restated by this page. */
-  const [provenanceOpen, setProvenanceOpen] = useState(false)
 
   /* ── Excluding a point (§8.1) ──────────────────────────────────────────────
      The entry point is the sheet selection, the affordance this rail already
@@ -2590,16 +2653,6 @@ export function DataAnalysisWorkspace({
       <PaneHeader Icon={ChartLine} title="Chart">
         <div className="ml-auto flex items-center gap-2">
           <span className="hidden text-[11px] text-muted-foreground lg:block">Double-click to edit · right-click for menu</span>
-          {/* §10.5, one click from the figure itself, not one tab and one click. */}
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={!derivedSpec}
-            onClick={() => setProvenanceOpen(true)}
-            title="How this figure was made, and from what"
-          >
-            <ClockCounterClockwise className="mr-1.5 h-4 w-4" /> Provenance
-          </Button>
           <ExportMenu variant="ghost" disabled={!hasPlot} defaultName={title} onExport={runExport} getPng={getChartPng} getCanvasSize={getChartSize} onSaveToLibrary={() => setSaveChartOpen(true)} />
         </div>
       </PaneHeader>
@@ -3053,11 +3106,6 @@ export function DataAnalysisWorkspace({
           <Button variant="outline" size="sm" onClick={exportStats}>
             <DownloadSimple className="mr-1.5 h-4 w-4" /> Export (.xlsx)
           </Button>
-          {/* Beside the result it explains: source, exclusions with reasons,
-              transforms, test, engine version and who changed what (§10.5). */}
-          <Button variant="outline" size="sm" onClick={() => setProvenanceOpen(true)}>
-            <ClockCounterClockwise className="mr-1.5 h-4 w-4" /> Provenance
-          </Button>
           <span className="text-[11.5px] text-muted-foreground/70">
             Every number here came from the engine, not from this page.
           </span>
@@ -3218,15 +3266,44 @@ export function DataAnalysisWorkspace({
 
   return (
     <div
+      ref={shellRef}
+      style={fullscreen ? fullscreenStyle : undefined}
       className={cn(
         "flex flex-col gap-4",
         // Full screen is a container change, not a different tree: the same
-        // workspace, given the whole viewport. Rendering a second copy would
-        // remount Univer and Plotly and lose the user's cursor and zoom.
+        // workspace, given the whole window. Rendering a second copy would
+        // remount Univer and Plotly and lose the user's cursor and zoom. The
+        // box itself comes from `fullscreenStyle`, measured off SidebarInset.
         fullscreen &&
-          "fixed inset-0 z-50 overflow-auto bg-[color:var(--background)] p-4 md:p-6",
+          "overflow-auto bg-[color:var(--background)] p-4 md:p-6",
       )}
     >
+      {/* Full screen covers the app header, which is where Catalyst is opened
+          from, so that one control has to exist here too — top-right, the
+          corner it lives in normally, and the same flare glyph and ring the
+          header uses so it reads as the same button. The left sidebar needs no
+          equivalent: collapsed to its rail it still shows its own open control,
+          and the shell is bounded to stop clear of it. */}
+      {fullscreen && (
+        <div className="flex shrink-0 items-center justify-end">
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "n9-neon-ring size-8 shrink-0 text-primary ring-1 ring-inset ring-[color:var(--primary)]/25 transition-colors hover:text-primary sm:size-9",
+              catalystState?.isOpen
+                ? "bg-[color:var(--primary)]/20 hover:bg-[color:var(--primary)]/24"
+                : "bg-[color:var(--primary)]/[0.08] hover:bg-[color:var(--primary)]/15",
+            )}
+            onClick={() => openCatalystPanel()}
+            aria-label="Ask Catalyst"
+            title="Ask Catalyst"
+          >
+            <FlareIcon className="size-4" />
+          </Button>
+        </div>
+      )}
+
       {!fullscreen && (
         <CatalystSectionHero
           scope="lab"
@@ -3341,30 +3418,10 @@ export function DataAnalysisWorkspace({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm"><DownloadSimple className="mr-1.5 h-4 w-4" /> Save <CaretDown className="ml-1 h-3.5 w-3.5" /></Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-60">
-            {phase === "chart" && (
-              <DropdownMenuItem onClick={() => setSaveChartOpen(true)}>
-                <ChartLine className="mr-2 h-4 w-4" /> Save chart to data files
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuItem onClick={() => setTemplatesOpen(true)}>
-              <SquaresFour className="mr-2 h-4 w-4" /> Save as template…
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => downloadSnapshotAsXlsxFile(liveSnapshot, "analysis.xlsx")}>
-              <DownloadSimple className="mr-2 h-4 w-4" /> Export data (.xlsx)
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={exportAnalysisFile}>
-              <DownloadSimple className="mr-2 h-4 w-4" /> Export analysis (.n9a)
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
         {/* §3A.3 rule 1, the explicit half. The primary control on this row,
             because keeping the work is the thing the download used to be the
-            only way to do. */}
+            only way to do. It sat next to a dropdown ALSO labelled "Save" that
+            only ever exported — the two are now "Save" and "Export". */}
         <Button
           variant="outline"
           size="sm"
@@ -3379,50 +3436,90 @@ export function DataAnalysisWorkspace({
           <FloppyDisk className="mr-1.5 h-4 w-4" />
           {savedAnalysis ? `Save r${savedAnalysis.currentRevisionNo + 1}` : "Save"}
         </Button>
-        <Button variant="outline" size="sm" onClick={openHistory} title="Saved analyses and their revisions">
-          <ClockCounterClockwise className="mr-1.5 h-4 w-4" />
-          {savedAnalysis ? "History" : "Saved"}
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => setTemplatesOpen(true)}><SquaresFour className="mr-1.5 h-4 w-4" /> Templates</Button>
-        {/* One stack for both authors. The tooltip names the edit rather than
-            saying "undo", because the thing a researcher needs to know before
-            pressing it is what is about to be taken back. */}
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!canUndoOf(editHistory)}
-          onClick={undoEdits}
-          title={
-            editHistory.past[editHistory.past.length - 1]?.applied[0]?.description ??
-            "Nothing to undo"
-          }
-          aria-label="Undo the last change"
-        >
-          <ArrowUUpLeft className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!canRedoOf(editHistory)}
-          onClick={redoEdits}
-          title={editHistory.future[0]?.applied[0]?.description ?? "Nothing to redo"}
-          aria-label="Redo the last undone change"
-        >
-          <ArrowUUpRight className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setFullscreen((v) => !v)}
-          title={fullscreen ? "Leave full screen (Esc)" : "Use the whole window"}
-        >
-          {fullscreen ? (
-            <><ArrowsInSimple className="mr-1.5 h-4 w-4" /> Exit full screen</>
-          ) : (
-            <><ArrowsOutSimple className="mr-1.5 h-4 w-4" /> Full screen</>
-          )}
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm"><DownloadSimple className="mr-1.5 h-4 w-4" /> Export <CaretDown className="ml-1 h-3.5 w-3.5" /></Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-60">
+            {phase === "chart" && (
+              <DropdownMenuItem onClick={() => setSaveChartOpen(true)}>
+                <ChartLine className="mr-2 h-4 w-4" /> Save chart to data files
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem onClick={() => downloadSnapshotAsXlsxFile(liveSnapshot, "analysis.xlsx")}>
+              <DownloadSimple className="mr-2 h-4 w-4" /> Export data (.xlsx)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={exportAnalysisFile}>
+              <DownloadSimple className="mr-2 h-4 w-4" /> Export analysis (.n9a)
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        {/* Everything that opens a library rather than acting on this analysis.
+            "Templates" and the Save menu's "Save as template…" opened the very
+            same dialog, so they are one entry now. */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" title="Saved analyses and templates">
+              <DotsThree className="h-4 w-4" weight="bold" />
+              <span className="sr-only">More</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-60">
+            <DropdownMenuItem onClick={openHistory}>
+              <ClockCounterClockwise className="mr-2 h-4 w-4" />
+              {savedAnalysis ? "History and revisions" : "Saved analyses"}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setTemplatesOpen(true)}>
+              <SquaresFour className="mr-2 h-4 w-4" /> Templates…
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        {/* One stack for both authors, kept as a joined pair so the row reads
+            as one control. The tooltip names the edit rather than saying
+            "undo", because the thing a researcher needs to know before pressing
+            it is what is about to be taken back. */}
+        <div className="ml-1 inline-flex overflow-hidden rounded-lg border border-border">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="rounded-none border-0"
+            disabled={!canUndoOf(editHistory)}
+            onClick={undoEdits}
+            title={
+              editHistory.past[editHistory.past.length - 1]?.applied[0]?.description ??
+              "Nothing to undo"
+            }
+            aria-label="Undo the last change"
+          >
+            <ArrowUUpLeft className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="rounded-none border-0 border-l border-border"
+            disabled={!canRedoOf(editHistory)}
+            onClick={redoEdits}
+            title={editHistory.future[0]?.applied[0]?.description ?? "Nothing to redo"}
+            aria-label="Redo the last undone change"
+          >
+            <ArrowUUpRight className="h-4 w-4" />
+          </Button>
+        </div>
         <span className="ml-auto text-xs text-muted-foreground">{table.rows.length} rows · {table.columns.length} cols</span>
+        {/* Same control the lab-note and protocol editors carry: an icon-only
+            ghost button at the far right of the toolbar, using the platform's
+            ArrowsOut / ArrowsIn pair rather than a labelled outline button. */}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 shrink-0 touch-manipulation text-muted-foreground hover:text-foreground"
+          onClick={() => setFullscreen((v) => !v)}
+          aria-label={fullscreen ? "Exit fullscreen" : "Fullscreen"}
+          title={fullscreen ? "Exit fullscreen (Esc)" : "Fullscreen"}
+        >
+          {fullscreen ? <ArrowsIn className="h-4 w-4" /> : <ArrowsOut className="h-4 w-4" />}
+        </Button>
       </div>
 
       {/* Maximized data editor, full ribbon, full width, for heavy editing */}
@@ -3616,21 +3713,6 @@ export function DataAnalysisWorkspace({
         getPng={getChartPng}
         onSaved={() => router.refresh()}
       />
-
-      {/* §10.5. A slide-over rather than a modal: it is read while looking at
-          the figure it explains. */}
-      {derivedSpec && (
-        <ProvenancePanel
-          open={provenanceOpen}
-          onClose={() => setProvenanceOpen(false)}
-          spec={derivedSpec}
-          result={engineResult}
-          history={historyMutations(editHistory)}
-          revisionNo={openRevisionRow?.revisionNo}
-          isFrozen={openRevisionRow?.isFrozen}
-          sourceDetached={reopenVerdict?.state === "detached"}
-        />
-      )}
 
       {/* §3A.3 rule 1 (explicitly) and rule 5 (the fork). */}
       <SaveAnalysisDialog
