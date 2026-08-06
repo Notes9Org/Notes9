@@ -12,13 +12,24 @@ import { PaperAIProvider } from "@/contexts/paper-ai-context"
 import { LiteratureMentionProvider } from "@/contexts/literature-mention-context"
 import { ProjectScopeProvider, useProjectScope } from "@/contexts/project-scope-context"
 import { HeaderAiProvider, useHeaderAi } from "./header-ai-context"
+import { ShortcutsProvider, useShortcuts, CATALYST_TOGGLE_EVENT } from "@/contexts/shortcuts-context"
+import { CommandPalette } from "@/components/shortcuts/command-palette"
+import { ShortcutsDialog } from "@/components/shortcuts/shortcuts-dialog"
 import { Button } from "@/components/ui/button"
+import { Kbd } from "@/components/ui/kbd"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { formatCombo, isMacPlatform } from "@/lib/shortcuts/match"
 import { ResizeHandle } from "@/components/ui/resize-handle"
 import { SidebarProvider, SidebarInset, useSidebar } from "@/components/ui/sidebar"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { useResizable } from "@/hooks/use-resizable"
 import { cn } from "@/lib/utils"
-import { List as Menu, X, Sun, Moon, Question as CircleHelp, Flag } from "@phosphor-icons/react/ssr"
+import { List as Menu, X, Sun, Moon, Question as CircleHelp, Flag, Keyboard } from "@phosphor-icons/react/ssr"
 import { ClipboardInfoIcon } from "@/components/ui/clipboard-info-icon"
 import { FlareIcon } from "@/components/ui/flare-icon"
 import { PageTransition } from "./page-transition"
@@ -213,7 +224,12 @@ export function AppLayout({ children }: AppLayoutProps) {
           <PaperAIProvider>
             <LiteratureMentionProvider>
               <HeaderAiProvider>
-                <AppLayoutBody>{children}</AppLayoutBody>
+                {/* Inside ProjectScopeProvider so `c e` and friends can pick up
+                    the active project; the body reads the palette/cheat-sheet
+                    state straight off the context. */}
+                <ShortcutsProvider>
+                  <AppLayoutBody>{children}</AppLayoutBody>
+                </ShortcutsProvider>
               </HeaderAiProvider>
             </LiteratureMentionProvider>
           </PaperAIProvider>
@@ -227,6 +243,13 @@ function AppLayoutBody({ children }: AppLayoutProps) {
   const pathname = usePathname()
   const router = useRouter()
   const { registration: headerAi } = useHeaderAi()
+  const {
+    paletteOpen,
+    setPaletteOpen,
+    cheatSheetOpen,
+    setCheatSheetOpen,
+    openCheatSheet,
+  } = useShortcuts()
   const { setTheme, resolvedTheme } = useTheme()
   const [themeMounted, setThemeMounted] = useState(false)
   const isMobile = useMediaQuery("(max-width: 768px)")
@@ -286,6 +309,14 @@ function AppLayoutBody({ children }: AppLayoutProps) {
     }
     setCatalystOpen(true)
   }, [catalystVisible, headerAi])
+
+  // Cmd+J. The shortcut can't call openCatalystPanel() (open-only), so it asks
+  // by event and the real toggle happens here, where the state lives.
+  useEffect(() => {
+    window.addEventListener(CATALYST_TOGGLE_EVENT, handleCatalystToggle)
+    return () =>
+      window.removeEventListener(CATALYST_TOGGLE_EVENT, handleCatalystToggle)
+  }, [handleCatalystToggle])
 
   const handleProtocolToggle = useCallback(() => {
     if (!headerAi) return
@@ -402,6 +433,8 @@ function AppLayoutBody({ children }: AppLayoutProps) {
     <>
       <SidebarProvider defaultOpen={!isMobile} open={sidebarOpen} onOpenChange={setSidebarOpen}>
         <AppTour />
+        <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+        <ShortcutsDialog open={cheatSheetOpen} onOpenChange={setCheatSheetOpen} />
         <div
         className="flex h-screen w-full gap-0 overflow-hidden bg-background"
         style={{
@@ -477,23 +510,44 @@ function AppLayoutBody({ children }: AppLayoutProps) {
 
             <div className="flex items-center gap-1 sm:gap-2">
               <ReportIssueDialog />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                data-tour={TOUR.help}
-                className="size-8 sm:size-9 text-muted-foreground hover:text-foreground"
-                onClick={() =>
-                  requestPageHelp(
-                    (pathname ?? "/dashboard") +
-                      (typeof window !== "undefined" ? window.location.search : ""),
-                  )
-                }
-                aria-label="Help: tour this page"
-                title="Help: take a quick tour of this page"
-              >
-                <CircleHelp className="size-4" />
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    data-tour={TOUR.help}
+                    className="size-8 sm:size-9 text-muted-foreground hover:text-foreground"
+                    aria-label="Help: tour this page"
+                    title="Help: tour this page or see keyboard shortcuts"
+                  >
+                    <CircleHelp className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    onSelect={() =>
+                      requestPageHelp(
+                        (pathname ?? "/dashboard") +
+                          (typeof window !== "undefined" ? window.location.search : ""),
+                      )
+                    }
+                  >
+                    <CircleHelp className="mr-2 size-4" />
+                    <span>Tour this page</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="cursor-pointer" onSelect={openCheatSheet}>
+                    <Keyboard className="mr-2 size-4" />
+                    <span>Keyboard shortcuts</span>
+                    {/* Portal content only mounts on click, so reading the
+                        platform here can't mismatch the server render. */}
+                    <Kbd className="ml-auto">
+                      {formatCombo("mod+/", isMacPlatform()).join("")}
+                    </Kbd>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               {/* Theme toggle: one click toggles dark ↔ light (client-only to avoid hydration mismatch) */}
               <Button
                 id="tour-theme-toggle"
