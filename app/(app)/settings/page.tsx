@@ -30,7 +30,6 @@ import { SignOut as LogOut, Sun, Moon, Monitor, CircleNotch as Loader2, Keyboard
 import { useShortcuts } from "@/contexts/shortcuts-context"
 import { ChangePasswordDialog } from "@/components/change-password-dialog"
 import { UsagePanel } from "@/components/settings/usage-panel"
-import { PermissionsPanel } from "@/components/settings/permissions-panel"
 import { RestoreChecklistButton } from "@/components/onboarding/restore-checklist-button"
 import { PageHeading } from "@/components/ui/page-heading"
 import { useToast } from "@/hooks/use-toast"
@@ -348,9 +347,9 @@ export default function SettingsPage(): ReactNode {
             <TabsTrigger value="usage" className="flex-1 px-4 py-2 text-sm sm:text-base">
               Usage
             </TabsTrigger>
-            <TabsTrigger value="permissions" className="flex-1 px-4 py-2 text-sm sm:text-base">
-              Permissions
-            </TabsTrigger>
+            {/* Permissions is hidden for now. Its panel still lives in
+                components/settings/permissions-panel.tsx — restore this trigger
+                and the matching TabsContent below to bring the tab back. */}
           </TabsList>
 
           <div className="relative grid w-full min-w-0 grid-cols-1">
@@ -703,14 +702,6 @@ export default function SettingsPage(): ReactNode {
           </SettingsPanelCard>
         </TabsContent>
 
-        <TabsContent value="permissions" className={cn(SETTINGS_PANEL_SHELL, "col-start-1 row-start-1")}>
-          <SettingsPanelCard
-            title="Permissions"
-            description="Control when Catalyst may read your private lab data"
-          >
-            <PermissionsPanel />
-          </SettingsPanelCard>
-        </TabsContent>
           </div>
 
       </Tabs>
