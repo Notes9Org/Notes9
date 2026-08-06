@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest"
-import { ALLOWED_MUTATION_KINDS, FORBIDDEN_MUTATION_KINDS } from "@/lib/data-analysis/ai/spec-author"
+import {
+  ALLOWED_MUTATION_KINDS,
+  FORBIDDEN_MUTATION_KINDS,
+  SpecPatchProposal,
+} from "@/lib/data-analysis/ai/spec-author"
 import type { SpecMutation } from "./mutations"
 import { MUTATION_CONTRACT, parseMutation, SpecMutationSchema } from "./mutation-schema"
+import contractFixture from "./spec-patch-proposal.contract-fixture.json"
 
 /**
  * P1, the contract.
@@ -145,6 +150,54 @@ describe("MUTATION_CONTRACT", () => {
   it("is non-empty prose, not a stringified object", () => {
     expect(MUTATION_CONTRACT.length).toBeGreaterThan(0)
     expect(() => JSON.parse(MUTATION_CONTRACT)).toThrow()
+  })
+})
+
+/**
+ * The cross-repo contract fixture.
+ *
+ * `spec-patch-proposal.contract-fixture.json` is committed byte-identically in
+ * BOTH repos, here and at `AI/catalyst/tests/fixtures/`. Catalyst carries
+ * mutations as an opaque `List[Dict[str, Any]]` passthrough, so nothing else in
+ * either build catches the two sides disagreeing about what a patch looks like
+ * on the wire. This fixture is that check: Catalyst asserts it survives its
+ * parse/normalise path, Notes9 asserts every mutation in it is accepted by the
+ * schema that actually applies it. Change the fixture on one side only and one
+ * of the two suites goes red.
+ *
+ * It deliberately spans the payload shapes that DIFFER per kind, `filters`,
+ * `transform`, `patch`, `index`, `axis`, `seriesKey`, and the plain
+ * `{ kind, value }` form, because a passthrough that flattens or renames a
+ * field only breaks on the kinds that don't use `value`.
+ */
+describe("cross-repo contract fixture", () => {
+  it("parses as a whole SpecPatchProposal envelope", () => {
+    const parsed = SpecPatchProposal.safeParse(contractFixture)
+    expect(parsed.success).toBe(true)
+  })
+
+  for (const [index, mutation] of contractFixture.mutations.entries()) {
+    it(`mutation[${index}] ("${mutation.kind}") parses under SpecMutationSchema`, () => {
+      const result = parseMutation(mutation)
+      // Surface zod's reason rather than a bare `false` when this breaks.
+      expect(result.ok ? null : result.reason).toBeNull()
+    })
+  }
+
+  // The shape coverage is the point of the fixture, so it is asserted rather
+  // than left to whoever edits the JSON next.
+  it("covers every per-kind payload shape the passthrough could flatten", () => {
+    const fields = new Set(contractFixture.mutations.flatMap((m) => Object.keys(m)))
+    for (const field of ["value", "filters", "transform", "patch", "index", "axis", "seriesKey"]) {
+      expect(fields).toContain(field)
+    }
+  })
+
+  it("only contains kinds the assistant is allowed to author", () => {
+    for (const mutation of contractFixture.mutations) {
+      expect(FORBIDDEN_MUTATION_KINDS.has(mutation.kind)).toBe(false)
+      expect(ALLOWED_MUTATION_KINDS.has(mutation.kind as SpecMutation["kind"])).toBe(true)
+    }
   })
 })
 

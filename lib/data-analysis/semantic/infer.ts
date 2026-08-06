@@ -49,8 +49,15 @@ export interface ColumnProfile {
 
 const MAX_LEVELS = 64
 
-/** Units live in the header far more reliably than in the cells. */
-function parseUnit(header: string): string | null {
+/**
+ * Units live in the header far more reliably than in the cells.
+ *
+ * Exported because a sheet that puts its units on a dedicated row underneath the
+ * header must be read with exactly these rules, including the rejections: "(n =
+ * 8)" and "(mean)" annotate a column wherever they are written, and a second
+ * parser would inevitably drift from this one.
+ */
+export function parseUnit(header: string): string | null {
   const match = header.match(/[([]\s*([^)\]]{1,24})\s*[)\]]\s*$/)
   if (!match) return null
   const unit = match[1].trim()

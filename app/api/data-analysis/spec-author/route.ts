@@ -8,6 +8,7 @@ import type { Table } from "@/lib/data-analysis/engine/resolver"
 import { profileTable, offerableTests } from "@/lib/data-analysis/semantic/infer"
 import {
   buildContextBundle,
+  CLARIFICATION_WITHHELD,
   containsFabricatedStatistic,
   sanitiseRationale,
   screenRequest,
@@ -27,15 +28,25 @@ import {
  * Three guarantees are enforced HERE, not in the UI and not in the prompt:
  *   1. no table → nothing is sent, HTTP 400;
  *   2. a screened-out request costs zero model calls;
- *   3. nothing the model invents a number into, and no test the data cannot
+ *   3. no PROSE the model invented a number into, and no test the data cannot
  *      support, reaches the client.
+ *
+ * And one affordance: a reply the gate mostly rejected gets ONE repair round
+ * before the researcher sees it, so the seam answers with a plan rather than a
+ * list of things it refused to do.
  */
 
 export const maxDuration = 60
 
 const CATALYST_PATH = "/analysis/spec-author"
-/** Under `maxDuration`, so a hung backend returns a message instead of a 504. */
-const CATALYST_TIMEOUT_MS = 45_000
+/**
+ * Under `maxDuration`, and shared by BOTH model calls: the first reply and the
+ * repair round together still have to leave the route time to answer, so a hung
+ * backend returns a message instead of a 504.
+ */
+const CATALYST_BUDGET_MS = 45_000
+/** Below this there is not enough budget left for a repair round to land. */
+const REPAIR_MIN_MS = 10_000
 
 /* ── Wire types ────────────────────────────────────────────────────────────*/
 
@@ -100,13 +111,25 @@ function toDataProfile(spec: AnalysisSpec, table: Table): DataProfile {
   }
 }
 
-/* ── Fabricated-number scan over the whole mutation, not just prose ────────*/
+/* ── The repair ask ────────────────────────────────────────────────────────*/
 
-function stringsIn(value: unknown, out: string[] = []): string[] {
-  if (typeof value === "string") out.push(value)
-  else if (Array.isArray(value)) for (const v of value) stringsIn(v, out)
-  else if (value && typeof value === "object") for (const v of Object.values(value)) stringsIn(v, out)
-  return out
+/**
+ * The only thing the first reply lacked was the gate's verdict on it. So the
+ * repair prompt is the original request plus the model's own rejected mutations
+ * and the reason each was refused, nothing else: the bundle already carries the
+ * contract and the legal test set, and repeating them would not be new
+ * information.
+ */
+function repairPrompt(prompt: string, rejected: { mutation: unknown; reason: string }[]): string {
+  const list = rejected
+    .map((r, i) => `${i + 1}. ${JSON.stringify(r.mutation)}\n   Rejected because: ${r.reason}`)
+    .join("\n")
+  return `${prompt}
+
+Your previous reply to this request was rejected and never reached the researcher. These mutations did not survive validation:
+${list}
+
+Answer the request again. Use only mutation kinds and fields listed under "contract" in the bundle, and only tests listed as legal under "offerableTests". Do not repeat a rejected mutation. If nothing legal satisfies the request, leave mutations empty, set clarificationNeeded, and ask one specific question instead.`
 }
 
 /* ── Route ─────────────────────────────────────────────────────────────────*/
@@ -204,14 +227,20 @@ export async function POST(req: NextRequest) {
       offerableTests: legalTests,
     })
 
-    let reply: CatalystReply
-    try {
-      reply = await callCatalyst<
+    // One budget, drawn down by however many calls this request makes, so the
+    // repair round can never push the route past `maxDuration`.
+    const deadline = Date.now() + CATALYST_BUDGET_MS
+    const ask = (text: string) =>
+      callCatalyst<
         { bundle: Record<string, unknown>; prompt: string; system: string },
         CatalystReply
-      >(CATALYST_PATH, { bundle, prompt, system: SPEC_AUTHOR_SYSTEM_PROMPT }, accessToken, {
-        timeoutMs: CATALYST_TIMEOUT_MS,
+      >(CATALYST_PATH, { bundle, prompt: text, system: SPEC_AUTHOR_SYSTEM_PROMPT }, accessToken, {
+        timeoutMs: Math.max(0, deadline - Date.now()),
       })
+
+    let reply: CatalystReply
+    try {
+      reply = await ask(prompt)
     } catch (err) {
       // (f) Fail CLOSED and legibly. Unset env, timeout and HTTP error all land
       // here; the workspace keeps computing without the assistant.
@@ -223,44 +252,126 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ outcome: "unavailable", reason }, { status: 503 })
     }
 
-    // (e) Validate → sanitise → drop. Order matters: an unparseable proposal has
-    // no rationale worth sanitising.
-    const raw = reply?.proposal ?? reply
-    const validated = validateProposal(raw)
-    const rejected = [...validated.rejected]
-
-    const { text: rationale } = sanitiseRationale(validated.rationale)
-
     // A test the data cannot support is not a suggestion, it is a wrong answer
     // with a confident tone. Same `legalTests` the bundle told the model about.
     const allowedTests = new Set(legalTests.map((c) => c.test))
 
-    const mutations = validated.mutations.filter((m) => {
-      const record = m as unknown as Record<string, unknown>
-      if (stringsIn(record).some(containsFabricatedStatistic)) {
-        rejected.push({
-          mutation: m,
-          reason:
-            "The mutation carried a statistic. Every number shown to the researcher comes from the engine.",
-        })
-        return false
-      }
-      if (record.kind === "analysis.setTest" && !allowedTests.has(record.value as never)) {
-        rejected.push({
-          mutation: m,
-          reason: `"${String(record.value)}" is not a test this data supports.`,
-        })
-        return false
-      }
-      return true
-    })
+    // (e) Validate → sanitise → drop. Order matters: an unparseable proposal has
+    // no rationale worth sanitising. Run once per model reply, so the repair
+    // round is held to exactly the same gate as the first.
+    const review = (raw: unknown) => {
+      const validated = validateProposal(raw)
+      const rejected = [...validated.rejected]
+      // `containsFabricatedStatistic` is a PROSE detector and is applied to prose
+      // only, the rationale and the question below. It used to be run over every
+      // string in every mutation payload too, which was a category error: inside
+      // a typed payload a decimal is a threshold, a control level or an ISO
+      // timestamp, not a claimed measurement. It refused `figure.setTitle
+      // "Viability at 100 nM"`, a filter at 0.5, a `normaliseToControl` on "0.1%
+      // DMSO" and every `.000Z` timestamp, while still admitting "the EC50 is 42
+      // nM" in the prose it was written for — blocking the legitimate and
+      // admitting the fabricated, worse on both axes than no gate at all.
+      //
+      // Payloads have their own, stronger gate: `SpecMutationSchema` types every
+      // field, `offerableTests` bounds the one below that chooses a test, and the
+      // researcher reads the whole patch before pressing Execute.
+      //
+      // ponytail: the known ceiling is an invented number written into a
+      // free-text payload field, a subtitle of "p = 0.03". Catching that needs an
+      // engine result to attribute numbers against, which this call site has no
+      // producer for.
+      const mutations = validated.mutations.filter((m) => {
+        const record = m as unknown as Record<string, unknown>
+        if (record.kind === "analysis.setTest" && !allowedTests.has(record.value as never)) {
+          rejected.push({
+            mutation: m,
+            reason: `"${String(record.value)}" is not a test this data supports.`,
+          })
+          return false
+        }
+        return true
+      })
 
-    return NextResponse.json({
-      rationale,
-      mutations,
-      clarificationNeeded: validated.clarificationNeeded,
-      rejected,
-    })
+      // The question is held to the same gate as the rationale, but REPLACED
+      // whole rather than stripped: it is a prompt the researcher has to answer,
+      // and half a question in the question box is worse than none.
+      //
+      // Replaced, not nulled. `clarificationNeeded` is also the P3 interlock
+      // (spec-prompt.ts `canExecuteProposal`), so nulling it here handed the
+      // researcher an Execute button for the one proposal the model had just
+      // flagged as ambiguous — the guard three lines above disarming the guard
+      // three lines below. Withholding must be strictly safer than not
+      // withholding, so the stand-in keeps Execute withheld and says why.
+      // The rejection is still recorded, and the repair round below still gets
+      // to ask for the question again without the number.
+      let clarificationNeeded = validated.clarificationNeeded
+      if (clarificationNeeded && containsFabricatedStatistic(clarificationNeeded)) {
+        rejected.push({
+          mutation: { clarificationNeeded },
+          reason:
+            "The clarifying question carried a statistic. Every number shown to the researcher comes from the engine.",
+        })
+        clarificationNeeded = CLARIFICATION_WITHHELD
+      }
+
+      return {
+        rationale: sanitiseRationale(validated.rationale).text,
+        mutations,
+        clarificationNeeded,
+        rejected,
+      }
+    }
+
+    let patch = review(reply?.proposal ?? reply)
+
+    /**
+     * A question the researcher can actually answer. The stand-in for a withheld
+     * one is not: it blocks Execute, which is its job, but it carries none of
+     * what the model wanted to ask, so a round that recovers only that has
+     * recovered nothing and a round that could recover the real question is
+     * still worth spending.
+     */
+    const asksAQuestion = (p: { clarificationNeeded: string | null }) =>
+      p.clarificationNeeded !== null && p.clarificationNeeded !== CLARIFICATION_WITHHELD
+
+    // (g) ONE repair round, before the response is returned, so the researcher
+    // still sees a single plan and still has to approve it. Nothing is applied
+    // here either way.
+    //
+    // The trigger is "more of the plan was dropped than survived": a rejection
+    // list is the model's patch coming back unusable, and rendering it as "left
+    // out of the change" hands the researcher something they cannot act on. A
+    // model that asked a question instead of acting is not failing, so it is
+    // left alone.
+    //
+    // A second failure is an answer, not another retry.
+    if (
+      !asksAQuestion(patch) &&
+      patch.rejected.length > patch.mutations.length &&
+      deadline - Date.now() > REPAIR_MIN_MS
+    ) {
+      try {
+        const retry = await ask(repairPrompt(prompt, patch.rejected))
+        const repaired = review(retry?.proposal ?? retry)
+        // Only adopt a repair that actually recovered something. A worse second
+        // reply must not throw away a partially good first one.
+        //
+        // A question counts as recovery when nothing at all survived the first
+        // round: the repair prompt asks for one in exactly that case, and a
+        // specific question the researcher can answer beats a list of refusals
+        // they cannot act on. Without this the model doing what it was told is
+        // the one reply the route throws away.
+        const recovered =
+          repaired.mutations.length > patch.mutations.length ||
+          (patch.mutations.length === 0 && asksAQuestion(repaired))
+        if (recovered) patch = repaired
+      } catch (err) {
+        // The first answer still stands; a failed repair is not a failed request.
+        console.error("[spec-author] repair round failed:", err)
+      }
+    }
+
+    return NextResponse.json(patch)
   } catch (error) {
     console.error("[spec-author] unexpected failure:", error)
     return NextResponse.json(

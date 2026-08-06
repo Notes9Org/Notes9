@@ -457,6 +457,32 @@ export const SignificanceBracket = z.object({
   /** Render as stars or the numeric p. */
   display: z.enum(["stars", "p-value", "both"]).default("stars"),
 })
+export type SignificanceBracket = z.infer<typeof SignificanceBracket>
+
+/**
+ * A bracket's identity is the comparison it spans.
+ *
+ * Brackets are generated from the post-hoc result on every recompute, so an
+ * index or a random id would point somewhere else the moment a group is added.
+ * The pair does not move, which is what makes a dragged offset survive a
+ * recompute and land back on the same comparison.
+ *
+ * ponytail: 30 characters a side keeps the id inside the schema's 64-character
+ * cap. Two groups identical in their first 30 characters would share a bracket;
+ * hash the pair instead if that ever turns up in real data.
+ */
+const PAIR_SEPARATOR = "\u001f"
+
+export function bracketId(fromGroup: string, toGroup: string): string {
+  return `${fromGroup.slice(0, 30)}${PAIR_SEPARATOR}${toGroup.slice(0, 30)}`
+}
+
+/** The comparison an id names, or null if it is not a pair id. */
+export function bracketPair(id: string): { fromGroup: string; toGroup: string } | null {
+  const parts = id.split(PAIR_SEPARATOR)
+  if (parts.length !== 2 || parts[0].length === 0 || parts[1].length === 0) return null
+  return { fromGroup: parts[0], toGroup: parts[1] }
+}
 
 export const Annotation = z.discriminatedUnion("kind", [
   z.object({

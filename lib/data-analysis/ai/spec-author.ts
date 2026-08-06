@@ -368,43 +368,105 @@ export function validateProposal(raw: unknown): ValidatedPatch {
  * rationale is free text, so this is the backstop: if the model writes "p =
  * 0.03" in its explanation, that value did not come from the engine and must
  * not be shown as though it did.
+ *
+ * The test is inverted on purpose. This used to be a list of known statistic
+ * phrasings, which can only ever catch what it enumerates: "p value of 0.03"
+ * walked straight through a rule written for "p-value". So the default is now
+ * deny. Every numeric literal in the prose counts as a fabricated statistic
+ * unless its shape is obviously not a measurement:
+ *
+ *   - digits welded to letters, which name a thing rather than measure one:
+ *     OD600, EC50, 384-well, plate_2, user-1
+ *   - a bare integer below 100: groups, replicates, wells, degrees of freedom
+ *   - a year
+ *
+ * Anything else is removed: every decimal fraction, every exponent, every
+ * percentage, every bare integer of 100 or more.
  */
+const NUMERIC_LITERAL = /\d+(?:,\d{3})*(?:\.\d+)?(?:[eE][+-]?\d+)?/g
+
 export function containsFabricatedStatistic(rationale: string): boolean {
-  const patterns = [
-    /\bp\s*[<>=]\s*0?\.\d+/i,
-    /\bp-?value\s+(of|is|was)\s+0?\.\d+/i,
-    /\b(r²|r2|R\^?2)\s*=\s*0?\.\d+/i,
-    /\bF\s*\(\s*\d+\s*,\s*\d+\s*\)\s*=\s*\d/i,
-    /\bt\s*\(\s*\d+(\.\d+)?\s*\)\s*=\s*-?\d/i,
-    /\bEC50\s*(=|of)\s*\d/i,
-    /\b(cohen'?s d|hedges'? g|eta[- ]squared|η²)\s*=\s*-?\d/i,
-  ]
-  return patterns.some((re) => re.test(rationale))
+  NUMERIC_LITERAL.lastIndex = 0
+  let match: RegExpExecArray | null
+  while ((match = NUMERIC_LITERAL.exec(rationale)) !== null) {
+    const literal = match[0]
+    const before = rationale.slice(0, match.index)
+    const after = rationale.slice(match.index + literal.length)
+
+    // A fraction, an exponent or a percentage is never a plain count.
+    if (/[.eE]/.test(literal) || after.startsWith("%")) return true
+
+    // Digits welded to letters are part of a name, not a value.
+    if (/[A-Za-z_]-?$/.test(before) || /^-?[A-Za-z_]/.test(after)) continue
+
+    const value = Number(literal.replace(/,/g, ""))
+    // ponytail: a bare integer below 100 is the known ceiling. An invented
+    // integer-valued statistic ("the difference is 12 nM", "mean of 45 versus
+    // 61") still slips through, and nothing structural separates it from the
+    // counts that must survive: "There are 3 groups, so ANOVA is appropriate."
+    // and "n = 8 wells" are the same shape. Telling them apart needs either a
+    // list of measurement words — which is the enumerated gate this one replaced,
+    // and it can only ever catch what it lists — or the engine result threaded in
+    // here so a number can be ATTRIBUTED rather than guessed at. The call sites
+    // have no result today; that is the upgrade path, not a cleverer regex.
+    if (value < 100) continue
+    if (value >= 1900 && value <= 2099) continue // a year
+
+    return true
+  }
+  return false
 }
 
 /**
  * Strip a fabricated statistic rather than dropping the whole rationale: the
  * assistant's reasoning is still useful, and the sanctioned numbers are one
  * panel away in the results.
+ *
+ * What is left SAYS that something was taken, in both cases. The rationale is
+ * the surface whose entire job is explaining a change, so a silent substitution
+ * here is its own defect: "Filtered to concentrations above 0.5 uM, where the
+ * assay is linear." is one sentence, it trips the gate on the threshold, and
+ * swapping it for a bare pointer to the results panel loses the explanation AND
+ * the fact that there ever was one. The researcher can only ask for it again if
+ * they are told it went missing.
  */
 export function sanitiseRationale(rationale: string): {
   text: string
   removed: boolean
 } {
   if (!containsFabricatedStatistic(rationale)) return { text: rationale, removed: false }
-  const text = rationale
+  const kept = rationale
     .split(/(?<=[.!?])\s+/)
     .filter((sentence) => !containsFabricatedStatistic(sentence))
     .join(" ")
     .trim()
   return {
     text:
-      text.length > 0
-        ? `${text} (Figures removed: see the results panel for the computed values.)`
-        : "See the results panel for the computed values.",
+      kept.length > 0
+        ? `${kept} (The rest of the explanation was withheld: it carried numbers that did not come from the engine. The computed values are in the results panel.)`
+        : "The assistant's explanation was withheld in full: it carried numbers that did not come from the engine. The computed values are in the results panel.",
     removed: true,
   }
 }
+
+/**
+ * What stands in for a clarifying question the gate will not show.
+ *
+ * The question is prose, so it is held to the same standard as the rationale;
+ * but it is a prompt the researcher has to ANSWER, so half of one is worse than
+ * none and it is replaced whole rather than stripped.
+ *
+ * Replaced, and never nulled. `clarificationNeeded` is not only a message, it is
+ * the P3 interlock: `canExecuteProposal` (workspace/spec-prompt.ts) withholds
+ * Execute for any non-null value. Nulling a question the gate refused therefore
+ * ENABLED Execute on the one proposal the model had itself flagged as ambiguous
+ * — withholding the question made the seam less safe than not withholding it,
+ * which is the wrong direction for a guard to fail in.
+ *
+ * Deliberately free of digits, so it survives its own gate.
+ */
+export const CLARIFICATION_WITHHELD =
+  "The assistant had a question before making this change, but its wording carried a number that did not come from the engine, so it is not shown. Ask again and it can put the question without one."
 
 /* ── The system prompt ─────────────────────────────────────────────────────*/
 

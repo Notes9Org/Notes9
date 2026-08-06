@@ -6,13 +6,15 @@ import { AnimatePresence, motion } from "framer-motion"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { DownloadSimple, CaretDown, Copy, FloppyDisk, Check, CircleNotch } from "@phosphor-icons/react/ssr"
-import type { ExportFormat } from "@/lib/data-analysis/chart-export"
+import { VECTOR_FORMATS, type ExportFormat } from "@/lib/data-analysis/chart-export"
 
 const FORMATS: { id: ExportFormat; label: string; hint: string }[] = [
   { id: "png", label: "PNG", hint: "Raster · transparent background" },
   { id: "jpeg", label: "JPG", hint: "Raster · smaller file, white background" },
   { id: "tiff", label: "TIFF", hint: "Raster · lossless, print-ready" },
   { id: "svg", label: "SVG", hint: "Vector · infinitely scalable" },
+  { id: "pdf", label: "PDF", hint: "Vector · live text, what journals ask for" },
+  { id: "eps", label: "EPS", hint: "Vector · legacy typesetting workflows" },
 ]
 const DPI_PRESETS = [150, 300, 600, 1200]
 
@@ -101,7 +103,7 @@ export function ExportMenu({
     if (open) setFname(cleanBase)
   }, [open, cleanBase])
 
-  const isVector = format === "svg"
+  const isVector = VECTOR_FORMATS.has(format)
   const ext = format === "jpeg" ? "jpg" : format
   const dpiNum = Number(dpiText)
   const dpiValid = Number.isFinite(dpiNum) && dpiNum >= DPI_MIN && dpiNum <= DPI_MAX
@@ -281,7 +283,9 @@ export function ExportMenu({
           ))}
         </div>
         {isVector ? (
-          <p className="mt-1.5 text-[11px] text-muted-foreground">SVG is a vector, resolution-independent.</p>
+          <p className="mt-1.5 text-[11px] text-muted-foreground">
+            {format.toUpperCase()} is a vector: resolution-independent, and the text stays text.
+          </p>
         ) : dpiValid ? (
           <p className="mt-1.5 text-[11px] text-muted-foreground">Physical DPI is embedded for print (journals check this).</p>
         ) : (

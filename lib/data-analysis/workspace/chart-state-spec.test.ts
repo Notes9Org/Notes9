@@ -1,8 +1,10 @@
+import { readFileSync } from "node:fs"
 import { describe, it, expect } from "vitest"
 import type { Table } from "@/lib/data-analysis/engine/resolver"
 import type { AnalysisSpec, FigureKind } from "@/lib/data-analysis/spec/analysis-spec"
 import {
   CHART_TYPE_TO_FIGURE_KIND,
+  PIPELINE_FOR_NEW_SHEET,
   FIGURE_KIND_TO_CHART_TYPE,
   chartStateFromSpec,
   specFromChartState,
@@ -395,5 +397,52 @@ describe("recomputeSignature", () => {
     const spec = specFromChartState(base, table)
     const otherKind = { ...spec, figure: { ...spec.figure, kind: "box" as const } }
     expect(recomputeSignature(otherKind)).toBe(recomputeSignature(spec))
+  })
+})
+
+/* ── A sheet swap and the §8.1 record (Blocker 3) ──────────────────────────*/
+
+/**
+ * The one door that says "these rows are gone".
+ *
+ * Both checks read the shell's source because a 3,800-line React component
+ * cannot be mounted here, and a decision that is written down but not applied is
+ * not a fix. Deliberately NOT tested here: that `row-5` names a different
+ * measurement in sheet A than in sheet B. It does, and it is the whole reason
+ * this door exists, but an assertion on it would pin positional row identity in
+ * place -- a later round that gives row ids a dataset would have to delete the
+ * test to ship the better fix, and a test whose premise is the defect is worse
+ * than no test. The reasoning lives on `PIPELINE_FOR_NEW_SHEET` instead.
+ */
+describe("replacing the sheet", () => {
+  const shellSource = () =>
+    readFileSync("components/data-analysis/data-analysis-workspace.tsx", "utf8")
+  // Prose about a decision is not the decision.
+  const withoutComments = (s: string) => s.replace(/^\s*\/\/.*$/gm, "")
+
+  it("drops every pipeline field the swap invalidates", () => {
+    const src = shellSource()
+    const start = src.indexOf("const loadSnapshot = useCallback(")
+    expect(start).toBeGreaterThan(-1)
+    const body = withoutComments(src.slice(start, src.indexOf("\n  }, [])", start)))
+    // Read off the constant, not a list copied beside it: a fourth pipeline
+    // field added to `PIPELINE_FOR_NEW_SHEET` fails here until the shell clears
+    // it too, which is the failure mode a hand-written list cannot catch.
+    for (const field of Object.keys(PIPELINE_FOR_NEW_SHEET)) {
+      expect(body).toContain(`PIPELINE_FOR_NEW_SHEET.${field}`)
+    }
+  })
+
+  it("is not what appending a statistics sheet does", () => {
+    // Same rows, one report tab added. Routing that through the swap door
+    // deleted the §8.1 exclusions that produced the very numbers it had just
+    // written, and recomputed the figure without them.
+    const src = shellSource()
+    const start = src.indexOf("const addStatsSheet = useCallback(")
+    expect(start).toBeGreaterThan(-1)
+    const body = withoutComments(src.slice(start, src.indexOf("\n  }, [", start)))
+    expect(body).not.toContain("loadSnapshot(")
+    // It must still show the new tab, so the remount is half the fix.
+    expect(body).toContain("setMountKey(")
   })
 })

@@ -26,7 +26,11 @@ import { ArrowClockwise, ChartLine } from "@phosphor-icons/react/ssr"
 import { cn } from "@/lib/utils"
 import type { AnalysisSpec } from "@/lib/data-analysis/spec/analysis-spec"
 import type { EngineResult } from "@/lib/data-analysis/engine/contract"
-import { buildFigure } from "@/lib/data-analysis/render/plotly-adapter"
+import {
+  buildFigure,
+  bracketMoveFromRelayout,
+  rowIdAtPoint,
+} from "@/lib/data-analysis/render/plotly-adapter"
 
 /** The slice of the Plotly API this component uses. */
 interface PlotlyApi {
@@ -46,8 +50,10 @@ interface PlotlyEventPoint {
   curveNumber?: number
 }
 
+type PlotlyEvent = { points?: PlotlyEventPoint[] } & Record<string, unknown>
+
 type PlotlyDiv = HTMLDivElement & {
-  on?: (event: string, handler: (e: { points?: PlotlyEventPoint[] }) => void) => void
+  on?: (event: string, handler: (e: PlotlyEvent) => void) => void
   removeAllListeners?: (event: string) => void
 }
 
@@ -78,6 +84,7 @@ export function FigureCanvas({
   result,
   onSelectRow,
   onExcludeRow,
+  onMoveBracket,
   className,
 }: {
   spec: AnalysisSpec
@@ -86,6 +93,8 @@ export function FigureCanvas({
   onSelectRow?: (rowId: string) => void
   /** A mark was right-clicked. Opens the reasoned-exclusion dialog (§8.1). */
   onExcludeRow?: (rowId: string) => void
+  /** A significance bracket was dragged, in spec units off its auto position. */
+  onMoveBracket?: (id: string, offsetY: number) => void
   className?: string
 }) {
   const host = useRef<PlotlyDiv | null>(null)
@@ -98,13 +107,10 @@ export function FigureCanvas({
   // time a parent passes a fresh callback identity.
   const selectRef = useRef(onSelectRow)
   const excludeRef = useRef(onExcludeRow)
+  const moveBracketRef = useRef(onMoveBracket)
   selectRef.current = onSelectRow
   excludeRef.current = onExcludeRow
-
-  const rowIdAt = (points?: PlotlyEventPoint[]): string | null => {
-    const raw = points?.[0]?.customdata
-    return typeof raw === "string" && raw.length > 0 ? raw : null
-  }
+  moveBracketRef.current = onMoveBracket
 
   useEffect(() => {
     let cancelled = false
@@ -133,19 +139,50 @@ export function FigureCanvas({
     const figure = buildFigure(spec, result, { fill: true })
     let disposed = false
 
+    // Plotly can drag its own shapes, so the bracket handle is the library's
+    // rather than a pointer state machine of ours; all that is left to do is
+    // read the resulting relayout back as a mutation.
+    //
+    // Which shapes get a handle has to be said per shape, not per figure.
+    // `config.edits.shapePosition` is one global switch that hangs a move
+    // handle on EVERY layout shape and ignores each shape's own `editable`
+    // while it is on (checked against the bundled plotly.js 3.7). Under it a
+    // volcano's threshold lines and the spec's own shape annotations sit past
+    // the bracket run, where there is no mutation to map a drag onto: they
+    // moved on screen and dispatched nothing, so the edit was discarded
+    // silently. Marking only the brackets `editable` is the honest version —
+    // the affordance appears on exactly the shapes that can record a move, and
+    // the rest do not move at all. `buildFigure` pushes the brackets first,
+    // which is the same leading index run `bracketMoveFromRelayout` reads a
+    // drag back through.
+    const bracketCount = figure.brackets?.length ?? 0
+    const shapes = figure.layout.shapes as Record<string, unknown>[] | undefined
+    const layout =
+      moveBracketRef.current && bracketCount > 0 && shapes
+        ? {
+            ...figure.layout,
+            shapes: shapes.map((s, i) => (i < bracketCount ? { ...s, editable: true } : s)),
+          }
+        : figure.layout
+
     plotly
-      .react(el, figure.data, figure.layout, CONFIG)
+      .react(el, figure.data, layout, CONFIG)
       .then(() => {
         if (disposed) return
         el.removeAllListeners?.("plotly_click")
         el.removeAllListeners?.("plotly_hover")
         el.removeAllListeners?.("plotly_unhover")
+        el.removeAllListeners?.("plotly_relayout")
         el.on?.("plotly_click", (e) => {
-          const id = rowIdAt(e.points)
+          const id = rowIdAtPoint(e.points, result)
           if (id) selectRef.current?.(id)
         })
-        el.on?.("plotly_hover", (e) => setHovered(rowIdAt(e.points)))
+        el.on?.("plotly_hover", (e) => setHovered(rowIdAtPoint(e.points, result)))
         el.on?.("plotly_unhover", () => setHovered(null))
+        el.on?.("plotly_relayout", (e) => {
+          const move = bracketMoveFromRelayout(e, figure.brackets)
+          if (move) moveBracketRef.current?.(move.id, move.offsetY)
+        })
       })
       .catch(() => {
         if (!disposed) setFailed(true)
@@ -222,9 +259,10 @@ export function FigureCanvas({
           Preparing the figure
         </div>
       )}
-      {hovered && onExcludeRow && (
-        <p className="pointer-events-none absolute bottom-1 right-2 text-[11px] text-muted-foreground/70">
-          Right-click this point to exclude it
+      {hovered && (
+        <p className="pointer-events-none absolute bottom-1 right-2 max-w-[60%] truncate text-[11px] text-muted-foreground/70">
+          Row {hovered}
+          {onExcludeRow ? " · right-click to exclude it" : ""}
         </p>
       )}
     </div>

@@ -1,4 +1,4 @@
-import type { AnalysisSpec } from "@/lib/data-analysis/spec/analysis-spec"
+import { bracketId, type AnalysisSpec } from "@/lib/data-analysis/spec/analysis-spec"
 import type { EngineResult } from "@/lib/data-analysis/engine/contract"
 import { PALETTE_DEFINITIONS, paletteColours, toColorscale } from "./palettes"
 import { rocCurve } from "@/lib/data-analysis/chart-transforms"
@@ -99,6 +99,14 @@ export const ERROR_BAR_OPTIONS: {
 export interface PlotlyFigure {
   data: Record<string, unknown>[]
   layout: Record<string, unknown>
+  /**
+   * Identity for each significance bracket in `layout.shapes`, index-aligned
+   * with the leading run of shapes (the brackets are pushed first). Present so
+   * a dragged bracket can be named without the chart component reverse-
+   * engineering it from coordinates. `baseY` is the auto-placed position an
+   * offset is measured from; `y` is where it is actually drawn.
+   */
+  brackets?: { id: string; baseY: number; y: number }[]
 }
 
 /* ── Helpers ───────────────────────────────────────────────────────────────*/
@@ -1229,8 +1237,15 @@ function threeD(spec: AnalysisSpec, result: EngineResult, surface: boolean) {
 function significanceLayer(spec: AnalysisSpec, result: EngineResult) {
   const shapes: Record<string, unknown>[] = []
   const annotations: Record<string, unknown>[] = []
+  /**
+   * One entry per bracket shape, in the order the shapes are pushed, so a
+   * pointer drag reported as `shapes[2].y0` can be turned back into "this
+   * comparison, moved this far". `baseY` is where the auto-placement put the
+   * bracket, which is what the stored offset is measured from.
+   */
+  const brackets: { id: string; baseY: number; y: number }[] = []
   const pairwise = result.test?.pairwise ?? []
-  if (pairwise.length === 0) return { shapes, annotations }
+  if (pairwise.length === 0) return { shapes, annotations, brackets }
 
   const groups = groupRows(spec, result)
   // Bar charts sit on a numbered axis, so a bracket addressed by group name
@@ -1246,17 +1261,22 @@ function significanceLayer(spec: AnalysisSpec, result: EngineResult) {
     ...[...groups.values()].flatMap((g) => g.y),
     ...(result.test?.pairwise.map(() => 0) ?? [0])
   )
-  if (!Number.isFinite(maxY)) return { shapes, annotations }
+  if (!Number.isFinite(maxY)) return { shapes, annotations, brackets }
 
   const step = maxY * 0.08
   let level = 0
 
   for (const pair of pairwise) {
     if (!pair.significant) continue
+    const pairId = bracketId(pair.groupA, pair.groupB)
+    // Matched by the pair either way: a hand-authored bracket names its groups,
+    // a dragged one carries the pair in its id. Both are the same comparison.
     const custom = spec.figure.brackets.find(
-      (b) => b.fromGroup === pair.groupA && b.toGroup === pair.groupB
+      (b) => b.id === pairId || (b.fromGroup === pair.groupA && b.toGroup === pair.groupB)
     )
-    const y = maxY + step * (level + 1) + (custom?.offsetY ?? 0)
+    const baseY = maxY + step * (level + 1)
+    const y = baseY + (custom?.offsetY ?? 0)
+    brackets.push({ id: custom?.id ?? pairId, baseY, y })
     level += 1
 
     shapes.push({
@@ -1291,7 +1311,7 @@ function significanceLayer(spec: AnalysisSpec, result: EngineResult) {
       xshift: 0,
     })
   }
-  return { shapes, annotations }
+  return { shapes, annotations, brackets }
 }
 
 /* ── Entry point ───────────────────────────────────────────────────────────*/
@@ -1385,7 +1405,7 @@ export function buildFigure(
       break
   }
 
-  const { shapes, annotations } = significanceLayer(spec, result)
+  const { shapes, annotations, brackets } = significanceLayer(spec, result)
 
   // A volcano's cut-offs are drawn, because a reader cannot otherwise tell
   // which points the colouring called hits.
@@ -1507,5 +1527,53 @@ export function buildFigure(
     layout.yaxis2 = buildAxis(figure.y2, figure, { overlaying: "y", side: "right" })
   }
 
-  return { data, layout }
+  return { data, layout, brackets }
+}
+
+/* ── Reading pointer events back ───────────────────────────────────────────*/
+
+/**
+ * The source row a clicked or hovered mark belongs to, or null.
+ *
+ * Every per-row mark carries its row id in `customdata` (see the file header),
+ * but the SUMMARY traces carry the group name there instead: a bar's customdata
+ * is its category, because that is what the bar is. Checking the id against the
+ * rows the engine actually emitted is what keeps a bar click from opening an
+ * exclusion dialog for a row called "Vehicle".
+ */
+export function rowIdAtPoint(
+  points: { customdata?: unknown }[] | undefined | null,
+  result: EngineResult | null
+): string | null {
+  const raw = points?.[0]?.customdata
+  if (typeof raw !== "string" || raw.length === 0) return null
+  return result?.plotData.some((row) => row.rowId === raw) ? raw : null
+}
+
+/**
+ * A dragged significance bracket, as the mutation that records the drag.
+ *
+ * Plotly reports a shape drag as a relayout patch keyed by the shape's index
+ * (`shapes[2].y0`), which is meaningless on its own; `brackets` from
+ * `buildFigure` is what turns the index back into a comparison. The offset is
+ * measured from the auto-placed position rather than from the previous offset,
+ * so repeated drags do not accumulate rounding.
+ */
+export function bracketMoveFromRelayout(
+  patch: Record<string, unknown> | null | undefined,
+  brackets: { id: string; baseY: number; y: number }[] | undefined
+): { id: string; offsetY: number } | null {
+  if (!patch || !brackets || brackets.length === 0) return null
+  for (const [key, value] of Object.entries(patch)) {
+    const match = /^shapes\[(\d+)\]\.y0$/.exec(key)
+    if (!match) continue
+    const bracket = brackets[Number(match[1])]
+    if (!bracket || typeof value !== "number" || !Number.isFinite(value)) continue
+    // A purely sideways drag reports y0 unchanged. Recording that as an edit
+    // would put an undo step and a provenance line behind a figure that did not
+    // move, which is worse than doing nothing.
+    if (value === bracket.y) return null
+    return { id: bracket.id, offsetY: value - bracket.baseY }
+  }
+  return null
 }

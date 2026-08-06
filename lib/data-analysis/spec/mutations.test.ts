@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { parseSpec, type AnalysisSpec } from "./analysis-spec"
+import { bracketId, parseSpec, type AnalysisSpec } from "./analysis-spec"
 import {
   applyAiPatch,
   applyMutation,
@@ -62,20 +62,44 @@ describe("applyMutation is pure", () => {
     expect(spec.figure.series[0].pointSize).toBe(10)
   })
 
-  it("replaces rather than duplicates when a row is excluded twice", () => {
-    let spec = baseSpec()
-    const mk = (reason: "contamination" | "instrument-error") => ({
+  // This replaces an earlier test that asserted the overwrite ("replaces rather
+  // than duplicates when a row is excluded twice") as correct behaviour. It was
+  // not: §8.1 keeps an exclusion BECAUSE it names who left the point out, when,
+  // and why, and replacing the record in place destroyed all three with nothing
+  // in history naming the loss. A test whose premise is the defect is worse than
+  // no test, so it is gone.
+  it("refuses to overwrite the governance record when a row is excluded twice", () => {
+    const first = {
       rowId: "A7",
-      reasonKind: reason,
-      reasonText: null,
+      reasonKind: "contamination" as const,
+      reasonText: "plate edge, visible film",
       method: null,
-      excludedBy: "user-1",
+      excludedBy: "aisha@lab.org",
       excludedAt: "2026-07-30T10:00:00Z",
-    })
-    spec = applyMutation(spec, { kind: "data.excludeRow", exclusion: mk("contamination") })
-    spec = applyMutation(spec, { kind: "data.excludeRow", exclusion: mk("instrument-error") })
-    expect(spec.exclusions).toHaveLength(1)
-    expect(spec.exclusions[0].reasonKind).toBe("instrument-error")
+    }
+    const second = {
+      rowId: "A7",
+      reasonKind: "instrument-error" as const,
+      reasonText: "reader lamp drift",
+      method: null,
+      excludedBy: "someone-else@lab.org",
+      excludedAt: "2026-08-04T16:00:00Z",
+    }
+    const excluded = applyMutation(baseSpec(), { kind: "data.excludeRow", exclusion: first })
+    const again = applyMutation(excluded, { kind: "data.excludeRow", exclusion: second })
+
+    // Every field of the original survives, not merely its count.
+    expect(again.exclusions).toHaveLength(1)
+    expect(again.exclusions[0]).toEqual(first)
+    // Identical spec, so the commit path treats it as "nothing happened" rather
+    // than writing a history entry for an edit that did not land.
+    expect(again).toBe(excluded)
+
+    // Refusing is not a dead end: restoring first, then excluding again, records
+    // the new reason AND leaves both events in history.
+    const restored = applyMutation(again, { kind: "data.restoreRow", rowId: "A7" })
+    const reExcluded = applyMutation(restored, { kind: "data.excludeRow", exclusion: second })
+    expect(reExcluded.exclusions).toEqual([second])
   })
 
   it("marks a dragged bracket as no longer engine-derived", () => {
@@ -93,6 +117,43 @@ describe("applyMutation is pure", () => {
     // A recompute may reposition derived brackets; this one must stay put.
     expect(spec.figure.brackets[0].derived).toBe(false)
     expect(spec.figure.brackets[0].offsetY).toBe(14)
+  })
+
+  it("gives a derived bracket a row the first time it is dragged", () => {
+    // The significant pairs are recomputed on every result, so the spec holds no
+    // bracket until someone moves one. Without the upsert the drag would be a
+    // no-op against an empty array and the offset would be lost silently.
+    const base = baseSpec()
+    expect(base.figure.brackets).toHaveLength(0)
+    const moved = applyMutation(base, {
+      kind: "figure.moveBracket",
+      id: bracketId("Control", "Treated"),
+      offsetY: -8,
+    })
+    expect(moved.figure.brackets).toEqual([
+      {
+        id: bracketId("Control", "Treated"),
+        fromGroup: "Control",
+        toGroup: "Treated",
+        offsetY: -8,
+        derived: false,
+        display: "stars",
+      },
+    ])
+    // Dragging it again updates the row rather than adding a second one.
+    const again = applyMutation(moved, {
+      kind: "figure.moveBracket",
+      id: bracketId("Control", "Treated"),
+      offsetY: 3,
+    })
+    expect(again.figure.brackets).toHaveLength(1)
+    expect(again.figure.brackets[0].offsetY).toBe(3)
+
+    // An id that is not a pair id (a hand-authored "b1") has no groups to
+    // recover, so it stays a no-op rather than inventing a comparison.
+    expect(
+      applyMutation(base, { kind: "figure.moveBracket", id: "b1", offsetY: 3 }).figure.brackets
+    ).toHaveLength(0)
   })
 })
 

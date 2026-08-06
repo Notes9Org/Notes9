@@ -1,21 +1,24 @@
 "use client"
 
-import { X } from "@phosphor-icons/react/ssr"
+import { Plus, X } from "@phosphor-icons/react/ssr"
 import type { Exclusion, RowFilter, Transform } from "@/lib/data-analysis/spec/analysis-spec"
 import {
   exclusionChipLabel,
   filterChipLabel,
   transformChipLabel,
 } from "@/lib/data-analysis/workspace/pipeline-chips"
+import type { PrepOffer } from "@/lib/data-analysis/workspace/prep-offers"
 
 /**
  * P5, the pipeline bar.
  *
  * A row of chips for what is currently filtered, transformed away or
  * excluded, the AI-authored pipeline (P3) surfaced where a researcher can see
- * it and undo it, one chip at a time. Show-and-remove only: there is no
- * add-a-filter form here, because adding is what the natural-language prompt
- * is for.
+ * it and undo it, one chip at a time. Alongside them, the preparation the
+ * engine's own measurements warrant but nobody has applied yet: an offer chip
+ * quotes the number that motivated it, so the suggestion is auditable rather
+ * than a guess, and accepting one dispatches the same ordinary mutation the
+ * assistant would have proposed.
  *
  * Props in, callbacks out, no internal state. Every removal is the caller's
  * job to route through the existing mutation appliers
@@ -28,9 +31,12 @@ export interface PipelineBarProps {
   filters: RowFilter[]
   transforms: Transform[]
   exclusions: Exclusion[]
+  /** Measured, not yet applied. Empty when the numbers warrant nothing. */
+  offers?: PrepOffer[]
   onSetFilters: (filters: RowFilter[]) => void
   onRemoveTransform: (index: number) => void
   onRestoreRow: (rowId: string) => void
+  onAcceptOffer?: (offer: PrepOffer) => void
 }
 
 const CHIP_CLASS =
@@ -39,17 +45,31 @@ const CHIP_CLASS =
 const REMOVE_CLASS =
   "flex size-4 shrink-0 items-center justify-center rounded-full text-muted-foreground/70 outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-[var(--n9-accent,#965034)]/40"
 
+/**
+ * Dashed, because an offer is not part of the pipeline until it is taken. The
+ * solid chips above describe what the data HAS had done to it; these describe
+ * what it has not.
+ */
+const OFFER_CLASS =
+  "inline-flex items-center gap-1 rounded-full border border-dashed border-border bg-transparent py-1 pl-2 pr-2.5 text-left text-[12px] text-muted-foreground outline-none transition-colors hover:border-border hover:bg-muted/50 hover:text-foreground focus-visible:ring-2 focus-visible:ring-[var(--n9-accent,#965034)]/40"
+
 export function PipelineBar({
   filters,
   transforms,
   exclusions,
+  offers = [],
   onSetFilters,
   onRemoveTransform,
   onRestoreRow,
+  onAcceptOffer,
 }: PipelineBarProps) {
   // Visually unchanged until the AI (or a manual edit) puts something in the
-  // pipeline, an empty bar would just be a strip of dead space.
-  if (filters.length === 0 && transforms.length === 0 && exclusions.length === 0) return null
+  // pipeline, or the profile finds something worth offering; an empty bar would
+  // just be a strip of dead space.
+  const showOffers = offers.length > 0 && onAcceptOffer !== undefined
+  if (filters.length === 0 && transforms.length === 0 && exclusions.length === 0 && !showOffers) {
+    return null
+  }
 
   return (
     <div
@@ -104,6 +124,20 @@ export function PipelineBar({
           </span>
         )
       })}
+      {showOffers &&
+        offers.map((offer) => (
+          <button
+            key={offer.id}
+            type="button"
+            className={OFFER_CLASS}
+            title={offer.detail}
+            aria-label={`Apply: ${offer.label}`}
+            onClick={() => onAcceptOffer?.(offer)}
+          >
+            <Plus className="size-3 shrink-0" weight="bold" aria-hidden />
+            {offer.label}
+          </button>
+        ))}
     </div>
   )
 }

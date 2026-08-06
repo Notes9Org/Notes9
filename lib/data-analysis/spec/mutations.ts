@@ -8,6 +8,7 @@ import type {
   TestKind,
   Transform,
 } from "./analysis-spec"
+import { bracketPair } from "./analysis-spec"
 
 /**
  * L6, the edit layer.
@@ -292,18 +293,32 @@ export function applyMutation(spec: AnalysisSpec, m: SpecMutation): AnalysisSpec
         ...spec,
         figure: { ...figure, annotations: figure.annotations.filter((a) => a.id !== m.id) },
       }
-    case "figure.moveBracket":
+    case "figure.moveBracket": {
+      // A bracket the engine derived has no row in the spec until someone moves
+      // it: the significant pairs are recomputed on every result, so storing all
+      // of them would churn the spec for no gain. Dragging one is the moment it
+      // becomes the researcher's own, and the id names the pair it spans, so the
+      // row can be written here rather than needing a second mutation to create
+      // it first.
+      const pair = figure.brackets.some((b) => b.id === m.id) ? null : bracketPair(m.id)
       return {
         ...spec,
         figure: {
           ...figure,
-          brackets: figure.brackets.map((b) =>
-            // A dragged bracket stops being engine-derived, so a recompute will
-            // reposition its siblings but leave this one where the user put it.
-            b.id === m.id ? { ...b, offsetY: m.offsetY, derived: false } : b
-          ),
+          brackets: pair
+            ? [
+                ...figure.brackets,
+                { id: m.id, ...pair, offsetY: m.offsetY, derived: false, display: "stars" as const },
+              ]
+            : figure.brackets.map((b) =>
+                // A dragged bracket stops being engine-derived, so a recompute
+                // will reposition its siblings but leave this one where the user
+                // put it.
+                b.id === m.id ? { ...b, offsetY: m.offsetY, derived: false } : b
+              ),
         },
       }
+    }
     case "figure.setShowExcluded":
       return { ...spec, figure: { ...figure, showExcludedPoints: m.value } }
     case "axis.set": {
@@ -357,9 +372,24 @@ export function applyMutation(spec: AnalysisSpec, m: SpecMutation): AnalysisSpec
     case "data.setFilters":
       return { ...spec, filters: m.filters }
     case "data.excludeRow": {
-      // Re-excluding a row replaces the reason rather than duplicating it.
-      const others = spec.exclusions.filter((e) => e.rowId !== m.exclusion.rowId)
-      return { ...spec, exclusions: [...others, m.exclusion] }
+      // §8.1 records are append-only. An exclusion names a person, a reason, a
+      // method and a time, and the spec holds the only copy; replacing it in
+      // place destroyed all four silently, with no undo entry naming the loss.
+      //
+      // So a row that is already excluded is REFUSED, not overwritten. Refused
+      // rather than superseded because a supersession needs a second record to
+      // point at, and the trail that already exists says the same thing: restore
+      // the row, then exclude it again, and history holds both events with both
+      // reasons and both authors.
+      //
+      // Refusing here covers every caller -- the sheet's card, the figure's
+      // right-click and an assistant patch alike -- which a guard at one call
+      // site cannot. Returning the spec unchanged is also what the commit path
+      // reads as "nothing happened" (`splitApprovedMutations` drops mutations
+      // that leave the spec identical), so nothing is written and no history
+      // entry claims an edit that did not occur.
+      if (spec.exclusions.some((e) => e.rowId === m.exclusion.rowId)) return spec
+      return { ...spec, exclusions: [...spec.exclusions, m.exclusion] }
     }
     case "data.restoreRow":
       return { ...spec, exclusions: spec.exclusions.filter((e) => e.rowId !== m.rowId) }
@@ -368,6 +398,14 @@ export function applyMutation(spec: AnalysisSpec, m: SpecMutation): AnalysisSpec
       return { ...spec, design: { ...spec.design, ...m.patch } }
     case "roles.set":
       return { ...spec, roles: m.roles }
+    default:
+      // Unreachable for a `SpecMutation`, and the point is what happens when the
+      // value is not one: a `.n9a` or a stored overlay can carry a kind this
+      // build does not have. Falling off the switch returned `undefined`, the
+      // next entry in `applyOverlay`'s reduce read `undefined.figure` and threw,
+      // and the workspace lost the whole figure. An unknown edit is a lost edit,
+      // never a destroyed spec.
+      return spec
   }
 }
 

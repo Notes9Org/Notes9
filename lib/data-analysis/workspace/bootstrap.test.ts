@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest"
+import { readFileSync } from "node:fs"
 import type { Table } from "@/lib/data-analysis/engine/resolver"
-import { hashTable, pipelineFromTable, specFromTable, tableFromGrid } from "./bootstrap"
+import { detectHeader, hashTable, pipelineFromTable, specFromTable, tableFromGrid } from "./bootstrap"
 
 const meta = { fileName: "plate.xlsx", sheet: "Sheet1", versionHash: "sha256:a" }
 
@@ -134,6 +135,94 @@ describe("reading a grid", () => {
   })
 })
 
+describe("reading a sheet a bench actually produced", () => {
+  // Title, merged group labels, sub-headers, a row of units, and a footnote
+  // under a blank line. Reading row 0 as the header turns every one of these
+  // into a wrong column or a wrong data point.
+  const plate = [
+    ["Plate 3 viability"],
+    ["", "", "Treated", "", "Control", ""],
+    ["Subject", "Day", "Mean", "SD", "Mean", "SD"],
+    ["", "", "%", "%", "%", "%"],
+    ["S1", 1, 95, 2, 88, 3],
+    ["S2", 1, 96, 1, 90, 2],
+    [],
+    ["n = 8"],
+  ]
+
+  it("carries the merged group label across its span and folds in the unit row", () => {
+    const plan = detectHeader(plate)
+    expect(plan.startRow).toBe(1)
+    expect(plan.rowCount).toBe(2)
+    expect(plan.unitRow).toBe(3)
+    expect(plan.columns).toEqual([
+      "Subject",
+      "Day",
+      "Treated Mean (%)",
+      "Treated SD (%)",
+      "Control Mean (%)",
+      "Control SD (%)",
+    ])
+    expect(plan.units).toEqual([null, null, "%", "%", "%", "%"])
+  })
+
+  it("keeps the data rows and leaves the footnote out", () => {
+    const table = tableFromGrid(plate)
+    expect(table.rows).toHaveLength(2)
+    // The sheet's own row numbers still identify the points.
+    expect(table.rows.map((r) => r.rowId)).toEqual(["row-5", "row-6"])
+    expect(table.rows[0].values["Treated Mean (%)"]).toBe(95)
+  })
+
+  it("carries the unit through to the figure's y axis", () => {
+    // The unit is folded into the column name precisely so the semantic layer
+    // reads it with no further wiring.
+    const spec = specFromTable(tableFromGrid(plate), meta)
+    expect(spec.roles.find((r) => r.column === "Treated Mean (%)")?.unit).toBe("%")
+  })
+
+  it("lets the user override a header it read wrong", () => {
+    const plan = detectHeader(plate, { startRow: 2, rowCount: 1, unitRow: false })
+    expect(plan.columns).toEqual(["Subject", "Day", "Mean", "SD", "Mean", "SD"])
+    expect(plan.unitRow).toBeNull()
+    expect(plan.dataStart).toBe(3)
+  })
+
+  it("does not mistake a second header row for units", () => {
+    // "Mean" and "SD" annotate a column but are not its unit, and parseUnit
+    // already knows that; a second unit parser would have to learn it again.
+    const plan = detectHeader([
+      ["Dose", "Signal"],
+      ["Mean", "SD"],
+      [1, 2],
+      [3, 4],
+    ])
+    expect(plan.unitRow).toBeNull()
+    expect(plan.columns).toEqual(["Dose", "Signal"])
+  })
+
+  it("does not eat the first data row of a sheet with no numbers in it", () => {
+    // Detection declines to guess here rather than risk swallowing real data.
+    const table = tableFromGrid([
+      ["Group", "Outcome"],
+      ["Ctrl", "Yes"],
+      ["Drug", "No"],
+    ])
+    expect(table.columns).toEqual(["Group", "Outcome"])
+    expect(table.rows).toHaveLength(2)
+  })
+
+  it("keeps a trailing single-value row that no blank line separates", () => {
+    // A footnote is fenced off by a blank row; a last reading is not.
+    const table = tableFromGrid([
+      ["Well", "OD"],
+      ["A1", 0.5],
+      ["A2", null],
+    ])
+    expect(table.rows).toHaveLength(2)
+  })
+})
+
 describe("data version hash", () => {
   it("is stable for identical data", () => {
     expect(hashTable(unpaired)).toBe(hashTable(unpaired))
@@ -154,5 +243,31 @@ describe("data version hash", () => {
     expect(hashTable({ ...unpaired, columns: ["Well", "Group", "Viability (%)"] })).not.toBe(
       hashTable(unpaired)
     )
+  })
+})
+
+describe("the separator byte hashTable joins column names with", () => {
+  it("is written as an escape, so the source stays a text file", () => {
+    // A raw NUL byte in the source makes git treat bootstrap.ts as binary and
+    // emit no diff for it at all, which is how a 10 KB change to this file
+    // shipped unreviewable. The escape is the same code unit, so the hash is
+    // unchanged; see the pinned value below.
+    const src = readFileSync("lib/data-analysis/workspace/bootstrap.ts")
+    expect(src.includes(0)).toBe(false)
+  })
+
+  it("is still NUL and not a space", () => {
+    // A space would let adjacent names run together, so a rename that only
+    // moves the boundary would hash the same and go undetected.
+    const rows: Table["rows"] = [{ rowId: "r", values: { x: 1 } }]
+    expect(hashTable({ columns: ["A B", "C"], rows })).not.toBe(
+      hashTable({ columns: ["A", "B C"], rows })
+    )
+  })
+
+  it("hashes a fixed table to the value stored analyses were saved with", () => {
+    // This is dataset.versionHash. Any change here reports drift on, or
+    // detaches, every analysis already in the database.
+    expect(hashTable(unpaired)).toBe("sha256:9cee431b12aaa0b7")
   })
 })

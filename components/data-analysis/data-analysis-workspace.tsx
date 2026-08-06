@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import * as XLSX from "xlsx"
 import { AnimatePresence, motion } from "framer-motion"
 import {
@@ -45,6 +45,10 @@ import {
   Plus,
   Check,
   Sparkle,
+  ArrowUUpLeft,
+  ArrowUUpRight,
+  ClockCounterClockwise,
+  Prohibit,
 } from "@phosphor-icons/react/ssr"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -83,6 +87,21 @@ import { Dock, DockTab, useDockLayout } from "@/components/data-analysis/workspa
 import { LayoutCanvas } from "@/components/data-analysis/workspace/layout-canvas"
 import { PipelineTabs } from "@/components/data-analysis/workspace/pipeline-tabs"
 import { ResultsCard } from "@/components/data-analysis/workspace/results-card"
+import { ProvenancePanel } from "@/components/data-analysis/workspace/provenance-panel"
+import { ExclusionDialog, type ExclusionPreview } from "@/components/data-analysis/workspace/exclusion-dialog"
+import { useAuthUser } from "@/components/auth/auth-provider"
+import { Exclusion, parseSpec } from "@/lib/data-analysis/spec/analysis-spec"
+import {
+  emptyGate,
+  engineDisplayAfter,
+  gateForReopen,
+  gateRun,
+  gateStep,
+  railFromConfig,
+  readAnalysisBundle,
+  reopenFromSpec,
+  type RecomputeGate,
+} from "@/lib/data-analysis/workspace/workspace-guards"
 import {
   RESULTS_SHEET_NAME,
   buildResultsSheet,
@@ -95,16 +114,51 @@ import {
   type FigureLayout,
 } from "@/lib/data-analysis/render/figure-layout"
 import {
+  PIPELINE_FOR_NEW_SHEET,
   specFromChartState,
   tableFromChartRows,
   recomputeSignature,
   type ChartState,
 } from "@/lib/data-analysis/workspace/chart-state-spec"
+import { ReopenBanner } from "@/components/data-analysis/workspace/reopen-banner"
+import {
+  RevisionHistoryDialog,
+  SaveAnalysisDialog,
+} from "@/components/data-analysis/workspace/analysis-library"
+import {
+  buildPortableBundle,
+  createAnalysis,
+  getAnalysis,
+  listRecentAnalyses,
+  listRevisions,
+  openRevision,
+  type AnalysisRevision,
+  type ReopenVerdict,
+  type SavedAnalysis,
+} from "@/lib/data-analysis/saved-analysis"
+import {
+  autosaveDraft,
+  freezeOnce,
+  readDataSnapshot,
+  readWorkspaceConfig,
+  rerunRevision,
+  saveRevision,
+} from "@/lib/data-analysis/workspace/saved-analysis-session"
 import { requestSpecPatch, type SpecPatchOutcome } from "@/lib/data-analysis/ai/spec-author-client"
-import { applyAiPatch, applyMutation, describeMutation, initHistory, type SpecMutation } from "@/lib/data-analysis/spec/mutations"
-import type { AnalysisSpec } from "@/lib/data-analysis/spec/analysis-spec"
-import { aiNotice, canExecuteProposal, railEditsFromSpec } from "@/lib/data-analysis/workspace/spec-prompt"
+import { applyAiPatch, applyMutation, describeMutation, dispatchMutation, initHistory, type AppliedMutation, type SpecMutation } from "@/lib/data-analysis/spec/mutations"
+import { aiNotice, applyOverlay, canExecuteProposal, splitApprovedMutations } from "@/lib/data-analysis/workspace/spec-prompt"
+import {
+  canRedo as canRedoOf,
+  canUndo as canUndoOf,
+  commit as commitEdit,
+  emptyHistory,
+  historyMutations,
+  redo as redoEdit,
+  undo as undoEdit,
+  type ConfigHistory,
+} from "@/lib/data-analysis/workspace/edit-history"
 import { PipelineBar } from "@/components/data-analysis/pipeline-bar"
+import { prepOffers, profilePreparation } from "@/lib/data-analysis/workspace/prep-offers"
 import { computeAnalysis } from "@/lib/data-analysis/engine/client"
 import type { EngineResult } from "@/lib/data-analysis/engine/contract"
 import type { Table as SpecTable } from "@/lib/data-analysis/engine/resolver"
@@ -117,6 +171,9 @@ import {
   downloadSnapshotAsXlsxFile,
   type UniverWorkbookSnapshot,
 } from "@/lib/spreadsheet-workbook"
+import { hashTable } from "@/lib/data-analysis/workspace/bootstrap"
+import { snapshotToTable } from "@/lib/data-analysis/workspace/snapshot-table"
+import { ATTACHMENT_MAX_FILE_SIZE } from "@/lib/attachment-types"
 
 function buildSnapshotFromAoa(aoa: (string | number)[][], sheetName: string, fileName: string): UniverWorkbookSnapshot {
   const ws = XLSX.utils.aoa_to_sheet(aoa)
@@ -128,26 +185,23 @@ function buildSnapshotFromAoa(aoa: (string | number)[][], sheetName: string, fil
   return buildSpreadsheetWorkbookSnapshot(fileName, wb)
 }
 
-function snapshotToTable(snapshot: UniverWorkbookSnapshot): Table {
-  try {
-    const wb = snapshotToXlsxWorkbook(snapshot)
-    const ws = wb.Sheets[wb.SheetNames[0]]
-    if (!ws) return { columns: [], rows: [] }
-    const aoa = XLSX.utils.sheet_to_json<(string | number)[]>(ws, { header: 1, blankrows: false })
-    const header = (aoa[0] ?? []).map((c) => String(c ?? "").trim()).filter(Boolean)
-    const rows = aoa.slice(1).map((r) => {
-      const o: Record<string, number | string> = {}
-      header.forEach((h, i) => {
-        const v = r[i]
-        o[h] = typeof v === "number" ? v : v == null || v === "" ? "" : isFinite(Number(v)) ? Number(v) : String(v)
-      })
-      return o
-    })
-    return { columns: header, rows }
-  } catch {
-    return { columns: [], rows: [] }
-  }
+/* `snapshotToTable` now lives in lib/data-analysis/workspace/snapshot-table.ts.
+   Its output is what stored specs name and what `dataset.versionHash` is taken
+   over, so it sits where a test can pin it. */
+
+/** Download any JSON payload as a file. Shared by the two export paths. */
+function downloadJson(payload: unknown, fileName: string) {
+  const blob = new Blob([JSON.stringify(payload)], { type: "application/json" })
+  const a = document.createElement("a")
+  a.href = URL.createObjectURL(blob)
+  a.download = fileName
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000)
 }
+
+const slugify = (s: string) => (s || "analysis").replace(/\s+/g, "-").toLowerCase()
 
 /** Error-bar representation for aggregated replicates. */
 type ErrorMode = "none" | "sd" | "sem" | "ci90" | "ci95" | "ci99" | "range" | "iqr" | "mad"
@@ -691,6 +745,20 @@ export function DataAnalysisWorkspace({
   const [dataFilters, setDataFilters] = useState<ChartState["filters"]>([])
   const [dataTransforms, setDataTransforms] = useState<ChartState["transforms"]>([])
   const [dataExclusions, setDataExclusions] = useState<ChartState["exclusions"]>([])
+  /**
+   * The approved AI edits the rail has no control for.
+   *
+   * The two blocks above are this problem solved one field at a time: a patch
+   * that lands in the spec and has nowhere to live on the rail is erased by the
+   * next `derivedSpec` recompute. Annotations, brackets, the second axis,
+   * show-excluded, the missing-value policy, the nonlinear fit, the design and
+   * the roles are the remainder, and there is no control to give them. So they
+   * are held as the typed mutations the user approved and replayed at the end
+   * of every derivation instead (`applyOverlay`). Origin "ai" travels with each
+   * one, which is what lets a provenance layer colour them apart from a hand
+   * edit.
+   */
+  const [aiOverlay, setAiOverlay] = useState<AppliedMutation[]>([])
   const setStyle = useCallback((series: string, patch: Partial<SeriesStyle>) => {
     setSeriesStyles((prev) => ({ ...prev, [series]: { ...prev[series], ...patch } }))
   }, [])
@@ -730,7 +798,7 @@ export function DataAnalysisWorkspace({
    */
   const derivedSpec = useMemo(() => {
     try {
-      return specFromChartState(
+      const fromRail = specFromChartState(
         {
           chartType, xKey, yKeys, zKey, sizeKey, title, subtitle, xLabel, xUnit, yLabel, yUnit,
           yLog, xLog, showGrid, showLegend, legendPos, paletteName, errorMode, fontFamily,
@@ -742,6 +810,16 @@ export function DataAnalysisWorkspace({
         specTable,
         { fileName: sheetFileName }
       )
+      // The last step of the derivation, not a step after it: the approved AI
+      // edits with no control behind them are re-stated here on every render,
+      // which is the only reason they are still in the spec on the next one.
+      if (aiOverlay.length === 0) return fromRail
+      // Re-parsed because the overlay can come from a file. `applyMutation`'s
+      // switch has no default, so a kind it does not know returns `undefined`
+      // and the reduce hands the figure a spec-shaped hole. Degrading to the
+      // rail's own spec is the honest failure.
+      const overlaid = parseSpec(applyOverlay(fromRail, aiOverlay))
+      return overlaid.ok ? overlaid.spec : fromRail
     } catch {
       // A spec that will not derive must never take the figure down with it.
       return null
@@ -751,9 +829,20 @@ export function DataAnalysisWorkspace({
     yLog, xLog, showGrid, showLegend, legendPos, paletteName, errorMode, fontFamily,
     titleSize, axisTitleSize, xMin, xMax, yMin, yMax, nticks, seriesStyles, caption,
     statTest, statPostHoc, statAlpha, statTails, statReferenceLevel,
-    dataFilters, dataTransforms, dataExclusions,
+    dataFilters, dataTransforms, dataExclusions, aiOverlay,
     specTable, sheetFileName,
   ])
+
+  // P5 offers, in two memos on purpose. The scan of the rows hangs off the
+  // table alone; `derivedSpec` above is rebuilt whenever any style knob moves,
+  // so profiling from it would put a full table pass on the render path of the
+  // colour picker. The second memo only reshuffles the already-measured
+  // profiles, which is cheap enough to re-run whenever the spec changes.
+  const tableProfiles = useMemo(() => profilePreparation(specTable), [specTable])
+  const preparationOffers = useMemo(
+    () => (derivedSpec ? prepOffers(derivedSpec, tableProfiles) : []),
+    [derivedSpec, tableProfiles]
+  )
 
   const visiblePhases = useMemo(
     () =>
@@ -802,27 +891,51 @@ export function DataAnalysisWorkspace({
   const [engineResult, setEngineResult] = useState<EngineResult | null>(null)
   const [engineBusy, setEngineBusy] = useState(false)
   const [engineNote, setEngineNote] = useState<string | null>(null)
-  const attemptedRef = useRef<string | null>(null)
+  /**
+   * §3A.3 rule 3, enforced at the only place that can break it.
+   *
+   * Reopening a revision loads its STORED result. The gate carries the signature
+   * that result answers, so the debounced recompute below adopts it instead of
+   * running. Without this, opening a saved analysis would quietly recompute it,
+   * and a p-value already in a submitted paper would change underneath its
+   * author on a page load. Change anything that moves the signature and the
+   * recompute runs normally, because that is no longer the analysis that was
+   * stored.
+   *
+   * The 700ms debounce is what makes this safe across the several renders an
+   * open takes (snapshot, then configuration): the timer is cleared on each,
+   * so only the settled derivation is ever measured. What the exemption may NOT
+   * survive is a return trip — see `gateStep`.
+   */
+  const gateRef = useRef<RecomputeGate>(emptyGate())
+  /** The library file behind the sheet, when it came from one. Drift is measured against it. */
+  const [sourceFile, setSourceFile] = useState<{ id: string; experimentId: string } | null>(null)
   useEffect(() => {
     if (!derivedSpec || specTable.rows.length === 0) return
     const signature = recomputeSignature(derivedSpec)
-    if (attemptedRef.current === signature) return
+    const step = gateStep(gateRef.current, signature)
+    gateRef.current = step.gate
+    if (!step.run) return
     const timer = setTimeout(async () => {
-      attemptedRef.current = signature
+      gateRef.current = gateRun(signature)
       setEngineBusy(true)
       setEngineNote(null)
       try {
-        const outcome = await computeAnalysis(derivedSpec, specTable, { force: true })
-        if (outcome.ok) setEngineResult(outcome.result)
-        else if ("blocked" in outcome) {
-          setEngineResult(null)
-          setEngineNote(outcome.blocked.map((b) => b.message).join(" "))
-        } else {
-          setEngineResult(null)
-          setEngineNote(outcome.question.question)
-        }
+        // Every branch of an attempt names BOTH what is shown and what is said,
+        // and both are applied unconditionally. The four-branch version here had
+        // one — the `catch` — that set the note and left `engineResult` alone, so
+        // after an engine throw the previous spec's numbers stayed on screen at
+        // full confidence behind a thin compute bar. `engineDisplayAfter` has no
+        // branch that can decline to name a result.
+        const shown = engineDisplayAfter(
+          await computeAnalysis(derivedSpec, specTable, { force: true })
+        )
+        setEngineResult(shown.result)
+        setEngineNote(shown.note)
       } catch (err) {
-        setEngineNote(err instanceof Error ? err.message : String(err))
+        const shown = engineDisplayAfter({ threw: err })
+        setEngineResult(shown.result)
+        setEngineNote(shown.note)
       } finally {
         setEngineBusy(false)
       }
@@ -1300,6 +1413,53 @@ export function DataAnalysisWorkspace({
   const [activeAnalysisId, setActiveAnalysisId] = useState<string>("a1")
   const analysisSeq = useRef(1)
   const buildConfigRef = useRef<() => unknown>(() => ({}))
+  const applyConfigRef = useRef<(c: unknown) => void>(() => undefined)
+
+  /* ── One undo stack, both authors ──────────────────────────────────────────
+     Every edit that arrives as a typed mutation, whether the assistant proposed
+     it or a control produced it, lands through `commitEdits` below. Nothing in
+     the stack records who made the change, which is precisely why undo cannot
+     treat the two differently: an AI edit is an ordinary entry in the same
+     history, reversed by the same call. The mutations attached to each entry are
+     what the provenance card reads, so the record and the stack cannot drift.
+
+     It sits here, above the tab handlers, because a whole-configuration swap has
+     to be able to clear it. */
+  const [editHistory, setEditHistory] = useState<ConfigHistory>(emptyHistory)
+
+  const commitEdits = useCallback(
+    (applied: AppliedMutation[], patch: Record<string, unknown>) => {
+      const before = buildConfigRef.current() as Record<string, unknown>
+      const after = { ...before, ...patch }
+      applyConfigRef.current(after)
+      setEditHistory((h) => commitEdit(h, { before, after, applied }))
+    },
+    []
+  )
+
+  /* Merged over the CURRENT configuration rather than restored wholesale: a
+     control turned by hand after the commit is not part of what is being
+     reversed, and this rail keeps no record of that control having moved. */
+  const undoEdits = useCallback(() => {
+    const { history, patch } = undoEdit(editHistory)
+    if (!patch) return
+    applyConfigRef.current({ ...(buildConfigRef.current() as object), ...patch })
+    setEditHistory(history)
+  }, [editHistory])
+
+  const redoEdits = useCallback(() => {
+    const { history, patch } = redoEdit(editHistory)
+    if (!patch) return
+    applyConfigRef.current({ ...(buildConfigRef.current() as object), ...patch })
+    setEditHistory(history)
+  }, [editHistory])
+
+  /** A whole-configuration swap, a different analysis tab or a template, is not
+   *  an edit. Undo must not reach back across one into another analysis. */
+  const swapConfig = useCallback((c: unknown) => {
+    setEditHistory(emptyHistory)
+    applyConfigRef.current(c)
+  }, [])
 
   /**
    * Tab handlers work off a ref of the list, and apply the incoming
@@ -1330,9 +1490,9 @@ export function DataAnalysisWorkspace({
       if (!target) return
       setAnalyses(saved)
       setActiveAnalysisId(id)
-      applyConfigRef.current(target.config)
+      swapConfig(target.config)
     },
-    [activeAnalysisId, captureActive]
+    [activeAnalysisId, captureActive, swapConfig]
   )
 
   const newAnalysis = useCallback(() => {
@@ -1355,9 +1515,9 @@ export function DataAnalysisWorkspace({
       next.splice(index + 1, 0, copy)
       setAnalyses(next)
       setActiveAnalysisId(newId)
-      applyConfigRef.current(copy.config)
+      swapConfig(copy.config)
     },
-    [captureActive]
+    [captureActive, swapConfig]
   )
 
   const closeAnalysis = useCallback(
@@ -1373,11 +1533,11 @@ export function DataAnalysisWorkspace({
         const neighbour = next[index] ?? next[index - 1]
         if (neighbour) {
           setActiveAnalysisId(neighbour.id)
-          applyConfigRef.current(neighbour.config)
+          swapConfig(neighbour.config)
         }
       }
     },
-    [activeAnalysisId]
+    [activeAnalysisId, swapConfig]
   )
 
   /* ── Import (local + from Notes9 library) · Save ──────────────────────────── */
@@ -1442,16 +1602,39 @@ export function DataAnalysisWorkspace({
     return out
   }, [analyses, activeAnalysisId, derivedSpec, specTable, engineResult, sheetFileName])
 
-  const loadSnapshot = useCallback((snap: UniverWorkbookSnapshot) => {
+  const loadSnapshot = useCallback((snap: UniverWorkbookSnapshot, source: { id: string; experimentId: string } | null = null) => {
     seededRef.current = false
     setLiveSnapshot(snap)
     setMountSnapshot(snap)
     setMountKey((k) => k + 1)
+    // Which library file, if any, this sheet came from. A saved analysis keeps
+    // the reference so a later reopen can tell whether the source has moved
+    // (§3A.3 rule 4); an ad-hoc sheet has no source and nothing to drift from.
+    setSourceFile(source)
+    // New rows are a new question: whatever stored result was being held is no
+    // longer the answer to it.
+    gateRef.current = emptyGate()
     // New sheet data invalidates any pending or shown AI turn: a proposal was
     // computed against the spec that just got replaced, and a reply about it
     // would be talking about data that's gone.
     setAiReply(null)
     setAiProposal(null)
+    // Approved edits go with it for the same reason: an annotation or an
+    // exclusion authored against the sheet that was just replaced is pointing
+    // at rows that no longer exist. The undo stack goes for the third time for
+    // the same reason: undoing into a configuration built on rows that are gone
+    // is not an undo, it is a corruption.
+    setAiOverlay([])
+    setEditHistory(emptyHistory)
+    // And so does the pipeline itself, which is worse than the overlay: `rowId`
+    // is positional, so a carried-over exclusion does not dangle, it silently
+    // re-points at whatever now sits in that row while still naming the original
+    // person and reason. `PIPELINE_FOR_NEW_SHEET` carries the reasoning and the
+    // rejected alternatives. A reopen restores its own pipeline through
+    // `applyConfig`, which runs after this, so nothing saved is lost.
+    setDataFilters(PIPELINE_FOR_NEW_SHEET.filters)
+    setDataTransforms(PIPELINE_FOR_NEW_SHEET.transforms)
+    setDataExclusions(PIPELINE_FOR_NEW_SHEET.exclusions)
   }, [])
 
   // Serialize / restore the full analysis config (chart + plate) for .n9a save
@@ -1463,61 +1646,101 @@ export function DataAnalysisWorkspace({
     test: statTest, postHoc: statPostHoc, alpha: statAlpha, tails: statTails,
     referenceLevel: statReferenceLevel,
     filters: dataFilters, transforms: dataTransforms, exclusions: dataExclusions,
+    aiOverlay,
     plate: { format: plateModel.format, originRow: plateModel.originRow, originCol: plateModel.originCol, roleOverrides: plateModel.roleOverrides, annOverrides: plateModel.annOverrides },
     phase,
   })
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const applyConfigRef = useRef<(c: unknown) => void>(() => undefined)
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const applyConfig = useCallback((c: any) => {
     if (!c || typeof c !== "object") return
-    if (c.chartType) setChartType(c.chartType)
-    if (typeof c.xKey === "string") setXKey(c.xKey)
-    if (Array.isArray(c.yKeys)) setYKeys(c.yKeys)
-    if (typeof c.zKey === "string") setZKey(c.zKey)
-    if (typeof c.sizeKey === "string") setSizeKey(c.sizeKey)
-    if (typeof c.title === "string") setTitle(c.title)
-    if (typeof c.xLabel === "string") setXLabel(c.xLabel)
-    if (typeof c.xUnit === "string") setXUnit(c.xUnit)
-    if (typeof c.yLabel === "string") setYLabel(c.yLabel)
-    if (typeof c.yUnit === "string") setYUnit(c.yUnit)
-    if (typeof c.yLog === "boolean") setYLog(c.yLog)
-    if (typeof c.xLog === "boolean") setXLog(c.xLog)
-    if (typeof c.showGrid === "boolean") setShowGrid(c.showGrid)
-    if (typeof c.showLegend === "boolean") setShowLegend(c.showLegend)
+    /**
+     * What the configuration is allowed to do to the rail is decided by
+     * `railFromConfig`, NOT here. It used to be decided here, in thirty guarded
+     * setter calls that nothing could test, and the two places that had to
+     * reason about it — `reopenFromSpec` and its test — each modelled it and
+     * each got the same field wrong. One definition, three consumers.
+     *
+     * Only spec-bearing fields go through it. `markers`, `showPoints`,
+     * `hlines`, `vlines`, `chartH`, the plate and the phase never reach
+     * `specFromChartState`, so a disagreement about them cannot put a number
+     * beside a spec that did not produce it, and they stay below.
+     */
+    const { rail, overlay, dropped } = railFromConfig(c)
+    // A configuration that names its own X/Y has already answered the question
+    // the first-run seeding above exists to answer. Without this the seeding
+    // fires on the render after `loadSnapshot` and overwrites the restored
+    // binding with "column 1 vs the first two numeric columns" — which is why a
+    // reopened analysis, a restored session and an imported .n9a could all come
+    // back plotting the wrong series.
+    if (rail.xKey !== undefined || rail.yKeys !== undefined) seededRef.current = true
+    // Cast, as the `c: any` version implicitly did: `ChartState.chartType` and
+    // `legendPos` are plain strings in the shared rail type, and narrowing them
+    // here would mean a second copy of the chart-type list. An unrecognised
+    // value falls through `CHART_TYPE_TO_FIGURE_KIND` to the default kind, which
+    // is what it did before.
+    if (rail.chartType !== undefined) setChartType(rail.chartType as ChartType)
+    if (rail.xKey !== undefined) setXKey(rail.xKey)
+    if (rail.yKeys !== undefined) setYKeys(rail.yKeys)
+    if (rail.zKey !== undefined) setZKey(rail.zKey)
+    if (rail.sizeKey !== undefined) setSizeKey(rail.sizeKey)
+    if (rail.title !== undefined) setTitle(rail.title)
+    if (rail.xLabel !== undefined) setXLabel(rail.xLabel)
+    if (rail.xUnit !== undefined) setXUnit(rail.xUnit)
+    if (rail.yLabel !== undefined) setYLabel(rail.yLabel)
+    if (rail.yUnit !== undefined) setYUnit(rail.yUnit)
+    if (rail.yLog !== undefined) setYLog(rail.yLog)
+    if (rail.xLog !== undefined) setXLog(rail.xLog)
+    if (rail.showGrid !== undefined) setShowGrid(rail.showGrid)
+    if (rail.showLegend !== undefined) setShowLegend(rail.showLegend)
     if (typeof c.markers === "boolean") setMarkers(c.markers)
-    if (typeof c.paletteName === "string") setPaletteName(c.paletteName)
-    if (c.seriesStyles && typeof c.seriesStyles === "object") setSeriesStyles(c.seriesStyles)
-    if (typeof c.xMin === "string") setXMin(c.xMin)
-    if (typeof c.xMax === "string") setXMax(c.xMax)
-    if (typeof c.yMin === "string") setYMin(c.yMin)
-    if (typeof c.yMax === "string") setYMax(c.yMax)
-    if (typeof c.nticks === "string") setNticks(c.nticks)
-    if (typeof c.fontFamily === "string") setFontFamily(c.fontFamily)
-    if (typeof c.titleSize === "number") setTitleSize(c.titleSize)
-    if (typeof c.axisTitleSize === "number") setAxisTitleSize(c.axisTitleSize)
-    if (typeof c.errorMode === "string") setErrorMode(c.errorMode)
+    if (rail.paletteName !== undefined) setPaletteName(rail.paletteName)
+    if (rail.seriesStyles !== undefined) setSeriesStyles(rail.seriesStyles)
+    // Strings by the time they arrive: `railFromConfig` normalises the numeric
+    // form `chartStateFromSpec` produces, which these five used to drop.
+    if (rail.xMin !== undefined) setXMin(String(rail.xMin))
+    if (rail.xMax !== undefined) setXMax(String(rail.xMax))
+    if (rail.yMin !== undefined) setYMin(String(rail.yMin))
+    if (rail.yMax !== undefined) setYMax(String(rail.yMax))
+    if (rail.nticks !== undefined) setNticks(String(rail.nticks))
+    if (rail.fontFamily !== undefined) setFontFamily(rail.fontFamily)
+    if (rail.titleSize !== undefined) setTitleSize(rail.titleSize)
+    if (rail.axisTitleSize !== undefined) setAxisTitleSize(rail.axisTitleSize)
+    if (rail.errorMode !== undefined) setErrorMode(rail.errorMode)
     if (typeof c.showPoints === "boolean") setShowPoints(c.showPoints)
-    if (typeof c.subtitle === "string") setSubtitle(c.subtitle)
-    setCaption(typeof c.caption === "string" ? c.caption : null)
-    if (typeof c.legendPos === "string") setLegendPos(c.legendPos)
+    if (rail.subtitle !== undefined) setSubtitle(rail.subtitle)
+    setCaption(rail.caption ?? null)
+    if (rail.legendPos !== undefined) setLegendPos(rail.legendPos as "bottom" | "right" | "top")
     if (typeof c.hlines === "string") setHlines(c.hlines)
     if (typeof c.vlines === "string") setVlines(c.vlines)
     if (typeof c.chartH === "number") setChartH(c.chartH)
-    // The statistics slice. Null on the reference level is a value ("compare
-    // against no baseline"), so it is accepted alongside a column name.
-    if (typeof c.test === "string") setStatTest(c.test)
-    if (typeof c.postHoc === "string") setStatPostHoc(c.postHoc)
-    if (typeof c.alpha === "number") setStatAlpha(c.alpha)
-    if (typeof c.tails === "string") setStatTails(c.tails)
-    if (c.referenceLevel === null || typeof c.referenceLevel === "string") setStatReferenceLevel(c.referenceLevel)
-    // The data pipeline. Read back symmetrically with buildConfig above: the
-    // AI patch path merges `{...buildConfig(), ...edits}` before calling this,
-    // so a key written there and not read here is silently dropped on merge.
-    if (Array.isArray(c.filters)) setDataFilters(c.filters)
-    if (Array.isArray(c.transforms)) setDataTransforms(c.transforms)
-    if (Array.isArray(c.exclusions)) setDataExclusions(c.exclusions)
+    if (rail.test !== undefined) setStatTest(rail.test)
+    if (rail.postHoc !== undefined) setStatPostHoc(rail.postHoc)
+    if (rail.alpha !== undefined) setStatAlpha(rail.alpha)
+    if (rail.tails !== undefined) setStatTails(rail.tails)
+    if (rail.referenceLevel !== undefined) setStatReferenceLevel(rail.referenceLevel)
+    // The data pipeline, governed by §8.1 inside `railFromConfig`: this same
+    // object arrives from `JSON.parse` of an arbitrary `.n9a`, and
+    // `specFromChartState` builds the spec by object literal without ever
+    // parsing it. Unvalidated, a hand-edited file put a `statistical-outlier`
+    // with no method straight into the live spec, the engine, and the next
+    // revision written to Postgres.
+    if (rail.filters !== undefined) setDataFilters(rail.filters)
+    if (rail.transforms !== undefined) setDataTransforms(rail.transforms)
+    if (rail.exclusions !== undefined) setDataExclusions(rail.exclusions)
+    if (dropped > 0) {
+      toast.error(
+        `${dropped} pipeline ${dropped === 1 ? "entry was" : "entries were"} not readable and have been left out.`
+      )
+    }
+    // The approved AI edits with no control behind them. Read back here so a
+    // saved analysis, a restored session and an analysis tab all reopen with
+    // the figure the user actually approved, and written by `executeProposal`
+    // through this same merge so there is one writer.
+    // Total, not conditional: an overlay belongs to ONE analysis, so a
+    // configuration that carries none has to CLEAR the previous one. Left
+    // conditional, an older `.n9a` opened with the last figure's approved edits
+    // still being restated over every derivation.
+    setAiOverlay(overlay)
     if (c.plate) {
       if (c.plate.format) plateModel.setFormat(c.plate.format)
       if (typeof c.plate.originRow === "number") plateModel.setOriginRow(c.plate.originRow)
@@ -1549,11 +1772,12 @@ export function DataAnalysisWorkspace({
   /* P3, propose then execute. The model's reply is a PLAN, not an action: the
      spec it would produce, computed and held here, is not handed to
      `applyConfig` until the researcher reads the rationale and presses
-     Execute. `patchedSpec` is exactly what `executeProposal` needs to derive
-     the rail edits, nothing else, so a stale proposal cannot smuggle in a
-     spec field discardProposal never touched. */
+     Execute. What is held is the APPROVED MUTATION LIST, not the spec it would
+     produce: the list is exactly what the reply card describes to the user, so
+     Execute cannot do more or less than what was read, and a stale proposal
+     cannot smuggle in a spec field discardProposal never touched. */
   interface AiProposal {
-    patchedSpec: AnalysisSpec
+    approved: AppliedMutation[]
     mutationCount: number
     clarificationNeeded: string | null
   }
@@ -1592,8 +1816,12 @@ export function DataAnalysisWorkspace({
         // until the researcher presses Execute (`executeProposal`, below).
         const patched = applyAiPatch(initHistory(derivedSpec), outcome.mutations)
         applied = patched.applied.map(describeMutation)
+        // The sentences the user reads and the list Execute runs are the same
+        // mutations, taken from the same result: `history.past` is what
+        // `applyAiPatch` actually dispatched, already tagged origin "ai", so
+        // the count on the card cannot drift from the count that lands.
         setAiProposal({
-          patchedSpec: patched.history.spec,
+          approved: patched.history.past.map((entry) => entry.applied),
           mutationCount: patched.applied.length,
           clarificationNeeded: outcome.clarificationNeeded,
         })
@@ -1615,20 +1843,26 @@ export function DataAnalysisWorkspace({
     }
   }, [aiPrompt, derivedSpec, specTable])
 
-  /** What a clicked rail control already does: turn a spec change into rail
-      edits and hand them to `applyConfig`. Moved verbatim out of `askForChange`
-      - the only thing that changed is who calls it and when. */
+  /** Run the approved list, all of it.
+   *
+   *  Each mutation goes where it can actually be held: onto the rail if a
+   *  control exists for it, so the setting moves in front of the user and stays
+   *  editable by hand, and onto the overlay if none does, so it is re-stated on
+   *  every later derivation instead of being recomputed away on the next one.
+   *  `splitApprovedMutations` decides which; nothing is dropped either way. */
   const executeProposal = useCallback(() => {
     if (!aiProposal || !derivedSpec) return
-    const edits = railEditsFromSpec(derivedSpec, aiProposal.patchedSpec, specTable)
+    const { edits, overlay } = splitApprovedMutations(derivedSpec, aiProposal.approved, specTable)
     // Merged over the current configuration, not applied alone: `applyConfig`
     // is a total setter, and handing it a partial config would reset the
-    // fields the patch never mentioned.
-    if (Object.keys(edits).length > 0) {
-      applyConfigRef.current({ ...(buildConfigRef.current() as object), ...edits })
+    // fields the patch never mentioned. The overlay rides the same merge, so
+    // both halves of the change land in one commit and cannot half-apply, and
+    // one commit is also one undo.
+    if (Object.keys(edits).length > 0 || overlay.length > 0) {
+      commitEdits(aiProposal.approved, { ...edits, aiOverlay: [...aiOverlay, ...overlay] })
     }
     setAiProposal(null)
-  }, [aiProposal, derivedSpec, specTable])
+  }, [aiProposal, aiOverlay, derivedSpec, specTable, commitEdits])
 
   /** Never touches the spec, clearing the pending proposal is the entire
       effect, which is what makes "byte-identical afterwards" true by
@@ -1644,25 +1878,200 @@ export function DataAnalysisWorkspace({
   const applySpecMutation = useCallback(
     (mutation: SpecMutation) => {
       if (!derivedSpec) return
-      const next = applyMutation(derivedSpec, mutation)
-      const edits = railEditsFromSpec(derivedSpec, next, specTable)
-      if (Object.keys(edits).length > 0) {
-        applyConfigRef.current({ ...(buildConfigRef.current() as object), ...edits })
+      // Through `dispatchMutation` rather than bare `applyMutation` so a hand
+      // edit arrives as the same described, origin-tagged `AppliedMutation` an
+      // assistant patch does. That is the whole reason one undo stack and one
+      // provenance list can cover both without knowing which is which.
+      const dispatched = dispatchMutation(initHistory(derivedSpec), mutation, "user")
+      const applied = dispatched.past.map((entry) => entry.applied)
+      // Through `splitApprovedMutations` rather than `railEditsFromSpec` alone,
+      // because the rail cannot hold every field: a dragged significance
+      // bracket has no control on it, and routing only through the rail dropped
+      // that edit on the floor with no error. One split for hand edits and
+      // assistant patches alike means a mutation the rail cannot express is
+      // kept on the overlay instead of being silently lost.
+      const { edits, overlay } = splitApprovedMutations(derivedSpec, applied, specTable)
+      if (Object.keys(edits).length > 0 || overlay.length > 0) {
+        commitEdits(applied, { ...edits, aiOverlay: [...aiOverlay, ...overlay] })
       }
     },
-    [derivedSpec, specTable]
+    [derivedSpec, specTable, commitEdits, aiOverlay]
   )
+
+
+  /* ── Provenance (§10.5) ────────────────────────────────────────────────────
+     One panel, opened from the figure and from beside the results card, because
+     "one click away from any figure" has to be true from wherever the figure is
+     being looked at. It reads the derived spec, the engine's own result and the
+     edit history above, so nothing on it is restated by this page. */
+  const [provenanceOpen, setProvenanceOpen] = useState(false)
+
+  /* ── Excluding a point (§8.1) ──────────────────────────────────────────────
+     The entry point is the sheet selection, the affordance this rail already
+     has for "that row, there": the same "From the sheet" card that binds a cell
+     to an axis now offers to exclude the row it sits in. Lane J's figure-click
+     path lands on `beginExclusion` too, so there is one governed door rather
+     than two.
+
+     What makes it governed is that the only way in is the dialog, and the
+     dialog will not submit without a reason. The schema agrees independently
+     (§8.1: a statistical exclusion must name its method), so an ad-hoc
+     "outlier" is refused by the type as well as by the screen. */
+  const currentUser = useAuthUser()
+  const excludedBy = currentUser?.email ?? currentUser?.id ?? "unknown"
+  const [exclusionRowId, setExclusionRowId] = useState<string | null>(null)
+  const [exclusionPreview, setExclusionPreview] = useState<ExclusionPreview | null>(null)
+  const [exclusionPreviewLoading, setExclusionPreviewLoading] = useState(false)
+
+  // The one door refuses a row that is already excluded instead of opening the
+  // dialog over it. Two things go wrong if it opens: the impact preview compares
+  // "with the point / without it" for a point that is already out, so the "with"
+  // number is not the current analysis; and confirming would ask
+  // `data.excludeRow` to overwrite a §8.1 record, which that mutation now refuses
+  // -- silently, from here. Saying so out loud is the difference. The sheet card
+  // and the figure's right-click both arrive here, so neither needs its own copy.
+  const beginExclusion = useCallback(
+    (rowId: string) => {
+      if ((derivedSpec?.exclusions ?? []).some((e) => e.rowId === rowId)) {
+        toast.info("That row is already excluded. Restore it first to change the reason.")
+        return
+      }
+      setExclusionRowId(rowId)
+    },
+    [derivedSpec]
+  )
+
+  /* ── Interacting with the figure itself ────────────────────────────────────
+     The renderer already puts each mark's source row on the mark and already
+     draws the significance brackets; what was missing was the call site handing
+     it somewhere to send the events. Hover names the row, a right-click sends
+     that row to the dialog above (the one door), and a dragged bracket becomes
+     the same typed mutation a control or an assistant patch would produce.
+
+     Scoped to the analysis that is open, because a layout panel can show a
+     different one and this page only owns the open spec. ponytail: no
+     `onSelectRow` here -- the sheet is a Univer instance with no imperative
+     "select this row" entry point, so a click would have nowhere to land.
+     Wire it when SheetHost grows one. */
+  const figureInteraction = useMemo(
+    () => ({
+      pipelineId: activeAnalysisId,
+      onExcludeRow: beginExclusion,
+      onMoveBracket: (id: string, offsetY: number) =>
+        applySpecMutation({ kind: "figure.moveBracket", id, offsetY }),
+    }),
+    [activeAnalysisId, beginExclusion, applySpecMutation]
+  )
+
+  const confirmExclusion = useCallback(
+    (exclusion: Exclusion) => {
+      // The reason is required by the schema, not only by the dialog's disabled
+      // button (§8.1): this record outlives the screen that produced it, and a
+      // UI guard is not a guarantee. An ad-hoc "statistical outlier" with no
+      // named method is refused here exactly as it is refused on save.
+      const governed = Exclusion.safeParse(exclusion)
+      if (!governed.success) {
+        toast.error(governed.error.issues[0]?.message ?? "That exclusion needs a reason.")
+        return
+      }
+      // The same typed mutation and the same commit path a pipeline-chip
+      // removal or an assistant patch takes, so the exclusion is one undo, and
+      // shows up on the provenance card as one entry, without this callback
+      // knowing anything about either.
+      applySpecMutation({ kind: "data.excludeRow", exclusion: governed.data })
+      setExclusionRowId(null)
+    },
+    [applySpecMutation]
+  )
+
+  /**
+   * What this exclusion would do to the answer, before it is made.
+   *
+   * The engine can compute the with/without pair for a spec that carries
+   * exclusions (`exclusionImpact`), so the preview is that same calculation run
+   * against a candidate spec that is never committed. The probe carries a
+   * placeholder reason: a p-value does not depend on WHY a point is out, only on
+   * whether it is, and the researcher has to see the effect before choosing the
+   * reason rather than after.
+   *
+   * This is the ONLY screen that renders the comparison, so it is the only
+   * caller that asks for it. The pair is a second Pyodide compute, and the
+   * debounced recompute above must not pay for a number it never shows.
+   */
+  useEffect(() => {
+    if (!exclusionRowId || !derivedSpec || specTable.rows.length === 0) return
+    let cancelled = false
+    setExclusionPreview(null)
+    setExclusionPreviewLoading(true)
+    const probe = applyMutation(derivedSpec, {
+      kind: "data.excludeRow",
+      exclusion: {
+        rowId: exclusionRowId,
+        reasonKind: "technical-failure",
+        reasonText: null,
+        method: null,
+        excludedBy,
+        excludedAt: new Date().toISOString(),
+      },
+    })
+    computeAnalysis(probe, specTable, { withExclusionImpact: true })
+      .then((outcome) => {
+        if (cancelled) return
+        const impact = outcome.ok ? outcome.result.exclusionImpact : null
+        setExclusionPreview(
+          impact
+            ? {
+                // `withExclusions` means the exclusions were honoured, i.e. the
+                // point is gone. Reading these the other way round would show
+                // the researcher the reverse of what they are about to do.
+                withPoint: impact.withoutExclusions.pValue,
+                withoutPoint: impact.withExclusions.pValue,
+                alpha: probe.analysis.alpha,
+              }
+            : null
+        )
+      })
+      .catch(() => {
+        // A preview that will not compute must not block the exclusion: the
+        // governance is the reason, not the arithmetic.
+        if (!cancelled) setExclusionPreview(null)
+      })
+      .finally(() => {
+        if (!cancelled) setExclusionPreviewLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [exclusionRowId, derivedSpec, specTable, excludedBy])
 
   // Import: local spreadsheet/CSV, or a saved .n9a analysis bundle.
   const onImport = useCallback(
     (file: File) => {
       const isBundle = /\.(n9a|json)$/i.test(file.name)
+      // The same ceiling the upload path enforces, and the same wording: a file
+      // the library would refuse must not open here either.
+      if (file.size > ATTACHMENT_MAX_FILE_SIZE) {
+        toast.error(`File is too large. Maximum size is ${ATTACHMENT_MAX_FILE_SIZE / (1024 * 1024)} MB.`)
+        return
+      }
       file.arrayBuffer().then((buf) => {
         if (isBundle) {
           try {
-            const parsed = JSON.parse(new TextDecoder().decode(buf))
-            if (parsed?.workbook) loadSnapshot(parsed.workbook as UniverWorkbookSnapshot)
-            if (parsed?.config) applyConfig(parsed.config)
+            // Both shapes the product writes: the workspace's own
+            // `{ workbook, config }` and a revision export, whose sheet and rail
+            // live inside its `dataSnapshot`. Read before anything is touched,
+            // because a file that cannot be loaded must leave the analysis on
+            // screen — and its undo stack — exactly as it was.
+            const bundle = readAnalysisBundle(JSON.parse(new TextDecoder().decode(buf)))
+            if (!bundle) {
+              toast.error(`${file.name} isn't a Notes9 analysis file.`)
+              return
+            }
+            loadSnapshot(bundle.workbook)
+            // Opening a saved analysis is a new baseline, not an edit to the
+            // one on screen.
+            setEditHistory(emptyHistory)
+            if (bundle.config) applyConfig(bundle.config)
             toast.success(`Opened ${file.name}`)
           } catch {
             toast.error("Couldn't read that analysis file")
@@ -1670,7 +2079,13 @@ export function DataAnalysisWorkspace({
           return
         }
         const wb = readSpreadsheetWorkbook(buf, file.name)
+        if (wb.SheetNames.length === 0) throw new Error("no sheets")
         loadSnapshot(buildSpreadsheetWorkbookSnapshot(file.name, wb))
+      })
+      .catch(() => {
+        // Without this the rejection is unhandled and the user is left looking
+        // at the sheet they had, with nothing to say the import failed.
+        toast.error(`Couldn't read ${file.name}. The file may be corrupt, or not a spreadsheet.`)
       })
     },
     [loadSnapshot, applyConfig],
@@ -1690,7 +2105,10 @@ export function DataAnalysisWorkspace({
           data = await res.json()
         }
         if (data?.workbook_snapshot) {
-          loadSnapshot(data.workbook_snapshot as UniverWorkbookSnapshot)
+          loadSnapshot(data.workbook_snapshot as UniverWorkbookSnapshot, {
+            id: file.id,
+            experimentId: file.experiment_id,
+          })
           toast.success(`Loaded ${file.file_name}`)
           setLibraryOpen(false)
         } else {
@@ -1705,19 +2123,398 @@ export function DataAnalysisWorkspace({
     [loadSnapshot],
   )
 
-  const saveAnalysis = useCallback(() => {
-    const bundle = { kind: "notes9-analysis", version: 1, savedAt: new Date().toISOString(), workbook: liveSnapshot, config: buildConfig() }
-    const blob = new Blob([JSON.stringify(bundle)], { type: "application/json" })
-    const a = document.createElement("a")
-    a.href = URL.createObjectURL(blob)
-    a.download = `${(title || "analysis").replace(/\s+/g, "-").toLowerCase()}.n9a`
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000)
-    toast.success("Analysis saved")
+  /**
+   * The `.n9a` download.
+   *
+   * Kept, and demoted. It was the only way to keep an analysis, which is the
+   * file-on-disk model §3A exists to replace; it is now one of two, and the
+   * one that matters for taking work somewhere else (rule 6).
+   */
+  const exportAnalysisFile = useCallback(() => {
+    downloadJson(
+      { kind: "notes9-analysis", version: 1, savedAt: new Date().toISOString(), workbook: liveSnapshot, config: buildConfig() },
+      `${slugify(title)}.n9a`
+    )
+    toast.success("Analysis exported")
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveSnapshot, title])
+
+  /* ── The saved analysis (§3A) ──────────────────────────────────────────────
+     Everything below turns the workspace into something that survives a reload
+     without a download: a server draft that autosaves, numbered revisions that
+     are cut on purpose, and a reopen path that shows what was stored rather
+     than what a fresh run would say. */
+
+  const [savedAnalysis, setSavedAnalysis] = useState<SavedAnalysis | null>(null)
+  const [openRevisionRow, setOpenRevisionRow] = useState<AnalysisRevision | null>(null)
+  const [reopenVerdict, setReopenVerdict] = useState<ReopenVerdict | null>(null)
+  const [revisions, setRevisions] = useState<AnalysisRevision[]>([])
+  const [recentAnalyses, setRecentAnalyses] = useState<SavedAnalysis[]>([])
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false)
+  const [savingRevision, setSavingRevision] = useState(false)
+  const [busyRevisionId, setBusyRevisionId] = useState<string | null>(null)
+  const [rerunning, setRerunning] = useState(false)
+
+  /** The live workbook behind a saved analysis's source file, or null if it is gone. */
+  const fetchSourceWorkbook = useCallback(
+    async (analysis: SavedAnalysis): Promise<UniverWorkbookSnapshot | null> => {
+      if (!analysis.sourceDataFileId || !analysis.experimentId) return null
+      try {
+        const res = await fetch(
+          `/api/experiments/${analysis.experimentId}/data-files/${analysis.sourceDataFileId}/workbook`
+        )
+        if (!res.ok) return null
+        const data = await res.json()
+        return (data?.workbook_snapshot as UniverWorkbookSnapshot | undefined) ?? null
+      } catch {
+        return null
+      }
+    },
+    []
+  )
+
+  const tableOf = useCallback((snap: UniverWorkbookSnapshot) => {
+    const t = snapshotToTable(snap)
+    return tableFromChartRows(t.columns, t.rows)
+  }, [])
+
+  const refreshRevisions = useCallback(async (analysisId: string) => {
+    setHistoryLoading(true)
+    try {
+      setRevisions(await listRevisions(analysisId))
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't load the revision history")
+    } finally {
+      setHistoryLoading(false)
+    }
+  }, [])
+
+  /**
+   * Reopen (§3A.3 rule 3, §3A.6).
+   *
+   * The drift check is made against the LIVE source file, not against the
+   * snapshot we are about to load — comparing the snapshot with itself would
+   * always say "clean" and the check would be theatre. With no source file
+   * behind the analysis there is nothing that can have drifted, so the stored
+   * hash stands in and the reopen reads clean, which is the truth.
+   *
+   * Nothing here recomputes. `openRevision` cannot (it has no engine), and this
+   * caller does not either: it hands the stored result straight to the screen
+   * and parks its signature so the debounced engine adopts rather than runs.
+   */
+  const openSavedRevision = useCallback(
+    async (analysis: SavedAnalysis, revision: AnalysisRevision, restore: boolean) => {
+      setBusyRevisionId(revision.id)
+      try {
+        let liveHash: string | null = revision.dataVersionHash
+        if (analysis.sourceDataFileId) {
+          const live = await fetchSourceWorkbook(analysis)
+          liveHash = live ? hashTable(tableOf(live)) : null
+        }
+
+        const verdict = await openRevision(revision.id, liveHash)
+        if (verdict.state === "unreadable") {
+          setReopenVerdict(verdict)
+          toast.error(verdict.message)
+          return
+        }
+
+        const snapshot = readDataSnapshot(verdict.revision.dataSnapshot)
+        // The stored rows, so the figure is drawn from what it was computed
+        // from even when the source file has been edited or deleted.
+        if (snapshot?.workbook) {
+          loadSnapshot(
+            snapshot.workbook,
+            analysis.sourceDataFileId && analysis.experimentId
+              ? { id: analysis.sourceDataFileId, experimentId: analysis.experimentId }
+              : null
+          )
+        }
+
+        // The rail this revision's STORED SPEC implies, with everything the rail
+        // cannot express carried on the overlay beside it. Deliberately not
+        // `analysis.workspaceState`, which is the working draft and would dress
+        // revision 2's numbers in the latest revision's figure; and deliberately
+        // not the rail alone, which cannot hold `secondFactorColumn`,
+        // `missingValues` or `nonlinear` — a two-way/pairwise revision came back
+        // as one-way/listwise and the stored p-value went on screen beside it.
+        const reopen = reopenFromSpec(
+          verdict.spec,
+          (snapshot?.config as Record<string, unknown> | null) ?? null,
+          snapshot?.table ?? specTable,
+          sheetFileName
+        )
+        swapConfig(reopen.config)
+
+        setEngineResult(verdict.results)
+        setEngineNote(null)
+        // The STORED spec's signature, because rail + overlay now reproduces the
+        // stored spec exactly. Where it cannot, `unrestored` says so and the
+        // signature genuinely differs, so the engine runs rather than adopting a
+        // number the spec on screen did not produce.
+        gateRef.current = gateForReopen(reopen.signature)
+        // Named, never dropped. A field this build cannot put back is the one
+        // thing a reopen must not be quiet about: quiet is how a stored p-value
+        // came to sit beside a spec that never produced it.
+        if (reopen.unrestored.length > 0) {
+          toast.error(
+            `Revision ${revision.revisionNo} did not reopen exactly. Not restored: ${reopen.unrestored
+              .slice(0, 6)
+              .join(", ")}${reopen.unrestored.length > 6 ? ", …" : ""}.`
+          )
+        }
+
+        setSavedAnalysis(analysis)
+        setOpenRevisionRow(verdict.revision)
+        // A clean reopen says nothing; every other verdict is a screen, not a toast.
+        setReopenVerdict(verdict.state === "clean" ? null : verdict)
+        setHistoryOpen(false)
+
+        if (restore) {
+          // §3A.4 restore: the older revision becomes the working draft. It is
+          // still not a revision — the next explicit save cuts that.
+          await autosaveDraft(analysis.id, verdict.spec, reopen.config)
+          toast.success(`Revision ${revision.revisionNo} restored into the working draft.`)
+        }
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Couldn't open that revision")
+      } finally {
+        setBusyRevisionId(null)
+      }
+    },
+    [fetchSourceWorkbook, tableOf, loadSnapshot, swapConfig, specTable, sheetFileName]
+  )
+
+  const bindAnalysis = useCallback(
+    async (analysis: SavedAnalysis) => {
+      setHistoryLoading(true)
+      try {
+        const list = await listRevisions(analysis.id)
+        setRevisions(list)
+        setSavedAnalysis(analysis)
+        if (list[0]) {
+          await openSavedRevision(analysis, list[0], false)
+        } else {
+          // An analysis whose first save never got as far as a revision. The
+          // working draft is all there is, and it is still worth resuming.
+          const draft = readWorkspaceConfig(analysis.workspaceState)
+          if (draft) swapConfig(draft)
+          setHistoryOpen(false)
+        }
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Couldn't open that analysis")
+      } finally {
+        setHistoryLoading(false)
+      }
+    },
+    [openSavedRevision, swapConfig]
+  )
+
+  /** Arriving from an experiment or project listing: `/data-analysis?analysis=<id>`. */
+  const searchParams = useSearchParams()
+  const analysisParam = searchParams.get("analysis")
+  const openedParamRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!analysisParam || openedParamRef.current === analysisParam) return
+    openedParamRef.current = analysisParam
+    void (async () => {
+      try {
+        const analysis = await getAnalysis(analysisParam)
+        if (!analysis) {
+          toast.error("That analysis is no longer available.")
+          return
+        }
+        await bindAnalysis(analysis)
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Couldn't open that analysis")
+      }
+    })()
+  }, [analysisParam, bindAnalysis])
+
+  /**
+   * §3A.3 rule 1, explicitly. The first save creates the analysis; every save
+   * after it appends a revision, and `saveRevision` forks rather than modifies
+   * when the revision on screen is frozen.
+   */
+  const commitSave = useCallback(
+    async (input: { name: string; experimentId: string | null; changeSummary: string }) => {
+      if (!derivedSpec) {
+        toast.error("There is nothing to save yet — this spec will not derive.")
+        return
+      }
+      setSavingRevision(true)
+      try {
+        const analysis =
+          savedAnalysis ??
+          (await createAnalysis({
+            experimentId: input.experimentId,
+            name: input.name,
+            spec: derivedSpec,
+            sourceDataFileId: sourceFile?.id ?? null,
+          }))
+
+        const config = buildConfig()
+        const revision = await saveRevision({
+          analysisId: analysis.id,
+          spec: derivedSpec,
+          results: engineResult,
+          table: specTable,
+          workbook: liveSnapshot,
+          config,
+          name: savedAnalysis ? undefined : input.name,
+          changeSummary: input.changeSummary || undefined,
+          openRevision: openRevisionRow,
+        })
+
+        await autosaveDraft(analysis.id, derivedSpec, config)
+
+        setSavedAnalysis({ ...analysis, currentRevisionNo: revision.revisionNo })
+        setOpenRevisionRow(revision)
+        setRevisions((rs) => [revision, ...rs.filter((r) => r.id !== revision.id)])
+        setReopenVerdict(null)
+        gateRef.current = emptyGate()
+        setSaveDialogOpen(false)
+        toast.success(
+          openRevisionRow?.isFrozen
+            ? `Saved as revision ${revision.revisionNo}, forked from frozen revision ${openRevisionRow.revisionNo}.`
+            : `Saved as revision ${revision.revisionNo}.`
+        )
+        // `commitRevision` drops a result whose spec hash is not this spec's, so
+        // the revision cannot hold numbers the spec never produced. Said out
+        // loud rather than left to be discovered on reopen: the save happened,
+        // but it did not capture numbers, and the researcher has to know that
+        // before quoting the figure.
+        if (engineResult && !revision.results) {
+          toast.error(
+            "The results on screen were computed from an earlier version of this analysis, so revision " +
+              `${revision.revisionNo} was saved without them. Let it recompute and save again to store its numbers.`
+          )
+        }
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Couldn't save this analysis")
+      } finally {
+        setSavingRevision(false)
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    },
+    [derivedSpec, savedAnalysis, sourceFile, engineResult, specTable, liveSnapshot, openRevisionRow]
+  )
+
+  /**
+   * "Re-run against the current data" (§3A.3 rule 3).
+   *
+   * Pulls the live source first: re-running against the snapshot that was just
+   * opened would recompute the same numbers and present them as new. The result
+   * lands in a NEW revision through `rerunRevision`, and the revision it came
+   * from is not touched — which is the whole reason this is a separate act
+   * rather than something the reopen does for you.
+   */
+  const rerunIntoNewRevisionNow = useCallback(async () => {
+    if (!savedAnalysis || !openRevisionRow || !derivedSpec) return
+    setRerunning(true)
+    try {
+      const live = await fetchSourceWorkbook(savedAnalysis)
+      const workbook = live ?? liveSnapshot
+      const table = live ? tableOf(live) : specTable
+      const spec: typeof derivedSpec = {
+        ...derivedSpec,
+        dataset: {
+          ...derivedSpec.dataset,
+          versionHash: hashTable(table),
+          rowCount: table.rows.length,
+          columnCount: table.columns.length,
+        },
+      }
+
+      const outcome = await computeAnalysis(spec, table, { force: true })
+      if (!outcome.ok) {
+        toast.error(
+          "blocked" in outcome ? outcome.blocked.map((b) => b.message).join(" ") : outcome.question.question
+        )
+        return
+      }
+
+      const revision = await rerunRevision({
+        analysisId: savedAnalysis.id,
+        spec,
+        results: outcome.result,
+        table,
+        workbook,
+        config: buildConfig(),
+        previousRevisionId: openRevisionRow.id,
+      })
+
+      if (live) {
+        loadSnapshot(
+          live,
+          savedAnalysis.sourceDataFileId && savedAnalysis.experimentId
+            ? { id: savedAnalysis.sourceDataFileId, experimentId: savedAnalysis.experimentId }
+            : null
+        )
+      }
+      setEngineResult(outcome.result)
+      setEngineNote(null)
+      // Settled, not adopted: the engine has just RUN this signature, so the
+      // result on screen is that run. `loadSnapshot` above cleared the gate.
+      gateRef.current = gateRun(recomputeSignature(spec))
+
+      const previousNo = openRevisionRow.revisionNo
+      setOpenRevisionRow(revision)
+      setSavedAnalysis({ ...savedAnalysis, currentRevisionNo: revision.revisionNo })
+      setRevisions((rs) => [revision, ...rs])
+      setReopenVerdict(null)
+      toast.success(`Re-run saved as revision ${revision.revisionNo}. Revision ${previousNo} is unchanged.`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "The re-run could not be saved")
+    } finally {
+      setRerunning(false)
+    }
+  }, [savedAnalysis, openRevisionRow, derivedSpec, fetchSourceWorkbook, liveSnapshot, tableOf, specTable, loadSnapshot])
+
+  /** §3A.3 rule 5. One-way, and `freezeOnce` refuses a second one. */
+  const freezeRevisionNow = useCallback(
+    async (revision: AnalysisRevision) => {
+      setBusyRevisionId(revision.id)
+      try {
+        const frozen = await freezeOnce(revision)
+        setRevisions((rs) => rs.map((r) => (r.id === frozen.id ? frozen : r)))
+        setOpenRevisionRow((r) => (r && r.id === frozen.id ? frozen : r))
+        toast.success(`Revision ${frozen.revisionNo} is frozen. Editing it now forks a new revision.`)
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Couldn't freeze this revision")
+      } finally {
+        setBusyRevisionId(null)
+      }
+    },
+    []
+  )
+
+  /** §3A.3 rule 6, from the history: one revision, under the documented schema. */
+  const exportRevision = useCallback(
+    (revision: AnalysisRevision) => {
+      if (!savedAnalysis) return
+      downloadJson(
+        buildPortableBundle(savedAnalysis, revision),
+        `${slugify(savedAnalysis.name)}-r${revision.revisionNo}.n9a`
+      )
+    },
+    [savedAnalysis]
+  )
+
+  const openHistory = useCallback(() => {
+    setHistoryOpen(true)
+    if (savedAnalysis) {
+      void refreshRevisions(savedAnalysis.id)
+      return
+    }
+    setHistoryLoading(true)
+    listRecentAnalyses()
+      .then(setRecentAnalyses)
+      .catch(() => setRecentAnalyses([]))
+      .finally(() => setHistoryLoading(false))
+  }, [savedAnalysis, refreshRevisions])
 
   /* ── Session persistence: data + config always resume ─────────────────────── */
   const configJson = JSON.stringify(buildConfig())
@@ -1750,12 +2547,35 @@ export function DataAnalysisWorkspace({
     return () => clearTimeout(t)
   }, [liveSnapshot, configJson])
 
+  /**
+   * §3A.3 rule 1: once an analysis exists, the autosave goes to its server
+   * draft as well as to this browser.
+   *
+   * The local copy above is kept and is not redundant: it holds the workbook,
+   * it works before anything has been saved and while signed out, and it is
+   * what makes an unsaved scratch sheet survive a reload. What it cannot do is
+   * follow the researcher to another machine, which is what this adds.
+   *
+   * Failure is swallowed on purpose (`saveDraft` returns it rather than
+   * throwing): losing one autosave must not interrupt work, and the next one is
+   * 800ms away.
+   */
+  useEffect(() => {
+    if (!savedAnalysis || !derivedSpec) return
+    const t = setTimeout(() => {
+      void autosaveDraft(savedAnalysis.id, derivedSpec, JSON.parse(configJson))
+    }, 800)
+    return () => clearTimeout(t)
+  }, [savedAnalysis, derivedSpec, configJson])
+
   /* ── Templates (gallery + saved setups live server-side via TemplatesDialog) ── */
   const [templatesOpen, setTemplatesOpen] = useState(false)
   const applyTemplate = useCallback(
     (t: AnalysisTemplate) => {
       try {
         if (t.aoa) loadSnapshot(buildSnapshotFromAoa(t.aoa, t.name, `${t.name}.xlsx`))
+        // A template is a whole configuration, not an edit to this one.
+        setEditHistory(emptyHistory)
         applyConfig({ ...t.config, phase: t.phase })
         toast.success(`Applied “${t.name}”`)
       } catch (e) {
@@ -1770,6 +2590,16 @@ export function DataAnalysisWorkspace({
       <PaneHeader Icon={ChartLine} title="Chart">
         <div className="ml-auto flex items-center gap-2">
           <span className="hidden text-[11px] text-muted-foreground lg:block">Double-click to edit · right-click for menu</span>
+          {/* §10.5, one click from the figure itself, not one tab and one click. */}
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={!derivedSpec}
+            onClick={() => setProvenanceOpen(true)}
+            title="How this figure was made, and from what"
+          >
+            <ClockCounterClockwise className="mr-1.5 h-4 w-4" /> Provenance
+          </Button>
           <ExportMenu variant="ghost" disabled={!hasPlot} defaultName={title} onExport={runExport} getPng={getChartPng} getCanvasSize={getChartSize} onSaveToLibrary={() => setSaveChartOpen(true)} />
         </div>
       </PaneHeader>
@@ -1790,6 +2620,19 @@ export function DataAnalysisWorkspace({
   // Column the current sheet selection points at (for X/Y series binding).
   const selColumn = sheetSel?.columnHeader && table.columns.includes(sheetSel.columnHeader) ? sheetSel.columnHeader : null
   const selNumeric = selColumn ? numericCols.includes(selColumn) : false
+  /**
+   * The spec's identity for the row the selection sits in.
+   *
+   * `tableFromChartRows` numbers rows from the sheet itself, header on row 1, so
+   * the first data row is `row-2`. Univer's row index is 0-based over that same
+   * grid, which makes the mapping one addition, and the header row (0) is
+   * correctly excluded by the lower bound.
+   */
+  const selRowId =
+    sheetSel && sheetSel.row >= 1 && sheetSel.row <= table.rows.length
+      ? `row-${sheetSel.row + 1}`
+      : null
+  const selRowExcluded = selRowId != null && (derivedSpec?.exclusions ?? []).some((e) => e.rowId === selRowId)
 
   const chartSettings = (
     <div className="space-y-4">
@@ -1909,6 +2752,25 @@ export function DataAnalysisWorkspace({
                       <BindBtn icon={ArrowRight} label="Set as X" active={xKey === selColumn} onClick={() => setXKey(selColumn)} />
                       <BindBtn icon={Plus} label="Add as Y" active={yKeys.includes(selColumn)} disabled={!selNumeric} onClick={() => setYKeys((p) => (p.includes(selColumn) ? p : [...p, selColumn]))} />
                     </div>
+                  </div>
+                )}
+
+                {/* §8.1. The point is never deleted, only marked, so the
+                    with/without comparison stays computable, which is why the
+                    wording is "exclude" and the undo is an ordinary undo. */}
+                {selRowId && (
+                  <div>
+                    <p className="mb-1.5 text-xs text-muted-foreground">
+                      {selRowExcluded
+                        ? "This row is already excluded. Restore it from the pipeline bar."
+                        : "Leave this row out of the analysis"}
+                    </p>
+                    <BindBtn
+                      icon={Prohibit}
+                      label="Exclude row…"
+                      disabled={selRowExcluded || !derivedSpec}
+                      onClick={() => beginExclusion(selRowId)}
+                    />
                   </div>
                 )}
               </div>
@@ -2123,12 +2985,23 @@ export function DataAnalysisWorkspace({
       let n = 2
       while (wb.SheetNames.includes(name)) name = `${RESULTS_SHEET_NAME} ${n++}`
       XLSX.utils.book_append_sheet(wb, ws, name)
-      loadSnapshot(buildSpreadsheetWorkbookSnapshot(sheetFileName, wb))
+      // Installed directly, NOT through `loadSnapshot`. That is the door for
+      // "these rows are gone", and it drops the pipeline, the AI overlay, the
+      // undo stack and the axis seeding on the way through. This is the same
+      // data with a report tab appended: sending it through the swap door
+      // deleted the §8.1 exclusions that produced the very numbers just written
+      // and recomputed the figure without them, and re-seeded X/Y over the
+      // user's binding. Nothing about the analysis changed, so nothing about the
+      // analysis is reset — only the sheet remounts, to show the new tab.
+      const next = buildSpreadsheetWorkbookSnapshot(sheetFileName, wb)
+      setLiveSnapshot(next)
+      setMountSnapshot(next)
+      setMountKey((k) => k + 1)
       toast.success(`Statistics added to the sheet as "${name}"`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not add the statistics sheet")
     }
-  }, [derivedSpec, engineResult, title, sheetFileName, loadSnapshot])
+  }, [derivedSpec, engineResult, title, sheetFileName])
 
   /** The statistics as tab-separated text, for pasting anywhere. */
   const copyStats = useCallback(async () => {
@@ -2179,6 +3052,11 @@ export function DataAnalysisWorkspace({
           </Button>
           <Button variant="outline" size="sm" onClick={exportStats}>
             <DownloadSimple className="mr-1.5 h-4 w-4" /> Export (.xlsx)
+          </Button>
+          {/* Beside the result it explains: source, exclusions with reasons,
+              transforms, test, engine version and who changed what (§10.5). */}
+          <Button variant="outline" size="sm" onClick={() => setProvenanceOpen(true)}>
+            <ClockCounterClockwise className="mr-1.5 h-4 w-4" /> Provenance
           </Button>
           <span className="text-[11.5px] text-muted-foreground/70">
             Every number here came from the engine, not from this page.
@@ -2322,9 +3200,13 @@ export function DataAnalysisWorkspace({
         filters={derivedSpec?.filters ?? []}
         transforms={derivedSpec?.transforms ?? []}
         exclusions={derivedSpec?.exclusions ?? []}
+        offers={preparationOffers}
         onSetFilters={(filters) => applySpecMutation({ kind: "data.setFilters", filters })}
         onRemoveTransform={(index) => applySpecMutation({ kind: "data.removeTransform", index })}
         onRestoreRow={(rowId) => applySpecMutation({ kind: "data.restoreRow", rowId })}
+        // An accepted offer is the researcher's edit: the same dispatcher, the
+        // same typed mutation, origin "user". Nothing about it is a second path.
+        onAcceptOffer={(offer) => applySpecMutation(offer.mutation)}
       />
     </div>
   )
@@ -2383,6 +3265,20 @@ export function DataAnalysisWorkspace({
         }
       />
 
+      {/* §10.8. The integrity check is a first-class screen: what was stored,
+          what has changed since, and two clear choices. It sits above
+          everything the researcher would otherwise reach for, because the
+          decision has consequences for a number that may already be in a
+          submitted paper. */}
+      {reopenVerdict && (
+        <ReopenBanner
+          verdict={reopenVerdict}
+          onKeepStored={() => setReopenVerdict(null)}
+          onRerun={rerunIntoNewRevisionNow}
+          rerunning={rerunning}
+        />
+      )}
+
       {/* Scoped to the analysis above it, and deliberately below the tabs: what
           it changes is this analysis, not the page. */}
       {specPrompt}
@@ -2430,7 +3326,7 @@ export function DataAnalysisWorkspace({
           </TabsList>
         </Tabs>
 
-        <input ref={fileRef} type="file" accept=".csv,.tsv,.xlsx,.xls,.n9a,.json" className="hidden" onChange={(e) => { if (e.target.files?.[0]) onImport(e.target.files[0]); e.target.value = "" }} />
+        <input ref={fileRef} type="file" accept=".csv,.tsv,.txt,.xlsx,.xls,.n9a,.json" className="hidden" onChange={(e) => { if (e.target.files?.[0]) onImport(e.target.files[0]); e.target.value = "" }} />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm"><UploadSimple className="mr-1.5 h-4 w-4" /> Import <CaretDown className="ml-1 h-3.5 w-3.5" /></Button>
@@ -2461,12 +3357,59 @@ export function DataAnalysisWorkspace({
             <DropdownMenuItem onClick={() => downloadSnapshotAsXlsxFile(liveSnapshot, "analysis.xlsx")}>
               <DownloadSimple className="mr-2 h-4 w-4" /> Export data (.xlsx)
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={saveAnalysis}>
-              <FloppyDisk className="mr-2 h-4 w-4" /> Save analysis (.n9a)
+            <DropdownMenuItem onClick={exportAnalysisFile}>
+              <DownloadSimple className="mr-2 h-4 w-4" /> Export analysis (.n9a)
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        {/* §3A.3 rule 1, the explicit half. The primary control on this row,
+            because keeping the work is the thing the download used to be the
+            only way to do. */}
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!derivedSpec}
+          onClick={() => setSaveDialogOpen(true)}
+          title={
+            savedAnalysis
+              ? `Cut revision ${savedAnalysis.currentRevisionNo + 1} of “${savedAnalysis.name}”`
+              : "Save this analysis so it reopens without a file"
+          }
+        >
+          <FloppyDisk className="mr-1.5 h-4 w-4" />
+          {savedAnalysis ? `Save r${savedAnalysis.currentRevisionNo + 1}` : "Save"}
+        </Button>
+        <Button variant="outline" size="sm" onClick={openHistory} title="Saved analyses and their revisions">
+          <ClockCounterClockwise className="mr-1.5 h-4 w-4" />
+          {savedAnalysis ? "History" : "Saved"}
+        </Button>
         <Button variant="outline" size="sm" onClick={() => setTemplatesOpen(true)}><SquaresFour className="mr-1.5 h-4 w-4" /> Templates</Button>
+        {/* One stack for both authors. The tooltip names the edit rather than
+            saying "undo", because the thing a researcher needs to know before
+            pressing it is what is about to be taken back. */}
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!canUndoOf(editHistory)}
+          onClick={undoEdits}
+          title={
+            editHistory.past[editHistory.past.length - 1]?.applied[0]?.description ??
+            "Nothing to undo"
+          }
+          aria-label="Undo the last change"
+        >
+          <ArrowUUpLeft className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!canRedoOf(editHistory)}
+          onClick={redoEdits}
+          title={editHistory.future[0]?.applied[0]?.description ?? "Nothing to redo"}
+          aria-label="Redo the last undone change"
+        >
+          <ArrowUUpRight className="h-4 w-4" />
+        </Button>
         <Button
           variant="outline"
           size="sm"
@@ -2509,6 +3452,7 @@ export function DataAnalysisWorkspace({
             layout={figureLayout}
             pipelines={layoutPipelines}
             onChange={setFigureLayout}
+            interaction={figureInteraction}
             className="flex-1"
           />
         </div>
@@ -2672,6 +3616,75 @@ export function DataAnalysisWorkspace({
         getPng={getChartPng}
         onSaved={() => router.refresh()}
       />
+
+      {/* §10.5. A slide-over rather than a modal: it is read while looking at
+          the figure it explains. */}
+      {derivedSpec && (
+        <ProvenancePanel
+          open={provenanceOpen}
+          onClose={() => setProvenanceOpen(false)}
+          spec={derivedSpec}
+          result={engineResult}
+          history={historyMutations(editHistory)}
+          revisionNo={openRevisionRow?.revisionNo}
+          isFrozen={openRevisionRow?.isFrozen}
+          sourceDetached={reopenVerdict?.state === "detached"}
+        />
+      )}
+
+      {/* §3A.3 rule 1 (explicitly) and rule 5 (the fork). */}
+      <SaveAnalysisDialog
+        open={saveDialogOpen}
+        onOpenChange={setSaveDialogOpen}
+        mode={savedAnalysis ? "revision" : "create"}
+        defaultName={savedAnalysis?.name ?? title}
+        projects={projects}
+        experiments={experiments}
+        saving={savingRevision}
+        frozenRevisionNo={openRevisionRow?.isFrozen ? openRevisionRow.revisionNo : null}
+        onSave={commitSave}
+      />
+
+      {/* §3A.4. Append-only, so there is no delete here and never will be. */}
+      <RevisionHistoryDialog
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        analysis={savedAnalysis}
+        revisions={revisions}
+        recent={recentAnalyses}
+        loading={historyLoading}
+        openRevisionId={openRevisionRow?.id ?? null}
+        busyRevisionId={busyRevisionId}
+        onSelectAnalysis={(a) => void bindAnalysis(a)}
+        onOpenRevision={(rev, restore) => {
+          if (savedAnalysis) void openSavedRevision(savedAnalysis, rev, restore)
+        }}
+        onFreeze={(rev) => void freezeRevisionNow(rev)}
+        onExport={exportRevision}
+      />
+
+      {/* §8.1. The one door to an exclusion, and it does not open without a
+          reason. */}
+      {exclusionRowId && (
+        <ExclusionDialog
+          open
+          rowId={exclusionRowId}
+          // Only when the sheet is actually sitting on the row being excluded.
+          // The figure can now start an exclusion too, and describing the row
+          // the cursor happens to be on instead of the point that was clicked
+          // would put the wrong row in front of the person approving it.
+          rowSummary={
+            sheetSel && selRowId === exclusionRowId
+              ? `Row ${sheetSel.row + 1}${selColumn ? ` · ${selColumn} ${sheetSel.text}` : ""}`
+              : undefined
+          }
+          preview={exclusionPreview}
+          previewLoading={exclusionPreviewLoading}
+          currentUserId={excludedBy}
+          onCancel={() => setExclusionRowId(null)}
+          onConfirm={confirmExclusion}
+        />
+      )}
     </div>
   )
 }

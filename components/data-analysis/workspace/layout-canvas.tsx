@@ -40,18 +40,37 @@ import {
   setPanelSpan,
   type FigureLayout,
 } from "@/lib/data-analysis/render/figure-layout"
-import { writeTiff } from "@/lib/data-analysis/chart-export"
+import { VECTOR_FORMATS, writeTiff, type ExportFormat } from "@/lib/data-analysis/chart-export"
 import { Button } from "@/components/ui/button"
 import { ExportMenu } from "@/components/data-analysis/export-menu"
 import type { ChartExportFn } from "@/components/data-analysis/plotly-chart"
 import { FigureCanvas } from "./figure-canvas"
 import { EASE_OUT, Reveal } from "./motion"
 
+/**
+ * Figure interaction, scoped to one analysis.
+ *
+ * A panel can show any pipeline, but only the open one has a spec this page can
+ * mutate, so the handlers are addressed to a pipeline id rather than handed to
+ * every panel. A click on some other panel's figure is then inert by
+ * construction instead of quietly excluding a row from the wrong analysis.
+ */
+export interface FigureInteraction {
+  pipelineId: string
+  /** A mark was clicked; reveal its row. */
+  onSelectRow?: (rowId: string) => void
+  /** A mark was right-clicked; open the reasoned-exclusion dialog (§8.1). */
+  onExcludeRow?: (rowId: string) => void
+  /** A significance bracket was dragged. */
+  onMoveBracket?: (id: string, offsetY: number) => void
+}
+
 export function LayoutCanvas({
   layout,
   pipelines,
   onChange,
   onOpenPipeline,
+  interaction,
   className,
 }: {
   layout: FigureLayout
@@ -59,6 +78,8 @@ export function LayoutCanvas({
   onChange: (next: FigureLayout) => void
   /** Jump to a panel's analysis in the tab strip. */
   onOpenPipeline?: (pipelineId: string) => void
+  /** Hover, click-to-exclude and bracket dragging, for one pipeline. */
+  interaction?: FigureInteraction
   className?: string
 }) {
   const reduce = useReducedMotion()
@@ -241,7 +262,19 @@ export function LayoutCanvas({
 
               <div className="flex min-h-0 flex-1 flex-col px-2 pb-2 pt-8">
                 {pipeline?.result ? (
-                  <FigureCanvas spec={pipeline.spec} result={pipeline.result} />
+                  <FigureCanvas
+                    spec={pipeline.spec}
+                    result={pipeline.result}
+                    onSelectRow={
+                      interaction?.pipelineId === pipeline.id ? interaction.onSelectRow : undefined
+                    }
+                    onExcludeRow={
+                      interaction?.pipelineId === pipeline.id ? interaction.onExcludeRow : undefined
+                    }
+                    onMoveBracket={
+                      interaction?.pipelineId === pipeline.id ? interaction.onMoveBracket : undefined
+                    }
+                  />
                 ) : (
                   <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border/60 bg-muted/20 p-4 text-center">
                     <p className="text-[12.5px] text-muted-foreground">
@@ -424,7 +457,7 @@ export async function composeLayoutPng(
   layout: FigureLayout,
   gridEl: HTMLElement | null,
   options: {
-    format?: "png" | "jpeg" | "tiff" | "svg"
+    format?: ExportFormat
     dpi?: number
     filename?: string
     transparent?: boolean
@@ -432,10 +465,10 @@ export async function composeLayoutPng(
   } = {}
 ): Promise<void> {
   const { format = "png", dpi = 300, transparent = false, colourSpace = "rgb" } = options
-  if (format === "svg") {
+  if (VECTOR_FORMATS.has(format)) {
     // A composed figure is a raster of several independent plots; there is no
-    // single SVG to hand back without re-laying out every panel's vector
-    // output, so say that rather than writing a PNG with an .svg name.
+    // single vector document to hand back without re-laying out every panel's
+    // vector output, so say that rather than writing a PNG with an .svg name.
     throw new Error("Vector export is available per panel; the composed figure exports as a raster.")
   }
   if (!gridEl) throw new Error("The figure is not on screen yet.")

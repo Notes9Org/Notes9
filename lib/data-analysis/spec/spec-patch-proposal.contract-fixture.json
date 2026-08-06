@@ -1,0 +1,42 @@
+{
+  "rationale": "Switched the figure to a dose-response curve and fitted a 4-parameter logistic, so the IC50 comes from the fit rather than from reading it off bars. Viability is normalised to the on-plate DMSO control per plate, the vehicle-only wells are filtered out because they carry no dose information, and the earlier log10 transform is removed since the 4PL already fits on a log dose axis. Axis, legend and series styling follow so the curve stays readable at print size.",
+  "mutations": [
+    { "kind": "figure.setKind", "value": "dose-response" },
+    { "kind": "figure.setTitle", "value": "Compound A dose-response, 72 h viability" },
+    {
+      "kind": "data.addTransform",
+      "transform": {
+        "kind": "normaliseToControl",
+        "column": "viability",
+        "groupColumn": "treatment",
+        "controlLevel": "DMSO",
+        "per": ["plate"],
+        "as": "percent"
+      }
+    },
+    { "kind": "data.removeTransform", "index": 1 },
+    {
+      "kind": "data.setFilters",
+      "filters": [
+        { "column": "concentration_uM", "op": "gt", "value": 0 },
+        { "column": "plate", "op": "in", "value": ["P1", "P2", "P3"] },
+        { "column": "viability", "op": "notNull", "value": null }
+      ]
+    },
+    {
+      "kind": "axis.set",
+      "axis": "x",
+      "patch": { "label": "Compound A", "unit": "uM", "scale": "log10", "tickCount": 6 }
+    },
+    {
+      "kind": "figure.setSeriesStyle",
+      "seriesKey": "viability",
+      "patch": { "colour": "#0072B2", "pointShape": "circle", "pointSize": 8, "jitter": 0.15 }
+    },
+    { "kind": "analysis.setNonlinear", "patch": { "model": "4pl", "confidenceBands": true } },
+    { "kind": "analysis.setColumns", "response": ["viability"], "group": "treatment" },
+    { "kind": "figure.setLegend", "show": true, "position": "right" },
+    { "kind": "figure.setDimensions", "width": 900, "height": 600 }
+  ],
+  "clarificationNeeded": null
+}
