@@ -28,6 +28,10 @@ interface LiteraturePdfPanelProps {
   /** If set, the viewer will search for this text and temporarily highlight the match. */
   highlightExcerpt?: string | null
   highlightPageNumber?: number | null
+  /** Per-click nonce (see `hooks/use-source-navigation.ts`), makes a repeat
+   * click on the SAME citation (identical excerpt) re-fire the highlight
+   * instead of being deduped by the fired-ref below. */
+  highlightNonce?: number | null
   /** Extra controls (e.g. Replace PDF) merged into the reader's single header row. */
   headerActions?: ReactNode
 }
@@ -40,6 +44,7 @@ export function LiteraturePdfPanel({
   openInNewTabFallbackUrl,
   highlightExcerpt,
   highlightPageNumber,
+  highlightNonce,
   headerActions,
 }: LiteraturePdfPanelProps) {
   const { toast } = useToast()
@@ -88,10 +93,14 @@ export function LiteraturePdfPanel({
 
   // Trigger excerpt highlight when the prop is set (e.g. from a reference click).
   // Retries until the PDF viewer is loaded and the excerpt is found.
+  // Keyed on excerpt + nonce (not excerpt alone) so a repeat click on the SAME
+  // citation, identical excerpt, new nonce, re-applies instead of being
+  // deduped by content.
   const highlightExcerptFiredRef = useRef<string | null>(null)
+  const highlightFiredKey = highlightExcerpt != null ? `${highlightExcerpt}|${highlightNonce ?? ''}` : null
   useEffect(() => {
     if (!highlightExcerpt || loadingAnnotations) return
-    if (highlightExcerptFiredRef.current === highlightExcerpt) return
+    if (highlightExcerptFiredRef.current === highlightFiredKey) return
 
     let cancelled = false
     let attempt = 0
@@ -123,13 +132,13 @@ export function LiteraturePdfPanel({
             { literatureId, highlightPageNumber, attempts: attempt + 1 },
           )
         }
-        highlightExcerptFiredRef.current = highlightExcerpt
+        highlightExcerptFiredRef.current = highlightFiredKey
       }
     }
 
     setTimeout(tryHighlight, delays[0])
     return () => { cancelled = true }
-  }, [highlightExcerpt, highlightPageNumber, loadingAnnotations])
+  }, [highlightExcerpt, highlightFiredKey, highlightPageNumber, loadingAnnotations])
 
   const createAnnotation = async (payload: {
     type: "highlight" | "note" | "comment"

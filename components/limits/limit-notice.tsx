@@ -3,7 +3,7 @@
 /**
  * components/limits/limit-notice.tsx
  *
- * Inline limit notice banner — shown at the point of action (inline-at-the-action
+ * Inline limit notice banner, shown at the point of action (inline-at-the-action
  * pattern, highest priority surface per the plan).
  *
  * Severity → visual treatment:
@@ -35,7 +35,7 @@ const ICONS = {
 } as const
 
 // ---------------------------------------------------------------------------
-// Color tokens — never red for planned limits
+// Color tokens, never red for planned limits
 // ---------------------------------------------------------------------------
 
 const COLOR_CLASSES: Record<string, {

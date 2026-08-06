@@ -323,7 +323,7 @@ export function LiteraturePageSkeleton() {
 // ---------------------------------------------------------------------------
 
 /**
- * Single assistant message bubble skeleton — matches the rounded-2xl bubble
+ * Single assistant message bubble skeleton, matches the rounded-2xl bubble
  * shape used by AssistantLoadingPlaceholder and chat-message.tsx.
  */
 export function CatalystMessageSkeleton({ className }: { className?: string }) {
@@ -352,7 +352,7 @@ export function CatalystMessageSkeleton({ className }: { className?: string }) {
 }
 
 /**
- * Citations panel skeleton — two stacked source-card shimmer blocks,
+ * Citations panel skeleton, two stacked source-card shimmer blocks,
  * matching AgentCitationsPanel's card layout.
  */
 export function CatalystCitationsPanelSkeleton({ className }: { className?: string }) {
@@ -377,7 +377,7 @@ export function CatalystCitationsPanelSkeleton({ className }: { className?: stri
 }
 
 /**
- * Reasoning / thinking panel skeleton — matches the collapsible header +
+ * Reasoning / thinking panel skeleton, matches the collapsible header +
  * streaming-text area used by AgentReasoningPanel and ThinkingPanel.
  */
 export function CatalystReasoningSkeleton({ className }: { className?: string }) {

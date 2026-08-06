@@ -15,6 +15,27 @@ export function isPersistedChatMessageId(id: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 }
 
+/**
+ * Em dashes in model prose read as machine-written, so they are normalized at
+ * render time. Prompt instructions alone don't hold: models emit them anyway,
+ * and the conversational prompt lives in the Catalyst backend, not this repo.
+ *
+ * Code fences and inline code are left verbatim: a dash inside a snippet or a
+ * regex is data, not prose.
+ *
+ * ponytail: an unclosed fence mid-stream is treated as prose for that frame and
+ * snaps back once the fence closes. Track fence state across chunks if the
+ * transient ever shows up in practice.
+ */
+export function stripEmDashes(md: string): string {
+  if (!md.includes('—')) return md;
+  // split() with a capture group keeps the delimiters, at the odd indices.
+  return md
+    .split(/(```[\s\S]*?```|`[^`\n]*`)/g)
+    .map((seg, i) => (i % 2 ? seg : seg.replace(/ — /g, ', ').replace(/—/g, '-')))
+    .join('');
+}
+
 /** Appended to saved assistant markdown; stripped for display, history, and parsing. */
 export const NOTES9_GROUNDING_MARKER = '\n§§NOTES9_GROUNDING§§\n';
 
@@ -24,7 +45,7 @@ export const NOTES9_GROUNDING_MARKER = '\n§§NOTES9_GROUNDING§§\n';
 export const NOTES9_MANIFEST_MARKER = '\n§§NOTES9_MANIFEST§§\n';
 
 // Display labels only. Unknown keys fall through to the raw value at the
-// usage site via `?? tool` — adding a new agent capability requires no
+// usage site via `?? tool`, adding a new agent capability requires no
 // change here.
 const TOOL_USED_LABEL: Record<string, string> = {
   sql: 'From your records',
@@ -138,7 +159,7 @@ export function formatNotes9AssistantMarkdown(
       }
     }
   } catch {
-    // Leave body/refs/manifest untouched on any error — never break the turn.
+    // Leave body/refs/manifest untouched on any error, never break the turn.
   }
 
   let out = body + formatNotes9Footer(donePayload);
@@ -155,7 +176,7 @@ export function formatNotes9AssistantMarkdown(
     out += NOTES9_MANIFEST_MARKER + manifestPayload;
   }
 
-  // Persist artifact metadata (no signed_url — that expires in ~1 h).
+  // Persist artifact metadata (no signed_url, that expires in ~1 h).
   // The card re-signs on demand via /api/agent/artifacts/[dataId]/resign.
   if (artifacts && artifacts.length > 0) {
     out += NOTES9_ARTIFACTS_MARKER + encodeStoredArtifacts(artifacts);

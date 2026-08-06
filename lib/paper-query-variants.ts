@@ -1,13 +1,13 @@
 /**
  * Natural-language query → search variants, PubMed term, and BM25 expansion.
  *
- * Design principle: ALL logic is structural and linguistic — zero domain-specific
+ * Design principle: ALL logic is structural and linguistic, zero domain-specific
  * lookup tables for synonyms, acronyms, or MeSH descriptors.
  *
  * Why no tables?
  *   PubMed's Automatic Term Mapping (ATM) has 30+ years of biomedical ontology built in.
  *   It maps unquoted tokens (SMFA, CKD, EGFR, author names, …) to MeSH, author fields,
- *   and synonym variants automatically — but ONLY when the query is NOT wrapped in a
+ *   and synonym variants automatically, but ONLY when the query is NOT wrapped in a
  *   parenthesised full-sentence expression. This file prepares clean keyword inputs that
  *   let ATM work correctly for any domain, without us maintaining a growing list of terms.
  *
@@ -82,7 +82,7 @@ export function capExpandedPubMedTermEncodedLength(
 /**
  * Common misspellings found in pasted / voice queries.
  * These are spelling artifacts, not medical domain knowledge.
- * Add entries when a typo shows up repeatedly — no function changes needed.
+ * Add entries when a typo shows up repeatedly, no function changes needed.
  */
 const SEARCH_TYPO_REPLACEMENTS: Array<{ re: RegExp; to: string }> = [
   { re: /\bmethodolgy\b/gi, to: "methodology" },
@@ -126,7 +126,7 @@ function uniquePreserveOrder(strings: string[]): string[] {
 
 /**
  * Detect ALL-CAPS tokens (≥2 chars) in a string.
- * Structural proxy for acronym detection — no lookup table required.
+ * Structural proxy for acronym detection, no lookup table required.
  * Works for any domain: SMFA, EGFR, CKD, PCR, ELISA, TNF, etc.
  */
 function detectAllCapsAcronyms(text: string): string[] {
@@ -170,7 +170,7 @@ function stripQuestionBoilerplate(s: string): string {
  *  2. Strip question boilerplate ("What is the …", "How does …").
  *  3. Remove trailing "by firstname lastname" author pattern (handled separately
  *     by pubMedAuthorHintClause as a field-qualified [au] clause).
- *  4. Promote ALL-CAPS tokens first (structural acronym detection — no table).
+ *  4. Promote ALL-CAPS tokens first (structural acronym detection, no table).
  *  5. Append remaining stop-filtered content words up to 8 tokens total.
  *
  * Sending these unquoted, unparenthesised tokens to PubMed enables its
@@ -248,7 +248,7 @@ function capitalizeWord(w: string): string {
 /**
  * Detects "… by firstname lastname" at the end of a query and returns a PubMed
  * author search clause `(Lastname F[au])`. Returns null when no author is found.
- * Purely linguistic pattern — no person-name dictionary required.
+ * Purely linguistic pattern, no person-name dictionary required.
  */
 export function pubMedAuthorHintClause(normalizedQuery: string): string | null {
   const s = normalizedQuery.trim()
@@ -310,7 +310,7 @@ export function generateQueryVariants(userQuery: string, maxVariants = 4): strin
  *
  * Structure (joined with OR, URL-capped):
  *  1. Compact AND query + optional author field clause
- *     — unquoted tokens → PubMed ATM handles MeSH mapping, acronym expansion,
+ *     unquoted tokens → PubMed ATM handles MeSH mapping, acronym expansion,
  *       synonym variants, and author-name recognition for ANY domain automatically.
  *  2. Broad token-OR group (only for verbose/question queries, for high recall)
  *
@@ -357,7 +357,7 @@ export function expandEuropeFreeTextQuery(userQuery: string): string {
  * Query string for BM25 re-ranking.
  *
  * Returns the normalized user query as-is. BM25 scores documents on token
- * overlap with this query — injecting synonyms or acronym expansions adds
+ * overlap with this query, injecting synonyms or acronym expansions adds
  * noise that hurts precision. The retrieved papers already contain the
  * relevant vocabulary; BM25 surfaces the ones with the most matching terms.
  */

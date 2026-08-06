@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
 import { useAutoSave } from '@/hooks/use-auto-save'
 
-describe('useAutoSave — cancel and record-switch safety', () => {
+describe('useAutoSave, cancel and record-switch safety', () => {
   beforeEach(() => {
     vi.useFakeTimers()
   })

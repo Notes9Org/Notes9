@@ -232,7 +232,7 @@ async function drainLiteratureAgentSse(
           break;
         case 'citations_manifest': {
           // Inline `[N]` chip map for the completed answer. Guard the wire shape
-          // before trusting the cast — `manifest.manifest` must be a plain object
+          // before trusting the cast, `manifest.manifest` must be a plain object
           // map (not null / array / scalar). Mirrors the main agent hook.
           const manifest = payload as CitationsManifest | null;
           if (
@@ -321,7 +321,7 @@ export function useLiteratureAgentStream() {
   });
 
   // Single source of truth for the "begin a fresh stream" reset. Sets every
-  // field of LiteratureAgentStreamState, so it fully replaces prior state — the
+  // field of LiteratureAgentStreamState, so it fully replaces prior state, the
   // three stream entry points previously duplicated this object literal.
   const STREAMING_RESET: LiteratureAgentStreamState = {
     donePayload: null,

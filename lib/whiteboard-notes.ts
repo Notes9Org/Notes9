@@ -88,7 +88,7 @@ function fromRow(r: Row): WhiteboardNote {
 
 async function authedClient() {
   const supabase = createClient()
-  // Use getSession() instead of getUser() — local cookie/storage read, no
+  // Use getSession() instead of getUser(), local cookie/storage read, no
   // /auth/v1/user round-trip. RLS still enforces authorization server-side
   // via the JWT cookie that PostgREST receives on every query.
   const { data: { session } } = await supabase.auth.getSession()

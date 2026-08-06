@@ -53,14 +53,14 @@ const FALLBACK_DEVICE_PIXEL_RATIO = 1.5
  * the viewport height so the match sits slightly below dead-center (easier to read).
  */
 const SCROLL_NUDGE_RATIO = 0.15
-/** Highlight box height as a multiple of font size — covers ascenders plus slight leading. */
+/** Highlight box height as a multiple of font size, covers ascenders plus slight leading. */
 const HIGHLIGHT_HEIGHT_FONT_MULTIPLE = 1.3
 
 /**
  * Stable empty-array singletons for the per-page props. Passing the same
  * reference when a page has no annotations / no RAG highlight lets `React.memo`
  * on `LiteraturePdfPageBlock` skip re-rendering that page on unrelated state
- * changes (selection, focus). Purely a referential-identity optimization —
+ * changes (selection, focus). Purely a referential-identity optimization
  * contents are identical to a fresh `[]`.
  */
 const EMPTY_ANNOTATIONS: LiteraturePdfAnnotation[] = []
@@ -181,7 +181,7 @@ const LiteraturePdfPageBlock = memo(function LiteraturePdfPageBlock({
       const canvas = canvasRef.current
       const textLayerContainer = textLayerRef.current
       const pageContainer = pageRef.current
-      // The refs are re-checked here because `getPage` above is async — during
+      // The refs are re-checked here because `getPage` above is async, during
       // that await the page can unmount / its canvas detach (e.g. when a
       // highlight bumps the rendered page range), leaving these null.
       if (!isActive || !canvas || !textLayerContainer || !pageContainer) return
@@ -798,7 +798,7 @@ export const LiteraturePdfViewer = forwardRef<LiteraturePdfViewerHandle, Literat
 
     // Coalesce bursts of resize notifications (e.g. during a window drag) into a
     // single rAF-scheduled recompute. The final size still produces the final
-    // fitScale, so behavior is unchanged — only intermediate churn is dropped.
+    // fitScale, so behavior is unchanged, only intermediate churn is dropped.
     resizeObserver = new ResizeObserver(() => {
       if (resizeRaf) cancelAnimationFrame(resizeRaf)
       resizeRaf = requestAnimationFrame(() => {
@@ -1037,7 +1037,7 @@ export const LiteraturePdfViewer = forwardRef<LiteraturePdfViewerHandle, Literat
               {renderedEndPage < pageCount ? " · scroll for more" : ""}
             </>
           ) : (
-            "—"
+            "-"
           )}
         </div>
         <div className="flex w-full items-center justify-end gap-2 sm:ml-auto sm:w-auto">

@@ -243,7 +243,7 @@ export function PaperDetailClient({ activePaperId }: { activePaperId: string }) 
       <div className="flex-1 min-w-0 min-h-0 flex flex-col">
         <Card className="flex h-full min-h-0 flex-col gap-0 py-0 border-0 shadow-none rounded-none sm:border sm:shadow-sm sm:rounded-xl">
           <div ref={paperWorkspaceRef} className="flex h-full min-h-0 min-w-0 flex-1 flex-row items-stretch overflow-hidden bg-background">
-            {/* Desktop Sidebar — glass rail (Catalyst history look) */}
+            {/* Desktop Sidebar, glass rail (Catalyst history look) */}
             <SideRail open={sidebarOpen} className="hidden sm:flex">
               <SidebarContent />
             </SideRail>

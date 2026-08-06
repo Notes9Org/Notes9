@@ -36,7 +36,7 @@ function saveAllSessions(sessions: PaperChatSession[]) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions))
   } catch {
-    // localStorage full — prune old sessions
+    // localStorage full, prune old sessions
     const pruned = sessions.slice(0, 50)
     localStorage.setItem(STORAGE_KEY, JSON.stringify(pruned))
   }
@@ -104,7 +104,7 @@ export function usePaperChatHistory(paperId: string) {
     if (currentSessionId === sessionId) setCurrentSessionId(null)
   }, [currentSessionId])
 
-  /** Revert session to a specific message — removes all messages after it */
+  /** Revert session to a specific message, removes all messages after it */
   const revertToMessage = useCallback((sessionId: string, messageId: string) => {
     const all = loadAllSessions()
     const idx = all.findIndex(s => s.id === sessionId)

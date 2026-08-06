@@ -103,7 +103,7 @@ function deriveSupportStatus(
   return null;
 }
 
-/** Subtle grounding signal — confidence cues, NOT correctness verdicts. */
+/** Subtle grounding signal, confidence cues, NOT correctness verdicts. */
 const SUPPORT_BADGE: Record<
   'supported' | 'partial' | 'unsupported',
   { label: string; symbol: string; className: string }
@@ -298,7 +298,7 @@ export type AgentCitationPanelItem = {
    * When set, used as the chip's `titleHref` instead of the internal
    * `documentHref` so clicking opens the actual source. */
   sourceUrl: string | null;
-  /** Other inline labels that resolve to the SAME underlying source — e.g. one
+  /** Other inline labels that resolve to the SAME underlying source, e.g. one
    * paper surfaced via both PubMed and PMC. Populated by the panel's
    * same-source dedupe so a single row stands in for every [N] that cited it. */
   aliasLabels?: string[];
@@ -320,7 +320,7 @@ function useResolvedCitationItem(
 
   useEffect(() => {
     let cancelled = false;
-    // Prefer source_id straight from the manifest/resource — no Supabase query.
+    // Prefer source_id straight from the manifest/resource, no Supabase query.
     if (item.sourceId) {
       setResolvedSourceId(item.sourceId);
       setIsResolving(false);
@@ -336,7 +336,7 @@ function useResolvedCitationItem(
       };
     }
 
-    // Only here — when source_id is truly absent — do we fall back to the
+    // Only here, when source_id is truly absent, do we fall back to the
     // by-title `.ilike()` lookup.
     setIsResolving(true);
     resolveSourceIdFromName(item.sourceType, item.sourceName).then((id) => {
@@ -413,7 +413,7 @@ function useResolvedCitationItem(
  * Filter out SQL/workspace citations that aren't useful for scientists.
  */
 function shouldShowCitation(item: AgentCitationPanelItem): boolean {
-  // Show EVERY grounded source the backend returned — including workspace /
+  // Show EVERY grounded source the backend returned, including workspace /
   // sql-derived records (samples, reports, data files, experiments, lab notes).
   // The previous version dropped entire `sql`/`workspace` source-type families,
   // which silently shrank the panel and was a primary cause of the
@@ -439,7 +439,7 @@ export function mergeGroundingAndRagItems(
 ): AgentCitationPanelItem[] {
   // Preserve each item's backend-assigned display index (groundingResource-
   // ToPanelItem set it from the resource's position, which matches the inline
-  // [N] markers and the citations manifest). Do NOT re-number after filtering —
+  // [N] markers and the citations manifest). Do NOT re-number after filtering
   // that misaligned panel rows from the [N] chips in the answer text.
   const base = resources.map((c, i) => groundingResourceToPanelItem(c, i)).filter(shouldShowCitation);
   if (!ragChunks?.length) {
@@ -509,7 +509,7 @@ export function groundingResourceToPanelItem(
     typeof c.cite_label === 'string' && c.cite_label.trim() ? c.cite_label.trim() : '';
   const citeLabel = citeLabelRaw || String(index + 1);
   // Sort key: part-wise numeric ("3.10" must sort after "3.2"). A plain
-  // parseFloat collides — parseFloat("3.10") === parseFloat("3.1") === 3.1.
+  // parseFloat collides, parseFloat("3.10") === parseFloat("3.1") === 3.1.
   // Fall back to array position when the label is non-numeric.
   const labelNumeric = citeLabelSortKey(citeLabel);
   return {
@@ -557,7 +557,7 @@ export function ragChunkToPanelItem(chunk: RagChunk, i: number): AgentCitationPa
     getCitationRoute({ source_type: sourceType, source_id: sourceId ?? chunk.source_id }) ||
     null;
   // A RagChunk's supporting passage lives on `excerpt`. Don't route through
-  // coalesceAgentExcerpt — it now prefers `cited_text`, a field a RagChunk
+  // coalesceAgentExcerpt, it now prefers `cited_text`, a field a RagChunk
   // doesn't legitimately carry, so read the chunk's own field directly.
   const excerpt = chunk.excerpt?.trim() ?? '';
   const relevance =
@@ -616,7 +616,7 @@ function SmartCitationLink({
   children: ReactNode;
 }) {
   if (isExternalUrl(href)) {
-    // External link — open in new tab, no SPA navigation, no highlight
+    // External link, open in new tab, no SPA navigation, no highlight
     // dispatch (which only makes sense for in-app document anchors).
     return (
       <a
@@ -663,7 +663,7 @@ function RetrievedTextBlock({
 }) {
   // Honest label: a real per-claim grounded span (cited_text + grounding) is the
   // EXACT text the claim is tied to → "Cited passage". A generic preview (no
-  // span — grounding fell through to the source body) stays "Retrieved text" so
+  // span, grounding fell through to the source body) stays "Retrieved text" so
   // we never imply a claim↔source link that grounding didn't actually establish.
   const isGroundedSpan = !!item.citedText && item.grounding !== 'none';
   const blockLabel = isGroundedSpan ? 'Cited passage' : 'Retrieved text';
@@ -736,7 +736,7 @@ function CiteMeta({ author, year }: { author: string | null; year: string | null
   );
 }
 
-/** Provenance kind metadata — drives the per-row "Internal / Paper / Web" tag so
+/** Provenance kind metadata, drives the per-row "Internal / Paper / Web" tag so
  * the source's origin is unmistakable even outside the grouped sections. */
 const PROVENANCE_META: Record<
   CitationGroupKey,
@@ -800,7 +800,7 @@ function CitationBlock({ item, isStreaming }: { item: AgentCitationPanelItem; is
 
   // Show the bare URL beneath the title for external/web citations so the
   // user can see where the link will take them without hovering. Workspace
-  // routes (/lab-notes/…) are intentionally NOT displayed — those go
+  // routes (/lab-notes/…) are intentionally NOT displayed, those go
   // through SPA navigation and the title alone reads better.
   const displayUrl = resolvedItem.sourceUrl;
 
@@ -1015,7 +1015,7 @@ function SingleCitationPanel({
   className?: string;
 }) {
   const resolvedItem = useResolvedCitationItem(item);
-  // Same precedence as CitationBlock — external sourceUrl first so web
+  // Same precedence as CitationBlock, external sourceUrl first so web
   // citations actually link out instead of failing silently to a null
   // internal route.
   const titleHref =
@@ -1145,7 +1145,7 @@ function groupBySubCitation(items: AgentCitationPanelItem[]): SubCitationGroup[]
     // (ADR-0006: real sub-citations of one doc share a base, e.g. [3.1]/[3.2],
     // while two distinct docs get distinct bases [3] and [4]), so the base
     // label backstops a missing sourceId. We deliberately do NOT fall back to
-    // sourceName/title — two DIFFERENT documents that happen to share a title
+    // sourceName/title, two DIFFERENT documents that happen to share a title
     // but lack a sourceId must never collapse into one group.
     const base = citeLabelBase(item.citeLabel);
     const identity = item.sourceId ?? '';
@@ -1192,7 +1192,7 @@ function citationGroup(item: AgentCitationPanelItem): CitationGroupKey {
 
 /** Normalized title key used to detect the SAME paper surfaced by different
  * providers (PubMed vs PMC vs publisher). Returns null for sources we must
- * never merge by title — workspace records (lab notes, experiments) keep their
+ * never merge by title, workspace records (lab notes, experiments) keep their
  * own stable identity, and titles too short/generic to be reliable are skipped. */
 function sameSourceKey(item: AgentCitationPanelItem): string | null {
   const type = normalizeAgentSourceType(item.sourceType);
@@ -1210,13 +1210,13 @@ function sameSourceKey(item: AgentCitationPanelItem): string | null {
  * different providers (PubMed/PMC/publisher) into a single row. The canonical
  * row keeps the lowest-numbered label; the rest become `aliasLabels` so the one
  * row still answers every inline [N] marker that referenced the paper. Purely
- * presentational — the manifest and inline chips are left untouched. */
+ * presentational, the manifest and inline chips are left untouched. */
 function dedupeSameSource(items: AgentCitationPanelItem[]): AgentCitationPanelItem[] {
   const byKey = new Map<string, AgentCitationPanelItem>();
   const out: AgentCitationPanelItem[] = [];
   for (const item of items) {
     const key = sameSourceKey(item);
-    // Skip sub-citations ("3.1"/"3.2") — those are distinct spans of ONE
+    // Skip sub-citations ("3.1"/"3.2"), those are distinct spans of ONE
     // document handled by groupBySubCitation, not cross-provider duplicates.
     if (!key || item.citeLabel.includes('.')) {
       out.push(item);
@@ -1233,7 +1233,7 @@ function dedupeSameSource(items: AgentCitationPanelItem[]): AgentCitationPanelIt
       continue;
     }
     // A shared backend id means the SAME document (e.g. multi-span), not a
-    // cross-provider duplicate — keep it as its own row.
+    // cross-provider duplicate, keep it as its own row.
     if (existing.sourceId && item.sourceId && existing.sourceId === item.sourceId) {
       out.push(item);
       continue;
@@ -1288,7 +1288,7 @@ export function AgentCitationsPanel({
   isStreaming = false,
   showEmptyState = false,
 }: AgentCitationsPanelProps) {
-  // Hooks must run unconditionally on every render — declare before any early
+  // Hooks must run unconditionally on every render, declare before any early
   // return. During streaming the item count grows 0→1→2, so a useState placed
   // after the length checks below changed the hook call order and crashed the
   // panel (Rules of Hooks violation).
@@ -1332,7 +1332,7 @@ export function AgentCitationsPanel({
     if (!showEmptyState) return null;
     return (
       <p className={cn('text-xs text-muted-foreground/80', className)}>
-        Answered from general knowledge — no workspace sources cited.
+        Answered from general knowledge, no workspace sources cited.
       </p>
     );
   }

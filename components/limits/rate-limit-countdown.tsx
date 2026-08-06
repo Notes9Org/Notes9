@@ -45,7 +45,7 @@ export function RateLimitCountdown({
   const firedRef = useRef(false)
 
   // Sync external seconds prop when it changes (new 429 arrives or resets).
-  // Do NOT reset firedRef or isRetrying when a retry is already in-flight —
+  // Do NOT reset firedRef or isRetrying when a retry is already in-flight
   // that would let the countdown fire onRetry a second time (double-submit).
   useEffect(() => {
     setRemaining(retryAfterSeconds)
@@ -63,7 +63,7 @@ export function RateLimitCountdown({
     return () => clearTimeout(id)
   }, [remaining])
 
-  // Auto-retry at zero — fire exactly once
+  // Auto-retry at zero, fire exactly once
   const handleExpiry = useCallback(() => {
     if (firedRef.current) return
     firedRef.current = true
@@ -83,7 +83,7 @@ export function RateLimitCountdown({
   const label = m > 0 ? `${m}:${String(s).padStart(2, '0')}` : `${s}s`
 
   if (!isActive && !isRetrying) {
-    // Not rate-limited — render children unchanged
+    // Not rate-limited, render children unchanged
     return <>{children}</>
   }
 
@@ -97,7 +97,7 @@ export function RateLimitCountdown({
       {/* The actual visible button (disabled, with countdown) */}
       <button
         disabled
-        aria-label={isRetrying ? 'Sending…' : `Send disabled — ready in ${label}`}
+        aria-label={isRetrying ? 'Sending…' : `Send disabled, ready in ${label}`}
         aria-live="polite"
         className={cn(
           'absolute inset-0 flex items-center justify-center gap-1.5',
@@ -123,7 +123,7 @@ export function RateLimitCountdown({
 }
 
 // ---------------------------------------------------------------------------
-// Hook — manage rate-limit state from API responses
+// Hook, manage rate-limit state from API responses
 // ---------------------------------------------------------------------------
 
 interface RateLimitState {
@@ -148,7 +148,7 @@ export function useRateLimit(): RateLimitState {
   const [seconds, setSeconds] = useState(0)
 
   const setFrom429Response = useCallback((headers: Headers) => {
-    // Fetch Headers.get() is case-insensitive per spec — no fallback needed.
+    // Fetch Headers.get() is case-insensitive per spec, no fallback needed.
     const raw = headers.get('Retry-After')
     const parsed = raw ? parseInt(raw, 10) : 0
     // Add 1 s buffer so the client doesn't retry exactly at the boundary

@@ -2,13 +2,7 @@
 
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { AuthShell } from "@/components/auth/auth-shell"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -22,7 +16,20 @@ import Link from "next/link"
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useState, useEffect, Suspense } from "react"
 import { Separator } from "@/components/ui/separator"
-import { Notes9Brand } from "@/components/brand/notes9-brand"
+
+/** Only allow in-app relative paths (same rules as auth/login + auth/callback). */
+function safeNextPath(raw: string | null): string {
+  if (!raw) return "/dashboard"
+  if (!raw.startsWith("/") || raw.startsWith("//")) return "/dashboard"
+  if (raw.includes("\\")) return "/dashboard"
+  try {
+    const probe = new URL(raw, "http://localhost")
+    if (probe.origin !== "http://localhost") return "/dashboard"
+    return probe.pathname + probe.search + probe.hash
+  } catch {
+    return "/dashboard"
+  }
+}
 
 function SignUpContent() {
   const [email, setEmail] = useState("")
@@ -37,6 +44,11 @@ function SignUpContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const inviteToken = searchParams.get("token")
+  // Where to send the user after auth. Defaults to /dashboard; the marketing
+  // hero passes ?next=/literature-reviews?q=...&autorun=1 so a new user lands
+  // straight in a live search of the question they typed on the home page.
+  const nextPath = safeNextPath(searchParams.get("next"))
+  const hasNext = nextPath !== "/dashboard"
 
   // Check if email exists when user stops typing
   useEffect(() => {
@@ -108,16 +120,21 @@ function SignUpContent() {
         return
       }
 
+      // The email-verification link must route through /auth/callback so the
+      // `next` destination survives the hop (the callback threads `next`).
+      const emailRedirectTo = inviteToken
+        ? `${window.location.origin}/auth/callback?token=${encodeURIComponent(inviteToken)}`
+        : hasNext
+          ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`
+          : process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ||
+            `${window.location.origin}/dashboard`
+
       // Attempt to sign up
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          emailRedirectTo:
-            inviteToken
-              ? `${window.location.origin}/auth/callback?token=${encodeURIComponent(inviteToken)}`
-              : process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ||
-                `${window.location.origin}/dashboard`,
+          emailRedirectTo,
           data: {
             first_name: firstName,
             last_name: lastName,
@@ -138,13 +155,14 @@ function SignUpContent() {
 
       // Check if user was created or if it's a duplicate
       if (data.user && !data.session) {
-        // User created but needs email verification
-        router.push("/auth/sign-up-success")
+        // User created but needs email verification. Carry `next` onto the
+        // success page so it can forward to login (which honors `next`).
+        router.push(hasNext ? `/auth/sign-up-success?next=${encodeURIComponent(nextPath)}` : "/auth/sign-up-success")
       } else if (data.user && data.session) {
-        // User already exists and was signed in automatically
-        router.push("/dashboard")
+        // Auto-signed-in, go straight to the intended destination.
+        router.push(nextPath)
       } else {
-        router.push("/auth/sign-up-success")
+        router.push(hasNext ? `/auth/sign-up-success?next=${encodeURIComponent(nextPath)}` : "/auth/sign-up-success")
       }
     } catch (error: unknown) {
       if (error instanceof Error) {
@@ -169,7 +187,9 @@ function SignUpContent() {
     try {
       const callbackUrl = inviteToken
         ? `${window.location.origin}/auth/callback?token=${encodeURIComponent(inviteToken)}`
-        : `${window.location.origin}/auth/callback`
+        : hasNext
+          ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`
+          : `${window.location.origin}/auth/callback`
 
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
@@ -193,25 +213,23 @@ function SignUpContent() {
   }
 
   return (
-    <div className="flex min-h-screen w-full items-center justify-center p-6 bg-background">
-      <div className="w-full max-w-md">
-        <div className="flex flex-col gap-6">
-          <div className="flex flex-col items-center gap-2 text-center">
-            <Notes9Brand stacked iconClassName="h-[60px] w-[60px]" textClassName="h-10 w-auto" />
-            <h1 className="text-2xl font-bold">Join Notes9</h1>
-            <p className="text-sm text-muted-foreground">
-              Create your research lab account
-            </p>
-          </div>
-          
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-xl">Create Account</CardTitle>
-              <CardDescription>
-                Enter your information to get started
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
+    <AuthShell
+      title="Join Notes9"
+      subtitle="Create your research lab account, free credits to start"
+      aside={
+        <>
+          By continuing you agree to our{" "}
+          <Link href="/terms" className="underline underline-offset-2 hover:text-foreground">
+            Terms
+          </Link>{" "}
+          &amp;{" "}
+          <Link href="/privacy" className="underline underline-offset-2 hover:text-foreground">
+            Privacy
+          </Link>
+          .
+        </>
+      }
+    >
               {/* OAuth Buttons */}
               <div className="flex flex-col gap-3 mb-6">
                 <Button
@@ -378,18 +396,20 @@ function SignUpContent() {
                 <div className="mt-4 text-center text-sm">
                   Already have an account?{" "}
                   <Link
-                    href={inviteToken ? `/auth/login?token=${encodeURIComponent(inviteToken)}` : "/auth/login"}
+                    href={
+                      inviteToken
+                        ? `/auth/login?token=${encodeURIComponent(inviteToken)}`
+                        : hasNext
+                          ? `/auth/login?next=${encodeURIComponent(nextPath)}`
+                          : "/auth/login"
+                    }
                     className="underline underline-offset-4 hover:text-primary"
                   >
                     Sign in
                   </Link>
                 </div>
               </form>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    </div>
+    </AuthShell>
   )
 }
 

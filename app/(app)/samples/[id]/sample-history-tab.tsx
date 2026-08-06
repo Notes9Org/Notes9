@@ -105,9 +105,9 @@ function actionVariant(action: SampleTransfer["action"]): "default" | "secondary
 
 function performerName(transfer: SampleTransfer) {
   const performer = transfer.performer
-  if (!performer) return "—"
+  if (!performer) return "-"
   const name = [performer.first_name, performer.last_name].filter(Boolean).join(" ").trim()
-  return name || "—"
+  return name || "-"
 }
 
 function formatDateTime(value: string) {
@@ -422,10 +422,10 @@ export function SampleHistoryTab({ sampleId, initialTransfers, currentLocation }
                   const movement = (
                     <div className="flex min-w-0 items-center gap-1.5 text-sm text-foreground">
                       <span className="truncate text-muted-foreground">
-                        {transfer.from_location || "—"}
+                        {transfer.from_location || "-"}
                       </span>
                       <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      <span className="truncate">{transfer.to_location || "—"}</span>
+                      <span className="truncate">{transfer.to_location || "-"}</span>
                     </div>
                   )
                   const qty = formatQuantity(transfer)
@@ -441,12 +441,12 @@ export function SampleHistoryTab({ sampleId, initialTransfers, currentLocation }
                       </TableCell>
                       <TableCell className="min-w-[160px] max-w-[240px]">{movement}</TableCell>
                       <TableCell className="whitespace-nowrap text-sm text-foreground">
-                        {qty || <span className="text-muted-foreground">—</span>}
+                        {qty || <span className="text-muted-foreground">-</span>}
                       </TableCell>
                       <TableCell className="text-sm text-foreground">{performerName(transfer)}</TableCell>
                       <TableCell className="hidden max-w-xs lg:table-cell">
                         <span className="line-clamp-2 text-xs text-muted-foreground">
-                          {transfer.notes || "—"}
+                          {transfer.notes || "-"}
                         </span>
                       </TableCell>
                       <TableCell>

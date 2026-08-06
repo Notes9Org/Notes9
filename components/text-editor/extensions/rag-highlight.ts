@@ -11,7 +11,7 @@ export interface RagHighlightOptions {
 const ragHighlightKey = new PluginKey('ragHighlight')
 
 /** Advisory char offsets (into the stripped source text) for the supporting
- * span. A precision bonus over the fuzzy `excerpt` match — only used when the
+ * span. A precision bonus over the fuzzy `excerpt` match, only used when the
  * offsets map cleanly onto the live editor text. */
 export interface RagHighlightCharRange {
   start: number
@@ -135,7 +135,7 @@ export const RagHighlight = Extension.create<RagHighlightOptions>({
                 const slice = fullText.slice(charRange.start, charRange.end)
                 // Only trust the raw offsets when the text at those positions
                 // STRONGLY corroborates the excerpt (≥0.65). A weak overlap is
-                // not enough to risk a confidently-wrong highlight — anything
+                // not enough to risk a confidently-wrong highlight, anything
                 // below the bar falls through to the full-document fuzzy search.
                 const corroboration = fuzzyFindExcerpt(slice, excerpt, { threshold: 0.65 })
                 if (corroboration) {

@@ -79,7 +79,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Server-side content verification — still rejects spoofed MIME types.
+    // Server-side content verification, still rejects spoofed MIME types.
     if (TEXT_SNIFF_MIME_TYPES.includes(effectiveType)) {
       // Text/markdown/JSON/SVG have no reliable magic bytes; require valid UTF-8.
       const textBuf = Buffer.from(await file.slice(0, 4096).arrayBuffer());
@@ -91,7 +91,7 @@ export async function POST(request: Request) {
       }
     } else if (OOXML_MIME_TYPES.includes(effectiveType)) {
       // .docx/.xlsx are ZIP containers; the identifying entries can sit past the
-      // first few KB, so sniff the WHOLE buffer (10MB-capped above) — fixes
+      // first few KB, so sniff the WHOLE buffer (10MB-capped above), fixes
       // larger Office files 400ing.
       const zipBuf = Buffer.from(await file.arrayBuffer());
       const detected = await fileTypeFromBuffer(zipBuf);
@@ -112,7 +112,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: `File content does not match declared type ${effectiveType}` }, { status: 400 });
       }
     } else {
-      // Images and PDF carry magic bytes at offset 0 — cheap 4 KB slice.
+      // Images and PDF carry magic bytes at offset 0, cheap 4 KB slice.
       const buf = Buffer.from(await file.slice(0, 4096).arrayBuffer());
       const detected = await fileTypeFromBuffer(buf);
       if (!detected || detected.mime !== effectiveType || !(ALLOWED_MIME_TYPES as readonly string[]).includes(detected.mime)) {
@@ -171,7 +171,7 @@ export async function POST(request: Request) {
 
       if (attErr) {
         // Registration failed. The bytes are in Storage but have no
-        // chat_attachments row, so the TTL cron can never reap them — a storage
+        // chat_attachments row, so the TTL cron can never reap them, a storage
         // leak. Delete the just-uploaded object to avoid the orphan, then ask the
         // user to retry. (Without a row the file also can't be re-signed on reload
         // or read by read_document in later turns anyway, so keeping it has little

@@ -9,11 +9,11 @@
  *     Supabase onAuthStateChange pattern previously used by the RUM provider.
  *
  * PII discipline (matches the old telemetry pipeline's stance):
- *   - autocapture disabled — we send explicit, named events only.
+ *   - autocapture disabled, we send explicit, named events only.
  *   - session-recording inputs masked; no free text is ever captured.
  *   - person profiles for identified users only (no anonymous profile sprawl).
  *
- * Fully inert when NEXT_PUBLIC_POSTHOG_KEY is unset — safe for local/preview.
+ * Fully inert when NEXT_PUBLIC_POSTHOG_KEY is unset, safe for local/preview.
  */
 
 import { Suspense, useEffect, type ReactNode } from 'react'
@@ -40,7 +40,7 @@ function initPostHog() {
     autocapture: false,
     // Only create person profiles once a user is identified.
     person_profiles: 'identified_only',
-    // Never record raw user input — PII discipline.
+    // Never record raw user input, PII discipline.
     session_recording: { maskAllInputs: true },
   })
   // Capture unhandled exceptions + promise rejections into Error Tracking.
@@ -52,7 +52,7 @@ function initPostHog() {
 
 /**
  * Manual pageview capture. Isolated in its own component so the
- * useSearchParams() read can sit behind a Suspense boundary — otherwise it
+ * useSearchParams() read can sit behind a Suspense boundary, otherwise it
  * deopts the whole app to client-side rendering in the App Router.
  */
 function PostHogPageView() {
@@ -91,7 +91,7 @@ export function PostHogProvider({ children }: { children: ReactNode }) {
               session?.user
             ) {
               posthog.identify(session.user.id, {
-                // Opaque/enum person properties only — never PII.
+                // Opaque/enum person properties only, never PII.
                 plan: (session.user.app_metadata?.plan as string) ?? null,
               })
             } else if (event === 'SIGNED_OUT') {

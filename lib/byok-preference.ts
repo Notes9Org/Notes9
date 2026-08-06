@@ -2,7 +2,7 @@
  * BYOK (bring your own key): the user's own Anthropic API key.
  *
  * The key lives ONLY in this browser (localStorage) and is sent as an
- * `X-BYOK-Api-Key` header on each agent request — the servers never store it.
+ * `X-BYOK-Api-Key` header on each agent request, the servers never store it.
  * When set, Catalyst runs on the user's Anthropic account: their bill, and the
  * app's credit limits don't apply. Clearing the field returns to house credits.
  */
@@ -25,7 +25,7 @@ export function setByokKey(key: string | null): void {
     if (!key || !key.trim()) window.localStorage.removeItem(STORAGE_KEY);
     else window.localStorage.setItem(STORAGE_KEY, key.trim());
   } catch {
-    // storage unavailable — the key just won't persist
+    // storage unavailable, the key just won't persist
   }
 }
 

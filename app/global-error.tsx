@@ -3,7 +3,7 @@
 /**
  * app/global-error.tsx
  *
- * Root-level error boundary — catches errors thrown in the root layout that
+ * Root-level error boundary, catches errors thrown in the root layout that
  * route-segment error.tsx boundaries cannot. Must render its own <html>/<body>.
  * Reports the exception to PostHog Error Tracking.
  */

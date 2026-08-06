@@ -166,7 +166,7 @@ export function ScientificCalculatorSheet({
   getEditor: () => Editor | null
   /** `overlay` covers only the editor region (parent must be `relative`). `sheet` uses the app-level right sheet. */
   presentation?: "sheet" | "overlay"
-  /** Called when a calculation is inserted — caller can persist to content_diffs. */
+  /** Called when a calculation is inserted, caller can persist to content_diffs. */
   onSaveToHistory?: (resultText: string) => void
 }) {
   const { toast } = useToast()
@@ -232,7 +232,7 @@ export function ScientificCalculatorSheet({
       toast({
         title: "Inserted",
         description: ltx
-          ? "Inserted as plain text — inline math failed for this formula."
+          ? "Inserted as plain text, inline math failed for this formula."
           : "Result added to your note at the cursor.",
       })
     },
@@ -258,7 +258,7 @@ export function ScientificCalculatorSheet({
   }
 
   // ---------------------------------------------------------------------------
-  // Mode selector (left rail) — icon/glyph column with tooltips
+  // Mode selector (left rail), icon/glyph column with tooltips
   // ---------------------------------------------------------------------------
   const modeSelector = (
     <TooltipProvider delayDuration={150}>
@@ -307,7 +307,7 @@ export function ScientificCalculatorSheet({
                                 : "text-muted-foreground/80 hover:bg-muted/60 hover:text-foreground",
                             )}
                           >
-                            {/* Sliding active pill — same grammar as the sidebar nav */}
+                            {/* Sliding active pill, same grammar as the sidebar nav */}
                             {isActive && (
                               <motion.span
                                 aria-hidden
@@ -374,7 +374,7 @@ export function ScientificCalculatorSheet({
   }, [mode, onResultChange])
 
   // ---------------------------------------------------------------------------
-  // Result card — symbol-led, no "Result" label
+  // Result card, symbol-led, no "Result" label
   // ---------------------------------------------------------------------------
   const resultCard = (
     <TooltipProvider delayDuration={150}>
@@ -502,12 +502,12 @@ export function ScientificCalculatorSheet({
 
           <TabsContent value="calc" className="mt-0 flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden">
             <div className="flex min-h-0 flex-1 flex-row">
-              {/* Left rail — icon/glyph column */}
+              {/* Left rail, icon/glyph column */}
               <div className="hidden w-12 shrink-0 border-r border-border/40 bg-muted/10 sm:flex sm:flex-col">
                 {modeSelector}
               </div>
 
-              {/* Right — form + result */}
+              {/* Right, form + result */}
               <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                 {/* Mobile: mode dropdown instead of rail */}
                 <div className="flex shrink-0 items-center gap-2 border-b border-border/40 px-3 py-2 sm:hidden">
@@ -535,7 +535,7 @@ export function ScientificCalculatorSheet({
                   </select>
                 </div>
 
-                {/* Mode header — formula only, theme typography */}
+                {/* Mode header, formula only, theme typography */}
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <button
@@ -617,7 +617,7 @@ export function ScientificCalculatorSheet({
   // Header
   // ---------------------------------------------------------------------------
   // Shared header chrome: quiet glass with a soft primary glow instead of the
-  // old slate gradient — matches the sidebar/panel ambient treatment.
+  // old slate gradient, matches the sidebar/panel ambient treatment.
   const headerAmbient = (
     <div
       aria-hidden
@@ -718,7 +718,7 @@ export function ScientificCalculatorSheet({
             exit={{ opacity: 0, x: 24, scale: 0.97, transition: { duration: 0.18, ease: "easeIn" } }}
             transition={{ type: "spring", stiffness: 380, damping: 34, mass: 0.9 }}
             className={cn(
-              // Frosted glass panel — same grammar as the sidebar switcher menus.
+              // Frosted glass panel, same grammar as the sidebar switcher menus.
               "relative z-[1] flex h-full min-h-0 w-full max-w-xl flex-col overflow-hidden rounded-2xl",
               "bg-[color:color-mix(in_oklab,var(--card)_88%,transparent)] backdrop-blur-2xl backdrop-saturate-150",
               "shadow-[0_24px_64px_-16px_rgba(0,0,0,0.28),0_8px_24px_-8px_rgba(0,0,0,0.12)]",

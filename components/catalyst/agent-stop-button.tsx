@@ -4,7 +4,7 @@ import { Square } from "@phosphor-icons/react/ssr";
 import { cn } from '@/lib/utils';
 
 interface AgentStopButtonProps {
-  /** Invoked when the user clicks Stop — should cancel the run + stream. */
+  /** Invoked when the user clicks Stop, should cancel the run + stream. */
   onStop: () => void;
   className?: string;
 }
@@ -13,7 +13,7 @@ interface AgentStopButtonProps {
  * Subtle "Stop" control shown while a run is streaming AND a server-side
  * cancel handle (runId) is available. Clicking it asks the backend to cancel
  * the run and aborts the local stream. When no runId exists (HITL flag off),
- * the caller simply doesn't render this — there's no error path.
+ * the caller simply doesn't render this, there's no error path.
  */
 export function AgentStopButton({ onStop, className }: AgentStopButtonProps) {
   return (

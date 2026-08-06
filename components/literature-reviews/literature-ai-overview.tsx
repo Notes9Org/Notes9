@@ -9,7 +9,7 @@ import type { CatalystLiterature } from '@/lib/catalyst-literature'
 /**
  * Inline "AI Overview" for the literature search (Google-style): a clamped teaser of
  * the streamed summary with Show more / Show less, and a "Dive deeper with Catalyst"
- * action that hands off to the chat sidebar. Nothing here creates a chat session —
+ * action that hands off to the chat sidebar. Nothing here creates a chat session
  * that only happens once the user dives (see the sidebar's C3 effect).
  */
 export function LiteratureAiOverview({

@@ -75,7 +75,7 @@ function parseStructureHints(diff: ContentDiff): ContentDiffStructureHints {
   return parseStructureHintsFromDb(diff.structure_hints)
 }
 
-/** Compact export: +/- lines and shortened unchanged runs — avoids duplicating full document twice per entry. */
+/** Compact export: +/- lines and shortened unchanged runs, avoids duplicating full document twice per entry. */
 function compactWordDiffForExport(prevPlain: string, nextPlain: string): string {
   const parts = diffWords(prevPlain, nextPlain)
   const lines: string[] = []
@@ -338,7 +338,7 @@ function DiffTableRows({ diff }: { diff: ContentDiff }) {
           </div>
         </TableCell>
         <TableCell className="py-2 align-top text-xs text-foreground/90">
-          <p className="leading-snug line-clamp-3">{diff.change_summary || "—"}</p>
+          <p className="leading-snug line-clamp-3">{diff.change_summary || "-"}</p>
         </TableCell>
         <TableCell className="w-[7rem] whitespace-nowrap py-2 align-top text-2xs tabular-nums">
           <div className="flex flex-col gap-0.5">

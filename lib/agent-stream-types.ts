@@ -1,4 +1,4 @@
-// MIRROR of AI/catalyst/agents/core/sse_schema.py — keep in sync (golden contract tests will fail otherwise)
+// MIRROR of AI/catalyst/agents/core/sse_schema.py, keep in sync (golden contract tests will fail otherwise)
 
 // ── Payload types ─────────────────────────────────────────────────────────────
 
@@ -45,9 +45,9 @@ export interface ThinkingTokenPayload {
 export interface TokenPayload {
   /** Canonical wire field. */
   delta: string;
-  /** Legacy alias — accepted by parser for back-compat. */
+  /** Legacy alias, accepted by parser for back-compat. */
   text?: string;
-  /** Legacy alias — accepted by parser for back-compat. */
+  /** Legacy alias, accepted by parser for back-compat. */
   token?: string;
 }
 
@@ -56,7 +56,7 @@ export type TextResetPayload = Record<string, never>;
 
 /** SSE event: tool_start – a tool invocation has begun */
 export interface ToolStartPayload {
-  /** Stable opaque correlation key — do NOT display; use `label` instead. */
+  /** Stable opaque correlation key, do NOT display; use `label` instead. */
   tool: string;
   /** Researcher-facing narration supplied by Tool.narrate_start(). */
   label: string;
@@ -193,7 +193,7 @@ export interface GroundingResource {
   cite_label?: string | null;
   // ── Per-claim, span-level grounding (unified wire contract) ───────────────
   /** Verbatim supporting span for THIS citation. Prefer over `excerpt` for
-   * highlighting — it pinpoints the exact sentence backing the claim. */
+   * highlighting, it pinpoints the exact sentence backing the claim. */
   cited_text?: string | null;
   /** Char offset into the stripped source where `cited_text` begins (advisory). */
   char_start?: number | null;
@@ -285,7 +285,7 @@ export interface PermissionRequestPayload {
   [key: string]: unknown;
 }
 
-// ── Legacy payload types (old LangGraph pipeline — kept for back-compat) ──────
+// ── Legacy payload types (old LangGraph pipeline, kept for back-compat) ──────
 
 /** @deprecated LangGraph pipeline removed; kept so old imports compile */
 export interface SqlPayload {
@@ -351,7 +351,7 @@ export type SseEvent =
 // ── Source-name normalizer (AD1: structured fields → view model) ──────────────
 //
 // The ONE place a source-bearing SSE event becomes the `source_names` shown on a
-// tool card. UI state is derived ONLY from typed wire fields here — never by
+// tool card. UI state is derived ONLY from typed wire fields here, never by
 // parsing human-readable `thinking` prose (that heuristic was fragile: any copy
 // change silently emptied the cards). Keeping the extraction in a single typed
 // function means a wording change on the backend can never break the cards, and
@@ -386,7 +386,7 @@ export function normalizeSourceNames(
 /**
  * Extract the display source names from a source-bearing SSE event, using ONLY
  * its structured fields. Returns `[]` for events that carry no structured
- * sources — including `thinking`, whose message text must never be parsed.
+ * sources, including `thinking`, whose message text must never be parsed.
  */
 export function sourceNamesFromEvent(
   eventType: string,
@@ -439,7 +439,7 @@ const KNOWN_EVENT_TYPES = new Set([
 
 /**
  * Returns true when `raw` has a known `event` string and a non-null `data`
- * object — i.e. it is a recognised SseEvent discriminated-union member.
+ * object, i.e. it is a recognised SseEvent discriminated-union member.
  * Used by the contract test to verify fixture entries are accepted.
  */
 export function isSseEvent(raw: unknown): raw is SseEvent {

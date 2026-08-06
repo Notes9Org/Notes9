@@ -10,7 +10,7 @@ import { pdfFileToEditorHtml } from "@/lib/pdf-to-editor-html"
  * imports behave identically everywhere. Handles PDF, Word (.docx), Markdown,
  * plain text, and HTML; preserves formatting and copies images inline.
  *
- * Spreadsheets are intentionally not handled here — they're inserted as a
+ * Spreadsheets are intentionally not handled here, they're inserted as a
  * dedicated editor node by the surfaces that support them.
  */
 

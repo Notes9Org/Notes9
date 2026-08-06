@@ -92,7 +92,7 @@ export function ProtocolDraftBiomniPanel({
     [templateShellHtml]
   )
 
-  // Pinned auto-scroll — follows new messages/steps only while the user is at the bottom.
+  // Pinned auto-scroll, follows new messages/steps only while the user is at the bottom.
   const { onScroll } = usePinnedAutoScroll(scrollRef, [messages, steps, error])
 
   const buildQuery = useCallback(
@@ -183,7 +183,7 @@ export function ProtocolDraftBiomniPanel({
 
       <div className="px-3 py-2 border-b space-y-1.5 shrink-0">
         <p className="text-micro text-muted-foreground leading-snug">
-          Selected papers are sent to the Cat-Bio literature stream only — they are not inserted into
+          Selected papers are sent to the Cat-Bio literature stream only, they are not inserted into
           the protocol body until you apply an assistant reply below.
         </p>
         <div className="flex flex-wrap gap-1">

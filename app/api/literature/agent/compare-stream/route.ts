@@ -29,7 +29,7 @@ export async function POST(req: Request) {
     });
   }
 
-  // Real JWT verification — `token` being non-empty is not authentication.
+  // Real JWT verification, `token` being non-empty is not authentication.
   const _verifiedUser = await verifyBearerToken(token);
   if (!_verifiedUser) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {

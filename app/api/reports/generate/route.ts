@@ -39,7 +39,7 @@ Your capabilities:
 - Generate inline data visualizations as Chart.js chart specifications
 
 OUTPUT FORMAT:
-Generate a structured data analysis report in markdown. Include charts INLINE within the relevant section — not grouped in a separate section. Each chart should appear right after the paragraph that discusses the data it visualizes.
+Generate a structured data analysis report in markdown. Include charts INLINE within the relevant section, not grouped in a separate section. Each chart should appear right after the paragraph that discusses the data it visualizes.
 
 Suggested sections (adapt as needed):
 1. **Executive Summary** - Key findings in 2-3 sentences
@@ -50,7 +50,7 @@ Suggested sections (adapt as needed):
 CHART GENERATION:
 Place charts INLINE immediately after the text that references them. Do NOT group all charts in one section.
 
-Example — a chart placed right after its discussion:
+Example, a chart placed right after its discussion:
 
 The treatment groups showed significant variation in cell viability...
 
@@ -86,7 +86,7 @@ RULES:
 3. Use proper scientific terminology
 4. Include quantitative observations where possible
 5. Structure the report for easy scanning with headers and bullet points
-6. Place each chart immediately after the paragraph discussing that data — never in a separate charts section`
+6. Place each chart immediately after the paragraph discussing that data, never in a separate charts section`
 }
 
 export async function POST(req: NextRequest) {
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
     const user = await getCurrentUser()
     if (!user) {
       return NextResponse.json(
-        { error: 'Unauthorized — sign in to generate reports.' },
+        { error: 'Unauthorized, sign in to generate reports.' },
         { status: 401 }
       )
     }

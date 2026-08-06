@@ -21,7 +21,7 @@ import { AnalyticsEvent } from '@/lib/analytics/events'
 import type { SearchPaper } from '@/types/paper-search'
 import type { AiSearchResult } from '@/types/ai-search'
 
-/** Searches we've already auto-opened Catalyst for — module-level so a tab switch
+/** Searches we've already auto-opened Catalyst for, module-level so a tab switch
  *  / remount doesn't re-open the sidebar for the same query. */
 
 /** Best external link for a result (matched metadata first, then the cited URL). */
@@ -187,7 +187,7 @@ export function AiSearchView({
   const displayed = useMemo(() => applyAiFilters(results, filters), [results, filters])
   const visible = useMemo(() => displayed.slice(0, visibleCount), [displayed, visibleCount])
   // "Load more" is a pure client-side reveal of the already-fetched, deeply
-  // ranked set — no network page-2 (that path caused duplicates/latency).
+  // ranked set, no network page-2 (that path caused duplicates/latency).
   const showLoadMore = visibleCount < displayed.length
   const onLoadMore = useCallback(() => {
     setVisibleCount((c) => {
@@ -207,13 +207,13 @@ export function AiSearchView({
   // exactly once per search run (on false→true).
   const wasStreamingRef = useRef(false)
 
-  // Inline "AI Overview" state — the summary renders below the search, and the
+  // Inline "AI Overview" state, the summary renders below the search, and the
   // Catalyst bridge is only populated when the user explicitly dives deeper.
   const [overview, setOverview] = useState<CatalystLiterature | null>(null)
 
   // Compose the AI summary (and its references) into local `overview` state so it
   // renders inline below the search as an "AI Overview". Nothing opens the chat or
-  // persists a session here — that happens only when the user clicks "Dive deeper"
+  // persists a session here, that happens only when the user clicks "Dive deeper"
   // (see diveDeeper), which hands the summary to the sidebar via setCatalystLiterature.
   useEffect(() => {
     const q = query.trim()
@@ -383,7 +383,7 @@ export function AiSearchView({
           <MotionResultCard
             key={`${r.paper?.id ?? r.sourceUrl ?? r.aiTitle ?? r.citeLabel}`}
             // Anchor by the VISIBLE badge (String(i+1), same value shown on the
-            // card and used by the [N] citation chips), not the raw r.citeLabel —
+            // card and used by the [N] citation chips), not the raw r.citeLabel
             // otherwise clicking [8] can't find the card the user sees as "8".
             data-cite-label={String(i + 1)}
             className="rounded-xl"

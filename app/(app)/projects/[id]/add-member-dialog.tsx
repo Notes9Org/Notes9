@@ -30,7 +30,7 @@ type Role = "lead" | "researcher" | "viewer"
 
 interface AddMemberDialogProps {
   projectId: string
-  /** Existing member user_ids — used to short-circuit duplicate adds. */
+  /** Existing member user_ids, used to short-circuit duplicate adds. */
   existingMemberIds?: string[]
 }
 
@@ -39,7 +39,7 @@ interface AddMemberDialogProps {
  * up in the `profiles` table; if the user already has a Notes9 account they
  * are linked immediately. If they don't, we surface a clear message so the
  * inviter knows to ask them to sign up first (full email-invite flow with
- * pending records is a follow-up — out of scope here).
+ * pending records is a follow-up, out of scope here).
  */
 export function AddMemberDialog({ projectId, existingMemberIds = [] }: AddMemberDialogProps) {
   const [open, setOpen] = useState(false)
@@ -72,7 +72,7 @@ export function AddMemberDialog({ projectId, existingMemberIds = [] }: AddMember
       if (!profile) {
         toast.error("No Notes9 account with that email", {
           description:
-            "Ask them to sign up at notes9.com first — invite tokens for unregistered users are not supported yet.",
+            "Ask them to sign up at notes9.com first, invite tokens for unregistered users are not supported yet.",
         })
         return
       }

@@ -4,15 +4,15 @@
  * Path taxonomy (object key = name in storage.objects):
  *
  * 1. Personal (RLS: first segment = auth.uid())
- *    - `{userId}/literature/{literatureId}/...` — literature PDFs (unchanged)
- *    - `{userId}/temp/...` — staging uploads
- *    - `{userId}/profile/avatar.{ext}` — profile photo
- *    - `{userId}/lab-notes/public/{noteId}.json` — published lab note JSON (writes; reads via API or policy)
+ *    - `{userId}/literature/{literatureId}/...`, literature PDFs (unchanged)
+ *    - `{userId}/temp/...`, staging uploads
+ *    - `{userId}/profile/avatar.{ext}`, profile photo
+ *    - `{userId}/lab-notes/public/{noteId}.json`, published lab note JSON (writes; reads via API or policy)
  *
  * 2. Org-scoped (RLS: first segment = profiles.organization_id, second = domain)
- *    - `{orgId}/protocol/{templateId}/...` — protocol document templates
- *    - `{orgId}/experiment/{experimentId}/{experimentDataId}/{fileName}` — experiment data files
- *    - `{orgId}/sample/{sampleId}/{sampleFileId}/{fileName}` — sample molecular files
+ *    - `{orgId}/protocol/{templateId}/...`, protocol document templates
+ *    - `{orgId}/experiment/{experimentId}/{experimentDataId}/{fileName}`, experiment data files
+ *    - `{orgId}/sample/{sampleId}/{sampleFileId}/{fileName}`, sample molecular files
  *
  * @see scripts/036_literature_catalog_placement.sql
  * @see scripts/041_protocol_templates_user_bucket.sql
@@ -40,7 +40,7 @@ export async function createSampleFileSignedUrl(
     .createSignedUrl(storagePath, ttlSeconds)
   if (error || !data?.signedUrl) {
     // Surface the underlying cause (almost always a storage RLS denial) instead
-    // of silently returning null — callers otherwise show an endless spinner.
+    // of silently returning null, callers otherwise show an endless spinner.
     if (error) console.error("createSampleFileSignedUrl failed", { storagePath, error })
     return null
   }

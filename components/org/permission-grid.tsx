@@ -67,7 +67,7 @@ export function PermissionGrid({
               <td className="px-3 py-2 font-medium">{capitalize(resource)}</td>
               {ACTIONS.map((action) => {
                 const perm = findPermission(resource, action)
-                if (!perm) return <td key={action} className="px-3 py-2 text-center">—</td>
+                if (!perm) return <td key={action} className="px-3 py-2 text-center">-</td>
                 return (
                   <td key={action} className="px-3 py-2 text-center">
                     <Checkbox

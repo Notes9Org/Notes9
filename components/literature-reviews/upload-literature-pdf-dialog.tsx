@@ -313,15 +313,15 @@ export function UploadLiteraturePdfDialog({
             <div className="col-span-2 pb-0.5 border-b border-border/40">
               <p className="font-bold text-muted-foreground uppercase text-3xs mb-0.5">Authors & Source</p>
               <p className="font-medium text-foreground truncate">{extracted.authors || "Unknown Authors"}</p>
-              <p className="text-muted-foreground italic truncate mt-0.5">{extracted.journal || "—"}</p>
+              <p className="text-muted-foreground italic truncate mt-0.5">{extracted.journal || "-"}</p>
             </div>
             <div>
               <p className="font-bold text-muted-foreground uppercase text-3xs mb-0.5">DOI/PMID</p>
-              <p className="font-mono text-primary/80 truncate">{extracted.doi ?? extracted.pmid ?? "—"}</p>
+              <p className="font-mono text-primary/80 truncate">{extracted.doi ?? extracted.pmid ?? "-"}</p>
             </div>
             <div>
               <p className="font-bold text-muted-foreground uppercase text-3xs mb-0.5">Publication</p>
-              <p className="font-medium text-foreground">{extracted.publicationYear ?? "—"}{extracted.pageCount ? ` • ${extracted.pageCount}p` : ""}</p>
+              <p className="font-medium text-foreground">{extracted.publicationYear ?? "-"}{extracted.pageCount ? ` • ${extracted.pageCount}p` : ""}</p>
             </div>
           </div>
         </div>

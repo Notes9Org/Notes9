@@ -3,7 +3,7 @@ import { Plugin, PluginKey, NodeSelection } from "@tiptap/pm/state"
 import type { EditorView } from "@tiptap/pm/view"
 
 /**
- * Block drag handle — a Notion/Word-style grip that appears in the left gutter
+ * Block drag handle, a Notion/Word-style grip that appears in the left gutter
  * when hovering a top-level block (paragraph, heading, table, image, list,
  * equation…) and lets the user drag the whole block to a new position.
  *
@@ -87,7 +87,7 @@ export const BlockDragHandle = Extension.create({
             }, delay)
           }
 
-          // Leaving the editor hides the handle — unless the pointer is moving
+          // Leaving the editor hides the handle, unless the pointer is moving
           // onto the handle itself (otherwise you could never grab it).
           const onEditorLeave = (event: MouseEvent) => {
             if (event.relatedTarget === handle || (event.relatedTarget instanceof Node && handle.contains(event.relatedTarget))) return
@@ -108,7 +108,7 @@ export const BlockDragHandle = Extension.create({
             if (!view.editable) return
             const blockEl = topLevelBlockEl(view, event.target as Node)
             if (!blockEl) {
-              // Pointer is over editor padding / the gutter corridor — give it
+              // Pointer is over editor padding / the gutter corridor, give it
               // time to reach the handle rather than yanking it away.
               if (event.target !== handle) scheduleHide()
               return
@@ -153,7 +153,7 @@ export const BlockDragHandle = Extension.create({
             hide()
           }
 
-          // Hovering the handle itself must always cancel a pending hide —
+          // Hovering the handle itself must always cancel a pending hide
           // it lives outside view.dom, so editor listeners never see it.
           const onHandleEnter = () => cancelScheduledHide()
           const onHandleLeave = () => {

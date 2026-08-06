@@ -23,7 +23,7 @@ const TOOL_ICONS: Record<string, LucideIcon> = {
 
 // Short mono-cased name shown only when the backend gave us a recognized
 // tool id. Random handles like `t_61z6cd0e8` would otherwise leak into the
-// UI and confuse the user — for unknown ids we skip the mono pill entirely
+// UI and confuse the user, for unknown ids we skip the mono pill entirely
 // and rely on the icon + the server-provided friendly label.
 const TOOL_NAMES: Record<string, string> = {
   nlp_to_sql_tool:        'records',
@@ -74,7 +74,7 @@ function ToolCardItem({ card }: ToolCardItemProps) {
   const graphData = useMemo(() => {
     if (isRunning || !isMapRelationships) return null;
     try { return parseRelationshipGraph(card); } catch { return null; }
-    // Depend on the specific fields parseRelationshipGraph reads — NOT the whole
+    // Depend on the specific fields parseRelationshipGraph reads, NOT the whole
     // `card` object, which gets a new reference on every streaming label update
     // and would otherwise re-run the dagre layout on every token.
   }, [isRunning, isMapRelationships, card.id, card.source_names, card.summary]);
@@ -94,7 +94,7 @@ function ToolCardItem({ card }: ToolCardItemProps) {
         // scattered per-card spinner-only signal so every busy block speaks one
         // motion vocabulary. Reduced-motion drops the sweep (handled in globals).
         isRunning && 'ai-shimmer border-primary/40 bg-primary/[0.03]',
-        // Failed tool: muted amber, not an alarming full-red — the label
+        // Failed tool: muted amber, not an alarming full-red, the label
         // text ("Couldn't …") already conveys failure.
         isError && 'border-amber-500/40 bg-amber-500/[0.05]',
         !isRunning && !isError && 'border-border/60',
@@ -114,15 +114,15 @@ function ToolCardItem({ card }: ToolCardItemProps) {
           isRunning
             ? `${card.label} (running)`
             : isError
-              ? `${card.label} (failed)${hasDetail ? ' — click to expand' : ''}`
-              : `${card.label}${hasDetail ? ' — click to expand' : ''}`
+              ? `${card.label} (failed)${hasDetail ? ', click to expand' : ''}`
+              : `${card.label}${hasDetail ? ', click to expand' : ''}`
         }
       >
         <span className="shrink-0 inline-flex items-center justify-center size-3.5">
           {isRunning ? (
             <Loader2 className="size-3.5 animate-spin text-primary" aria-hidden />
           ) : isError ? (
-            // Failed tool — distinct amber alert, never the green success check.
+            // Failed tool, distinct amber alert, never the green success check.
             <AlertCircle className="size-3.5 text-amber-600 dark:text-amber-500" aria-hidden />
           ) : (
             <CheckCircle2 className="size-3.5 text-emerald-600 dark:text-emerald-500" aria-hidden />
@@ -137,7 +137,7 @@ function ToolCardItem({ card }: ToolCardItemProps) {
           aria-hidden
         />
 
-        {/* Mono tool name pill — only when we have a friendly mapping.
+        {/* Mono tool name pill, only when we have a friendly mapping.
             Random backend handles (e.g. `t_61z6cd0e8`) are hidden so the
             user never sees a meaningless token in the chat. */}
         {displayName && (

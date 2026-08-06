@@ -145,7 +145,7 @@ export default async function ProtocolDetailPage({
     : `/protocols/${protocol.id}`
   // ─── Edit layout is now the base layout ─
 
-  // ─── Standard layout — height-bounded so the content tab fits the viewport ─
+  // ─── Standard layout, height-bounded so the content tab fits the viewport ─
   return (
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden md:gap-6 max-h-[calc(100dvh-4rem)] sm:max-h-[calc(100dvh-3.5rem)]">
         <SetPageBreadcrumb segments={protocolBreadcrumbSegments} />
@@ -330,7 +330,7 @@ export default async function ProtocolDetailPage({
                             {row.experimentName}
                           </TableCell>
                           <TableCell className="text-muted-foreground">
-                            {row.projectName || "—"}
+                            {row.projectName || "-"}
                           </TableCell>
                           <TableCell>
                             <Badge variant="outline">{row.status}</Badge>

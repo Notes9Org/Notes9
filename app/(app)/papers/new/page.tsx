@@ -38,7 +38,7 @@ function NewPaperPageInner() {
   const [isCreating, setIsCreating] = useState(false)
 
   useEffect(() => {
-    // Prefill from the URL param first, else the sidebar context — both are
+    // Prefill from the URL param first, else the sidebar context, both are
     // just prefills: project and experiment stay OPTIONAL and editable here.
     if (typeof window !== "undefined") {
       const p = new URLSearchParams(window.location.search).get("project")

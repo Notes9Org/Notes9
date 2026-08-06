@@ -5,13 +5,13 @@ import { escapeHtml } from "@/lib/sanitize-html"
  *
  * PDFs carry no semantic structure, so we reconstruct it heuristically from the
  * text layer + draw operators:
- *  - paragraphs   — text items grouped into lines by baseline, lines stitched
+ *  - paragraphs   - text items grouped into lines by baseline, lines stitched
  *                   into paragraphs by vertical gap
- *  - headings     — lines whose font size is meaningfully larger than the body
+ *  - headings     - lines whose font size is meaningfully larger than the body
  *                   text become h1/h2/h3 (by relative size)
- *  - bold/italic  — per-run, detected from the glyph's font name
- *  - lists        — lines beginning with a bullet or "1."/"a)" become <ul>/<ol>
- *  - images       — embedded raster images are extracted and inlined as data
+ *  - bold/italic  - per-run, detected from the glyph's font name
+ *  - lists        - lines beginning with a bullet or "1."/"a)" become <ul>/<ol>
+ *  - images       - embedded raster images are extracted and inlined as data
  *                   URIs, positioned by their draw transform
  *
  * Everything is best-effort and defensive: if image extraction or font lookup
@@ -169,7 +169,7 @@ export async function pdfFileToEditorHtml(file: File): Promise<string> {
           if (src) imageBlocks.push({ type: "image", y: p.topY, src })
         }
       } catch {
-        /* images are optional — never fail the import over them */
+        /* images are optional, never fail the import over them */
       }
     }
 

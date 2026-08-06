@@ -60,7 +60,7 @@ export interface ArtifactSourceDialogProps {
  * code or a tool-input spec) and shows it read-only with Shiki highlighting.
  * For python figures the code is editable and can be re-rendered in place; for
  * either kind a natural-language instruction can patch it. Each regenerate
- * produces a NEW draft version — the current one is never destroyed.
+ * produces a NEW draft version, the current one is never destroyed.
  */
 export function ArtifactSourceDialog({
   artifact,
@@ -110,7 +110,7 @@ export function ArtifactSourceDialog({
         const token = await getAccessToken();
         const next = await regenerateArtifact(artifact.dataId, body, token);
         if (!mounted.current) return;
-        toast.success(`Regenerated — version ${next.version}`);
+        toast.success(`Regenerated, version ${next.version}`);
         onRegenerated?.(next);
         onOpenChange(false);
       } catch (e) {

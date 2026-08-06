@@ -47,21 +47,22 @@ import { withFromDashboard } from "@/lib/from-dashboard"
 
 /**
  * Nav items that carry the active scope forward (`?project=` always; plus
- * `?experiment=` while the user is ON an experiment page — so Lab notes /
+ * `?experiment=` while the user is ON an experiment page, so Lab notes /
  * Data land inside the current experiment's context instead of a bare list).
- * Library items (Protocols, Samples) are deliberately absent — they're
+ * Library items (Protocols, Samples) are deliberately absent, they're
  * lab-wide libraries and always open unscoped from the sidebar.
  */
 const SCOPED_NAV_HREFS = new Set([
   "/experiments",
   "/lab-notes",
   "/data",
+  "/data-analysis",
   "/literature-reviews",
   "/papers",
   "/reports",
 ])
 
-/** Entity detail pages — the one place a context switch must navigate away. */
+/** Entity detail pages, the one place a context switch must navigate away. */
 const ENTITY_DETAIL_RE =
   /^\/(projects|experiments|lab-notes-list|lab-notes|protocols|samples|papers|literature-reviews|reports|catalyst|equipment)\/[^/?#]+/
 
@@ -195,10 +196,10 @@ export function AppSidebar() {
     return list
   }, [projects, scope.projectId, scope.projectName])
 
-  // ——— Context switching (nav-row switchers) ————————————————————————————
+  // --- Context switching (nav-row switchers) ---------------------------
   // Selecting a context is a FILTER, not a navigation: on list pages we stay
   // put and rewrite ?project=/?experiment= in place so the page re-filters.
-  // Only entity DETAIL pages navigate away — the entity on screen may not
+  // Only entity DETAIL pages navigate away, the entity on screen may not
   // belong to the new context (and standing on /experiments/<id> would
   // instantly re-pin the old experiment).
   const replaceScopeInUrl = useCallback(
@@ -414,7 +415,7 @@ export function AppSidebar() {
         setFetchError(true)
         setProjects([])
       } else {
-        // Sidebar shows a flat list now — experiments + lab-note drill-down lives
+        // Sidebar shows a flat list now, experiments + lab-note drill-down lives
         // on the project page, so we don't fetch or assemble that tree here.
         setProjects((projectsData ?? []) as Project[])
       }
@@ -431,7 +432,7 @@ export function AppSidebar() {
 
     // Debounce realtime refetches: bursts of project mutations would otherwise
     // fire `fetchData` many times in quick succession. Also: drop the `profiles`
-    // subscription — profile edits in Settings should not trigger a full
+    // subscription, profile edits in Settings should not trigger a full
     // sidebar reload (the sidebar derives projects/experiments, not profile).
     let pending: ReturnType<typeof setTimeout> | null = null
     const scheduleRefetch = () => {
@@ -488,14 +489,14 @@ export function AppSidebar() {
   return (
     <Sidebar
       // Standard docked variant. The "floated, not boxy" look comes from a soft
-      // right-edge shadow on the wrapper (app-layout) + no hard border-r seam —
+      // right-edge shadow on the wrapper (app-layout) + no hard border-r seam
       // the shadcn `floating` variant's fixed-position internals conflict with
       // this custom resizable container (leftover gap element + odd collapsed).
       variant="sidebar"
       collapsible="icon"
       className="border-r-0 transition-all duration-200 ease-in-out [&_[data-slot=sidebar-container]]:border-r-0 [&_[data-sidebar=sidebar]]:bg-[color:color-mix(in_oklab,var(--sidebar)_86%,transparent)] [&_[data-sidebar=sidebar]]:backdrop-blur-xl [&_[data-sidebar=sidebar]]:backdrop-saturate-[1.3]"
     >
-      {/* Ambient top glow — a soft warm radial wash that gives the panel depth.
+      {/* Ambient top glow, a soft warm radial wash that gives the panel depth.
           First child on purpose: everything after paints above it. */}
       <div
         aria-hidden
@@ -506,7 +507,7 @@ export function AppSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             {isIconMode ? (
-              // Icon mode: no logo — just the expand toggle. Keep the header the
+              // Icon mode: no logo, just the expand toggle. Keep the header the
               // same height as expanded (min-h-12) so the rows below don't shift up.
               <div className="flex min-h-12 w-full items-center justify-center">
                 <Button
@@ -527,7 +528,7 @@ export function AppSidebar() {
                   size="lg"
                   className="h-auto min-h-12 flex-1 min-w-0 overflow-visible py-2"
                 >
-                  <Link href="/dashboard" aria-label="Notes9 — go to dashboard">
+                  <Link href="/dashboard" aria-label="Notes9, go to dashboard">
                     <Notes9Brand
                       showIcon
                       iconClassName="h-6 w-6"
@@ -596,7 +597,7 @@ export function AppSidebar() {
                   transition={{ type: "spring", stiffness: 380, damping: 30 }}
                 >
                   {/* Icon offset is tuned to sit ~9px inside the input's
-                      visible left edge — `left-2.5` instead of the prior
+                      visible left edge, `left-2.5` instead of the prior
                       `left-4` which left a noticeable dead-space gap. */}
                   <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 select-none text-muted-foreground" />
                   <SidebarInput
@@ -631,7 +632,7 @@ export function AppSidebar() {
                 // closes whenever the user clears the search or navigates via
                 // a result. Without this, Radix's default close-focus runs on
                 // every close and yanks the cursor BACK into the search input
-                // — making "I clicked anywhere else" feel like "focus snapped
+                // making "I clicked anywhere else" feel like "focus snapped
                 // back to search again."
                 onCloseAutoFocus={(e) => e.preventDefault()}
               >
@@ -691,7 +692,7 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Global Create Button — icon in collapsed mode so the New slot keeps
+        {/* Global Create Button, icon in collapsed mode so the New slot keeps
             its height (rows below stay put) and collapsed users can still create. */}
         <SidebarGroup className={cn("pt-0 pb-1", isIconMode && "flex flex-col items-center")}>
           <SidebarGroupContent className={cn("px-2", isIconMode && "w-full flex flex-col items-center px-1.5")}>
@@ -770,7 +771,7 @@ export function AppSidebar() {
           <SidebarGroupContent
             // Sandglass strip, same grammar as TabsList: translucent, blurred,
             // grained container; the sliding active pill is the solid raised
-            // "tab" inside it. Kept centered — no scoped nudge, the strip
+            // "tab" inside it. Kept centered, no scoped nudge, the strip
             // stays symmetric in the sidebar column.
             className={cn(
               "n9-grain rounded-xl border border-[color:var(--glass-border)] bg-[color:var(--glass-bg)] p-1 backdrop-blur-md",
@@ -792,13 +793,13 @@ export function AppSidebar() {
                       pathname === item.href || pathname.startsWith(item.href + "/")
                     const isActive = mounted && pathMatches
                     // `mounted` gate: `scope` is client-only (empty during SSR),
-                    // so scoped hrefs appear only after hydration — server and
+                    // so scoped hrefs appear only after hydration, server and
                     // first client render stay identical.
                     const carriesScope =
                       mounted && !!scope.projectId && SCOPED_NAV_HREFS.has(item.href)
 
                     // Nav-row context: the Projects / Experiments rows carry the
-                    // active context — label shows the context NAME, a trailing
+                    // active context, label shows the context NAME, a trailing
                     // action opens the switcher. Client-only (mounted gate).
                     const isProjectsRow = item.href === "/projects"
                     const isExperimentsRow = item.href === "/experiments"
@@ -852,7 +853,7 @@ export function AppSidebar() {
                               )}
                             >
                               {/* With a context set the row label IS the context
-                                  name — no kicker, no dot; a slightly raised
+                                  name, no kicker, no dot; a slightly raised
                                   weight marks it as the active context without
                                   matching the full active-row treatment. */}
                               <span
@@ -892,7 +893,7 @@ export function AppSidebar() {
                                 // the click and navigates instead of opening the
                                 // switcher.
                                 // !top-4: center on the FIRST row (h-8 → 16px),
-                                // not on the whole item — the Experiments item
+                                // not on the whole item, the Experiments item
                                 // also holds the Lab notes/Data sub-rows, so
                                 // top-1/2 would sink the chevron down onto them.
                                 className="z-[2] !top-4 !-translate-y-1/2 size-5 rounded-[6px] bg-background text-muted-foreground shadow-sm transition-shadow duration-150 hover:shadow-md hover:text-primary data-[state=open]:text-primary dark:bg-sidebar-accent"
@@ -1097,7 +1098,7 @@ export function AppSidebar() {
                     size={isIconMode ? "default" : "lg"}
                     tooltip={
                       isIconMode
-                        ? `${getUserDisplayName()} — Account menu`
+                        ? `${getUserDisplayName()}, Account menu`
                         : undefined
                     }
                     className={cn(

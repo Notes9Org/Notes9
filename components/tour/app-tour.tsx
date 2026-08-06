@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { useAuthUser } from "@/components/auth/auth-provider"
 import { ProductTour } from "@/components/tour/product-tour"
@@ -44,6 +44,7 @@ export function requestStartTour() {
 export function AppTour() {
   const user = useAuthUser()
   const router = useRouter()
+  const pathname = usePathname()
   const [mounted, setMounted] = useState(false)
   const [mode, setMode] = useState<TourMode>("idle")
   const [pageSteps, setPageSteps] = useState<ReturnType<typeof buildContextualSteps>>([])
@@ -67,22 +68,14 @@ export function AppTour() {
     void getSupabase().from("profiles").update(updates).eq("id", user.id)
   }
 
-  const persistWelcome = (result: WelcomeResult) => {
-    if (!user) return
-    localStorage.setItem(welcomeSeenKey(user.id), "true")
-    const updates: Record<string, string> = {
-      notes9_welcome_seen_at: new Date().toISOString(),
-    }
-    if (result.jobTitle) updates.job_title = result.jobTitle
-    if (result.sector) updates.sector = result.sector
-    if (result.organizationName) updates.organization_name = result.organizationName
-    if (result.researchField) updates.research_field = result.researchField
-    if (result.primaryGoal) updates.primary_goal = result.primaryGoal
-    void getSupabase().from("profiles").update(updates).eq("id", user.id)
-  }
+  // NB: the welcome answers are persisted server-side by `completeWelcomeAction`
+  // inside WelcomeDialog, not here. They have to be written before starter
+  // content is seeded (the demo pack is chosen from the research field), and a
+  // fire-and-forget client update could not guarantee that ordering. All this
+  // component still owns is the fast localStorage gate.
 
   // The welcome wizard must not appear until the user has accepted the current
-  // terms — a brand-new signup sees the terms gate FIRST, then the tour. This is
+  // terms, a brand-new signup sees the terms gate FIRST, then the tour. This is
   // read from the auth user, which the terms modal refreshes on accept (via
   // refreshSession → onAuthStateChange), so the value flips here automatically.
   // Existing users have already accepted, so this is true immediately (no change
@@ -95,6 +88,16 @@ export function AppTour() {
     if (!mounted || !user) return
     // Defer onboarding until terms are accepted. The effect re-runs once `termsAccepted` flips.
     if (!termsAccepted) return
+
+    // Don't interrupt the post-signup payoff: when a new user lands on the
+    // literature page from the hero search (?autorun=1), let the query execute
+    // and the cited results appear FIRST. The welcome wizard fires on their
+    // next navigation instead (this effect re-runs on `pathname` change).
+    const onAutorunLanding =
+      pathname?.startsWith("/literature-reviews") &&
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("autorun") === "1"
+    if (onAutorunLanding) return
 
     let cancelled = false
     const run = async () => {
@@ -110,9 +113,9 @@ export function AppTour() {
         return
       }
 
-      // The DB is the source of truth. A brand-new profile — created on email,
+      // The DB is the source of truth. A brand-new profile, created on email,
       // Google, or Microsoft sign-up (via app code or the handle_new_user
-      // trigger) — has `notes9_welcome_seen_at = NULL`, so onboarding shows. If
+      // trigger), has `notes9_welcome_seen_at = NULL`, so onboarding shows. If
       // the row isn't readable yet (provisioning/replication race right after
       // OAuth), retry briefly rather than silently skipping onboarding.
       let profile:
@@ -148,7 +151,7 @@ export function AppTour() {
     return () => {
       cancelled = true
     }
-  }, [mounted, user, termsAccepted])
+  }, [mounted, user, termsAccepted, pathname])
 
   // ---- event wiring: page help + manual tour restart ---------------------
   useEffect(() => {
@@ -177,14 +180,18 @@ export function AppTour() {
   }, [mounted, router])
 
   // ---- handlers ----------------------------------------------------------
-  const handleWelcomeComplete = (result: WelcomeResult) => {
-    persistWelcome(result)
-    if (result.startTour) {
-      setMode("onboarding")
-    } else {
-      finalizeTour("skipped")
-      setMode("idle")
-    }
+  /**
+   * The wizard no longer chains straight into the 12-step product tour. A new
+   * user has just answered questions and created a project; dropping them into
+   * another 12 steps is where onboarding used to lose people. The tour is now
+   * offered from the Getting Started checklist instead, so it stays available
+   * indefinitely rather than being a one-shot they miss.
+   */
+  const handleWelcomeComplete = (_result: WelcomeResult) => {
+    if (user) localStorage.setItem(welcomeSeenKey(user.id), "true")
+    setMode("idle")
+    // Pick up the project and starter content the wizard just created.
+    router.refresh()
   }
 
   if (!mounted) return null

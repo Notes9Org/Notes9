@@ -15,7 +15,7 @@ const cardVariants = cva(
         // Clickable cards: token-driven hover lift + elevation, reduced-motion-safe.
         interactive:
           'n9-sheen border shadow-sm cursor-pointer transition-[transform,box-shadow,border-color] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-0.5 hover:shadow-md hover:border-border focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 motion-reduce:transition-none motion-reduce:hover:translate-y-0',
-        // Sandglass panel (G1): translucent grained glass — for widgets and
+        // Sandglass panel (G1): translucent grained glass, for widgets and
         // cards that float on the canvas, not for long-form reading surfaces.
         // Grain rides background-blend-mode so it composes with the ::before
         // kind-ribbon.

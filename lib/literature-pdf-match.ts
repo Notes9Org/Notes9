@@ -42,7 +42,7 @@ function splitAuthorString(raw: string | null) {
  * Results:, Conclusions:) are intentionally NOT treated as stops since they are
  * part of the abstract itself.
  *
- * Returns null when no plausible abstract can be isolated — an empty,
+ * Returns null when no plausible abstract can be isolated, an empty,
  * user-editable field is better than a wall of body text.
  */
 function extractAbstractSection(text: string): string | null {

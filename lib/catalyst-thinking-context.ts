@@ -24,7 +24,7 @@ const CREATE_VERBS = [
   'plot', 'render', 'compose', 'draft', 'visualize', 'visualise', 'export',
 ];
 
-// Artifact categories — when a create verb pairs with one of these nouns, the
+// Artifact categories, when a create verb pairs with one of these nouns, the
 // thinking state shows the artifact's icon and says it's being made.
 const ARTIFACT_CATEGORIES: Category[] = [
   {
@@ -59,7 +59,7 @@ const ARTIFACT_CATEGORIES: Category[] = [
   },
 ];
 
-// Topic categories (no artifact produced) — ordered most-specific → general.
+// Topic categories (no artifact produced), ordered most-specific → general.
 const CATEGORIES: Category[] = [
   {
     keywords: ['literature', 'paper', 'papers', 'pubmed', 'pmc', 'citation', 'cite', 'reference', 'doi', 'journal', 'publication'],
@@ -108,7 +108,7 @@ const CATEGORIES: Category[] = [
   },
 ];
 
-/** Short, encouraging facts about AI in biotech — shown occasionally beneath the
+/** Short, encouraging facts about AI in biotech, shown occasionally beneath the
  * thinking label so a wait feels informative rather than idle. */
 const FACTS: string[] = [
   'AlphaFold has predicted the 3D structure of over 200 million proteins.',
@@ -147,8 +147,8 @@ function pickFact(q: string): string | undefined {
 
 /**
  * Infer a context-aware loading state from the user's query. Artifact-creation
- * requests ("create an image", "build a chart") win first — showing that
- * artifact's icon and a "Creating…" label — then topic categories, then a
+ * requests ("create an image", "build a chart") win first, showing that
+ * artifact's icon and a "Creating…" label, then topic categories, then a
  * sensible default. A little AI-in-biotech fact appears about half the time.
  * Deterministic for a given query so it stays stable while the answer streams.
  * Presentational only; never changes what the agent actually does.

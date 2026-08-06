@@ -668,7 +668,7 @@ describe("Property 8: Multi-filter intersection", () => {
   const statusFilterArb = filterArb(statusArb)
   const typeFilterArb = filterArb(reportTypeArb)
 
-  // Reference implementation — mirrors reports-page-client.tsx exactly
+  // Reference implementation, mirrors reports-page-client.tsx exactly
   function applyFilters(
     reports: Array<{
       project_id: string | null

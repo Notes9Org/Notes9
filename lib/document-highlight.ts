@@ -12,9 +12,14 @@ export interface HighlightTarget {
   /** For literature: jump to Overview abstract vs PDF full text. */
   contentSurface?: 'abstract' | 'pdf' | null;
   /** Advisory char offsets (into the stripped source) for the supporting span.
-   * Used as a precision bonus by the highlighter — the fuzzy match on `excerpt`
+   * Used as a precision bonus by the highlighter, the fuzzy match on `excerpt`
    * (which now prefers `cited_text`) is the reliable primary path. */
   charRange?: { start: number; end: number } | null;
+  /** Per-click monotonic id (see `hooks/use-source-navigation.ts`) that makes
+   * every navigation VALUE-DISTINCT even when the excerpt/target is identical
+   * to the previous click, this is what lets a repeat click on the same
+   * citation re-fire the highlight instead of being deduped by content. */
+  nonce?: number;
 }
 
 const HIGHLIGHT_PARAM = 'highlight';
@@ -29,6 +34,7 @@ export function encodeHighlightParam(target: HighlightTarget): string {
     ...(target.pageNumber != null ? { pg: target.pageNumber } : {}),
     ...(target.contentSurface ? { sf: target.contentSurface } : {}),
     ...(target.charRange ? { cr: [target.charRange.start, target.charRange.end] } : {}),
+    ...(target.nonce != null ? { n: target.nonce } : {}),
   });
   if (typeof window !== 'undefined') {
     return btoa(unescape(encodeURIComponent(json)));
@@ -61,6 +67,9 @@ export function decodeHighlightParam(param: string): HighlightTarget | null {
       cr[1] > cr[0]
         ? { start: cr[0], end: cr[1] }
         : null;
+    // Legacy params (minted before nonces existed) decode fine with `nonce`
+    // left undefined, no back-compat break.
+    const nonce = typeof o.n === 'number' ? o.n : undefined;
     return {
       sourceType,
       sourceId,
@@ -69,6 +78,7 @@ export function decodeHighlightParam(param: string): HighlightTarget | null {
       pageNumber: typeof o.pg === 'number' ? o.pg : null,
       contentSurface,
       charRange,
+      nonce,
     };
   } catch {
     return null;
@@ -165,7 +175,7 @@ const SOURCE_TYPE_LABELS: Record<string, string> = {
   protocol: 'Protocol',
   experiment: 'Experiment',
   project: 'Project',
-  // Cat-Bio synthesis — covers both the new cat_bio_synthesis source_type and
+  // Cat-Bio synthesis, covers both the new cat_bio_synthesis source_type and
   // legacy biomni_synthesis (both normalize to cat_bio_synthesis).
   cat_bio_synthesis: 'Cat-Bio synthesis',
 };
@@ -301,7 +311,7 @@ export function buildHighlightUrlFromResource(
 ): string | null {
   const target = buildHighlightTargetFromResource(c);
   if (!target) return null;
-  // Lab notes are shown inside the experiment page — when the resource carries
+  // Lab notes are shown inside the experiment page, when the resource carries
   // the parent experiment id, deep-link straight to /experiments/<id>?tab=notes
   // &noteId=… instead of relying on the /lab-notes/<id> redirect (which fails
   // when the id isn't a real note id, e.g. a semantic chunk match).

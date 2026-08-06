@@ -317,7 +317,7 @@ export function useAwsTranscribe(options: UseAwsTranscribeOptions = {}) {
             for (const result of results) {
               const text = result.Alternatives?.[0]?.Transcript ?? "";
               if (!text) continue;
-              // Speech detected — restart the idle countdown.
+              // Speech detected, restart the idle countdown.
               bumpSilenceTimer();
               if (result.IsPartial) {
                 onInterim?.(text);

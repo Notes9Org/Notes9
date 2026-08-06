@@ -98,10 +98,10 @@ export function IdealGasPanel({ onResultChange }: { onResultChange: CalculatorRe
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="z-[280]">
-            <SelectItem value="P">P — pressure (atm)</SelectItem>
-            <SelectItem value="V">V — volume (L)</SelectItem>
-            <SelectItem value="n">n — amount (mol)</SelectItem>
-            <SelectItem value="T">T — temperature (K)</SelectItem>
+            <SelectItem value="P">P, pressure (atm)</SelectItem>
+            <SelectItem value="V">V, volume (L)</SelectItem>
+            <SelectItem value="n">n, amount (mol)</SelectItem>
+            <SelectItem value="T">T, temperature (K)</SelectItem>
           </SelectContent>
         </Select>
       </div>

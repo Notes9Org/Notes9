@@ -1,6 +1,6 @@
 /**
  * From full protocol HTML (TipTap output), keep only a "letterhead" shell:
- * top headings, short title lines, figures/images, and small header tables — not procedure body text.
+ * top headings, short title lines, figures/images, and small header tables, not procedure body text.
  */
 
 const SUBSTANTIAL_PARAGRAPH = 220
@@ -63,7 +63,7 @@ function extractShellWithDom(html: string): string {
       }
       break
     }
-    // Lists / long blocks = procedure body — stop
+    // Lists / long blocks = procedure body, stop
     if (["ul", "ol", "pre"].includes(tag)) break
     break
   }

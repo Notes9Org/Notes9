@@ -13,7 +13,7 @@ let warnedMissingJwtSecret = false
 //
 // Reads the access token from the cookie via getSession() (local; refreshes
 // only when expired) and verifies its HS256 signature + expiry locally with
-// jose against SUPABASE_JWT_SECRET — no auth-server round-trip and no database
+// jose against SUPABASE_JWT_SECRET, no auth-server round-trip and no database
 // connection per call, unlike getUser(), which was saturating the Nano
 // instance's connection pool. React.cache dedupes repeat calls within one
 // render on top of that, and is scoped to a single render pass, so there is no
@@ -21,7 +21,7 @@ let warnedMissingJwtSecret = false
 //
 // The Supabase access token already carries id (sub), email, role,
 // app_metadata and user_metadata, so we reconstruct a User-compatible object
-// from the verified payload — callers that read user.id / user.email /
+// from the verified payload, callers that read user.id / user.email /
 // user.user_metadata keep working unchanged.
 //
 // Safety: if the secret is missing or verification fails, we fall back to the

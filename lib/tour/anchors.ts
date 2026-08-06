@@ -2,8 +2,8 @@
  * Single source of truth for product-tour anchors.
  *
  * The tour targets elements by `data-tour="<key>"` rather than `id` because the
- * same chrome (sidebar nav, search) renders twice — once in the desktop sidebar
- * and once inside the mobile Sheet — and duplicate ids are invalid. `data-tour`
+ * same chrome (sidebar nav, search) renders twice, once in the desktop sidebar
+ * and once inside the mobile Sheet, and duplicate ids are invalid. `data-tour`
  * can legitimately repeat; the tour engine resolves the first *visible* match.
  *
  * Keep every key referenced by a step (lib/tour/onboarding-steps,
@@ -34,7 +34,7 @@ export const TOUR = {
   createPaper: "create-paper",
   generateReport: "generate-report",
   viewMode: "view-mode",
-  // Dashboard widgets — each is spotlighted on the dashboard help tour.
+  // Dashboard widgets, each is spotlighted on the dashboard help tour.
   dashSchedule: "dash-schedule",
   dashRecentWork: "dash-recent-work",
   dashWhiteboard: "dash-whiteboard",
@@ -44,7 +44,7 @@ export const TOUR = {
   litTabs: "lit-tabs",
   uploadPdf: "upload-pdf",
   // Shared list-page filter row (Projects, Experiments, Lab notes, Protocols,
-  // Samples, Equipment, Reports all render it — one anchor covers them all).
+  // Samples, Equipment, Reports all render it, one anchor covers them all).
   resourceFilters: "resource-filters",
   // Page-specific feature anchors.
   sampleStats: "sample-stats",

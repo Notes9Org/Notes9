@@ -5,7 +5,7 @@
 
 import { looksLikeMarkdown, markdownToHtml } from "@/lib/markdown-to-editor-html"
 
-/** Markers for content copied from within the Notes9 editor — skip round-trip. */
+/** Markers for content copied from within the Notes9 editor, skip round-trip. */
 const EDITOR_NATIVE_MARKERS = [
   'data-type="taskitem"',
   'data-type="tasklist"',
@@ -53,9 +53,9 @@ let turndownPromise: Promise<(html: string) => string> | null = null
 async function getHtmlToMarkdown(): Promise<(html: string) => string> {
   if (!turndownPromise) {
     turndownPromise = (async () => {
-      // @ts-expect-error — turndown ships without bundled types
+      // @ts-expect-error, turndown ships without bundled types
       const TurndownService = (await import("turndown")).default
-      // @ts-expect-error — plugin ships without types
+      // @ts-expect-error, plugin ships without types
       const { gfm } = await import("turndown-plugin-gfm")
 
       const service = new TurndownService({

@@ -11,7 +11,7 @@ import { PROTOCOL_TEMPLATE_MAX_FILE_BYTES } from "@/lib/protocol-template-types"
 
 /**
  * Step 1 (literature-style): return a storage path + template id. Client uploads the file
- * directly to Supabase Storage — avoids Next.js proxy body limits that cause "Failed to fetch".
+ * directly to Supabase Storage, avoids Next.js proxy body limits that cause "Failed to fetch".
  */
 export async function POST(request: Request) {
   try {

@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
  * Smart auto-scroll for chat-style surfaces.
  *
  * The default "scroll to bottom on every update" pattern fights the user the
- * moment they try to read earlier content while a response is streaming — the
+ * moment they try to read earlier content while a response is streaming, the
  * viewport keeps yanking back to the latest token. This hook implements the
  * Cursor/Claude/ChatGPT convention instead:
  *
@@ -81,7 +81,7 @@ export function usePinnedAutoScroll<E extends HTMLElement>(
     measurePin();
   }, [measurePin, scrollRef]);
 
-  /** Imperative jump — also re-pins. Call from a "Jump to bottom" button. */
+  /** Imperative jump, also re-pins. Call from a "Jump to bottom" button. */
   const scrollToBottom = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -94,13 +94,13 @@ export function usePinnedAutoScroll<E extends HTMLElement>(
     setShowJumpBottom(false);
   }, [scrollRef, smooth]);
 
-  /** Force the pin back on — call when sending a new user message. */
+  /** Force the pin back on, call when sending a new user message. */
   const repin = useCallback(() => {
     pinnedRef.current = true;
     scrollToBottom();
   }, [scrollToBottom]);
 
-  // Run an auto-scroll attempt whenever any tracked dep changes — but only
+  // Run an auto-scroll attempt whenever any tracked dep changes, but only
   // if the user is still pinned. Uses rAF so layout has settled.
   useEffect(() => {
     const id = requestAnimationFrame(() => {

@@ -10,9 +10,9 @@ export type PaginationParams = {
   pageContentHeightPx: number
   /** Backdrop gap drawn between two sheets. */
   gapPx: number
-  /** Top margin px — header zone of the next page. */
+  /** Top margin px, header zone of the next page. */
   marginTopPx: number
-  /** Bottom margin px — footer zone of the finishing page. */
+  /** Bottom margin px, footer zone of the finishing page. */
   marginBottomPx: number
   /** Callback when pagination computes new page breaks, providing DOM targets for portals. */
   onPortalsChange?: (portals: Array<{el: HTMLElement, page: number, type: 'header' | 'footer'}>) => void
@@ -31,7 +31,7 @@ const paginationKey = new PluginKey<DecorationSet>("n9Pagination")
  * (c) repeats the document header/footer so they appear on every page.
  *
  * Heights are measured from the DOM but the widgets are inserted *between*
- * blocks, so a block's own height never changes — measurements stay stable and
+ * blocks, so a block's own height never changes, measurements stay stable and
  * a signature check prevents the measure→decorate→measure loop.
  *
  * Only runs while Page view is enabled, so normal editing is never affected.
@@ -156,7 +156,7 @@ export const Pagination = Extension.create<PaginationOptions>({
           // Recompute when the editor's own DOM changes size. This is what makes
           // pagination appear on first paint: the content renders asynchronously
           // (immediatelyRender: false), so the editor grows AFTER the plugin's
-          // initial pass — the observer catches that growth and re-runs compute().
+          // initial pass, the observer catches that growth and re-runs compute().
           // The signature check in compute() stops the decorate→resize→decorate
           // feedback loop once breaks are stable.
           let ro: ResizeObserver | null = null
@@ -197,7 +197,7 @@ function buildSeparator(
   fill.style.height = `${b.fill}px`
   wrap.appendChild(fill)
 
-  // 2) Bottom-margin zone of the finishing page — holds the footer.
+  // 2) Bottom-margin zone of the finishing page, holds the footer.
   const footerZone = document.createElement("div")
   footerZone.className = "n9-page-sep-marginzone n9-page-sep-footerzone relative w-full"
   footerZone.style.height = `${params.marginBottomPx}px`
@@ -216,7 +216,7 @@ function buildSeparator(
   gap.style.height = `${params.gapPx}px`
   wrap.appendChild(gap)
 
-  // 4) Top-margin zone of the next page — holds the repeated header.
+  // 4) Top-margin zone of the next page, holds the repeated header.
   const headerZone = document.createElement("div")
   headerZone.className = "n9-page-sep-marginzone n9-page-sep-headerzone relative w-full"
   headerZone.style.height = `${params.marginTopPx}px`

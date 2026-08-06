@@ -27,7 +27,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Ownership scope — without `.eq("created_by", user.id)` any authenticated
+    // Ownership scope, without `.eq("created_by", user.id)` any authenticated
     // user could PATCH any annotation by guessing its id. RLS may also cover
     // this at the DB layer; defense-in-depth keeps the route safe even if a
     // future migration relaxes the policy.

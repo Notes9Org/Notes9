@@ -147,7 +147,7 @@ export function PaperAIPanel({
     return () => window.removeEventListener(PAPER_CITATION_STYLE_EVENT, handler)
   }, [])
 
-  /** Same tick as open — pick up toolbar changes before paint. */
+  /** Same tick as open, pick up toolbar changes before paint. */
   useLayoutEffect(() => {
     if (!open) return
     const s = readPaperCitationStyle()
@@ -171,7 +171,7 @@ export function PaperAIPanel({
     }
   }, [chatHistory.currentSession])
 
-  /** Pinned auto-scroll of the chat list only — avoid scrollIntoView (scrolls ancestors / breaks under TipTap fullscreen). */
+  /** Pinned auto-scroll of the chat list only, avoid scrollIntoView (scrolls ancestors / breaks under TipTap fullscreen). */
   const { onScroll } = usePinnedAutoScroll(scrollRef, [messages, diffPreview])
 
   useEffect(() => {
@@ -356,7 +356,7 @@ export function PaperAIPanel({
         embedded ? "min-w-0 w-full flex-1" : "w-[400px] min-w-[400px] border-l border-border"
       )}
     >
-      {/* Header — aligned with main Catalyst sidebar */}
+      {/* Header, aligned with main Catalyst sidebar */}
       <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border/40 bg-[color:var(--n9-header-bg)]/80 px-2 backdrop-blur-md sm:h-14 sm:px-4">
         <div className="flex min-w-0 items-center gap-1 overflow-hidden">
           <Button
@@ -454,7 +454,7 @@ export function PaperAIPanel({
         <div className="flex flex-col flex-1 overflow-hidden">
           <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/40">
             <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-            <span className="text-xs font-medium text-muted-foreground truncate">{paperTitle || "Untitled"} — AI suggestion</span>
+            <span className="text-xs font-medium text-muted-foreground truncate">{paperTitle || "Untitled"}, AI suggestion</span>
             <span className="ml-auto text-2xs font-mono px-1.5 py-0.5 rounded bg-green-500/15 text-green-600 dark:text-green-400">+{diffPreview.addCount}</span>
           </div>
           <div className="px-3 py-1.5 bg-blue-500/8 dark:bg-blue-500/10 border-b border-border/50">
@@ -586,7 +586,7 @@ export function PaperAIPanel({
             )}
           </div>
 
-          {/* Composer — Cursor-style card + agent row (matches main Catalyst sidebar) */}
+          {/* Composer, Cursor-style card + agent row (matches main Catalyst sidebar) */}
           <div className="flex-shrink-0 border-t border-border bg-background/95 p-4 backdrop-blur">
             <div className="mx-auto min-w-0 max-w-3xl">
               <div className={cn("n9-composer", "overflow-hidden")}>

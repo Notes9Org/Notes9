@@ -1,5 +1,5 @@
 /**
- * /api/files/upload — chat_attachments registration failure contract.
+ * /api/files/upload, chat_attachments registration failure contract.
  *
  * When the insert into chat_attachments fails (e.g. RLS denial) the route
  * deletes the just-uploaded storage object; the response must then be an
@@ -87,7 +87,7 @@ beforeEach(() => {
   vi.spyOn(console, "warn").mockImplementation(() => {});
 });
 
-describe("POST /api/files/upload — registration outcome contract", () => {
+describe("POST /api/files/upload, registration outcome contract", () => {
   it("returns 200 with chatAttachmentId when registration succeeds", async () => {
     const res = (await POST(makeRequest())) as unknown as {
       status: number;

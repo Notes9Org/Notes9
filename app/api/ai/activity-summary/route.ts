@@ -11,7 +11,7 @@ const NOTES9_API_BASE = tryCatalystBaseUrl();
  * GET /api/ai/activity-summary
  *
  * Returns an AI-generated one-liner summarising the user's recent lab activity.
- * Uses existing Notes9 `/chat` backend — no extra LLM dependencies needed.
+ * Uses existing Notes9 `/chat` backend, no extra LLM dependencies needed.
  *
  * Response: `{ summary: string, generatedAt: string }`
  */
@@ -67,7 +67,7 @@ export async function GET() {
           .gte('updated_at', since)
           .order('updated_at', { ascending: false })
           .limit(5),
-        // samples has no `name` column — the unique identifier is sample_code.
+        // samples has no `name` column, the unique identifier is sample_code.
         supabase
           .from('samples')
           .select('sample_code, updated_at')
@@ -107,7 +107,7 @@ export async function GET() {
     // ─── 3. Handle empty activity ────────────────────────────────────
     if (events.length === 0) {
       return NextResponse.json({
-        summary: 'No recent activity — start an experiment or jot down some notes to see your lab pulse here.',
+        summary: 'No recent activity, start an experiment or jot down some notes to see your lab pulse here.',
         generatedAt: new Date().toISOString(),
       });
     }
@@ -188,7 +188,7 @@ Summary:`;
     } catch (aiError) {
       // The AI backend is optional. A network failure (ECONNREFUSED when the
       // Notes9/Catalyst chat service isn't running), an 8s timeout abort, or a
-      // bad JSON body must NOT 500 the dashboard — degrade to the computed
+      // bad JSON body must NOT 500 the dashboard, degrade to the computed
       // summary instead.
       console.warn('Activity summary AI unavailable, using computed summary:', (aiError as Error)?.message);
       return NextResponse.json({

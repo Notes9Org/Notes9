@@ -4,7 +4,7 @@ import { normalizeDoi as normalizeDoiCanonical } from "@/lib/literature-pdf-stor
 
 /**
  * Extract a DOI-like substring from a raw value or arbitrary URL, then format it
- * via the canonical normalizer (`lib/literature-pdf-storage.ts`) — the shape
+ * via the canonical normalizer (`lib/literature-pdf-storage.ts`), the shape
  * actually persisted to `literature_reviews`. Extraction stays local because
  * callers here also pass non-DOI URLs, which the canonical normalizer alone
  * would (wrongly) accept as-is.
@@ -86,21 +86,21 @@ export function matchCitationToPaper(
   citation: CitationLike,
   papers: SearchPaper[],
 ): { paper: SearchPaper | null; matchKind: "doi" | "pmid" | "title" | "url" | "none" } {
-  // 1. DOI — extracted from an explicit doi field or the URL.
+  // 1. DOI, extracted from an explicit doi field or the URL.
   const citDoi = normalizeDoi(citation.doi) ?? normalizeDoi(citation.url)
   if (citDoi) {
     const hit = papers.find((p) => normalizeDoi(p.doi) === citDoi)
     if (hit) return { paper: hit, matchKind: "doi" }
   }
 
-  // 2. PMID — from the URL.
+  // 2. PMID, from the URL.
   const citPmid = extractPmid(citation.url)
   if (citPmid) {
     const hit = papers.find((p) => p.pmid && p.pmid.trim() === citPmid)
     if (hit) return { paper: hit, matchKind: "pmid" }
   }
 
-  // 3. Title — near-exact (fuzzy ≥ 0.85) to absorb punctuation/casing drift.
+  // 3. Title, near-exact (fuzzy ≥ 0.85) to absorb punctuation/casing drift.
   const citTitle = titleKey(citation.title)
   if (citTitle.length >= 12) {
     let best: { paper: SearchPaper; score: number } | null = null
@@ -159,7 +159,7 @@ export function citationToSearchPaper(c: CitationLike & { snippet?: string }): S
  * result is accepted only when its title is reasonably close (avoids attaching a
  * wrong abstract). Returns '' when nothing trustworthy is found.
  */
-/** Word-overlap (Jaccard) of two title keys — tolerant of word order/extra words. */
+/** Word-overlap (Jaccard) of two title keys, tolerant of word order/extra words. */
 function titleOverlap(a: string, b: string): number {
   const wa = new Set(a.split(" ").filter((w) => w.length > 2))
   const wb = new Set(b.split(" ").filter((w) => w.length > 2))

@@ -19,7 +19,7 @@ export interface CreateLabNoteInput {
  * Single writer for creating a lab_notes row, absorbing the 4 inline
  * inserts (autosave's create-on-first-keystroke, handleSave's create
  * fallback, the "+ New Note" quick-add, and new-lab-note-dialog.tsx). They
- * differ only in which optional fields they populate — the shared
+ * differ only in which optional fields they populate, the shared
  * shape/defaults live here so they can't drift again. Always
  * `.select().single()`: a full row is a safe superset for the one caller
  * that previously selected only "id".
@@ -66,7 +66,7 @@ export async function saveDraft(
  * Wraps the `commit_lab_note` RPC, which sets `app.force_version` so the DB
  * trigger `trg_write_document_version` writes a version even inside its
  * 3-minute throttle window, then promotes the draft into `content` and
- * clears the draft — all in one transaction. The trigger owns versioning;
+ * clears the draft, all in one transaction. The trigger owns versioning;
  * callers must NOT also write `document_versions` directly.
  */
 export async function commitLabNote(

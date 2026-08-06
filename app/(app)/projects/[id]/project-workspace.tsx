@@ -208,7 +208,7 @@ export function ProjectWorkspace({
                   Start with an experiment
                 </h2>
                 <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                  An experiment is the anchor of this project — link a protocol to it, attach the
+                  An experiment is the anchor of this project, link a protocol to it, attach the
                   samples you used, and capture lab notes as you go. The eight cards below fill in
                   as you work.
                 </p>
@@ -224,7 +224,7 @@ export function ProjectWorkspace({
         </div>
       ) : null}
 
-      {/* Lab Notes, Protocols, and Samples cards intentionally removed — they
+      {/* Lab Notes, Protocols, and Samples cards intentionally removed, they
           now live as sub-items under Experiments in the project sidebar, so
           surfacing them as separate workspace cards was redundant. */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">

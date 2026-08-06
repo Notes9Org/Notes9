@@ -12,7 +12,7 @@
  * unsubscribes (not aborts) on unmount. See use-ai-literature-search.ts.
  *
  * ponytail: survives SPA navigation/tab switches but NOT a full page reload or
- * tab close (no service worker / server job). That's the intentional ceiling —
+ * tab close (no service worker / server job). That's the intentional ceiling
  * upgrade path is a server-side search job if cross-reload resume is ever needed.
  *
  * SSE event contract (see api/literature_ai_search.py):
@@ -75,7 +75,7 @@ function writeSessionSearch(key: string, value: CachedAi): void {
     }
     window.sessionStorage.setItem(SS_INDEX, JSON.stringify(index))
   } catch {
-    /* quota / private mode — persistence is best-effort */
+    /* quota / private mode, persistence is best-effort */
   }
 }
 
@@ -162,14 +162,14 @@ export function getServerSnapshot(): EngineState {
   return EMPTY_STATE
 }
 
-/** Real abort — used by the manual Stop button. Unmounting a subscriber must
+/** Real abort, used by the manual Stop button. Unmounting a subscriber must
  *  NOT call this; it should just unsubscribe (handled by useSyncExternalStore). */
 export function stop(requestedQuery: string) {
   requestSeq += 1
   abortController?.abort()
   abortController = null
   // Force inSync (activeQuery === requested) so the hook's derived isStreaming
-  // can't stay true after an abort — otherwise the search bar re-locks, making
+  // can't stay true after an abort, otherwise the search bar re-locks, making
   // Stop look broken.
   setState({ isStreaming: false, phase: null, activeQuery: requestedQuery })
   // Clear the dedupe guard so the SAME query can run again after an abort.
@@ -177,7 +177,7 @@ export function stop(requestedQuery: string) {
 }
 
 /** Seed the cache for an instant, no-LLM restore (Deliverable 2: history click).
- *  Callers then call run(query) — it will hit this cache and return immediately. */
+ *  Callers then call run(query), it will hit this cache and return immediately. */
 export function restore(query: string, entry: CachedAi) {
   const cacheKey = cacheKeyForSearch(query)
   aiSearchCache.set(cacheKey, entry)
@@ -203,7 +203,7 @@ export async function run(q0: string): Promise<void> {
   const q = q0.trim()
   if (!q) return
   const cacheKey = cacheKeyForSearch(q)
-  if (cacheKey === lastRunQuery) return // already current — never re-run
+  if (cacheKey === lastRunQuery) return // already current, never re-run
   lastRunQuery = cacheKey
   const requestId = requestSeq + 1
   requestSeq = requestId
@@ -211,7 +211,7 @@ export async function run(q0: string): Promise<void> {
   abortController = null
   setState({ activeQuery: q, error: null, limitInfo: null })
 
-  // Restore a completed answer from cache — no network call. Fall back to the
+  // Restore a completed answer from cache, no network call. Fall back to the
   // sessionStorage layer (survives dashboard round-trips / soft reload) and
   // rehydrate the module Map so subsequent hits stay in-memory.
   let cached = aiSearchCache.get(cacheKey)
@@ -253,18 +253,18 @@ export async function run(q0: string): Promise<void> {
     const res = await fetch('/api/literature/ai-search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      // Cap at 10 results — the backend summarizes each paper, so a smaller
+      // Cap at 10 results, the backend summarizes each paper, so a smaller
       // set keeps token cost low.
       body: JSON.stringify({ query: q, limit: 10 }),
       signal: controller.signal,
     })
     if (res.status === 429) {
-      // Free-tier quota reached — a fact, not a failure.
+      // Free-tier quota reached, a fact, not a failure.
       let body: Record<string, unknown> = {}
       try {
         body = (await res.json()) as Record<string, unknown>
       } catch {
-        /* body optional — defaults below */
+        /* body optional, defaults below */
       }
       setState({
         limitInfo: {
@@ -345,7 +345,7 @@ export async function run(q0: string): Promise<void> {
           sawError = true
           if (isActiveRequest()) setState({ error: String((data as { error?: string }).error ?? 'Literature search failed.') })
         }
-        // `done` needs no special handling — the loop ends with the stream.
+        // `done` needs no special handling, the loop ends with the stream.
       }
     }
 
@@ -353,7 +353,7 @@ export async function run(q0: string): Promise<void> {
     if (isActiveRequest()) setState({ papers: state.papers.map((p) => ({ ...p })) })
     if (sawError) {
       // Failed run: clear the dedupe guard so the error banner's "Try again"
-      // actually re-runs, and do NOT cache — a cached partial would replay
+      // actually re-runs, and do NOT cache, a cached partial would replay
       // the broken state on every retry and across reloads via sessionStorage.
       if (requestSeq === requestId) {
         lastRunQuery = null
@@ -374,13 +374,13 @@ export async function run(q0: string): Promise<void> {
           has_summary: overall.trim().length > 0,
           duration_ms: Date.now() - searchStartedAt,
         })
-        // Authoritative history write — fires regardless of whether the
+        // Authoritative history write, fires regardless of whether the
         // right-sidebar bridge is mounted/reacting (Deliverable 1).
         if (receivedPapers.length > 0) void persistHistory(q, overall, receivedPapers, receivedManifest)
       }
     }
   } catch (e) {
-    // Only the still-active request may touch shared state — a superseded
+    // Only the still-active request may touch shared state, a superseded
     // request must not clear the newer one's retry guard or set its error.
     if ((e as Error)?.name !== 'AbortError' && requestSeq === requestId) {
       lastRunQuery = null
@@ -403,7 +403,7 @@ export async function run(q0: string): Promise<void> {
  * in history regardless of whether the right-sidebar Catalyst bridge is
  * mounted. Dedupes against the newest literature session for this user: same
  * normalized query touches/updates that row instead of inserting a duplicate.
- * Fire-and-forget, fail-open — a failed write only drops the search from
+ * Fire-and-forget, fail-open, a failed write only drops the search from
  * "recent searches"; the search itself already succeeded.
  */
 async function persistHistory(
@@ -431,7 +431,7 @@ async function persistHistory(
     }
 
     // Match ANY existing literature session with the same normalized query, not just the
-    // most-recent one — otherwise re-running an older query inserts a duplicate row.
+    // most-recent one, otherwise re-running an older query inserts a duplicate row.
     const { data: candidates } = await supabase
       .from('chat_sessions')
       .select('id, title')

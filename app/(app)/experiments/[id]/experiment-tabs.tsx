@@ -445,10 +445,10 @@ export function ExperimentTabs({ experiment, initialTab, experimentPageHref }: E
                     </TableCell>
                     <TableCell>{sample.sample_type}</TableCell>
                     <TableCell>
-                      {sample.status ? sample.status.replace(/_/g, " ") : "—"}
+                      {sample.status ? sample.status.replace(/_/g, " ") : "-"}
                     </TableCell>
                     <TableCell>
-                      {sample.storage_location || "—"}
+                      {sample.storage_location || "-"}
                     </TableCell>
                     <TableCell className="text-right">
                       <Button asChild variant="ghost" size="sm">

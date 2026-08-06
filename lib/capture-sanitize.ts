@@ -32,8 +32,58 @@ export const GENERIC_DATE = "Jan 15, 2024"
 export async function addCaptureInitScripts(page: Page): Promise<void> {
   await page.evaluateOnNewDocument(() => {
     localStorage.setItem("notes9_tour_completed", "true")
+    // The welcome/onboarding modal is gated by a per-user key
+    // (`notes9_welcome_seen:<userId>`) that we can't know ahead of login.
+    // Shim getItem so any welcome-seen lookup returns "true", passing the
+    // client gate before the app hydrates, no modal ever flashes in captures.
+    const proto = Storage.prototype as Storage & { __n9Patched?: boolean }
+    if (!proto.__n9Patched) {
+      const origGet = proto.getItem
+      proto.getItem = function (key: string) {
+        if (typeof key === "string" && key.startsWith("notes9_welcome_seen")) return "true"
+        return origGet.call(this, key)
+      }
+      proto.__n9Patched = true
+    }
   })
   await page.evaluateOnNewDocument("typeof __name === 'undefined' && (window.__name = function(fn){return fn})")
+}
+
+/**
+ * Light sanitize for pages whose main content is PUBLIC (e.g. live literature
+ * search results from PubMed/Europe PMC/OpenAlex). Only blurs the sidebar user
+ * block + avatars and redacts emails, it does NOT genericize titles/names,
+ * which on these pages are published paper titles and abstract text.
+ */
+export async function sanitizeLightForDemo(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const style = document.createElement("style")
+    style.id = "capture-sanitize-light"
+    style.textContent = `
+      .driver-overlay, .driver-popover, [class*="driver-overlay"], [class*="driver-popover"] { display: none !important; }
+      .pii-blur { filter: blur(10px) !important; }
+    `
+    document.getElementById("capture-sanitize-light")?.remove()
+    document.head.appendChild(style)
+
+    document.querySelectorAll('[data-slot="avatar"], [data-sidebar="footer"]').forEach((el) => {
+      ;(el as HTMLElement).classList.add("pii-blur")
+    })
+
+    const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null)
+    const toReplace: { node: Text; replacement: string }[] = []
+    let node: Text | null
+    while ((node = walker.nextNode() as Text | null)) {
+      const text = node.textContent || ""
+      const replacement = text.replace(emailRegex, "•••@•••.•••")
+      if (replacement !== text) toReplace.push({ node, replacement })
+    }
+    toReplace.forEach(({ node: n, replacement }) => {
+      n.textContent = replacement
+    })
+  })
+  await new Promise((r) => setTimeout(r, 150))
 }
 
 /** Hide tour overlay and sanitize content for demo (blur PII, redact emails, replace dates/names) */
@@ -110,7 +160,7 @@ export async function sanitizeForDemo(page: Page): Promise<void> {
         "Literature", "Complete list", "View Project", "View Details", "Untitled", "New Lab Note",
         "members", "experiments", "Manage your", "Research Lab", "Active Projects", "Notes9", "LIMS",
         "Workspace", "Dashboard", "Settings", "Search", "Create", "Add", "Edit", "Delete", "Cancel",
-        "Save", "Submit", "Loading", "—", "Copy", "Duplicate", "Export", "Import", "Unassigned",
+        "Save", "Submit", "Loading", "-", "Copy", "Duplicate", "Export", "Import", "Unassigned",
         "New note", "Rename", "Delete note", "Notes", "Markdown", "HTML", "PDF", "Word", "Download as",
         "Create your first lab notebook", "Create Note", "Select a note", "Protocol", "Overview",
         "Samples", "Data & Files", "Protocol & Assays", "Lab Notes"

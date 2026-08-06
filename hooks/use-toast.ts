@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * Thin adapter over sonner — keeps the existing useToast() API so all callers
+ * Thin adapter over sonner, keeps the existing useToast() API so all callers
  * continue to compile while the underlying notifications come from a single
  * unified source (sonner). The radix-based <Toaster> is no longer rendered.
  */

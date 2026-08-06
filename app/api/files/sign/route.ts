@@ -9,8 +9,8 @@ import { USER_STORAGE_BUCKET } from "@/lib/user-storage-bucket";
 // `storagePath` instead and call this endpoint to refresh the link.
 //
 // Security: we use the *user-scoped* Supabase client (anon key + the caller's
-// session cookie), so storage RLS — first path segment must equal auth.uid()
-// — is enforced by Postgres. A user can never sign another user's object even
+// session cookie), so storage RLS, first path segment must equal auth.uid()
+// is enforced by Postgres. A user can never sign another user's object even
 // if they guess the path. We also defensively reject paths outside the
 // caller's own prefix before hitting the network.
 const SIGNED_URL_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days

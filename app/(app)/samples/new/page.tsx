@@ -145,7 +145,7 @@ function NewSamplePageInner() {
   }, [searchParams])
 
   // Prefill from the sidebar context (`?project=` on the Create-menu link).
-  // Optional and editable — samples remain an org-wide library.
+  // Optional and editable, samples remain an org-wide library.
   useEffect(() => {
     const projectId = searchParams.get("project")
     if (!projectId) return

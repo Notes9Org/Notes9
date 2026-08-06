@@ -5,10 +5,10 @@ import type { CSSProperties } from 'react'
  * long titles scroll horizontally, and dropdown width matches the trigger so menus do not
  * spill over the adjacent control.
  *
- * SelectTrigger defaults apply `line-clamp-1` to the value (overflow:hidden) — we override
+ * SelectTrigger defaults apply `line-clamp-1` to the value (overflow:hidden), we override
  * with `!` so horizontal scroll works on the selected label.
  *
- * Radix sets `pointer-events: none` on SelectValue — restore so the value area can be
+ * Radix sets `pointer-events: none` on SelectValue, restore so the value area can be
  * drag-scrolled; clicks still bubble to the trigger button.
  */
 export const literatureLinkSelectTriggerClassName =

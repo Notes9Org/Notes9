@@ -8,10 +8,10 @@ import { getLiteratureStorageBucket } from "@/lib/literature-pdf-storage"
 /**
  * Same-origin PDF stream for the in-app reader (pdf.js).
  * The browser cannot reliably fetch Supabase `getPublicUrl` objects when the bucket is private
- * or RLS requires an authenticated session — pdf.js runs client-side without Supabase JWT.
+ * or RLS requires an authenticated session, pdf.js runs client-side without Supabase JWT.
  *
  * Authorization model: the row read below runs through the *user* client, so
- * RLS on `literature_reviews` is the access gate — the caller only obtains the
+ * RLS on `literature_reviews` is the access gate, the caller only obtains the
  * storage path if they're allowed to see the record (now org-scoped, see
  * 053_supabase_rls_migration.sql). Once authorized, the bytes are streamed via
  * the *service role* client. This is required because the `storage.objects`
@@ -31,7 +31,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     }
 
     // RLS-enforced read = the authorization check. If the user can't see the
-    // row (wrong org), maybeSingle() returns null and we 404 — never leak bytes.
+    // row (wrong org), maybeSingle() returns null and we 404, never leak bytes.
     const { data: row, error: selErr } = await supabase
       .from("literature_reviews")
       .select("pdf_storage_path")
@@ -56,7 +56,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
 
     if (dlErr || !blob) {
       // Surface the real cause (missing object, wrong bucket, etc.) instead of
-      // an opaque 502 — pdf.js only reports the status code to the user.
+      // an opaque 502, pdf.js only reports the status code to the user.
       console.error("viewer-pdf storage download failed", {
         id,
         bucket: getLiteratureStorageBucket(),

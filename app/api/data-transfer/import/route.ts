@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
   if (contentType.includes("multipart/form-data")) {
     // Guard against unbounded uploads exhausting server memory before we even
     // buffer the body. Research-folder imports bundle multiple files, so 50MB is
-    // a generous ceiling that still protects the process. App-layer only — no
+    // a generous ceiling that still protects the process. App-layer only, no
     // DB impact. (Content-Length is present for normal multipart uploads.)
     const MAX_IMPORT_BYTES = 50 * 1024 * 1024
     const contentLength = Number(req.headers.get("content-length") ?? 0)
@@ -238,7 +238,7 @@ async function importResearchFolder({
       continue
     }
 
-    // Bucket is private — `fileUrl` holds the storage path; readers sign on demand.
+    // Bucket is private, `fileUrl` holds the storage path; readers sign on demand.
     const fileUrl = storagePath
 
     try {
@@ -256,7 +256,7 @@ async function importResearchFolder({
       })
       report.inserted.files = (report.inserted.files ?? 0) + 1
     } catch (error: any) {
-      // Metadata row failed after the object was already uploaded — the object
+      // Metadata row failed after the object was already uploaded, the object
       // has no owning row and org-scoped paths have no TTL/cron reaper, so it
       // would leak forever. Delete it (best-effort; don't mask the real error).
       try {

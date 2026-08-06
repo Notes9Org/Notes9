@@ -24,7 +24,7 @@ const keyOf = (
  * per-row async resolution (which never reached the inline manifest and often
  * raced the first render), this runs once for the whole message so the inline
  * citation chips AND the Sources list can both be enriched from a single source
- * of truth — lab notes, protocols, literature articles, papers and reports all
+ * of truth, lab notes, protocols, literature articles, papers and reports all
  * show their actual title instead of "Untitled …".
  */
 export function useResolvedCitationTitles(

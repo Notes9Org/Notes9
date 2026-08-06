@@ -6,7 +6,7 @@ import { Notes9LoaderVariant, Notes9VideoLoader } from "@/components/brand/notes
 
 export const MIN_LOADER_DURATION_MS = 350
 // Hard failsafe only. This used to be 8s, which slow routes (dev compiles,
-// heavy RSC fetches) regularly exceeded — the overlay force-dismissed while
+// heavy RSC fetches) regularly exceeded, the overlay force-dismissed while
 // the route was still in flight, dumping the user back onto the PREVIOUS
 // page until the new one landed (read as a glitch). Successful navigations
 // are dismissed by the settle effect; this timer only rescues genuinely
@@ -86,7 +86,7 @@ function variantFromPath(path: string): Notes9LoaderVariant | null {
 }
 
 function inferLoaderVariant(actionLabel: string, href?: string | null): Notes9LoaderVariant {
-  // The destination path is what the user actually selected — it wins.
+  // The destination path is what the user actually selected, it wins.
   if (href) {
     const fromPath = variantFromPath(extractPathname(href))
     if (fromPath) return fromPath
@@ -250,7 +250,7 @@ function triggerLoader(
 export function NavigationLoader() {
   const [isLoading, setIsLoading] = useState(false)
   // Dismissal fades the overlay out over ~200ms instead of unmounting it in
-  // one frame — the destination is already painted beneath, so the handoff
+  // one frame, the destination is already painted beneath, so the handoff
   // reads as a reveal rather than a hard cut.
   const [isLeaving, setIsLeaving] = useState(false)
   const [mounted, setMounted] = useState(false)
@@ -261,7 +261,7 @@ export function NavigationLoader() {
   ])
   const [loadingStartedAt, setLoadingStartedAt] = useState<number | null>(null)
   const destinationPathRef = useRef<string | null>(null)
-  // Pathname at trigger time — when no destination is known (custom events),
+  // Pathname at trigger time, when no destination is known (custom events),
   // we settle only after we've actually LEFT this path.
   const originPathRef = useRef<string | null>(null)
   const pathname = usePathname()
@@ -277,7 +277,7 @@ export function NavigationLoader() {
     // Settle = hand off from the mascot overlay to the destination's
     // loading.tsx skeleton, which has already committed beneath us (that's
     // what flipped the pathname). The overlay is deliberately the SHORT
-    // phase — the route skeleton owns the rest of the wait while data
+    // phase, the route skeleton owns the rest of the wait while data
     // streams, so the skeleton always shows longer than the overlay.
     const destination = destinationPathRef.current
     const origin = originPathRef.current
@@ -287,7 +287,7 @@ export function NavigationLoader() {
 
     // Redirect chains (e.g. /data → /experiments?project=…) never reach the
     // recorded destination. Once we've LEFT the origin, treat a path that
-    // stays stable through a short grace window as the real destination —
+    // stays stable through a short grace window as the real destination
     // this effect re-runs (and cancels the timer) on every pathname hop, so
     // an intermediate route never dismisses the overlay early. Previously the
     // overlay waited for the unreachable destination until the 8s safety

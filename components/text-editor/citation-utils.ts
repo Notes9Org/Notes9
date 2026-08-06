@@ -99,7 +99,7 @@ function parseName(full: string): { family: string; given: string } {
   return { family: parts[parts.length - 1], given: parts.slice(0, -1).join(' ') }
 }
 
-/** "Jane A." → "J. A." (spaced, periods) — APA/MLA/Chicago/IEEE/Nature style. */
+/** "Jane A." → "J. A." (spaced, periods), APA/MLA/Chicago/IEEE/Nature style. */
 function initialsDotted(given: string): string {
   return given
     .split(/[\s.]+/)
@@ -108,7 +108,7 @@ function initialsDotted(given: string): string {
     .join(' ')
 }
 
-/** "Jane A." → "JA" (no periods, no spaces) — Vancouver/AMA/CSE/NLM style. */
+/** "Jane A." → "JA" (no periods, no spaces), Vancouver/AMA/CSE/NLM style. */
 function initialsPacked(given: string): string {
   return given
     .split(/[\s.]+/)

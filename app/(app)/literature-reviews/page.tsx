@@ -1,3 +1,4 @@
+import { cookies } from "next/headers"
 import { createClient } from "@/lib/supabase/server"
 import { requireUser } from "@/lib/auth/current-user"
 import { Button } from "@/components/ui/button"
@@ -15,12 +16,29 @@ import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
 export default async function LiteratureReviewsPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ project?: string; tab?: string; openPaper?: string }>
+  searchParams?: Promise<{ project?: string; tab?: string; openPaper?: string; q?: string; autorun?: string }>
 }) {
   const sp = searchParams ? await searchParams : {}
+
+  // Auto-run a live search when arriving from the marketing hero. The query
+  // comes via ?q=...&autorun=1; a short-lived cookie is the durable fallback
+  // for the email-verification hop, where the URL params can't survive.
+  const cookieStore = await cookies()
+  const pendingRaw = cookieStore.get("n9_pending_lit_query")?.value
+  let pendingQuery: string | undefined
+  if (pendingRaw) {
+    try {
+      pendingQuery = decodeURIComponent(pendingRaw)
+    } catch {
+      pendingQuery = pendingRaw
+    }
+  }
+  const initialQuery = (sp.q ?? pendingQuery)?.trim() || undefined
+  const autoRunSearch = Boolean(initialQuery) && (sp.autorun === "1" || Boolean(pendingQuery))
+
   const user = await requireUser()
   const supabase = await createClient()
-  // `literatureReviews` and `profile` are independent — parallelize.
+  // `literatureReviews` and `profile` are independent, parallelize.
   const [literatureReviewsRes, profileRes] = await Promise.all([
     supabase
       .from("literature_reviews")
@@ -66,8 +84,9 @@ export default async function LiteratureReviewsPage({
     sp.project,
     safeProjects.map((p) => p.id)
   )
-  const initialTab =
-    sp.tab === "repo"
+  const initialTab = autoRunSearch
+    ? "search"
+    : sp.tab === "repo"
       ? "repo"
       : sp.tab === "staging" || sp.tab === "search"
         ? "search"
@@ -134,6 +153,8 @@ export default async function LiteratureReviewsPage({
         initialProjectId={initialProjectId}
         initialTab={initialTab}
         openPaperId={sp.openPaper ?? null}
+        initialQuery={initialQuery}
+        autoRunSearch={autoRunSearch}
       />
     </div>
   )

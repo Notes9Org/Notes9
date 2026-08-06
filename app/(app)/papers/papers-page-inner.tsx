@@ -18,7 +18,7 @@ interface PapersPageInnerProps {
   projects?: { id: string; name: string }[]
 }
 
-// List view only needs these columns — avoid pulling heavy body/content fields.
+// List view only needs these columns, avoid pulling heavy body/content fields.
 const PAPER_LIST_COLUMNS = "id, title, status, updated_at, created_at, project_id"
 
 async function fetchPapersList(userId: string): Promise<PaperListItem[]> {
@@ -65,7 +65,7 @@ export function PapersPageInner({ projects = [] }: PapersPageInnerProps = {}) {
   const { projectId, projectName } = useProjectScope()
   const [projectFilter, setProjectFilter] = useState(projectId || FILTER_ALL)
 
-  // Cached, de-duplicated list fetch — shared across navigations so returning to
+  // Cached, de-duplicated list fetch, shared across navigations so returning to
   // this page (or arriving from a paper detail view) does not refetch.
   const {
     data: papers = [],

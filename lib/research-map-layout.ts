@@ -2,7 +2,7 @@ import dagre from "dagre"
 import { Position, type Edge, type Node } from "@xyflow/react"
 
 const NODE_W = 200
-/** Fits kind ribbon + 3 lines of title at text-sm — kept narrow so dense graphs
+/** Fits kind ribbon + 3 lines of title at text-sm, kept narrow so dense graphs
  *  don't collapse into thin slivers when fit-to-view zooms out. dagre must
  *  match RF node width/height. */
 const NODE_H = 84

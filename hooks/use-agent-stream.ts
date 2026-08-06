@@ -52,7 +52,7 @@ export type AgentAttachment = {
 export type AgentFileAttachment = {
   url: string;
   name: string;
-  // Single source of truth — do NOT re-declare a local union here; a subset
+  // Single source of truth, do NOT re-declare a local union here; a subset
   // silently drops the missing types at the live send path (the exact drift
   // lib/attachment-types.ts exists to prevent).
   content_type: AllowedMimeType;
@@ -85,7 +85,7 @@ export interface AgentStreamParams {
    * fetches + verifies + base64-encodes before passing to the LLM. */
   file_attachments?: AgentFileAttachment[];
   /** Transient papers (title + abstract + ids) passed inline so the agent
-   * grounds + inline-cites them WITHOUT a persisted literature_review row —
+   * grounds + inline-cites them WITHOUT a persisted literature_review row
    * literature-session follow-up context, or a closed-access paper's abstract
    * on "Ask Catalyst". Materialized into citable sources at preflight. */
   literature_sources?: AgentLiteratureSource[];
@@ -119,7 +119,7 @@ export interface CitationsManifestEntry {
   /** Full display label ("3", "3.2"); also the manifest key. */
   cite_label?: string;
   source_type: string;
-  /** Server-side identity for the source — now reliably present on the wire. */
+  /** Server-side identity for the source, now reliably present on the wire. */
   source_id?: string;
   source_name?: string;
   source_url?: string;
@@ -154,9 +154,9 @@ export interface ToolOutput {
   details: Record<string, unknown>;
 }
 
-/** A single live tool card — open while running, settled once result arrives */
+/** A single live tool card, open while running, settled once result arrives */
 export interface ToolCard {
-  /** Unique key — tool name (e.g. "nlp_to_sql_tool") */
+  /** Unique key, tool name (e.g. "nlp_to_sql_tool") */
   id: string;
   /** Human label from TOOL_LABELS map */
   label: string;
@@ -199,7 +199,7 @@ export interface AgentArtifact {
   hasSource?: boolean;
   /** 1-based version in the edit lineage. */
   version?: number | null;
-  /** v1 id shared by every version — used to list the version chain. */
+  /** v1 id shared by every version, used to list the version chain. */
   rootDataId?: string | null;
 }
 
@@ -256,7 +256,7 @@ export type ThinkingStage =
 
 export interface AgentStreamState {
   thinkingSteps: ThinkingPayload[];
-  /** Latest stage emitted via thinking events — drives ThinkingBar */
+  /** Latest stage emitted via thinking events, drives ThinkingBar */
   currentStage: ThinkingStage | null;
   /** Latest thinking message */
   currentThinkingMessage: string | null;
@@ -267,7 +267,7 @@ export interface AgentStreamState {
   currentStageProgress: number | null;
   /** Elapsed seconds reported by the backend for the current stage, or null. */
   currentStageElapsedS: number | null;
-  /** Live tool cards — keyed by tool id */
+  /** Live tool cards, keyed by tool id */
   toolCards: ToolCard[];
   /** Files the agent generated this turn (PDF/DOCX/XLSX/chart/figure), in the
    * order they were produced. Drafts carry `draft: true` and can be saved to an
@@ -276,7 +276,7 @@ export interface AgentStreamState {
   /** Relationship graphs the agent produced this turn (map_relationships),
    * rendered natively (interactive dagre) instead of as a static PNG. */
   graphs: AgentGraph[];
-  /** Biomni-style synthesis checklist — the ordered steps the design works
+  /** Biomni-style synthesis checklist, the ordered steps the design works
    * through, each ticked off live as its section is written. Null until the
    * backend emits a `synthesis_plan`. */
   synthesisPlan: SynthesisPlan | null;
@@ -297,7 +297,7 @@ export interface AgentStreamState {
   runId: string | null;
   /** Set when the agent is paused awaiting a tool-permission decision. */
   pendingPermission: PermissionPrompt | null;
-  /** Structured clarification question from the `clarify` SSE event — the
+  /** Structured clarification question from the `clarify` SSE event, the
    * agent ended its turn asking the user something instead of streaming an
    * answer. Cleared on each new send. */
   clarify: { question: string; options: string[] } | null;
@@ -334,7 +334,7 @@ function normalizeNotes9AgentResponse(raw: Record<string, unknown>): DonePayload
   const tool_used = raw.tool_used as DonePayload['tool_used'];
   // Carry the citation-health envelope through normalization. This function
   // rebuilds the payload field-by-field, so anything not copied here is dropped
-  // before any consumer sees it — which is exactly why the signal was dead.
+  // before any consumer sees it, which is exactly why the signal was dead.
   const citations_health =
     raw.citations_health === 'ok' ||
     raw.citations_health === 'degraded' ||
@@ -520,13 +520,13 @@ export function useAgentStream() {
       // Collect artifacts in a LOCAL array (not just React state) so the caller
       // can read the FINAL list synchronously when the stream resolves. Reading
       // the hook's `state.artifacts` from the caller's closure returns the stale
-      // (empty) value captured at render — which is exactly why generated charts
+      // (empty) value captured at render, which is exactly why generated charts
       // were persisted as nothing and vanished once streaming ended.
       const collectedArtifacts: AgentArtifact[] = [];
-      // Same stale-closure trap applies to graphs — capture locally so the caller
+      // Same stale-closure trap applies to graphs, capture locally so the caller
       // gets the FINAL list synchronously when the stream resolves.
       const collectedGraphs: AgentGraph[] = [];
-      // Same stale-closure trap applies to the citations manifest — capture it
+      // Same stale-closure trap applies to the citations manifest, capture it
       // locally so the caller persists the FINAL manifest, not the render-time null.
       let collectedManifest: CitationsManifest | null = null;
 
@@ -565,12 +565,12 @@ export function useAgentStream() {
 
       // Token throttle: accumulate masked deltas and flush to React state on a
       // ~80ms cadence instead of once per token. Per-token setState re-rendered
-      // the entire sidebar and re-parsed markdown on every token — the primary
+      // the entire sidebar and re-parsed markdown on every token, the primary
       // source of streaming jank. Flushed eagerly on text_reset / done / error
       // and after the read loop so no streamed text is lost.
       let pendingMasked = '';
       let flushTimer: ReturnType<typeof setTimeout> | null = null;
-      // One stateful masker per stream run — handles cite tokens split across deltas.
+      // One stateful masker per stream run, handles cite tokens split across deltas.
       const maskDelta = createStreamCiteMasker();
       const flushTokens = () => {
         if (flushTimer) {
@@ -598,7 +598,7 @@ export function useAgentStream() {
             'Content-Type': 'application/json',
             Accept: 'text/event-stream',
             Authorization: `Bearer ${token}`,
-            // BYOK: user's own Anthropic key (Settings) — runs on their account
+            // BYOK: user's own Anthropic key (Settings), runs on their account
             ...byokRequestHeaders(),
           },
           body: JSON.stringify(
@@ -620,7 +620,7 @@ export function useAgentStream() {
         if (!response.ok) {
           const errText = await response.text();
           if (response.status === 429) {
-            // Free-tier quota reached — a fact, not a failure. Surface the
+            // Free-tier quota reached, a fact, not a failure. Surface the
             // problem+json detail (friendly copy + reset date) as the message;
             // the turn never started, so nothing is lost.
             let problem: Record<string, unknown> = {};
@@ -766,14 +766,14 @@ export function useAgentStream() {
                   const isHeartbeat = p?.heartbeat === true;
 
                   // NOTE: source names are NEVER parsed out of this thinking
-                  // message — they arrive as structured fields on tool_result /
+                  // message, they arrive as structured fields on tool_result /
                   // tool_output / rag_chunks and are applied there via
                   // normalizeSourceNames (AD1). The old "from: …" / ": …" regex
                   // was fragile (broke on any backend copy change) and is gone.
                   setState((s) => {
                     return {
                       ...s,
-                      // Heartbeats keep the step list stable — only stage
+                      // Heartbeats keep the step list stable, only stage
                       // progress / elapsed are refreshed so the UI shows life
                       // without a flood of duplicate lines.
                       thinkingSteps: isHeartbeat
@@ -840,8 +840,8 @@ export function useAgentStream() {
                       c.id === toolId && c.status === 'running'
                         ? {
                             ...c,
-                            // Server sends an updated label describing what came back —
-                            // "Found 5 projects: …" — promote it onto the card.
+                            // Server sends an updated label describing what came back
+                            // "Found 5 projects: …", promote it onto the card.
                             label: serverLabel || c.label,
                             status,
                             citations_count: typeof p.citations_count === 'number' ? p.citations_count : c.citations_count,
@@ -1035,7 +1035,7 @@ export function useAgentStream() {
                 const rag = ragFromPayload(payload);
                 if (rag) {
                   // Source names come from the structured chunk fields via the
-                  // single normalizer — never parsed from thinking prose (AD1).
+                  // single normalizer, never parsed from thinking prose (AD1).
                   const ragSourceNames = normalizeSourceNames(
                     rag.chunks.map((chunk) => chunk.source_name),
                     { max: 5 },
@@ -1055,7 +1055,7 @@ export function useAgentStream() {
               }
               case 'citations_manifest': {
                 // Citation manifest for inline [N] resolution. Guard the wire
-                // shape before trusting the cast — `manifest.manifest` must be a
+                // shape before trusting the cast, `manifest.manifest` must be a
                 // plain object map (not null / array / scalar).
                 const manifest = payload as CitationsManifest | null;
                 if (
@@ -1131,7 +1131,7 @@ export function useAgentStream() {
                 // Backend signals end of an intermediate ReAct turn that
                 // streamed reasoning preamble before a tool_use. Wipe the
                 // streamed answer so the next turn's text starts on a
-                // clean slate — keeps the chat message free of "thinking"
+                // clean slate, keeps the chat message free of "thinking"
                 // leaks while preserving live streaming during each turn.
                 if (flushTimer) {
                   clearTimeout(flushTimer);
@@ -1174,7 +1174,7 @@ export function useAgentStream() {
                 break;
               }
               case 'notice': {
-                // Contained info strip (NOT an assistant reply) — e.g. a requested
+                // Contained info strip (NOT an assistant reply), e.g. a requested
                 // capability is unavailable for the selected model. Rendered by the
                 // CATALYST_NOTICE_EVENT listener in the Catalyst chat.
                 const message =
@@ -1185,7 +1185,7 @@ export function useAgentStream() {
                 break;
               }
               case 'clarify': {
-                // Structured clarification question — emitted instead of
+                // Structured clarification question, emitted instead of
                 // token-streaming the question. The turn still ends with `done`.
                 const question =
                   payload && typeof (payload as { question?: string }).question === 'string'

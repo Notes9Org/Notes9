@@ -7,15 +7,15 @@
  *
  * PMC open-access PDF pipeline (server-only; NCBI does not support CORS for these endpoints).
  *
- * 1. **Discovery** — [PMC OA Web Service](https://pmc.ncbi.nlm.nih.gov/tools/oa-service/)
+ * 1. **Discovery**, [PMC OA Web Service](https://pmc.ncbi.nlm.nih.gov/tools/oa-service/)
  *    (`https://www.ncbi.nlm.nih.gov/pmc/utils/oa/oa.fcgi?id=PMC…`): XML with
  *    `<link format="pdf" …>` and/or `<link format="tgz" …>` (OA package on FTP as `.tar.gz`).
- * 2. **Download** — [PMC FTP](https://pmc.ncbi.nlm.nih.gov/tools/ftp/) via **HTTPS** (`ftp://` → `https://`).
+ * 2. **Download**, [PMC FTP](https://pmc.ncbi.nlm.nih.gov/tools/ftp/) via **HTTPS** (`ftp://` → `https://`).
  *    If only `tgz` is listed, gzip+tar is parsed server-side to extract the `.pdf` (no browser).
- * 3. **PMID → PMCID** — E-utilities `elink` (this module) or
+ * 3. **PMID → PMCID**, E-utilities `elink` (this module) or
  *    [PMC ID Converter API](https://pmc.ncbi.nlm.nih.gov/tools/id-converter-api/); `oa.fcgi` expects PMC IDs.
  *
- * Next.js must call this from Server Actions, Route Handlers, or other server code — never the browser alone.
+ * Next.js must call this from Server Actions, Route Handlers, or other server code, never the browser alone.
  */
 import { createHash } from "crypto"
 
@@ -45,7 +45,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 
 // ── Shared OA-PDF download cache ─────────────────────────────────────────────
 // Open-access PDFs are public and identical for every user, so we cache the
-// downloaded bytes once — keyed by the paper's stable identity — and let BOTH
+// downloaded bytes once, keyed by the paper's stable identity, and let BOTH
 // the "tag in chat" flow (ephemeral-attach) and the "read/stage" flow reuse
 // them. This removes the redundant re-download (and re-resolve) when the same
 // paper is tagged and then read. Uses the service-role client because the cache
@@ -99,7 +99,7 @@ export async function writeOaPdfCache(cacheKey: string, buffer: ArrayBuffer): Pr
         contentType: "application/pdf",
       })
   } catch {
-    // Cache population is opportunistic — a failure here must not fail the fetch.
+    // Cache population is opportunistic, a failure here must not fail the fetch.
   }
 }
 
@@ -135,7 +135,7 @@ type PdfVerifyResponse = {
 
 /**
  * Call the catalyst verifier. Returns null on any failure (network, missing
- * config, 5xx) — the caller treats that as "verification unavailable, fall
+ * config, 5xx), the caller treats that as "verification unavailable, fall
  * back to legacy magic-byte check".
  */
 async function verifyPdfCandidatesViaCatalyst(params: {
@@ -179,7 +179,7 @@ async function verifyPdfCandidatesViaCatalyst(params: {
   }
 }
 
-/** Shown in User-Agent for NCBI/PMC polite use — must be a reachable contact URL. */
+/** Shown in User-Agent for NCBI/PMC polite use, must be a reachable contact URL. */
 const NOTES9_CONTACT = process.env.NOTES9_CONTACT_URL ?? "https://notes9.com"
 
 /**
@@ -195,7 +195,7 @@ const NCBI_METADATA_TIMEOUT_MS = 5_000
 /**
  * Plain real-browser UA for **publisher PDF byte fetches**. Cloudflare-fronted
  * hosts (MDPI, Frontiers, Wiley, …) challenge requests whose UA self-identifies
- * as a bot — so for those hosts we look like a normal browser. (We never bypass a
+ * as a bot, so for those hosts we look like a normal browser. (We never bypass a
  * real bot wall; this only avoids being flagged when fetching genuinely-OA PDFs.)
  */
 const BROWSER_USER_AGENT =
@@ -249,7 +249,7 @@ export function pdfFetchHeaders(pdfUrl: string): Record<string, string> {
 /**
  * Recognize an HTML bot/Proof-of-Work/Cloudflare interstitial served with a 200.
  * These come back as `text/html` (or start with `<`) and never carry the `%PDF`
- * magic bytes — when we see one we skip to the next candidate URL rather than
+ * magic bytes, when we see one we skip to the next candidate URL rather than
  * storing the challenge page as if it were the paper.
  */
 export function looksLikeHtmlInterstitial(contentType: string | null, head: Uint8Array): boolean {
@@ -276,7 +276,7 @@ export function looksLikeHtmlInterstitial(contentType: string | null, head: Uint
  * Map a PMID/DOI to its bare numeric PMC id via EuropePMC. EuropePMC's index is
  * more reliable than NCBI elink (which intermittently returns no PMC link for
  * articles that ARE in PMC), so this is the fallback resolver. Returns null on
- * any miss/error — best-effort.
+ * any miss/error, best-effort.
  */
 export async function fetchPmcIdFromEuropePmc(
   pmid: string | null | undefined,
@@ -375,13 +375,13 @@ function extractPmcNumericId(paper: SearchPaper): string | null {
  *
  * NLM's own `pmc.ncbi.nlm.nih.gov/.../pdf*` endpoints frequently serve a JS
  * Proof-of-Work bot interstitial (HTML, not PDF bytes), so the Europe PMC render
- * mirror — which streams the PDF without a bot challenge — is tried first. The
+ * mirror, which streams the PDF without a bot challenge, is tried first. The
  * bare `…/pdf/` folder forms (most POW-prone) come last.
  */
 export function buildPmcPdfCandidateUrls(pmcNumeric: string): string[] {
   const id = `PMC${pmcNumeric.replace(/^PMC/i, "")}`
   return [
-    // Non-gated Europe PMC render mirrors (different host — no NCBI rate limit).
+    // Non-gated Europe PMC render mirrors (different host, no NCBI rate limit).
     `https://europepmc.org/backend/ptpmcrender.fcgi?accid=${encodeURIComponent(id)}&blobtype=pdf`,
     `https://europepmc.org/articles/${id}?pdf=render`,
     // ONE canonical NLM request: the bare /pdf/ folder 301-redirects to the real
@@ -393,7 +393,7 @@ export function buildPmcPdfCandidateUrls(pmcNumeric: string): string[] {
 }
 
 /**
- * PMC OA Web Service (`oa.fcgi`) — **only** articles in the PMC Open Access Subset
+ * PMC OA Web Service (`oa.fcgi`), **only** articles in the PMC Open Access Subset
  * may be auto-fetched; closed/subscription PMC full text is excluded by policy.
  * @see https://pmc.ncbi.nlm.nih.gov/tools/oa-service/
  */
@@ -471,7 +471,7 @@ export async function resolvePmcOaPdfUrls(paper: SearchPaper): Promise<{
     }
   }
 
-  // oa.fcgi is only a best-effort source of an extra direct link — it is NOT
+  // oa.fcgi is only a best-effort source of an extra direct link, it is NOT
   // required to fetch the article PDF (the proof-of-work solver hits pmc.ncbi
   // directly). It also intermittently 5xx/times-out and its ftp:// package links
   // are now dead (404 HTTPS / 550 FTP). So never gate the PMC candidate URLs on
@@ -515,8 +515,8 @@ export async function fetchPdfFromOaPackageTgz(tgzHttpsUrl: string): Promise<{ b
 export type PdfDownloadResult = { buffer: ArrayBuffer; usedUrl: string }
 
 /** The single literature PDF downloader used by every path (Ask Catalyst attach,
- *  Read/stage import, PMC OA proxy). Candidates race in parallel — first valid
- *  PDF wins and aborts the losers — each fetch is streamed so an HTML bot/POW
+ *  Read/stage import, PMC OA proxy). Candidates race in parallel, first valid
+ *  PDF wins and aborts the losers, each fetch is streamed so an HTML bot/POW
  *  interstitial is rejected from its first bytes and an over-cap body is aborted
  *  mid-download instead of buffered whole. Bounded by a per-fetch timeout and a
  *  total budget so no leg can hang the caller. Returns null when nothing yields
@@ -566,7 +566,7 @@ function isPmcArticlePdfHost(url: string): boolean {
 }
 
 /** oa.fcgi advertises OA package/pdf as ftp://ftp.ncbi.nlm.nih.gov paths that no
- *  longer resolve — 404 over HTTPS, 550 over anonymous FTP. A guaranteed miss. */
+ *  longer resolve, 404 over HTTPS, 550 over anonymous FTP. A guaranteed miss. */
 function isDeadNcbiFtpUrl(url: string): boolean {
   try {
     return new URL(url).hostname.toLowerCase() === "ftp.ncbi.nlm.nih.gov"
@@ -649,7 +649,7 @@ async function fetchPmcPdfWithPow(
     if (!challenge || !Number.isFinite(difficulty) || difficulty < 1 || difficulty > 6) return null
 
     const nonce = solvePmcPow(challenge, difficulty)
-    // Re-request the RESOLVED url (first.url) — the interstitial's challenge is
+    // Re-request the RESOLVED url (first.url), the interstitial's challenge is
     // bound to the final path (e.g. /pdf/main.pdf). Re-requesting the original
     // bare /pdf/ folder would 301 again and the PoW cookie would not validate.
     const resolvedUrl = first.url || url
@@ -795,7 +795,7 @@ export async function downloadFirstPdf(
     perFetchTimeoutMs?: number
     totalBudgetMs?: number
     /** URLs that arrive after the race starts (e.g. a resolver running in
-     *  parallel) — they JOIN the race instead of blocking its start. */
+     *  parallel), they JOIN the race instead of blocking its start. */
     lateUrls?: Promise<string[]>
   },
 ): Promise<PdfDownloadResult | null> {
@@ -870,7 +870,7 @@ function searchPaperFromPmidOrPmc(pmid: string | null, pmcRaw: string | null): S
 
 /**
  * Server-only: fetches a PMC PDF via PubMed linkage (same logic as staging import).
- * No CORS — safe from Route Handlers / Server Actions. Fails if PMID has no PMC id,
+ * No CORS, safe from Route Handlers / Server Actions. Fails if PMID has no PMC id,
  * NLM cannot serve bytes (e.g. POW interstitial), or the article is not in the OA subset
  * where no direct PDF URL exists.
  */
@@ -1111,7 +1111,7 @@ export async function tryImportPdfForPaper(params: {
   literatureId: string
   paper: SearchPaper
   matchSource: PdfMatchSource
-  /** Signed-in user's email — passed to Unpaywall as the polite-pool contact. */
+  /** Signed-in user's email, passed to Unpaywall as the polite-pool contact. */
   contactEmail?: string | null
 }): Promise<TryImportPdfResult> {
   console.log(
@@ -1120,7 +1120,7 @@ export async function tryImportPdfForPaper(params: {
 
   // Deterministic "already have it" short-circuit. Every entry point (stage a
   // search hit, save to library, drag-drop) funnels through here, so checking the
-  // row's own stored PDF once — not just the TTL OA cache below, which expires —
+  // row's own stored PDF once, not just the TTL OA cache below, which expires
   // is what stops the same paper being re-resolved and re-downloaded on reopen.
   const { data: existingRow } = await params.supabase
     .from("literature_reviews")
@@ -1154,7 +1154,7 @@ export async function tryImportPdfForPaper(params: {
         console.log(`[lit] import-cache-hit literatureId=${params.literatureId} key=${cacheKey}`)
         return { ok: true as const, resolvedAbstract: params.paper.abstract ?? null }
       } catch {
-        // Persisting the cached copy failed — fall through to a fresh fetch.
+        // Persisting the cached copy failed, fall through to a fresh fetch.
       }
     }
   }

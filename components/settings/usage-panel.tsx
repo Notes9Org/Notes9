@@ -3,8 +3,8 @@
 /**
  * Settings → Usage panel (free plan).
  *
- * Shows the two free-tier meters — literature searches this ISO week and AI
- * usage this calendar month — using the remaining-capacity UsageMeter.
+ * Shows the two free-tier meters, literature searches this ISO week and AI
+ * usage this calendar month, using the remaining-capacity UsageMeter.
  * Reset moments are rendered as plain facts ("Returns Monday"), never as
  * warnings: a limit is a fact, not a failure.
  */
@@ -105,7 +105,7 @@ export function UsagePanel() {
           </div>
           {search.used == null ? (
             <p className="text-xs text-muted-foreground">
-              Usage temporarily unavailable — your searches are still counted.
+              Usage temporarily unavailable, your searches are still counted.
             </p>
           ) : (
             <UsageMeter
@@ -131,7 +131,7 @@ export function UsagePanel() {
           </div>
           {budget.used_credits == null ? (
             <p className="text-xs text-muted-foreground">
-              Usage temporarily unavailable — your credits are still counted.
+              Usage temporarily unavailable, your credits are still counted.
             </p>
           ) : (
             <UsageMeter

@@ -315,7 +315,7 @@ function drawAnnotationsSidebarColumn(
     return
   }
 
-  const truncatedMsg = "… (more notes omitted — column height limit)"
+  const truncatedMsg = "… (more notes omitted, column height limit)"
   let truncated = false
 
   for (const ann of list) {
@@ -369,8 +369,8 @@ function drawAnnotationsSidebarColumn(
 }
 
 /**
- * Export PDF with (1) colored highlight/note overlays on the original page — same logic as the reader,
- * using each annotation’s `color` when set — and (2) a right column listing highlights/notes like the sidebar.
+ * Export PDF with (1) colored highlight/note overlays on the original page, same logic as the reader,
+ * using each annotation’s `color` when set, and (2) a right column listing highlights/notes like the sidebar.
  */
 export async function buildLiteraturePdfWithAnnotationsEmbedded(
   pdfBytes: ArrayBuffer,

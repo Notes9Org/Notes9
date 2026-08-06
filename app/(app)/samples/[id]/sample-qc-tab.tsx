@@ -109,9 +109,9 @@ function resultVariant(result: SampleQcRecord["result"]): "default" | "secondary
 
 function performerName(record: SampleQcRecord) {
   const performer = record.performer
-  if (!performer) return "—"
+  if (!performer) return "-"
   const name = [performer.first_name, performer.last_name].filter(Boolean).join(" ").trim()
-  return name || "—"
+  return name || "-"
 }
 
 function formatDateTime(value: string) {
@@ -456,15 +456,15 @@ export function SampleQcTab({ sampleId, initialRecords }: SampleQcTabProps) {
                         </Badge>
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-sm text-foreground">
-                        {measured || <span className="text-muted-foreground">—</span>}
+                        {measured || <span className="text-muted-foreground">-</span>}
                       </TableCell>
                       <TableCell className="hidden text-sm text-muted-foreground md:table-cell">
-                        {record.expected_value || "—"}
+                        {record.expected_value || "-"}
                       </TableCell>
                       <TableCell className="text-sm text-foreground">{performerName(record)}</TableCell>
                       <TableCell className="hidden max-w-xs lg:table-cell">
                         <span className="line-clamp-2 text-xs text-muted-foreground">
-                          {record.notes || "—"}
+                          {record.notes || "-"}
                         </span>
                       </TableCell>
                       <TableCell>

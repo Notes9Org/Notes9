@@ -378,7 +378,7 @@ const PRICING = [
   {
     name: "Free",
     tag: "For researchers",
-    price: "Free",
+    price: "$0",
     blurb: "For individual researchers and small teams building their first connected project memory.",
     cta: { label: "Start free", href: "/auth/sign-up" },
     primary: true,
@@ -405,60 +405,87 @@ const PRICING = [
   },
 ]
 
+/**
+ * Pricing, set as columns rather than cards.
+ *
+ * The previous version was three-card SaaS boilerplate, rounded borders, a
+ * tinted "recommended" panel, and a hover tilt on each. Runner and Sana both
+ * drop the card entirely and let a hairline do the separating, which suits an
+ * editorial page and stops two tiers from looking like a comparison grid that
+ * lost a column.
+ *
+ * The hover tilt is gone too. It dates the page and it fights a surface whose
+ * job is to be read carefully.
+ */
 export function PricingTiers() {
   return (
     <>
-      <div className="mx-auto grid max-w-4xl gap-6 sm:grid-cols-2">
-        {PRICING.map((tier, i) => (
-          <Reveal3D key={tier.name} delay={i * 0.1} className="h-full">
-          <TiltCard max={4} className="h-full">
-          <div
-            className={cn(
-              "flex h-full flex-col rounded-2xl border p-7",
-              tier.primary
-                ? "border-[var(--n9-accent)]/40 bg-[var(--n9-accent-light)]/60 shadow-[0_24px_60px_-30px_var(--n9-accent-glow)]"
-                : "border-border/60 bg-card",
-            )}
-          >
-            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-              <h3 className="text-[20px] font-semibold text-foreground">{tier.name}</h3>
-              <span className="shrink-0 whitespace-nowrap rounded-full border border-[var(--n9-accent)]/25 bg-[var(--n9-accent-light)] px-2.5 py-0.5 text-[12px] font-semibold uppercase tracking-wide text-[var(--n9-accent)]">
-                {tier.tag}
-              </span>
-            </div>
-            <div className="mt-3 font-serif text-3xl text-foreground">{tier.price}</div>
-            <p className="mt-2 text-[16px] leading-6 text-muted-foreground">{tier.blurb}</p>
-            <ul className="mt-5 flex-1 space-y-2.5">
-              {tier.points.map((p) => (
-                <li key={p} className="flex items-start gap-2.5 text-[16px] leading-6 text-muted-foreground">
-                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-[var(--n9-accent)]" />
-                  {p}
-                </li>
-              ))}
-            </ul>
-            <Button
-              asChild
-              size="lg"
-              variant={tier.primary ? "default" : "outline"}
+      <div className="mx-auto max-w-4xl">
+        <div className="grid gap-12 sm:grid-cols-2 sm:gap-0 sm:divide-x sm:divide-border/60">
+          {PRICING.map((tier, i) => (
+            <div
+              key={tier.name}
               className={cn(
-                "mt-7 h-11 rounded-full",
-                tier.primary &&
-                  "bg-[var(--n9-accent)] text-white shadow-[0_12px_40px_-12px_var(--n9-accent-glow)] hover:bg-[var(--n9-accent-hover)]",
+                "flex flex-col",
+                i === 0 ? "sm:pr-12" : "sm:pl-12"
               )}
             >
-              <Link href={tier.cta.href}>
+              <p className="n9-label">{tier.tag}</p>
+
+              <h3 className="mt-6 font-serif text-[26px] tracking-tight text-foreground">
+                {tier.name}
+              </h3>
+
+              <p
+                className={cn(
+                  "mt-3 font-serif text-[clamp(2.4rem,5vw,3.4rem)] leading-none tracking-tight",
+                  tier.primary ? "text-[var(--n9-accent)]" : "text-foreground"
+                )}
+              >
+                {tier.price}
+              </p>
+
+              <p className="mt-4 max-w-xs text-[15px] leading-6 text-muted-foreground">
+                {tier.blurb}
+              </p>
+
+              <hr className="n9-hairline mt-8" />
+
+              <ul className="mt-7 flex-1 space-y-3.5">
+                {tier.points.map((point) => (
+                  <li
+                    key={point}
+                    className="flex items-start gap-3 text-[15px] leading-6 text-foreground/80"
+                  >
+                    <Check
+                      className="mt-1 size-3.5 shrink-0 text-[var(--n9-accent)]"
+                      weight="bold"
+                    />
+                    {point}
+                  </li>
+                ))}
+              </ul>
+
+              <Link
+                href={tier.cta.href}
+                className={cn(
+                  "n9-press mt-10 inline-flex h-12 items-center justify-center gap-2 rounded-full px-7 text-[15px] font-semibold transition-colors",
+                  tier.primary
+                    ? "bg-[var(--n9-accent)] text-white shadow-[0_14px_44px_-12px_var(--n9-accent-glow)] hover:bg-[var(--n9-accent-hover)]"
+                    : "border border-border text-foreground hover:bg-muted"
+                )}
+              >
                 {tier.cta.label}
-                <ArrowRight className="ml-2 h-4 w-4" />
+                <ArrowRight className="size-4" />
               </Link>
-            </Button>
-          </div>
-          </TiltCard>
-          </Reveal3D>
-        ))}
+            </div>
+          ))}
+        </div>
       </div>
-      <p className="mx-auto mt-6 max-w-2xl text-center text-[14px] text-muted-foreground/70">
-        Every feature is free while we’re in early access. Enterprise adds team-wide deployment,
-        security review and onboarding support when your lab is ready to scale.
+
+      <p className="mx-auto mt-14 max-w-2xl text-center text-[14px] leading-6 text-muted-foreground">
+        Every feature is free while we&rsquo;re in early access. Enterprise adds team-wide
+        deployment, security review and onboarding support when your lab is ready to scale.
       </p>
     </>
   )
@@ -545,19 +572,19 @@ export function FinalCtaSection() {
             <Button
               asChild
               size="lg"
-              className="h-14 w-full rounded-full bg-[linear-gradient(115deg,var(--n9-accent),color-mix(in_oklab,var(--n9-accent)_58%,#d9a24a))] px-10 text-[17px] font-semibold text-white shadow-[0_16px_44px_-14px_var(--n9-accent-glow)] hover:opacity-95 sm:w-auto"
+              className="h-11 w-full rounded-full bg-[var(--n9-accent)] px-6 text-[15px] font-medium text-white shadow-sm hover:bg-[var(--n9-accent-hover)] sm:w-auto"
             >
               <Link href="/auth/sign-up">
                 Start free
-                <ArrowRight className="ml-2 h-5 w-5" />
+                <ArrowRight className="ml-1.5 h-4 w-4" />
               </Link>
             </Button>
-            <Button asChild size="lg" variant="outline" className="h-14 w-full rounded-full px-10 text-[17px] font-semibold sm:w-auto">
+            <Button asChild size="lg" variant="outline" className="h-11 w-full rounded-full border-border bg-background px-6 text-[15px] font-medium hover:bg-muted sm:w-auto">
               <Link href="/#contact">Book a 15-min demo</Link>
             </Button>
           </div>
           <p className="mt-5 text-[14px] text-muted-foreground/80">
-            Free for students and postdocs · under a minute to start.
+            Free credits when you sign up · under a minute to start.
           </p>
         </div>
       </div>

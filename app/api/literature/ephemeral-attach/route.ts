@@ -26,7 +26,7 @@ type OaResolveResult = { pdfUrls: string[]; oaPackageTgzUrl: string | null; abst
 // before any chat session exists, and the live table requires a real, owned
 // session_id (NOT NULL + chat_attachments_insert_own RLS). Registration is
 // deferred to the sidebar's send-time back-fill (/api/files/register), which
-// was built for exactly this pre-session gap — it upserts the row with the
+// was built for exactly this pre-session gap, it upserts the row with the
 // just-created session_id, giving the file its 7-day TTL and read_document
 // re-reads. We return chatAttachmentId: null so that back-fill picks it up.
 // No Redis, no literature_reviews row.
@@ -68,7 +68,7 @@ export async function POST(request: Request) {
 
     // Candidate OA-PDF URLs. Use the SAME broad resolver as the "Read paper" /
     // stage flow (resolveOaSources): Unpaywall + OpenAlex + Europe PMC + PMC OA
-    // subset + preprint mirrors + the card's own pdfUrl — resolves by DOI, so
+    // subset + preprint mirrors + the card's own pdfUrl, resolves by DOI, so
     // non-PMC open-access papers (Elsevier/MDPI/Frontiers/...) work here too.
     // The paper's own pdfUrl still downloads IMMEDIATELY while the resolver runs
     // concurrently and feeds the rest into the same race as they arrive; the
@@ -76,7 +76,7 @@ export async function POST(request: Request) {
     // only" rather than holding the composer hostage.
     // Shared OA-PDF cache: if the same paper was already downloaded (by a prior
     // tag, or by the read/stage flow), reuse those bytes and skip the entire
-    // resolve + download race below — this is what makes a tag-then-read (or a
+    // resolve + download race below, this is what makes a tag-then-read (or a
     // re-tag) instant instead of re-fetching over the network.
     const cacheKey = oaPdfCacheKey(paper as SearchPaper)
     let pdfBuffer: ArrayBuffer | null = cacheKey ? await readOaPdfCache(cacheKey) : null
@@ -148,7 +148,7 @@ export async function POST(request: Request) {
         })
       }
 
-      // Fresh download succeeded — populate the shared cache for next time.
+      // Fresh download succeeded, populate the shared cache for next time.
       if (cacheKey) void writeOaPdfCache(cacheKey, pdfBuffer)
     }
 
@@ -174,8 +174,8 @@ export async function POST(request: Request) {
 
     // chatAttachmentId is deliberately null: no chat session exists yet, and the
     // live chat_attachments schema requires an owned session_id. The sidebar's
-    // send-time back-fill (/api/files/register) registers this file — keyed on
-    // storagePath + a null chatAttachmentId — as soon as the session is created,
+    // send-time back-fill (/api/files/register) registers this file, keyed on
+    // storagePath + a null chatAttachmentId, as soon as the session is created,
     // which is what gives it the 7-day TTL and later read_document re-reads.
     return NextResponse.json({
       url: signedUrl,

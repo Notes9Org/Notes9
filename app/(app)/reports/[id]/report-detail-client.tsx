@@ -283,7 +283,7 @@ export function ReportDetailClient({
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-          {/* Desktop Sidebar — glass rail (Catalyst history look). flex-1 so it
+          {/* Desktop Sidebar, glass rail (Catalyst history look). flex-1 so it
               fills the full workspace height instead of shrinking to the list. */}
           <SideRail open={sidebarOpen} className="hidden flex-1 sm:flex">
             <SidebarContent />

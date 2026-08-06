@@ -5,7 +5,7 @@ import { BreadcrumbSkeleton, PageHeadingSkeleton } from "@/components/loading/pa
  *
  * Without this file the parent `../loading.tsx` (the LIST skeleton) is used as
  * the Suspense fallback for the whole subtree, so navigating into a paper
- * briefly re-rendered the list — the "returns to the same page and loads again"
+ * briefly re-rendered the list, the "returns to the same page and loads again"
  * flash. This mirrors the layout of `[id]/page.tsx` (`space-y-6` → breadcrumb →
  * LiteratureDetailView) so the transition reads as one continuous load.
  */

@@ -56,7 +56,7 @@ describe("Property 13: Unauthenticated access redirects to login", () => {
         const redirectTarget = !user ? "/auth/login" : null
 
         expect(redirectTarget).toBe("/auth/login")
-        // The route is under (app) group — it starts with one of the known prefixes
+        // The route is under (app) group, it starts with one of the known prefixes
         const isAppRoute = appRoutePrefixes.some(
           (prefix) => route === prefix || route.startsWith(prefix + "/")
         )
@@ -66,7 +66,7 @@ describe("Property 13: Unauthenticated access redirects to login", () => {
     )
   })
 
-  it("authenticated users are NOT redirected — redirect target is null", () => {
+  it("authenticated users are NOT redirected, redirect target is null", () => {
     fc.assert(
       fc.property(appRouteArb, (route) => {
         const user = { id: "some-user-id" } // authenticated
@@ -155,7 +155,7 @@ describe("Property 14: Login email pre-fill from query parameter", () => {
     expect(emailState).toBe("")
   })
 
-  it("the pre-filled email is the exact string from the query parameter — no transformation", () => {
+  it("the pre-filled email is the exact string from the query parameter, no transformation", () => {
     fc.assert(
       fc.property(arbitraryStringArb, (emailParam) => {
         // The login page does not validate or transform the email param

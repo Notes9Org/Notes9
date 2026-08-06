@@ -31,7 +31,7 @@ function distinctIdFromCookie(cookieHeader: string | undefined): string | undefi
       return typeof parsed.distinct_id === 'string' ? parsed.distinct_id : undefined
     }
   } catch {
-    // Malformed/absent cookie — attribute anonymously.
+    // Malformed/absent cookie, attribute anonymously.
   }
   return undefined
 }

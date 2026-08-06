@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { Vote } from '@/lib/db/schema';
 
-// Action Button Component. Hover tooltips removed (they rendered glitchy —
+// Action Button Component. Hover tooltips removed (they rendered glitchy
 // user request, 2026-07); the label survives as an aria-label for
 // accessibility without any hover popup.
 interface ActionButtonProps extends ComponentProps<typeof Button> {

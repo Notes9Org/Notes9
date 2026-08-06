@@ -1,5 +1,5 @@
 /**
- * Tests for lib/analytics/posthog-server.ts — the server-side capture helper.
+ * Tests for lib/analytics/posthog-server.ts, the server-side capture helper.
  * Must be inert (no client constructed, no throw) when unconfigured, and
  * forward to posthog-node when a key is present.
  */

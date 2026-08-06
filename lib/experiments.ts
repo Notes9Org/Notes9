@@ -16,7 +16,7 @@ export interface CreateExperimentInput {
  * Single writer for creating an experiment row. Call sites disagree on which
  * optional fields they populate (new-experiment form omits hypothesis;
  * duplicate copies hypothesis + assigned_to from the source; import supplies
- * neither) — every field but name/projectId/assignedTo/createdBy is
+ * neither), every field but name/projectId/assignedTo/createdBy is
  * optional and omitted keys are dropped from the insert (Supabase serializes
  * `undefined` away), so each caller's exact prior payload is preserved.
  */
@@ -52,7 +52,7 @@ export interface UpdateExperimentFields {
 /**
  * Partial update, used both for the full edit form
  * (edit-experiment-dialog.tsx) and the status-only quick action
- * (status-update-buttons.tsx). Omitted fields are left untouched — only
+ * (status-update-buttons.tsx). Omitted fields are left untouched, only
  * `updated_at` is always set.
  */
 export async function updateExperiment(
@@ -79,7 +79,7 @@ export async function deleteExperiment(supabase: SupabaseClient, experimentId: s
 /**
  * Import-only: locate an existing experiment by name (optionally scoped to
  * a project). Matching by name is only valid in an import context where
- * names come from a backup/source system — not a general-purpose lookup.
+ * names come from a backup/source system, not a general-purpose lookup.
  * Shared by `upsertExperimentByName` below (research-folder importer) and
  * the full-backup restorer's `resolveExistingId`, so "what counts as the
  * same experiment" can't drift between the two import paths again.
@@ -98,7 +98,7 @@ export async function findExperimentByName(
 /**
  * Import-only find-or-create: try `createExperiment` with the
  * research-folder importer's defaults (status "planned"), and on failure
- * fall back to `findExperimentByName` scoped to the project — this is
+ * fall back to `findExperimentByName` scoped to the project, this is
  * `ensureExperimentId`'s exact prior control flow, just routed through the
  * shared writer/lookup. Normal app create paths always want a fresh row and
  * should call `createExperiment` directly.

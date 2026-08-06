@@ -76,7 +76,7 @@ export function ChatHistory({
                     isCurrent ? 'bg-primary/10' : 'hover:bg-muted',
                   )}
                 >
-                  {/* Real button — keyboard reachable, focus ring, full hit area */}
+                  {/* Real button, keyboard reachable, focus ring, full hit area */}
                   <button
                     type="button"
                     onClick={() => onSelectSession(session.id)}
@@ -102,7 +102,7 @@ export function ChatHistory({
                       </p>
                     </div>
                   </button>
-                  {/* Delete — always reachable on focus; visible on hover/focus.
+                  {/* Delete, always reachable on focus; visible on hover/focus.
                       Size bumped from size-6 (24px) to icon (36px) to meet the
                       ~40px hit-target threshold. */}
                   <Button

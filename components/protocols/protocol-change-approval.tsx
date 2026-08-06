@@ -7,11 +7,11 @@ export interface ProtocolChangeApprovalProps {
   draftContent: string
   protocolId: string
   currentVersion: string
-  /** Protocol name — enriches stored structure hints like lab note change history. */
+  /** Protocol name, enriches stored structure hints like lab note change history. */
   documentTitle?: string | null
   onAccept: (newContent: string, newVersion: string) => Promise<void>
   onReject: () => void
-  /** @deprecated Kept for compatibility; the bar stays mounted — use draft vs saved only. */
+  /** @deprecated Kept for compatibility; the bar stays mounted, use draft vs saved only. */
   isVisible?: boolean
   extraDirty?: boolean
 }

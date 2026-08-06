@@ -2,7 +2,7 @@
  * lib/limits/config.ts
  *
  * Static ceiling constants for the stateless limit guards (Workstream C).
- * These are abuse ceilings — generous backstops against malformed or malicious
+ * These are abuse ceilings, generous backstops against malformed or malicious
  * payloads. They are NOT organic conversation caps; rolling summarization
  * handles conversational continuity separately.
  *
@@ -19,7 +19,7 @@ export const BODY_BYTES_MAX = 25 * 1024 * 1024;
 
 /** Maximum number of items in a raw history array POSTed in a single request.
  *  This is a backstop against a malicious 100k-item array, not a conversation
- *  length limit — the real sliding window lives in the Redis / summarization layer. */
+ *  length limit, the real sliding window lives in the Redis / summarization layer. */
 export const HISTORY_ITEMS_MAX = 400;
 
 /** Maximum characters in the query / prompt string. */

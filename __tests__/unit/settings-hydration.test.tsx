@@ -32,7 +32,7 @@ describe("Settings theme toggle hydration safety (Req 11.1)", () => {
   })
 
   it("conditionally renders theme buttons only when mounted is true", () => {
-    // The theme buttons are gated on `mounted` — either `{mounted && (...)}`
+    // The theme buttons are gated on `mounted`, either `{mounted && (...)}`
     // or the equivalent `{mounted ? (...) : (...)}` ternary form.
     expect(settingsSource).toMatch(/\{mounted\s*(&&|\?)/)
   })

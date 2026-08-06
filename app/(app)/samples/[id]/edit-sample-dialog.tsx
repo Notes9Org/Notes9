@@ -74,7 +74,7 @@ type EditSampleDialogProps = {
 
 // Link-picker options (all projects/experiments/lab notes) used only inside the
 // edit dialog. Fetched lazily when the dialog opens instead of on every sample
-// detail page render — this was the bulk of the detail page's server latency.
+// detail page render, this was the bulk of the detail page's server latency.
 type SampleLinkOptions = {
   projects: SampleLinkOption[]
   experiments: SampleLinkOption[]
@@ -126,7 +126,7 @@ export function EditSampleDialog({
   const [open, setOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
 
-  // Lazily load link-picker options only while the dialog is open — this is the
+  // Lazily load link-picker options only while the dialog is open, this is the
   // data that previously made the sample detail page render slowly. Falls back to
   // props if a caller still supplies them (the detail page no longer does).
   const { data: lazyLinkOptions } = useQuery({

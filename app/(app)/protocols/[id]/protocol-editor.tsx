@@ -222,7 +222,7 @@ export function ProtocolEditor({
     }
   }, [formData.project_id])
 
-  // Highlight from AI reference navigation — retries until content is loaded
+  // Highlight from AI reference navigation, retries until content is loaded
   const highlightParam = searchParams.get(HIGHLIGHT_PARAM)
   const highlightFiredRef = useRef<string | null>(null)
   const urlHighlightTarget = highlightParam ? decodeHighlightParam(highlightParam) : null
@@ -402,7 +402,7 @@ export function ProtocolEditor({
     ]
   )
 
-  // ─── Design mode (?design=1) — full editing in ProtocolDesignMode ───────
+  // ─── Design mode (?design=1), full editing in ProtocolDesignMode ───────
   // Outer shell mirrors lab-notes-tab so the inner Card/sidebar/editor flex
   // chain has the same heights and overflow rules.
   if (defaultDesignMode) {
@@ -437,7 +437,7 @@ export function ProtocolEditor({
     )
   }
 
-  // ─── View mode — read-only; editing only in Design Mode ───────────────────
+  // ─── View mode, read-only; editing only in Design Mode ───────────────────
   return (
     <>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -620,7 +620,7 @@ export function ProtocolEditor({
               <div className="min-h-0 flex-1 overflow-hidden text-left">
                 <TiptapEditor
                   // Force a fresh editor when the user navigates to a different
-                  // protocol — without the key, ProseMirror reuses internal state
+                  // protocol, without the key, ProseMirror reuses internal state
                   // and the previous protocol's body bleeds in.
                   key={protocol.id}
                   content={protocol.content ?? ""}

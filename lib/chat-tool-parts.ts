@@ -3,7 +3,7 @@
  * `ToolCard[]` shape that `useAgentStream` produces for the full-page surface.
  *
  * The modal chat (`components/catalyst/chat.tsx`) consumes the unified AI SDK
- * stream — every tool lifecycle event (`tool_start` / `tool_call` /
+ * stream, every tool lifecycle event (`tool_start` / `tool_call` /
  * `tool_result` / `tool_output`) is forwarded by `app/api/chat/route.ts` as a
  * single `data-tool` part. This helper reduces the part list into ordered,
  * settled tool cards so the modal can render the same Cursor/Claude-style
@@ -22,7 +22,7 @@ interface MessagePart {
   data?: ToolPartData;
 }
 
-/** Legacy fallback labels — server always supplies one but kept for safety. */
+/** Legacy fallback labels, server always supplies one but kept for safety. */
 const TOOL_LABELS: Record<string, string> = {
   nlp_to_sql_tool:        'Looking through your workspace',
   rag_tool:               'Reading your notes and documents',
@@ -52,7 +52,7 @@ function asStringArray(v: unknown): string[] | undefined {
 
 /**
  * Reduce a message's parts into ToolCard[] in the order the agent fired them.
- * Tool identity is the `tool` field on each payload — same id collapses to one
+ * Tool identity is the `tool` field on each payload, same id collapses to one
  * card whose state advances through start → result/output.
  */
 export function extractToolCards(parts: unknown): ToolCard[] {

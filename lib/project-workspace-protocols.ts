@@ -40,7 +40,7 @@ export async function loadProjectWorkspaceProtocols(
   }
 
   // The three sources (experiment links, lab-note links, direct project/experiment
-  // columns) are independent — fan them out concurrently instead of awaiting each
+  // columns) are independent, fan them out concurrently instead of awaiting each
   // in series. The lab-note source is itself a 2-step chain (notes -> note links)
   // wrapped in an IIFE so it overlaps with the other two queries.
   type ProtocolJoinRow = { protocol: unknown }

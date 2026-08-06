@@ -17,7 +17,7 @@ export const CITATION_STYLES: CitationStyle[] = [
   {
     id: "vancouver",
     name: "Vancouver",
-    description: "Numbered citations [1], [2] — common in biomedical journals",
+    description: "Numbered citations [1], [2], common in biomedical journals",
     inlineExample: "[1]",
     promptInstructions: `Use Vancouver citation style:
 - Inline citations: sequential numbers in square brackets, e.g. [1], [2], [3]
@@ -28,7 +28,7 @@ export const CITATION_STYLES: CitationStyle[] = [
   {
     id: "apa",
     name: "APA 7th",
-    description: "(Author, Year) — psychology, social sciences",
+    description: "(Author, Year), psychology, social sciences",
     inlineExample: "(Smith, 2024)",
     promptInstructions: `Use APA 7th edition citation style:
 - Inline citations: (Author, Year), e.g. (Smith, 2024), (Smith & Jones, 2024)
@@ -39,7 +39,7 @@ export const CITATION_STYLES: CitationStyle[] = [
   {
     id: "nature",
     name: "Nature",
-    description: "Superscript numbers¹ ² — Nature family journals",
+    description: "Superscript numbers¹ ², Nature family journals",
     inlineExample: "¹",
     promptInstructions: `Use Nature citation style:
 - Inline citations: superscript numbers in order of appearance, e.g. ¹, ², ³
@@ -52,7 +52,7 @@ export const MORE_CITATION_STYLES: CitationStyle[] = [
   {
     id: "ieee",
     name: "IEEE",
-    description: "[1] numbered — engineering, computer science",
+    description: "[1] numbered, engineering, computer science",
     inlineExample: "[1]",
     promptInstructions: `Use IEEE citation style:
 - Inline citations: numbers in square brackets in order of appearance, e.g. [1], [2]
@@ -61,7 +61,7 @@ export const MORE_CITATION_STYLES: CitationStyle[] = [
   {
     id: "harvard",
     name: "Harvard",
-    description: "(Author Year) — widely used in UK/Australia",
+    description: "(Author Year), widely used in UK/Australia",
     inlineExample: "(Smith 2024)",
     promptInstructions: `Use Harvard citation style:
 - Inline citations: (Author Year), e.g. (Smith 2024), no comma between author and year
@@ -71,7 +71,7 @@ export const MORE_CITATION_STYLES: CitationStyle[] = [
   {
     id: "chicago-notes",
     name: "Chicago (Notes)",
-    description: "Footnote numbers¹ — humanities, history",
+    description: "Footnote numbers¹, humanities, history",
     inlineExample: "¹",
     promptInstructions: `Use Chicago Notes-Bibliography citation style:
 - Inline citations: superscript footnote numbers

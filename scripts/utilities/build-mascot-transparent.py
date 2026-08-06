@@ -61,7 +61,7 @@ def main() -> None:
                 px[x, y] = (0, 0, 0, 0)
                 cleared += 1
 
-    # Inner “transparency” checkerboard is still opaque inside the ring — flatten to paper white
+    # Inner “transparency” checkerboard is still opaque inside the ring, flatten to paper white
     flattened = 0
     for x in range(w):
         for y in range(h):

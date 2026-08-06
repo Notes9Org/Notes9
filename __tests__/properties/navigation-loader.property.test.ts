@@ -22,7 +22,7 @@ describe("Property 1: Navigation loader dismisses on pathname change", () => {
     .array(pathSegment, { minLength: 1, maxLength: 5 })
     .map((segments) => "/" + segments.join("/"))
 
-  it("MIN_LOADER_DURATION_MS is 350ms — the maximum time before dismissal after pathname change", () => {
+  it("MIN_LOADER_DURATION_MS is 350ms, the maximum time before dismissal after pathname change", () => {
     fc.assert(
       fc.property(internalPathname, (_pathname) => {
         // For any pathname, the loader should dismiss within MIN_LOADER_DURATION_MS
@@ -56,7 +56,7 @@ describe("Property 1: Navigation loader dismisses on pathname change", () => {
     )
   })
 
-  it("pathname change always triggers dismissal — no pathname leaves the loader stuck", () => {
+  it("pathname change always triggers dismissal, no pathname leaves the loader stuck", () => {
     fc.assert(
       fc.property(internalPathname, internalPathname, (oldPath, newPath) => {
         // When pathname changes (old !== new), the dismissal effect fires

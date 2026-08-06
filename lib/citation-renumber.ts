@@ -6,7 +6,7 @@
  * given. Those ids are sparse and arrival-ordered, so they never line up with
  * the rendered sources list (which is positional). Numbering is a *mechanical*
  * concern, not the model's job: we renumber by **order of first appearance** in
- * the text — the first cited source becomes `[1]`, the next new one `[2]`, … —
+ * the text, the first cited source becomes `[1]`, the next new one `[2]`, …
  * and rewrite both the inline markers and (via the returned remap) the sources
  * list / manifest to match.
  *
@@ -60,7 +60,7 @@ export function collectAppearanceOrder(
   const order: string[] = []
   const seen = new Set<string>()
   if (!markdown) return order
-  // RegExp is stateful (global) — use a local copy to stay reentrant.
+  // RegExp is stateful (global), use a local copy to stay reentrant.
   const re = new RegExp(CITATION_GROUP_RE.source, 'g')
   let m: RegExpExecArray | null
   while ((m = re.exec(markdown)) !== null) {
@@ -120,7 +120,7 @@ export function renumberCitations(
     const mapped = splitTokens(inner)
       .map((token) => (remap.has(baseOf(token)) ? applyRemapToLabel(token, remap) : null))
       .filter((t): t is string => t !== null)
-    // No mappable tokens (all unknown) — leave the original marker as-is.
+    // No mappable tokens (all unknown), leave the original marker as-is.
     if (mapped.length === 0) return full
     // Stable, readable order: ascending by new numeric value.
     mapped.sort((a, b) => parseFloat(a) - parseFloat(b))

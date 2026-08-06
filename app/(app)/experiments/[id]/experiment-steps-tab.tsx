@@ -279,7 +279,7 @@ export function ExperimentStepsTab({ experimentId }: ExperimentStepsTabProps) {
                           <Clock className="h-3 w-3" />
                           {formatDuration(step.duration_minutes)}
                         </span>
-                      ) : "—"}
+                      ) : "-"}
                     </td>
                     <td className="p-4 align-middle">
                       <Badge variant="outline" className={cn("text-2xs px-1.5 py-0 font-normal", statusCfg.color)}>

@@ -27,8 +27,8 @@ export function OrgSetupCTA({ visible }: OrgSetupCTAProps) {
           <Building2 className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden />
           <p className="max-w-xl">
             {collab
-              ? "Most research teams start here — it only takes a minute, and you can invite collaborators right after."
-              : "Most researchers start here — it only takes a minute."}
+              ? "Most research teams start here, it only takes a minute, and you can invite collaborators right after."
+              : "Most researchers start here, it only takes a minute."}
           </p>
         </div>
         <Button asChild className="shrink-0 cursor-pointer">

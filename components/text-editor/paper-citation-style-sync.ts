@@ -73,7 +73,7 @@ const TIPTAP_TO_STYLE_SLUG: Partial<Record<string, string>> = {
 }
 
 /**
- * Prompt text for `/api/ai/paper-chat` — prefers curated prompts from citation-styles when mappable.
+ * Prompt text for `/api/ai/paper-chat`, prefers curated prompts from citation-styles when mappable.
  */
 export function getPaperAiCitationPrompt(tiptapStyle: string): string {
   const slug = TIPTAP_TO_STYLE_SLUG[tiptapStyle]

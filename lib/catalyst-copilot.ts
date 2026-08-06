@@ -1,7 +1,7 @@
 /**
  * Literature co-pilot context. When a literature search runs we "prime" Catalyst
- * with the search — the question, the papers (title + abstract + metadata) and
- * the AI summary — so that whenever the user opens the Catalyst sidebar it can
+ * with the search, the question, the papers (title + abstract + metadata) and
+ * the AI summary, so that whenever the user opens the Catalyst sidebar it can
  * already answer questions about any paper or the overall research area, without
  * the user having to attach or "drop" anything first. Auto-primed on search,
  * surfaced on demand. Stored at module level so it survives the sidebar (which
@@ -67,8 +67,8 @@ export function buildCoPilotPreamble(ctx: CoPilotContext): string {
   )
   lines.push(
     'Below are the papers that search surfaced (with abstracts) plus an AI summary of the evidence. ' +
-      'Use these together with web search to answer the user. You can discuss ANY of these papers — ' +
-      'even without the full PDF — grounding answers in the abstract and what you can verify online. ' +
+      'Use these together with web search to answer the user. You can discuss ANY of these papers, ' +
+      'even without the full PDF, grounding answers in the abstract and what you can verify online. ' +
       'Refer to papers by their number, and say when something is not covered by the abstract.',
   )
   const papers = ctx.papers.slice(0, 8)
@@ -79,7 +79,7 @@ export function buildCoPilotPreamble(ctx: CoPilotContext): string {
         .filter(Boolean)
         .join(' · ')
       lines.push(
-        `\n[${p.n}] ${p.title}${meta ? ` — ${meta}` : ''}${p.openAccess ? ' (open access)' : ''}` +
+        `\n[${p.n}] ${p.title}${meta ? `, ${meta}` : ''}${p.openAccess ? ' (open access)' : ''}` +
           `${p.url ? `\nLink: ${p.url}` : ''}` +
           `${p.abstract ? `\nAbstract: ${truncate(p.abstract, 700)}` : '\nAbstract: (not available)'}`,
       )

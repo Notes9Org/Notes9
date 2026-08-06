@@ -12,7 +12,7 @@ export type AiSearchMatchKind = "doi" | "pmid" | "title" | "url" | "none"
 export interface AiSearchResult {
   /** Inline citation label from the AI answer ("1", "2", "3.1"). */
   citeLabel: string
-  /** Exact snippet relevant to the query — prefers cited_text, then excerpt. */
+  /** Exact snippet relevant to the query, prefers cited_text, then excerpt. */
   snippet: string
   /** Title the AI reported (used when no DB match). */
   aiTitle: string | null
@@ -23,7 +23,7 @@ export interface AiSearchResult {
   /** How the match was made (drives a confidence hint in the UI). */
   matchKind: AiSearchMatchKind
   /**
-   * Abstract for the result, always populated when one can be found — from the
+   * Abstract for the result, always populated when one can be found, from the
    * matched database paper, the AI source payload, or a background lookup of the
    * paper by DOI/PMID/title. Mirrors the abstract shown on database results.
    */
@@ -36,7 +36,7 @@ export interface AiSearchResult {
   dedupeKey: string
   /** Best lookup term for fetching a missing abstract (DOI → PMID → title). */
   lookupTerm: string | null
-  /** Whether the lookup term is an id (DOI/PMID) — its top hit is trustworthy. */
+  /** Whether the lookup term is an id (DOI/PMID), its top hit is trustworthy. */
   lookupById: boolean
   /**
    * True while this result has no abstract yet but a background lookup is going

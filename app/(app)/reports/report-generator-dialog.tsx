@@ -134,7 +134,7 @@ export function ReportGeneratorDialog({
   const { isGenerating, content, error, generate, reset } =
     useReportGeneration()
 
-  // If the user is already inside a project, pre-select it — the picker stays
+  // If the user is already inside a project, pre-select it, the picker stays
   // editable so they can still target another project.
   const [selectedProjectId, setSelectedProjectId] = useState<string>(scopedProjectId ?? "")
   const [selectedExperimentIds, setSelectedExperimentIds] = useState<string[]>(
@@ -301,7 +301,7 @@ export function ReportGeneratorDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Project select — prefilled from the sidebar context but always
+          {/* Project select, prefilled from the sidebar context but always
               editable; required because the analysis runs over one project's
               data. */}
           <div className="space-y-2">
@@ -346,7 +346,7 @@ export function ReportGeneratorDialog({
             </div>
           )}
 
-          {/* Query textarea — Cmd/Ctrl+Enter submits (Enter alone is reserved for newlines) */}
+          {/* Query textarea, Cmd/Ctrl+Enter submits (Enter alone is reserved for newlines) */}
           <div className="space-y-2">
             <Label htmlFor="query-textarea">
               Analysis Query *{" "}

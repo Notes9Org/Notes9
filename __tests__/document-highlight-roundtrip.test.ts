@@ -24,7 +24,7 @@ describe('document-highlight roundtrip', () => {
     const target: HighlightTarget = {
       sourceType: 'protocol',
       sourceId: 'p-1',
-      excerpt: 'α β γ — 蛋白质 — 🧪',
+      excerpt: 'α β γ, 蛋白质, 🧪',
     }
     const encoded = encodeHighlightParam(target)
     const decoded = decodeHighlightParam(encoded)
@@ -63,6 +63,44 @@ describe('document-highlight roundtrip', () => {
         ? btoa(JSON.stringify({ st: 'lab_note' }))
         : Buffer.from(JSON.stringify({ st: 'lab_note' }), 'utf-8').toString('base64')
     expect(decodeHighlightParam(encoded)).toBeNull()
+  })
+
+  // Per-click nonce (hooks/use-source-navigation.ts): makes a repeat click on
+  // the SAME citation value-distinct across both delivery paths so downstream
+  // content-keyed dedup gates (e.g. the PDF panel's fired-ref) reset per click.
+  it('round-trips a nonce', () => {
+    const target: HighlightTarget = {
+      sourceType: 'lab_note',
+      sourceId: 'note-1',
+      excerpt: 'The reaction yielded 42mg of product.',
+      nonce: 7,
+    }
+    const decoded = decodeHighlightParam(encodeHighlightParam(target))
+    expect(decoded?.nonce).toBe(7)
+  })
+
+  it('produces a different param string for two different nonces (same excerpt)', () => {
+    const base: HighlightTarget = {
+      sourceType: 'lab_note',
+      sourceId: 'note-1',
+      excerpt: 'identical excerpt text',
+    }
+    const encoded1 = encodeHighlightParam({ ...base, nonce: 1 })
+    const encoded2 = encodeHighlightParam({ ...base, nonce: 2 })
+    expect(encoded1).not.toBe(encoded2)
+    expect(decodeHighlightParam(encoded1)?.nonce).toBe(1)
+    expect(decodeHighlightParam(encoded2)?.nonce).toBe(2)
+  })
+
+  it('decodes a legacy param without `n` with nonce undefined', () => {
+    const legacyJson = JSON.stringify({ st: 'lab_note', sid: 'note-1', ex: 'legacy excerpt' })
+    const encoded =
+      typeof window !== 'undefined'
+        ? btoa(legacyJson)
+        : Buffer.from(legacyJson, 'utf-8').toString('base64')
+    const decoded = decodeHighlightParam(encoded)
+    expect(decoded?.excerpt).toBe('legacy excerpt')
+    expect(decoded?.nonce).toBeUndefined()
   })
 })
 

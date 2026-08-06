@@ -23,7 +23,7 @@ export interface LiteratureHistoryEntry {
   updatedAt: string
 }
 
-/** What the AI literature search offers — shown on the empty (pre-search) state. */
+/** What the AI literature search offers, shown on the empty (pre-search) state. */
 const SEARCH_FEATURES: { Icon: LucideIcon; title: string; desc: string }[] = [
   {
     Icon: ScrollText,
@@ -43,7 +43,7 @@ const SEARCH_FEATURES: { Icon: LucideIcon; title: string; desc: string }[] = [
   {
     Icon: Unlock,
     title: 'Open-access PDFs inline',
-    desc: 'Open-access papers load right inside Notes9 — no downloads or new tabs needed.',
+    desc: 'Open-access papers load right inside Notes9, no downloads or new tabs needed.',
   },
   {
     Icon: Highlighter,
@@ -57,7 +57,7 @@ const SEARCH_FEATURES: { Icon: LucideIcon; title: string; desc: string }[] = [
   },
 ]
 
-/** Rotating example questions typed into the empty bar — signals that this is
+/** Rotating example questions typed into the empty bar, signals that this is
  *  a natural-language AI search, not a keyword box. */
 const AI_PROMPTS = [
   'Find ASO kidney and plasma PK data across species',
@@ -145,8 +145,8 @@ export function LiteratureSearchForm({
   const [historyOpen, setHistoryOpen] = useState(false)
 
   // `setQuery` is a parent-owned setter that only accepts a string (no functional
-  // updater). Mirror the live query in a ref so the mic's onFinal callback — which
-  // the transcribe hook captures once at start() — appends each finalized segment
+  // updater). Mirror the live query in a ref so the mic's onFinal callback, which
+  // the transcribe hook captures once at start(), appends each finalized segment
   // to the current value instead of overwriting with a stale closure.
   const queryRef = useRef(query)
   useEffect(() => {
@@ -230,7 +230,7 @@ export function LiteratureSearchForm({
         )}
         <Input
           /* type="text" (not "search") so the browser's native clear "×" never
-             appears — we render our own below. Placeholder cycles example
+             appears, we render our own below. Placeholder cycles example
              research questions to signal natural-language AI search. */
           type="text"
           placeholder={placeholder}
@@ -506,7 +506,7 @@ export function SearchTab({
             AI-powered literature search
           </h3>
           <p className="mb-8 max-w-xl text-[15px] leading-relaxed text-muted-foreground">
-            Ask a question and get a cited AI summary plus the most relevant papers — searched across
+            Ask a question and get a cited AI summary plus the most relevant papers, searched across
             PubMed, Europe PMC, and OpenAlex.
           </p>
 

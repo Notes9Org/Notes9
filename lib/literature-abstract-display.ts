@@ -75,7 +75,7 @@ export function cleanScrapedAbstract(raw: string | null | undefined): string | n
   const original = raw
   let text = raw.trim()
   if (!text) return original
-  // Normal abstract length — leave it completely alone.
+  // Normal abstract length, leave it completely alone.
   if (text.length <= 2500) return original
 
   // (a) Strip a leading title/author/affiliation block before an "Abstract"

@@ -210,7 +210,7 @@ export function AgentFlowPipeline({
       role="group"
       aria-label="Agent reasoning pipeline"
     >
-      {/* Rail row — stage nodes + connectors */}
+      {/* Rail row, stage nodes + connectors */}
       <div className="flex items-center gap-0">
         {PIPELINE.map((s, i) => {
           const isActive = effectiveActiveId === s.id;
@@ -223,7 +223,7 @@ export function AgentFlowPipeline({
           return (
             <div key={s.id} className="flex flex-1 items-center first:flex-none last:flex-none">
               {/* Connector before (skipped for first). When active+streaming, keep
-                  the parent transparent so the animated gradient is visible — a
+                  the parent transparent so the animated gradient is visible, a
                   primary/60 base would otherwise paint over the shimmer. */}
               {i > 0 && (
                 <div
@@ -285,7 +285,7 @@ export function AgentFlowPipeline({
         })}
       </div>
 
-      {/* Tool chips row — laid out under their stage column */}
+      {/* Tool chips row, laid out under their stage column */}
       {toolCards.length > 0 && (
         <div className="mt-2 grid grid-cols-4 gap-2 border-t border-border/40 pt-2">
           {PIPELINE.map((s) => {
@@ -296,7 +296,7 @@ export function AgentFlowPipeline({
                 className="flex flex-wrap items-start justify-center gap-1 min-h-[1.25rem]"
               >
                 {cards.map((card) => {
-                  // Stable key: position in the full toolCards array — same card
+                  // Stable key: position in the full toolCards array, same card
                   // instance keeps the same key across rerenders even if other
                   // cards reorder around it.
                   const globalIdx = toolCards.indexOf(card);

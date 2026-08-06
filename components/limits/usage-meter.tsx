@@ -3,11 +3,11 @@
 /**
  * components/limits/usage-meter.tsx
  *
- * Ambient usage meter — shows remaining capacity, not % consumed.
+ * Ambient usage meter, shows remaining capacity, not % consumed.
  * Framing: "200 left" not "80% used".
  *
  * Surface priority (per plan): inline-at-the-action > settings meter > account banner.
- * This component is the settings/account surface — shown only when the user
+ * This component is the settings/account surface, shown only when the user
  * actively navigates to their usage settings, not in the main product flow.
  *
  * State model:
@@ -91,7 +91,7 @@ export function UsageMeter({
   // If usage climbs to 'near' or 'at_limit', the notice must reappear.
   const effectivelyDismissed = dismissed && severity === 'approaching'
 
-  // Below threshold or user dismissed the approaching notice — minimal row
+  // Below threshold or user dismissed the approaching notice, minimal row
   if (!severity || effectivelyDismissed) {
     return (
       <div className={cn('space-y-1.5', className)}>
@@ -125,7 +125,7 @@ export function UsageMeter({
       {/* Bar */}
       <Bar ratio={ratio} color={msg.color} />
 
-      {/* Notice — only for approaching/near/at_limit */}
+      {/* Notice, only for approaching/near/at_limit */}
       <MeterNotice
         message={msg}
         severity={severity}
@@ -196,7 +196,7 @@ function MeterNotice({
 }
 
 // ---------------------------------------------------------------------------
-// Compact variant — for account banners / sidebars
+// Compact variant, for account banners / sidebars
 // ---------------------------------------------------------------------------
 
 interface UsageMeterCompactProps extends UsageMeterProps {

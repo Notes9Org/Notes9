@@ -109,7 +109,7 @@ export function upgradeInsecurePdfUrlIfKnownHost(url: string): string {
 }
 
 /**
- * Only URLs tied to what search showed — primary card href, then same-article fallbacks (PMC folder → main.pdf).
+ * Only URLs tied to what search showed, primary card href, then same-article fallbacks (PMC folder → main.pdf).
  */
 export function expandSearchCardPdfUrls(cardUrl: string): string[] {
   const primary = upgradeInsecurePdfUrlIfKnownHost(cardUrl.trim())

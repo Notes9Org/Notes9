@@ -42,6 +42,11 @@ import {
   FileText as FileSpreadsheet,
 } from "@phosphor-icons/react/ssr"
 import { UploadFileDialog } from "@/app/(app)/experiments/[id]/upload-file-dialog"
+import { ExperimentDataTabularDialog, isTabularExperimentFile } from "@/components/experiments/experiment-data-tabular-dialog"
+import { ExperimentDataPreviewDialog, isPreviewableExperimentFile } from "@/components/experiments/experiment-data-preview-dialog"
+import { createClient } from "@/lib/supabase/client"
+import { createBucketSignedUrl } from "@/lib/storage-signed-url"
+import { USER_STORAGE_BUCKET } from "@/lib/user-storage-bucket"
 
 export type DataFileRow = {
   id: string
@@ -52,6 +57,9 @@ export type DataFileRow = {
   created_at: string
   experiment_id: string
   project_id: string | null
+  /** Storage path inside the `user` bucket (or a legacy full URL), needed to preview in place. */
+  file_url: string
+  tabular_format?: string | null
   experiment_name: string | null
   project_name: string | null
 }
@@ -78,7 +86,7 @@ function getFileIcon(fileName: string, fileType: string | null) {
 }
 
 function formatFileSize(bytes: number | null): string {
-  if (!bytes) return "—"
+  if (!bytes) return "-"
   const k = 1024
   const sizes = ["Bytes", "KB", "MB"]
   const i = Math.floor(Math.log(bytes) / Math.log(k))
@@ -101,9 +109,17 @@ export function DataFilesListClient({
   const [projectFilter, setProjectFilter] = useState(FILTER_ALL)
   const [experimentFilter, setExperimentFilter] = useState(FILTER_ALL)
 
+  // In-place file viewers (mirror the experiment Data tab): spreadsheets open in
+  // the Univer viewer, images/PDF/text in the preview dialog, anything else in a
+  // new tab via a signed URL, no navigation away from the Data files browser.
+  const [tabularOpen, setTabularOpen] = useState(false)
+  const [tabularFile, setTabularFile] = useState<DataFileRow | null>(null)
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [previewFile, setPreviewFile] = useState<DataFileRow | null>(null)
+
   // Read-only URL sync (same pattern as lab-notes): the sidebar context
   // arrives as ?project=/?experiment= and prefills the filters; changing a
-  // filter here is a LOCAL viewing choice — it deliberately does not write
+  // filter here is a LOCAL viewing choice, it deliberately does not write
   // back to the URL, so browsing another project's files never flips the
   // global sidebar context.
   useEffect(() => {
@@ -148,7 +164,7 @@ export function DataFilesListClient({
     })
   }, [files, projectFilter, experimentFilter])
 
-  // ——— Upload scoping (context-prefilled, editable, both REQUIRED) ————
+  // --- Upload scoping (context-prefilled, editable, both REQUIRED) ---
   // experiment_data.experiment_id is NOT NULL, so unlike docs the target
   // experiment is mandatory. Prefill order: active filter → sidebar context.
   const [uploadProjectId, setUploadProjectId] = useState<string | null>(null)
@@ -231,20 +247,56 @@ export function DataFilesListClient({
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">
-          Data files always live inside an experiment — both selections are required.
+          Data files always live inside an experiment, both selections are required.
         </p>
       </div>
     </div>
   )
 
+  // Open a file's own renderer in place, instead of routing to the experiment page.
   const openFileRow = (file: DataFileRow) => {
-    const qs = new URLSearchParams({ tab: "data" })
-    if (file.project_id) qs.set("project", file.project_id)
-    router.push(`/experiments/${file.experiment_id}?${qs.toString()}`)
+    if (isTabularExperimentFile(file)) {
+      setTabularFile(file)
+      setTabularOpen(true)
+    } else if (isPreviewableExperimentFile(file)) {
+      setPreviewFile(file)
+      setPreviewOpen(true)
+    } else {
+      // Fallback for formats without an inline renderer (e.g. zip, raw binary):
+      // view the file itself via a short-lived signed URL in a new tab.
+      void (async () => {
+        const href = await createBucketSignedUrl(createClient(), USER_STORAGE_BUCKET, file.file_url)
+        if (href) window.open(href, "_blank", "noopener,noreferrer")
+      })()
+    }
   }
 
   return (
     <>
+      {tabularFile && (
+        <ExperimentDataTabularDialog
+          open={tabularOpen}
+          onOpenChange={(o) => {
+            setTabularOpen(o)
+            if (!o) setTabularFile(null)
+          }}
+          experimentId={tabularFile.experiment_id}
+          fileId={tabularFile.id}
+          fileName={tabularFile.file_name}
+        />
+      )}
+      {previewFile && (
+        <ExperimentDataPreviewDialog
+          open={previewOpen}
+          onOpenChange={(o) => {
+            setPreviewOpen(o)
+            if (!o) setPreviewFile(null)
+          }}
+          fileUrl={previewFile.file_url}
+          fileName={previewFile.file_name}
+          fileType={previewFile.file_type}
+        />
+      )}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <p className="text-muted-foreground">
           Every data file across your experiments. Change the filters to browse other
@@ -339,17 +391,17 @@ export function DataFilesListClient({
                         {file.data_type}
                       </Badge>
                     ) : (
-                      "—"
+                      "-"
                     )}
                   </TableCell>
                   <TableCell className="max-w-[180px]">
                     <span className="truncate block" title={file.experiment_name ?? undefined}>
-                      {file.experiment_name ?? "—"}
+                      {file.experiment_name ?? "-"}
                     </span>
                   </TableCell>
                   <TableCell className="hidden lg:table-cell max-w-[160px]">
                     <span className="truncate block" title={file.project_name ?? undefined}>
-                      {file.project_name ?? "—"}
+                      {file.project_name ?? "-"}
                     </span>
                   </TableCell>
                   <TableCell className="hidden md:table-cell whitespace-nowrap">

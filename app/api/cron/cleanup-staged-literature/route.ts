@@ -1,11 +1,11 @@
 /**
- * Vercel Cron — enforces the 7-day TTL on STAGED (read-without-library)
+ * Vercel Cron, enforces the 7-day TTL on STAGED (read-without-library)
  * `literature_reviews` rows (migration 092).
  *
  * A staged row is a paper the user opened to read but never added to their library.
  * It carries `catalog_placement='staging'` and `staged_expires_at = stage_time + 7d`.
  * Promotion to the library ("Save to library") clears `staged_expires_at`, so ONLY
- * genuinely-abandoned reads ever match here — a single hard-delete phase is safe (no
+ * genuinely-abandoned reads ever match here, a single hard-delete phase is safe (no
  * tombstone grace needed; there is nothing to "undo" about an un-saved read).
  *
  * Auth: Vercel Cron sends `Authorization: Bearer $CRON_SECRET`; fail closed when unset.
@@ -13,8 +13,8 @@
  * Idempotent + batched, backed by the partial index `idx_literature_reviews_staged_expiry`.
  *
  * Note: an associated imported PDF in storage may be left orphaned (recoverable via a
- * manual sweep); the row — which is what surfaces the paper in the UI and via
- * read_document — is removed, which is the user-visible contract that matters.
+ * manual sweep); the row, which is what surfaces the paper in the UI and via
+ * read_document, is removed, which is the user-visible contract that matters.
  */
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase-service-role";

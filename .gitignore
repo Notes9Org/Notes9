@@ -70,3 +70,16 @@ scripts/ruvector.db
 agentdb.rvf
 agentdb.rvf.lock
 .gstack/
+
+# Python bytecode from local engine validation runs
+__pycache__/
+*.pyc
+
+# Self-hosted Pyodide mirror written by scripts/utilities/fetch-pyodide.ts.
+# 45 MB of wheels and wasm, reproducible from the version pinned in
+# lib/data-analysis/engine/contract.ts — committing it would put an
+# incompressible binary payload in history permanently, once per runtime
+# upgrade. See docs/data-analysis/self-hosting-pyodide.md.
+/public/pyodide/
+CLAUDE.local.md
+supabase/.temp/

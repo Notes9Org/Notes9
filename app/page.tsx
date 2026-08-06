@@ -2,18 +2,16 @@ import { redirect } from 'next/navigation'
 import { getCurrentUser } from "@/lib/auth/current-user"
 import { Header } from "@/components/marketing/header"
 import { Footer } from "@/components/marketing/footer"
-import { AcademicHero } from "@/components/marketing/academic-hero"
 import { ContactForm } from "@/components/marketing/contact-form"
 import { FloatingPageMenu } from "@/components/marketing/floating-page-menu"
-import { AppGlyphRail } from "@/components/marketing/app-glyphs"
+import { HeroSplit } from "@/components/marketing/hero-split"
 import {
-  DifferentiationSection,
-  FinalCtaSection,
-  IcpBenefitsSection,
-  PainSection,
-  PricingTeaserSection,
-  SolutionSection,
-} from "@/components/marketing/home-sections"
+  CatalystBand,
+  ChainSection,
+  ClosingSection,
+  FractureSection,
+  ProofBand,
+} from "@/components/marketing/home-editorial"
 
 import "@/styles/marketing.css"
 
@@ -59,7 +57,7 @@ export default async function HomePage({
 
   return (
     <div
-      className="marketing-theme font-sans min-h-screen flex flex-col bg-background text-foreground relative overflow-hidden"
+      className="marketing-theme font-sans min-h-screen flex flex-col bg-background text-foreground relative overflow-x-clip"
       style={{
         "--font-dm-sans": "var(--font-dm-sans, 'DM Sans', sans-serif)",
         "--font-dm-serif": "var(--font-dm-serif, 'DM Serif Display', serif)",
@@ -76,30 +74,30 @@ export default async function HomePage({
       <div className="relative z-10 flex flex-col min-h-screen">
         <Header />
         <FloatingPageMenu />
-        <AppGlyphRail />
         <main className="flex-1 pt-16">
-          <AcademicHero />
-          <PainSection />
-          <SolutionSection />
-          <IcpBenefitsSection />
-          <DifferentiationSection />
-          <PricingTeaserSection />
-          <section id="contact">
-            <div className="container mx-auto px-4 py-20 sm:px-6 lg:px-8">
-              <div className="n9-readable mx-auto max-w-2xl text-center">
-                <h2 className="font-serif text-3xl tracking-tight text-foreground sm:text-4xl">
-                  Get in touch
-                </h2>
-                <p className="mt-4 text-[20px] leading-7 text-muted-foreground">
-                  Tell us about your lab and where friction shows up today.
-                </p>
-              </div>
-              <div className="mx-auto mt-10 max-w-2xl">
-                <ContactForm />
-              </div>
-            </div>
-          </section>
-          <FinalCtaSection />
+          {/* Replaces the AcademicHero + eight scroll-locked StackSections.
+              The stacked layout pinned a hero and slid full-screen panels over
+              it, which meant eight viewport-height scroll events before a
+              visitor reached pricing. This composition is a normal document:
+              sections follow one another, and the page is roughly half as tall.
+
+              The previous version is not deleted, every section component it
+              used still exists in components/marketing/home-sections.tsx, so
+              reverting is an import change rather than a rebuild. */}
+          <HeroSplit />
+          <ProofBand />
+          <FractureSection />
+          <ChainSection />
+          <CatalystBand />
+
+          {/* The closing CTA and the contact form are one section now. As two
+              they made the same ask twice in a row, and the second heading read
+              as a duplicate of the first. ClosingSection owns the anchor, the
+              framing and the sign-off wordmark; the form is passed in so the
+              page keeps ownership of what it renders. */}
+          <ClosingSection>
+            <ContactForm />
+          </ClosingSection>
         </main>
         <Footer />
       </div>

@@ -19,7 +19,7 @@ export default async function LiteratureReviewDetailPage({
   const resolvedSearch = searchParams ? await searchParams : {}
   const user = await requireUser()
   const supabase = await createClient()
-  // Fetch the literature row and the caller's profile in parallel — they're
+  // Fetch the literature row and the caller's profile in parallel, they're
   // independent, so the page waits on the slower of the two, not their sum.
   const [
     { data: literature, error },

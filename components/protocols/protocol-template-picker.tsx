@@ -275,7 +275,7 @@ export function ProtocolTemplatePicker({
           {includeLibraryProtocols ? (
             <>
               {" "}
-              You can also reuse letterhead from an existing protocol below — that copies titles and
+              You can also reuse letterhead from an existing protocol below, that copies titles and
               logos only, not the full procedure.
             </>
           ) : null}

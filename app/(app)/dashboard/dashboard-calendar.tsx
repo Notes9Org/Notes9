@@ -150,7 +150,7 @@ export function DashboardCalendar({
   )
   const [now, setNow] = useState<number | null>(null)
   const [today, setToday] = useState<Date | null>(null)
-  /** The visible day — defaults to today on mount, but the user can navigate
+  /** The visible day, defaults to today on mount, but the user can navigate
       with the ← Today → controls. Drives event filtering and the new-event
       default date. */
   const [viewDay, setViewDay] = useState<Date | null>(null)
@@ -170,7 +170,7 @@ export function DashboardCalendar({
     durationMin: number
     tone: EventTone
   } | null>(null)
-  /** Day / Week / Month — drives the layout below the controls strip. */
+  /** Day / Week / Month, drives the layout below the controls strip. */
   const [view, setView] = useState<"day" | "week" | "month">("day")
   /** New-event composer controls: tone + duration. Defaults match the previous
       hard-coded behavior (ink, 30-min) so existing users see no surprise. */
@@ -183,7 +183,7 @@ export function DashboardCalendar({
   const [editStart, setEditStart] = useState("")
   const [editEnd, setEditEnd] = useState("")
   const [editTone, setEditTone] = useState<EventTone>("ink")
-  /** AlertDialog for delete confirms — silent hover-X delete was destructive
+  /** AlertDialog for delete confirms, silent hover-X delete was destructive
       and reversible only by manual recreation. */
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [, startTransition] = useTransition()
@@ -274,7 +274,7 @@ export function DashboardCalendar({
         ])
       })
       .catch(() => {
-        // Swallow — the visible range will show empty if the fetch fails.
+        // Swallow, the visible range will show empty if the fetch fails.
       })
       .finally(() => {
         if (!cancelled) setLoadingDay(false)
@@ -320,7 +320,7 @@ export function DashboardCalendar({
     setViewDay(new Date())
   }
 
-  // Events that fall on today but outside the rendered 08:00–19:00 window —
+  // Events that fall on today but outside the rendered 08:00–19:00 window
   // surface a small counter so users don't think their early/late events
   // silently vanished.
   const offWindow = useMemo(() => {
@@ -395,7 +395,7 @@ export function DashboardCalendar({
         .catch(() => {
           // Keep draft so the user can retry, and tell them it didn't save.
           setAdding(false)
-          toast.error("Couldn't add that event. Your draft is kept — try again.")
+          toast.error("Couldn't add that event. Your draft is kept, try again.")
         })
     })
   }
@@ -748,7 +748,7 @@ export function DashboardCalendar({
                         // Otherwise Radix restores focus to the anchor (the
                         // hour-row div) and, since that div isn't focusable,
                         // browsers can fall through to the next focusable
-                        // element above — the sidebar search input.
+                        // element above, the sidebar search input.
                         e.preventDefault()
                       }}
                     >
@@ -929,7 +929,7 @@ export function DashboardCalendar({
                     sideOffset={6}
                     onOpenAutoFocus={(e) => {
                       // Let the title input claim focus rather than the
-                      // popover's container — same pattern todo-panel uses.
+                      // popover's container, same pattern todo-panel uses.
                       e.preventDefault()
                     }}
                     onCloseAutoFocus={(e) => e.preventDefault()}
@@ -1086,7 +1086,7 @@ function EmptyCalendar({ onAdd }: { onAdd: () => void }) {
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
- * Week view — 7 columns × hour rows. Each column shows that day's events;
+ * Week view, 7 columns × hour rows. Each column shows that day's events;
  * double-clicking a cell opens the in-place quick-add Popover on the parent.
  * ──────────────────────────────────────────────────────────────────────── */
 function WeekView({
@@ -1201,7 +1201,7 @@ function WeekView({
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
- * Month view — 6×7 grid. Each cell: date number + up to 3 event chips.
+ * Month view, 6×7 grid. Each cell: date number + up to 3 event chips.
  * Click a cell to jump to day view on that date.
  * ──────────────────────────────────────────────────────────────────────── */
 function MonthView({

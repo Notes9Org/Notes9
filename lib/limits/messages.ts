@@ -54,7 +54,7 @@ export interface CountdownMessage {
 export const approaching: Record<string, LimitMessage> = {
   rpm: {
     title: 'Getting busy',
-    body: "You've sent quite a few requests in the last minute. Everything is still working — heads up that the pace may slow slightly.",
+    body: "You've sent quite a few requests in the last minute. Everything is still working, heads up that the pace may slow slightly.",
     action: 'Carry on as normal.',
     resetHint: 'Resets in about a minute.',
     icon: 'clock',
@@ -63,7 +63,7 @@ export const approaching: Record<string, LimitMessage> = {
   daily_tokens: {
     title: 'Good amount of AI work today',
     body: "You've used a healthy chunk of today's AI budget. Your work is safe and the AI is still fully available.",
-    action: 'Keep going — you still have capacity left.',
+    action: 'Keep going, you still have capacity left.',
     resetHint: 'Resets at midnight UTC.',
     icon: 'zap',
     color: 'blue',
@@ -79,7 +79,7 @@ export const approaching: Record<string, LimitMessage> = {
   lit_search_weekly: {
     title: 'Plenty of searching this week',
     body: "You've used a good share of this week's literature searches. Everything is still fully available.",
-    action: 'Keep going — you still have searches left.',
+    action: 'Keep going, you still have searches left.',
     resetHint: 'Full capacity returns Monday at 00:00 UTC.',
     icon: 'zap',
     color: 'blue',
@@ -87,7 +87,7 @@ export const approaching: Record<string, LimitMessage> = {
   ai_budget_monthly: {
     title: "You've used about half your AI credits",
     body: "You've used around half of this month's free credits. Your work is safe and the AI is still fully available.",
-    action: 'Keep going — you still have plenty of credits left.',
+    action: 'Keep going, you still have plenty of credits left.',
     resetHint: 'Credits refresh on the 1st.',
     icon: 'zap',
     color: 'blue',
@@ -117,7 +117,7 @@ export const near: Record<string, LimitMessage> = {
   },
   storage: {
     title: 'Almost out of storage',
-    body: 'You have very little file space left. You can still use the AI — only new file uploads are affected.',
+    body: 'You have very little file space left. You can still use the AI, only new file uploads are affected.',
     action: 'Delete files you no longer need to free space.',
     resetHint: 'Storage frees up when files are removed.',
     icon: 'cloud',
@@ -137,22 +137,22 @@ export const near: Record<string, LimitMessage> = {
 // At limit (100 %)
 // ---------------------------------------------------------------------------
 
-// rpm_concurrency is intentionally binary (at_limit only) — concurrency is either
+// rpm_concurrency is intentionally binary (at_limit only), concurrency is either
 // in-progress or not; there is no meaningful "approaching" state for it.
 // getMessage('rpm_concurrency', 'approaching'|'near') correctly falls through to
 // atLimit['rpm_concurrency'] via the second lookup in getMessage(), which returns
-// the "One moment" copy — a reasonable conservative framing.
+// the "One moment" copy, a reasonable conservative framing.
 export const atLimit: Record<string, LimitMessage> = {
   rpm: {
     title: 'Taking a short breath',
-    body: "You've been moving fast — the AI needs a moment to catch up. Your work is saved and nothing is lost.",
+    body: "You've been moving fast, the AI needs a moment to catch up. Your work is saved and nothing is lost.",
     action: 'The assistant will be ready again shortly.',
     resetHint: 'Automatically ready in a few seconds.',
     icon: 'clock',
     color: 'amber',
   },
   rpm_concurrency: {
-    title: 'One moment — finishing a previous request',
+    title: 'One moment, finishing a previous request',
     body: 'You have another AI request already in progress. The new one will start as soon as it finishes.',
     action: 'Wait for the current response to complete.',
     resetHint: 'Ready as soon as the in-progress request finishes.',
@@ -162,7 +162,7 @@ export const atLimit: Record<string, LimitMessage> = {
   daily_tokens: {
     title: "Today\'s AI capacity is full",
     body: "You've made great use of the AI today. All your notes, experiments, and conversations are fully saved.",
-    action: "Come back tomorrow — or reach out if you need more capacity sooner.",
+    action: "Come back tomorrow, or reach out if you need more capacity sooner.",
     resetHint: 'Full capacity returns at midnight UTC.',
     icon: 'calendar',
     color: 'amber',
@@ -179,7 +179,7 @@ export const atLimit: Record<string, LimitMessage> = {
     title: 'File is too large to upload',
     body: 'This file exceeds the size limit for uploads. Other uploads and AI features work normally.',
     action: 'Try a smaller file, or compress it before uploading.',
-    resetHint: 'No action needed — this applies only to this file.',
+    resetHint: 'No action needed, this applies only to this file.',
     icon: 'file',
     color: 'slate',
   },
@@ -195,7 +195,7 @@ export const atLimit: Record<string, LimitMessage> = {
     title: 'Request is too large',
     body: 'This message or its attachments exceed the size limit. Your work is not lost.',
     action: 'Try shortening the message or sending fewer attachments at once.',
-    resetHint: 'No waiting required — try again with a smaller payload.',
+    resetHint: 'No waiting required, try again with a smaller payload.',
     icon: 'file',
     color: 'slate',
   },
@@ -216,7 +216,7 @@ export const atLimit: Record<string, LimitMessage> = {
 export const softOverage: Record<string, LimitMessage> = {
   daily_tokens: {
     title: 'Slightly over today\'s AI capacity',
-    body: "You've gone a touch over today's limit. The assistant is still available — we're giving you a little extra room.",
+    body: "You've gone a touch over today's limit. The assistant is still available, we're giving you a little extra room.",
     action: 'Wrap up any open work; full capacity returns tomorrow.',
     resetHint: 'Full capacity returns at midnight UTC.',
     icon: 'info',
@@ -225,13 +225,13 @@ export const softOverage: Record<string, LimitMessage> = {
 }
 
 // ---------------------------------------------------------------------------
-// Conversation continuity (never a hard block — just informational)
+// Conversation continuity (never a hard block, just informational)
 // ---------------------------------------------------------------------------
 
 export const conversationSummary: LimitMessage = {
   title: 'Older messages summarized',
-  body: 'The conversation is getting long, so older messages have been condensed into a summary. Nothing is lost — the AI remembers the full context.',
-  action: 'Keep going — the conversation continues normally.',
+  body: 'The conversation is getting long, so older messages have been condensed into a summary. Nothing is lost, the AI remembers the full context.',
+  action: 'Keep going, the conversation continues normally.',
   resetHint: 'The full history is always available in the chat.',
   icon: 'message-circle',
   color: 'blue',
@@ -249,7 +249,7 @@ export const rpmCountdown: CountdownMessage = {
 }
 
 // ---------------------------------------------------------------------------
-// Helper — pick the right message for a known limit code
+// Helper, pick the right message for a known limit code
 // ---------------------------------------------------------------------------
 
 export type LimitCode =

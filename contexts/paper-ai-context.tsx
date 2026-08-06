@@ -8,7 +8,7 @@ interface PaperAIContextValue {
   paperId: string
   /** Returns the current paper HTML content (always fresh) */
   getContent: () => string
-  /** Register the paper editor — called by paper detail page */
+  /** Register the paper editor, called by paper detail page */
   register: (opts: {
     id: string
     title: string

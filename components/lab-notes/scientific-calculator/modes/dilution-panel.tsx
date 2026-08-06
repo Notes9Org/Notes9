@@ -115,10 +115,10 @@ export function DilutionPanel({
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="z-[280]">
-            <SelectItem value="C1">C1 — initial concentration</SelectItem>
-            <SelectItem value="V1">V1 — initial volume</SelectItem>
-            <SelectItem value="C2">C2 — final concentration</SelectItem>
-            <SelectItem value="V2">V2 — final volume</SelectItem>
+            <SelectItem value="C1">C1, initial concentration</SelectItem>
+            <SelectItem value="V1">V1, initial volume</SelectItem>
+            <SelectItem value="C2">C2, final concentration</SelectItem>
+            <SelectItem value="V2">V2, final volume</SelectItem>
           </SelectContent>
         </Select>
       </div>

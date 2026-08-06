@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils';
 import type { ToolCard } from '@/hooks/use-agent-stream';
 
-/** Fraction of the agent's tools that have finished (done or errored) — a
+/** Fraction of the agent's tools that have finished (done or errored), a
  * concrete, honest "amount of work done" signal to drive the loader ring.
  * Returns undefined when there are no tools yet (→ indeterminate spinner). */
 export function toolCardsProgress(cards?: ToolCard[] | null): number | undefined {
@@ -19,7 +19,7 @@ interface Notes9ChatLoaderProps {
   /** Optional 0–1 completion. When provided the ring becomes a determinate arc
    * that fills to reflect how much of the work is done (e.g. tools completed). */
   progress?: number;
-  /** When true the loader stops (dimmed, static) — used on request error. */
+  /** When true the loader stops (dimmed, static), used on request error. */
   error?: boolean;
 }
 
@@ -68,7 +68,7 @@ export function Notes9ChatLoader({
         </svg>
       )}
 
-      {/* Indeterminate spinner — a faint track with a bright arc that rotates */}
+      {/* Indeterminate spinner, a faint track with a bright arc that rotates */}
       {!hasProgress && !error && (
         <svg
           className="absolute inset-0 animate-spin [animation-duration:0.85s]"
@@ -89,7 +89,7 @@ export function Notes9ChatLoader({
         </svg>
       )}
 
-      {/* Static, upright logo in the center — never spins (looks more polished) */}
+      {/* Static, upright logo in the center, never spins (looks more polished) */}
       <img
         src="/notes9-logo-mark-transparent.png"
         alt=""

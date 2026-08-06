@@ -93,15 +93,24 @@ export default function RootLayout({
         className="font-sans antialiased"
         style={{
           // Map global styles to CSS variables so Tailwind classes still function correctly.
-          // Journal-grounded product typeface system (see docs/UI_UX_REVAMP_PLAN.md §3.1):
-          //   body/UI + headings → Merriweather Sans (Nature's web UI face)
-          //   display/serif       → Source Serif 4 (scientific-publishing serif)
-          //   mono                → IBM Plex Mono (sequences, IDs, measurements)
-          // Legacy var names are kept to avoid churn; their resolved faces changed.
-          "--font-ibm-sans": "var(--font-ibm-sans, 'Merriweather Sans', system-ui, sans-serif)",
-          "--font-ibm-serif": "var(--font-ibm-serif, 'Source Serif 4', Georgia, serif)",
-          "--font-familjen": "var(--font-familjen, 'Merriweather Sans', system-ui, sans-serif)",
-          "--font-jetbrains-mono": "var(--font-jetbrains-mono, 'IBM Plex Mono', monospace)",
+          //
+          // The platform runs on the native system UI stack. docs/UI_UX_REVAMP_PLAN.md
+          // §3.1 specifies a webfont trio (Merriweather Sans / Source Serif 4 /
+          // IBM Plex Mono), and for a while these variables were written as
+          // `var(--font-ibm-sans, 'Merriweather Sans', ...)`, self-referential,
+          // therefore invalid at computed-value time, therefore silently dropped
+          // along with every `font-family` rule built on them. The whole product
+          // rendered in the system stack as a result. Wiring the webfonts up
+          // "correctly" changed typography across every surface at once, which is
+          // not the look this product wants, so the system stack is now the
+          // deliberate choice rather than an accident.
+          //
+          // Write literal stacks here. A custom property that references its own
+          // name resolves to nothing and takes its dependents down with it.
+          "--font-ibm-sans": "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+          "--font-ibm-serif": "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+          "--font-familjen": "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+          "--font-jetbrains-mono": "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
         } as React.CSSProperties}
       >
         <ThemeProvider
@@ -116,7 +125,7 @@ export default function RootLayout({
               link click, only stops when the route actually commits. Unlike the
               full-screen NavigationLoader (which must bail out on a safety
               timeout and can reveal the old page mid-navigation), a lingering
-              bar is harmless — so it stays honest through slow compiles/fetches.
+              bar is harmless, so it stays honest through slow compiles/fetches.
             */}
             <HolyLoader color="var(--primary)" height="3px" zIndex={2147483647} />
             <NavigationLoader />
@@ -125,7 +134,7 @@ export default function RootLayout({
           </PostHogProvider>
           {/*
             Univer UI portals toolbar/menu popups here (default id `univer-popup-portal`).
-            If this node is missing, createPortal returns null — font/color dropdowns never appear.
+            If this node is missing, createPortal returns null, font/color dropdowns never appear.
             Zero-size + pointer-events-none so the host never blocks the page; popups set their own hit targets.
           */}
           <div

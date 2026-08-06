@@ -6,9 +6,9 @@
  * One control governing whether Catalyst may read the user's PRIVATE lab data
  * (their records via SQL, their notes/documents via RAG, attached files, and
  * agent memory). Three modes:
- *   - ask    (default) — Catalyst asks in chat before reading private data
- *   - always           — allow silently
- *   - never            — Catalyst never reads private data (answers from context only)
+ *   - ask    (default), Catalyst asks in chat before reading private data
+ *   - always           - allow silently
+ *   - never            - Catalyst never reads private data (answers from context only)
  *
  * Persists to public.user_ai_permissions (owner-RLS) via the browser Supabase
  * client, mirroring the profile-save pattern. Degrades gracefully if migration
@@ -67,7 +67,7 @@ export function PermissionsPanel() {
           if (v === "ask" || v === "always" || v === "never") setMode(v)
         }
       } catch {
-        /* table may not exist yet — keep default 'ask' */
+        /* table may not exist yet, keep default 'ask' */
       } finally {
         if (!cancelled) setStatus("ready")
       }

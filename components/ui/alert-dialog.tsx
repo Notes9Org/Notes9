@@ -80,7 +80,7 @@ function AlertDialogContent({
         }}
         onCloseAutoFocus={(e) => {
           // Prevent Radix from restoring focus to the sidebar search (or other
-          // anchors) after dismiss — that looked like a stray caret / highlight.
+          // anchors) after dismiss, that looked like a stray caret / highlight.
           e.preventDefault()
           onCloseAutoFocus?.(e)
         }}

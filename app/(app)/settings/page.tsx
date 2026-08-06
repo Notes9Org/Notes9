@@ -30,6 +30,7 @@ import { SignOut as LogOut, Sun, Moon, Monitor, CircleNotch as Loader2 } from "@
 import { ChangePasswordDialog } from "@/components/change-password-dialog"
 import { UsagePanel } from "@/components/settings/usage-panel"
 import { PermissionsPanel } from "@/components/settings/permissions-panel"
+import { RestoreChecklistButton } from "@/components/onboarding/restore-checklist-button"
 import { PageHeading } from "@/components/ui/page-heading"
 import { useToast } from "@/hooks/use-toast"
 import { USER_STORAGE_BUCKET, createProfileAvatarStoragePath } from "@/lib/user-storage-bucket"
@@ -280,7 +281,7 @@ export default function SettingsPage(): ReactNode {
 
       if (uploadError) throw uploadError
 
-      // Bucket is private — persist the storage path; sign for display.
+      // Bucket is private, persist the storage path; sign for display.
       const { error: updateError } = await supabase
         .from("profiles")
         .update({
@@ -578,7 +579,7 @@ export default function SettingsPage(): ReactNode {
 
               <SettingsRow
                 title="AI model"
-                description="The model that runs your Catalyst tasks — usage credits scale with the model's cost"
+                description="The model that runs your Catalyst tasks, usage credits scale with the model's cost"
               >
                 {mounted ? (
                   <div className="flex flex-wrap gap-2">
@@ -607,7 +608,7 @@ export default function SettingsPage(): ReactNode {
 
               <SettingsRow
                 title="Your Anthropic API key"
-                description="Optional — run Catalyst on your own Anthropic account. No credit limits apply; the key stays in this browser and is never stored on our servers"
+                description="Optional, run Catalyst on your own Anthropic account. No credit limits apply; the key stays in this browser and is never stored on our servers"
               >
                 {mounted ? (
                   <div className="flex w-full max-w-md flex-col gap-2">
@@ -646,11 +647,18 @@ export default function SettingsPage(): ReactNode {
                     </div>
                     {byokSaved ? (
                       <p className="text-xs text-muted-foreground">
-                        Active — your tasks run on your Anthropic account and don&apos;t use credits.
+                        Active, your tasks run on your Anthropic account and don&apos;t use credits.
                       </p>
                     ) : null}
                   </div>
                 ) : null}
+              </SettingsRow>
+
+              <SettingsRow
+                title="Getting started"
+                description="Bring the getting-started checklist back to your dashboard"
+              >
+                <RestoreChecklistButton />
               </SettingsRow>
 
               <SettingsRow

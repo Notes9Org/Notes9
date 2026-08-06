@@ -137,7 +137,7 @@ export function createDatabaseExtension(): Database {
           return state;
         }
 
-        // No content found — return null (Hocuspocus creates empty doc)
+        // No content found, return null (Hocuspocus creates empty doc)
         return null;
       });
     },

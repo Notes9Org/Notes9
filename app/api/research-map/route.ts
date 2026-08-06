@@ -50,7 +50,7 @@ function chunkArray<T>(arr: T[], size: number): T[][] {
  * Postgres handles `IN` lists well into the thousands, so we issue a single
  * `.in(col, ids)` query instead of one round-trip per chunk. We only fall back
  * to chunking when the id list is very large (> IN_CHUNK_THRESHOLD) to avoid
- * pathological statement sizes — that keeps connection usage flat for the
+ * pathological statement sizes, that keeps connection usage flat for the
  * common case (a project with a few hundred experiments) while staying safe at
  * the extreme. Rows are returned flattened across chunks; RLS still scopes
  * them to the caller's org.
@@ -208,7 +208,7 @@ export async function GET(req: NextRequest) {
         litQuery = litQuery.eq("project_id", projectId).limit(400)
       }
 
-      // notes + literature only depend on experimentIds — fetch concurrently.
+      // notes + literature only depend on experimentIds, fetch concurrently.
       const [{ data: notes }, { data: literature }] = await Promise.all([
         notesQuery,
         litQuery,
@@ -399,7 +399,7 @@ export async function GET(req: NextRequest) {
       }
 
       // Reports linked to this project (and to any of its experiments).
-      // Each row can carry a project_id, an experiment_id, or both — we draw
+      // Each row can carry a project_id, an experiment_id, or both, we draw
       // whichever edges land in the included-types set so the researcher sees
       // every connection without the noise of a hub-only graph.
       if (includeTypes.has("report")) {
@@ -523,7 +523,7 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      // Experiment data files — each file becomes a leaf node hanging off its
+      // Experiment data files, each file becomes a leaf node hanging off its
       // experiment so the map shows what data backs each run.
       if (includeTypes.has("data_file") && experimentIds.length > 0) {
         const dataFiles = await selectIn<{
@@ -559,7 +559,7 @@ export async function GET(req: NextRequest) {
         }
       }
     } else {
-      // These four top-level fetches are independent of one another — issue them
+      // These four top-level fetches are independent of one another, issue them
       // concurrently instead of four sequential round-trips. Org projects are
       // included so empty projects still appear in the map.
       let expQuery = supabase
@@ -868,7 +868,7 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      // Papers (writing section) — RLS ensures only user's own papers are returned
+      // Papers (writing section), RLS ensures only user's own papers are returned
       if (includeTypes.has("paper") && !experimentId) {
         const { data: paperRows } = await supabase
           .from("papers")
@@ -895,7 +895,7 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      // Reports — org-wide. Connect to the most specific scope available:
+      // Reports, org-wide. Connect to the most specific scope available:
       // experiment first, project second. RLS limits visibility to rows the
       // user can see; we still gate edges on whether the parent node was
       // included (via project_id / experiment_id presence in the graph).
@@ -948,7 +948,7 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      // Samples — org-wide. Linked to experiments (samples.experiment_id) and
+      // Samples, org-wide. Linked to experiments (samples.experiment_id) and
       // to projects via the sample_projects junction. RLS limits visibility.
       if (includeTypes.has("sample")) {
         const includedExpIds = new Set(allExperiments.map((e) => e.id))
@@ -1037,7 +1037,7 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      // Experiment data files (org-wide) — one leaf node per file, linked to its
+      // Experiment data files (org-wide), one leaf node per file, linked to its
       // experiment.
       if (includeTypes.has("data_file")) {
         const includedExpIds = allExperiments.map((e) => e.id)

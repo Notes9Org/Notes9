@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 
 /**
  * Lightweight page-transition wrapper. Fades + lifts the content a few pixels
- * when the pathname changes, then settles. Pure CSS — no framer-motion in the
+ * when the pathname changes, then settles. Pure CSS, no framer-motion in the
  * bundle. The animation only runs after first paint, so the very first page
  * load is instant (avoids a flash on hydration).
  */
@@ -17,7 +17,7 @@ export function PageTransition({ children }: { children: ReactNode }) {
   // Detect the pathname change DURING render, not in an effect: the effect
   // ran one paint late, so the new page painted fully visible for a frame,
   // snapped to opacity 0 when the animation class landed, then faded back in
-  // — reading as a glitch right when the navigation loader hands off.
+  // reading as a glitch right when the navigation loader hands off.
   // Render-phase state means the new keyed div carries the animation class
   // from its very first frame.
   const [prevPathname, setPrevPathname] = useState(pathname)

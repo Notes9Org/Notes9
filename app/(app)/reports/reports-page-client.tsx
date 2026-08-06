@@ -213,7 +213,7 @@ export function ReportsPageClient({ reports: initialReports, projects, experimen
   }
 
   // Title block shared by both states. The "Generate" action is intentionally
-  // NOT here — the empty state shows a single prominent CTA in its card, and
+  // NOT here, the empty state shows a single prominent CTA in its card, and
   // the populated state appends the header action below. This avoids two
   // identical "Generate" buttons rendering on the same screen.
   const titleBlock = (

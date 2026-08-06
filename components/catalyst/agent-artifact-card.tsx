@@ -37,7 +37,7 @@ const KIND_LABEL: Record<ArtifactKind, string> = {
   file: 'File',
 };
 
-// Per-type accent tile — small colored icon square (left of the filename row).
+// Per-type accent tile, small colored icon square (left of the filename row).
 // Restrained alpha so it reads as a tint, not a badge fight.
 const KIND_ACCENT: Record<ArtifactKind, string> = {
   image:
@@ -49,7 +49,7 @@ const KIND_ACCENT: Record<ArtifactKind, string> = {
   file: 'bg-muted text-muted-foreground',
 };
 
-// Thinner left-edge accent bar per type — replaces the broad colored area that
+// Thinner left-edge accent bar per type, replaces the broad colored area that
 // dominated the old layout.
 const KIND_BORDER: Record<ArtifactKind, string> = {
   image: 'border-l-primary/50 dark:border-l-primary/50',
@@ -113,7 +113,7 @@ export function AgentArtifactCard({ artifact: artifactProp }: AgentArtifactCardP
   // Whether the user has expanded the image from the thumbnail to the full
   // inline preview (click-to-expand behaviour).
   const [expanded, setExpanded] = useState(false);
-  // True once the backend reports the draft is gone (24h TTL swept) — the card
+  // True once the backend reports the draft is gone (24h TTL swept), the card
   // then shows an honest "expired" tombstone instead of a broken preview.
   const [expired, setExpired] = useState(false);
 
@@ -154,7 +154,7 @@ export function AgentArtifactCard({ artifact: artifactProp }: AgentArtifactCardP
     }
     // 410 ⇒ draft swept past its TTL: show the expired tombstone.
     if (res && 'expired' in res) setExpired(true);
-    // Re-sign failed — flip the thumbnail to error state so we render the
+    // Re-sign failed, flip the thumbnail to error state so we render the
     // icon tile instead of a broken image or an empty box.
     if (isImage) setThumbState('error');
     return null;
@@ -212,7 +212,7 @@ export function AgentArtifactCard({ artifact: artifactProp }: AgentArtifactCardP
     }
 
     if (thumbState === 'error' || !activeUrl) {
-      // Graceful degradation — render the icon tile, same as non-image kinds.
+      // Graceful degradation, render the icon tile, same as non-image kinds.
       return null;
     }
 
@@ -281,7 +281,7 @@ export function AgentArtifactCard({ artifact: artifactProp }: AgentArtifactCardP
 
   // ── Status badge ─────────────────────────────────────────────────────────────
 
-  // Rendered as a small inline label — not a chip — to keep the row tight.
+  // Rendered as a small inline label, not a chip, to keep the row tight.
   // Screen readers read the metaLine which already contains the status, so
   // this span is aria-hidden to avoid duplication.
   function renderStatus() {
@@ -335,7 +335,7 @@ export function AgentArtifactCard({ artifact: artifactProp }: AgentArtifactCardP
               {artifact.fileName}
             </p>
             <p className="mt-0.5 text-xs leading-none text-muted-foreground/70">
-              Expired — unsaved drafts are kept 24h. Generate it again to recreate it.
+              Expired, unsaved drafts are kept 24h. Generate it again to recreate it.
             </p>
           </div>
         </div>
@@ -411,10 +411,10 @@ export function AgentArtifactCard({ artifact: artifactProp }: AgentArtifactCardP
         {/* Action cluster */}
         <div className="flex shrink-0 items-center gap-0.5">
 
-          {/* Inline status indicator (visual only — already in sr metaLine) */}
+          {/* Inline status indicator (visual only, already in sr metaLine) */}
           <span className="mr-1 hidden sm:flex">{renderStatus()}</span>
 
-          {/* Preview — for non-images opens in a new tab; for images the
+          {/* Preview, for non-images opens in a new tab; for images the
               thumbnail tile itself is the expand trigger, but we keep this
               so the card is still operable when the thumbnail fails. */}
           {(!isImage || thumbState === 'error' || !activeUrl) && (
@@ -465,7 +465,7 @@ export function AgentArtifactCard({ artifact: artifactProp }: AgentArtifactCardP
             </Button>
           )}
 
-          {/* View code / Edit — only when a regenerable recipe was stored */}
+          {/* View code / Edit, only when a regenerable recipe was stored */}
           {artifact.hasSource && (
             <Button
               variant="ghost"
@@ -582,7 +582,7 @@ export function AgentArtifactList({ artifacts }: { artifacts: AgentArtifact[] })
 
 /**
  * Render PERSISTED artifacts (parsed from a saved assistant message). These have
- * no live signed URL — each card re-signs lazily by data_id.
+ * no live signed URL, each card re-signs lazily by data_id.
  */
 export function PersistedArtifactList({ artifacts }: { artifacts: PersistedArtifact[] }) {
   if (!artifacts.length) return null;

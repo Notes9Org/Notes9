@@ -24,7 +24,7 @@ export default async function ExperimentsPage({
 }) {
   const user = await requireUser()
   const supabase = await createClient()
-  // `profile` and the unfiltered `experiments` list are independent — fetch
+  // `profile` and the unfiltered `experiments` list are independent, fetch
   // in parallel. `orgProjects` has to wait for `profile.organization_id`.
   const [profileResult, experimentsRes] = await Promise.all([
     ensureUserProfile(user),
@@ -74,7 +74,7 @@ export default async function ExperimentsPage({
         <CatalystSectionHero size="sm" scope="experiments" shrinkOnScroll />
 
         {/* Arriving via the sidebar's Data link with no experiment open lands
-            here by design — say so, or the hop reads as a glitch. */}
+            here by design, say so, or the hop reads as a glitch. */}
         {sp.intent === "data" && (
           <div className="n9-grain flex items-start gap-2.5 rounded-xl border border-[color:color-mix(in_oklab,var(--primary)_20%,var(--glass-border))] bg-[color:var(--glass-bg)] px-3.5 py-2.5 backdrop-blur-md">
             <Database className="mt-0.5 size-4 shrink-0 text-[color:var(--n9-accent)]" weight="fill" aria-hidden />
@@ -126,7 +126,7 @@ export default async function ExperimentsPage({
                 <EmptyTitle>No experiments yet</EmptyTitle>
                 <EmptyDescription>
                   {projectContext
-                    ? `Run your first experiment in ${projectContext.name} — link protocols, capture samples, and write lab notes from one place.`
+                    ? `Run your first experiment in ${projectContext.name}, link protocols, capture samples, and write lab notes from one place.`
                     : "An experiment is where you record what you ran, link the protocol and samples used, and capture lab notes alongside the results."}
                 </EmptyDescription>
               </EmptyHeader>

@@ -29,7 +29,7 @@ export default async function ExperimentDetailPage({
   const user = await requireUser()
   const supabase = await createClient()
   // Fetch experiment data with linked protocols
-  // Fetch the experiment and the viewer's organization in parallel — both depend
+  // Fetch the experiment and the viewer's organization in parallel, both depend
   // only on the authenticated user, and the org id is needed to scope the project
   // and assignee dropdowns below.
   const [experimentRes, viewerProfileRes] = await Promise.all([
@@ -52,7 +52,7 @@ export default async function ExperimentDetailPage({
     notFound()
   }
 
-  // All remaining queries are independent of each other — fire them in parallel
+  // All remaining queries are independent of each other, fire them in parallel
   // so the page renders ~5 round-trips faster on cold loads.
   const [
     linkedProtocolsRes,

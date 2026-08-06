@@ -123,7 +123,7 @@ export default function WebinarPage() {
                     Your spot for{" "}
                     <span className="font-medium text-foreground">{WEBINAR_TITLE}</span>{" "}
                     is confirmed. You&apos;ll receive an email with the meeting link and
-                    details shortly — keep an eye on your inbox.
+                    details shortly, keep an eye on your inbox.
                   </p>
                   <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Mail className="h-3.5 w-3.5" />
@@ -204,7 +204,7 @@ export default function WebinarPage() {
                     />
                   </div>
 
-                  {/* Honeypot — visually hidden, off-screen; real users never fill it. */}
+                  {/* Honeypot, visually hidden, off-screen; real users never fill it. */}
                   <div aria-hidden className="absolute left-[-9999px] top-[-9999px]" tabIndex={-1}>
                     <label htmlFor="company">Company</label>
                     <input

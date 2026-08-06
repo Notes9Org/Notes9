@@ -74,7 +74,7 @@ function _getMessageThinking(message: UIMessage): string | null {
 }
 
 // ---------------------------------------------------------------------------
-// Memoized per-message item — only re-renders when the message itself changes
+// Memoized per-message item, only re-renders when the message itself changes
 // (settled history messages) or when isLast/isStreaming flip on the last entry.
 // ---------------------------------------------------------------------------
 
@@ -284,7 +284,7 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
           .single();
         if (data) {
           // avatar_url stores either a legacy public URL or (post-051) a
-          // storage path inside the private `user` bucket — sign it for display.
+          // storage path inside the private `user` bucket, sign it for display.
           if (data.avatar_url) {
             const { createBucketSignedUrl, USER_STORAGE_BUCKET } = await import('@/lib/storage-signed-url');
             const signed = await createBucketSignedUrl(supabase, USER_STORAGE_BUCKET, data.avatar_url);
@@ -369,7 +369,7 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
           .catch((err) => {
             console.warn('Attachment re-sign failed', { event: 'attachment_resign_failed', sessionId, pathCount: pathsToSign.length, err });
             // Don't leave the user staring at broken/expired attachment previews
-            // with no explanation — surface a quiet, non-blocking notice.
+            // with no explanation, surface a quiet, non-blocking notice.
             toast.error('Some attachments could not be loaded. Try reopening this chat.');
           });
       }
@@ -382,7 +382,7 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
     currentSessionRef.current = sessionId;
   }, [loadMessages, setMessages]);
 
-  // Smart auto-scroll — only follows when the user is pinned to the bottom.
+  // Smart auto-scroll, only follows when the user is pinned to the bottom.
   // Scrolling up releases the pin so the user can read prior context while
   // streaming; the floating "↓" button re-pins on click.
   const {
@@ -411,7 +411,7 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
 
         for (const message of messages) {
           if (!newSavedIds.has(message.id)) {
-            // Extract TEXT only — never include thinking, sources, or tool parts
+            // Extract TEXT only, never include thinking, sources, or tool parts
             // in the persisted content. Those go in metadata so they can be
             // rendered separately (and never leak into the visible chat history).
             const content = getMessageTextContent(message);
@@ -525,7 +525,7 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
     }
 
     // Sending a new message is an explicit "I want to see what comes next"
-    // signal — re-pin so the user's own message + the streamed reply scroll
+    // signal, re-pin so the user's own message + the streamed reply scroll
     // into view even if they were previously reading earlier history.
     repinMessages();
 
@@ -556,7 +556,7 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
 
     setIsRegenerating(true);
 
-    // Find the LAST user message — assistant message we're regenerating may not
+    // Find the LAST user message, assistant message we're regenerating may not
     // be the very last entry if errors/edits left state in flux.
     let lastUserMessageIndex = -1;
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -581,7 +581,7 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
       return;
     }
 
-    // Drop the user message AND everything after it — then resend.
+    // Drop the user message AND everything after it, then resend.
     // The user message will be re-added by `sendMessage`, and the assistant
     // response starts fresh. Also clear the assistant rows from the DB so
     // stale orphaned replies don't accumulate on retry.
@@ -612,7 +612,7 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
       onSubmit(e);
     }
     // ESC is owned by Radix `<Dialog onEscapeKeyDown>`. Don't double-fire it
-    // from the textarea — used to close the modal mid-typing and destroy
+    // from the textarea, used to close the modal mid-typing and destroy
     // the draft. The dialog still closes on ESC when focus is outside.
   };
 
@@ -702,7 +702,7 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
   // Reduce the message's `data-tool` parts back into ordered ToolCard[].
   // Forwarded by `/api/chat/route.ts` from upstream SSE tool_start /
   // tool_call / tool_result / tool_output events. Same shape the full-page
-  // surface consumes — keeps the UI consistent across modal and page.
+  // surface consumes, keeps the UI consistent across modal and page.
   const getMessageToolCards = (message: typeof messages[0]): ToolCard[] =>
     extractToolCards(message.parts);
 
@@ -736,7 +736,7 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
           </DialogHeader>
 
           <div className="flex flex-1 overflow-hidden">
-            {/* Chat History Sidebar — animated width transition */}
+            {/* Chat History Sidebar, animated width transition */}
             <div
               className={cn(
                 'shrink-0 overflow-hidden border-r border-border/40 transition-all duration-300 ease-in-out',
@@ -757,7 +757,7 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
 
             {/* Main Chat Area */}
             <div className="flex-1 flex flex-col min-w-0">
-              {/* Messages Area — plain div so the ref targets the real scroll container */}
+              {/* Messages Area, plain div so the ref targets the real scroll container */}
               <div
                 ref={scrollViewportRef}
                 onScroll={onMessagesScroll}
@@ -851,7 +851,7 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
                   </div>
               </div>
 
-              {/* Floating jump-to-bottom — appears only when the user has
+              {/* Floating jump-to-bottom, appears only when the user has
                   scrolled away from the latest message. Re-pins on click. */}
               {showJumpBottom && (
                 <Button
@@ -866,9 +866,9 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
                 </Button>
               )}
 
-              {/* Input Area — elevated floating composer */}
+              {/* Input Area, elevated floating composer */}
               <div className="p-3 shrink-0 space-y-2 bg-background/80 backdrop-blur-sm border-t border-border/30">
-                {/* Web search toggle + status — compact row */}
+                {/* Web search toggle + status, compact row */}
                 <div className="flex items-center justify-between px-1">
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     {isLoading && webSearchEnabled && (
@@ -898,7 +898,7 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
                   </div>
                 )}
 
-                {/* Composer — unified glass shell (.n9-composer, globals.css) */}
+                {/* Composer, unified glass shell (.n9-composer, globals.css) */}
                 <div className="n9-composer relative">
                   <Textarea
                     ref={textareaRef}

@@ -8,7 +8,7 @@ import { timeOfDayLabel } from "@/lib/greeting"
  * date line with the greeting beneath, left-aligned, no avatar. The name is
  * accent-tinted so the row reads personal without any chrome around it.
  *
- * Lives client-side so the time-of-day reflects the user's local clock — a
+ * Lives client-side so the time-of-day reflects the user's local clock, a
  * server-rendered version would say "Morning" to an IST user at 11pm because
  * the Vercel/UTC clock is six hours behind. SSR fallback is "Morning" so the
  * hydration markup matches; the effect overwrites it on mount.

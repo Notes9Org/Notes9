@@ -26,7 +26,7 @@ describe("normalizeDeclaredMime", () => {
   });
 });
 
-describe("resolveAttachmentMime — the core 'sometimes fails' fix", () => {
+describe("resolveAttachmentMime, the core 'sometimes fails' fix", () => {
   it("prefers a valid declared MIME", () => {
     expect(resolveAttachmentMime({ type: "application/pdf", name: "x.pdf" })).toBe("application/pdf");
   });
@@ -73,7 +73,7 @@ describe("isAllowedMimeType (type guard used to narrow the send payload)", () =>
       expect(isAllowedMimeType(m)).toBe(true);
     }
   });
-  it("rejects unknown types, including svg (stored-XSS vector — deliberately not allowed)", () => {
+  it("rejects unknown types, including svg (stored-XSS vector, deliberately not allowed)", () => {
     expect(isAllowedMimeType("application/zip")).toBe(false);
     expect(isAllowedMimeType("image/svg+xml")).toBe(false);
     expect(isAllowedMimeType("")).toBe(false);
@@ -105,7 +105,7 @@ describe("allow-list invariants (keeps the 4 layers consistent)", () => {
       expect(ALLOWED_MIME_TYPES).toContain(m);
     }
   });
-  it("does NOT include svg (stored-XSS vector — deliberately not allowed)", () => {
+  it("does NOT include svg (stored-XSS vector, deliberately not allowed)", () => {
     expect(ALLOWED_MIME_TYPES).not.toContain("image/svg+xml");
   });
   it("ATTACHMENT_ACCEPT contains both MIME types and extension tokens", () => {

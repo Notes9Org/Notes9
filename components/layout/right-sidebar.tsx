@@ -20,7 +20,7 @@ import { DefaultChatTransport, type UIMessage } from 'ai';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-// Hover tooltips disabled in the Catalyst chat area (they rendered glitchy —
+// Hover tooltips disabled in the Catalyst chat area (they rendered glitchy
 // user request, 2026-07). No-op stand-ins keep call sites unchanged while
 // never showing hover/focus popups; controls keep their aria-labels.
 type TooltipStubProps = { children?: React.ReactNode; [prop: string]: unknown }
@@ -218,7 +218,7 @@ const FETCHING_PAPER_CHIP_TIMEOUT_MS = 30_000;
 
 /** True for synthetic in-chat notices (e.g. the "upload the PDF" bubble) that are
  *  shown to the user but must NEVER be replayed to the model as a prior assistant
- *  turn — otherwise the model treats a fabricated utterance as its own answer. */
+ *  turn, otherwise the model treats a fabricated utterance as its own answer. */
 function isNoticeMessage(msg: { metadata?: unknown }): boolean {
   return (msg.metadata as { notice?: boolean } | undefined)?.notice === true;
 }
@@ -431,7 +431,7 @@ function sortLiteratureCandidates(
 }
 
 // ---------------------------------------------------------------------------
-// Module-level helpers — pure functions hoisted out of RightSidebar so the
+// Module-level helpers, pure functions hoisted out of RightSidebar so the
 // SidebarChatMessageItem memo'd component can close over them without
 // re-creating its own definition on every parent render.
 // ---------------------------------------------------------------------------
@@ -503,7 +503,7 @@ function sidebarGetMessageContent(message: UIMessage): string {
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// LiteratureSummaryInline — replaces LiteratureSummaryPanel as the render path
+// LiteratureSummaryInline, replaces LiteratureSummaryPanel as the render path
 // for the live literature search AI summary.  Renders with the same ChatMessage
 // component used in the chat so the summary gets [N] chips and the "All
 // citations" panel (C4).  "Continue in Catalyst" button opens the persisted
@@ -550,7 +550,7 @@ function LiteratureSummaryInline({ lit, sessionId, onContinue }: LiteratureSumma
           </h3>
         )}
       </div>
-      {/* Live pipeline progress while the (~2-min) search runs — turns the static
+      {/* Live pipeline progress while the (~2-min) search runs, turns the static
           "composing…" state into a visible step timeline fed by SSE `status` events. */}
       {lit.streaming && (lit.phases?.length ?? 0) > 0 && (
         <ol className="min-w-0 space-y-1">
@@ -589,7 +589,7 @@ function LiteratureSummaryInline({ lit, sessionId, onContinue }: LiteratureSumma
 
 interface SidebarChatMessageItemProps {
   message: UIMessage;
-  /** Pre-extracted plain-text content — stable string for settled messages. */
+  /** Pre-extracted plain-text content, stable string for settled messages. */
   rawContent: string;
   /** Attachment list for this message id (stable Map entry for settled msgs). */
   messageAttachments?: Attachment[];
@@ -651,9 +651,9 @@ const LONG_MESSAGE_COLLAPSED_PX = 480;
 /**
  * Caps very tall completed assistant messages at a fixed height with an inner
  * scroll (wheel on hover reveals the full message) plus a Show more / Show less
- * toggle for full expansion — so one long reply doesn't wall the whole thread.
+ * toggle for full expansion, so one long reply doesn't wall the whole thread.
  * The latest assistant message (including while it streams) always renders
- * fully expanded, and toggling never scrolls the thread — usePinnedAutoScroll
+ * fully expanded, and toggling never scrolls the thread, usePinnedAutoScroll
  * stays the only scroll authority.
  */
 function CollapsibleLongMessage({
@@ -722,7 +722,7 @@ const SidebarChatMessageItem = memo(function SidebarChatMessageItem({
   onRegenerate,
 }: SidebarChatMessageItemProps) {
   // System notices (credit thresholds, "not open access", etc.) are injected as
-  // assistant messages so they land in-thread, but they are NOT AI answers —
+  // assistant messages so they land in-thread, but they are NOT AI answers
   // render them as a calm, contained info/warning strip (no Catalyst avatar, no
   // citation/actions) so they never read as a model response.
   const noticeMeta = (message as {
@@ -746,7 +746,7 @@ const SidebarChatMessageItem = memo(function SidebarChatMessageItem({
       </div>
     );
   }
-  // All derivations are pure functions of rawContent / message — stable for
+  // All derivations are pure functions of rawContent / message, stable for
   // settled messages because rawContent (a string) doesn't change.
   const literatureParsed =
     message.role === 'assistant'
@@ -1061,7 +1061,7 @@ export function RightSidebar({
   // Synchronous mirror of `attachments`: handleSubmit is an async closure that
   // captures the render-time `attachments` snapshot, so after the poll-gate awaits
   // a late-arriving paper it must read this ref (updated in place by onAttach and
-  // on every render) to include the freshly attached PDF — not the stale closure.
+  // on every render) to include the freshly attached PDF, not the stale closure.
   const attachmentsRef = useRef<Attachment[]>([]);
   attachmentsRef.current = attachments;
   const [uploadQueue, setUploadQueue] = useState<string[]>([]);
@@ -1072,7 +1072,7 @@ export function RightSidebar({
   const pendingLiteratureSourcesRef = useRef<AgentLiteratureSource[]>([]);
   // PDF text selection from an Ask-Catalyst launch: shown as a dismissible
   // excerpt strip above the composer and folded into the next send's model
-  // query (state, not ref — the strip renders from it).
+  // query (state, not ref, the strip renders from it).
   const [pendingSelections, setPendingSelections] = useState<Array<{ text: string; title?: string }>>([]);
   // Set when an Ask-Catalyst launch signals a paper attachment is being fetched
   // (launch.expectAttachment); cleared when the attachment lands, a notice fires,
@@ -1083,7 +1083,7 @@ export function RightSidebar({
   // Optimistic spinner chips for Ask-Catalyst papers whose PDF is still being
   // fetched (launch.expectedAttachmentName). Display-only cousins of uploadQueue:
   // rendered in the same chip row, but deliberately SEPARATE state because
-  // uploadQueue's isUploading disables Send — a pending paper must not (the
+  // uploadQueue's isUploading disables Send, a pending paper must not (the
   // abstract literature_source is already attached, so an early send is fine).
   // Cleared when the real attachment lands (matched by name), when a launch
   // without expectAttachment supersedes it (the card's no-PDF fallback re-open),
@@ -1099,7 +1099,7 @@ export function RightSidebar({
   const armPendingAttach = useCallback(() => {
     pendingAttachRef.current = true;
     if (pendingAttachTimerRef.current) clearTimeout(pendingAttachTimerRef.current);
-    // Never block Send forever — if the fetch stalls, release the gate so the user
+    // Never block Send forever, if the fetch stalls, release the gate so the user
     // can still send (falling back to abstract-grounded literature_sources).
     pendingAttachTimerRef.current = setTimeout(() => {
       pendingAttachRef.current = false;
@@ -1147,7 +1147,7 @@ export function RightSidebar({
   // If messages.length === 0 => "New Chat View" (Input at top/center, Past Chats at bottom)
   // If messages.length > 0 => "Active Chat View" (Messages take space, Input at bottom)
 
-  // Stable client reference — without this, every render creates a new client
+  // Stable client reference, without this, every render creates a new client
   // object, and the seven downstream `useEffect`s that depend on `supabase`
   // re-fire on every keystroke (re-subscribing realtime listeners, re-loading
   // sessions, etc.). The memo holds the client for the lifetime of the panel.
@@ -1183,7 +1183,7 @@ export function RightSidebar({
   }, [sessionInternalGranted]);
 
   // ponytail: `options.tags` (legacy annotation, ignored by the backend) is no
-  // longer emitted — tagged records ride top-level `attachments` only.
+  // longer emitted, tagged records ride top-level `attachments` only.
   const buildNotes9StreamOptions = useCallback(
     () => ({
       web_search: webSearchEnabledRef.current ? ('on' as const) : ('off' as const),
@@ -1203,14 +1203,14 @@ export function RightSidebar({
     (tags: Array<{ kind: CatalystMentionKind; id: string; title: string }>) => {
       if (tags.length === 0) return undefined;
       // Reconcile each tag against the LIVE mention list before sending. A tag
-      // can carry a STALE id — a record that was re-imported under a new UUID
-      // (papers commonly get duplicated staging/repository copies) or deleted —
+      // can carry a STALE id, a record that was re-imported under a new UUID
+      // (papers commonly get duplicated staging/repository copies) or deleted
       // when it was persisted in an earlier message/draft. A dead id makes the
       // agent show "Record not found" and then flail. If the live workspace has
       // the same kind + title, remap to the current id; if it's truly gone, drop
       // it with a warning so it never reaches the agent.
       //
-      // GUARD: if the live list hasn't loaded yet, pass tags through unchanged —
+      // GUARD: if the live list hasn't loaded yet, pass tags through unchanged
       // never drop valid tags just because the lookup table is empty.
       if (allMentionItems.length === 0) {
         return tags.map((t) => ({ kind: t.kind, id: t.id, title: t.title }));
@@ -1285,7 +1285,7 @@ export function RightSidebar({
           setInternalDataPermission(v);
         }
       } catch {
-        /* table may not exist yet — keep default 'ask' */
+        /* table may not exist yet, keep default 'ask' */
       }
     };
     void loadPermission();
@@ -1298,7 +1298,7 @@ export function RightSidebar({
     let cancelled = false;
 
     const loadMentionItems = async () => {
-      // Serve from cache if it's fresh — no DB connection used.
+      // Serve from cache if it's fresh, no DB connection used.
       if (mentionItemsCache && Date.now() - mentionItemsCache.fetchedAt < MENTION_ITEMS_TTL_MS) {
         setAllMentionItems(mentionItemsCache.items);
         return;
@@ -1391,7 +1391,7 @@ export function RightSidebar({
   // Chronological anchor for the literature AI-summary panel: the number of chat
   // messages that already existed when the *current* search started. The panel
   // renders after those messages (so it sits below older answers) and before any
-  // later follow-ups (which append after it) — instead of being pinned at the very
+  // later follow-ups (which append after it), instead of being pinned at the very
   // top above stale turns. Re-anchored only when the search query changes (not on
   // every streamed token), read via a ref to avoid a stale-closure capture.
   const messagesLenRef = useRef(0);
@@ -1428,7 +1428,7 @@ export function RightSidebar({
 
   // Signal the layout when a real conversation is underway (or via a streamed
   // literature summary) so the docked Catalyst sidebar can widen for comfortable
-  // reading. Only the docked variant cares — the full page is already wide.
+  // reading. Only the docked variant cares, the full page is already wide.
   const hasConversation = messages.length > 0 || !!literature;
   useEffect(() => {
     if (isPageVariant || typeof window === 'undefined') return;
@@ -1440,7 +1440,7 @@ export function RightSidebar({
   }, [hasConversation, isPageVariant]);
 
   // A literature-search summary arrives via the in-memory bridge and is shown in
-  // a pinned panel — it was never persisted, so these chats never appeared in
+  // a pinned panel, it was never persisted, so these chats never appeared in
   // history. Once a summary finishes streaming, save it as a real session in the
   // UNIFIED Notes9 format (query + formatted assistant markdown with grounding +
   // manifest).  The session kind is 'literature' and carries the compact paper
@@ -1471,7 +1471,7 @@ export function RightSidebar({
         ? { literature: { ...literature.context, summary: summary.slice(0, 6000) } }
         : {};
       // Dedupe against the plain history row the search engine already wrote
-      // on completion (lib/literature-search-engine.ts persistHistory) — reuse
+      // on completion (lib/literature-search-engine.ts persistHistory), reuse
       // it (with dive's richer metadata + real chat messages) instead of
       // inserting a second row for the same query.
       const existing = sessions.find((s) => s.kind === 'literature' && s.title === title);
@@ -1519,7 +1519,7 @@ export function RightSidebar({
   // Answer an inline permission prompt. Allow/Always grant the session so the
   // paused run resumes and reads the private data; Always also persists so
   // Settings reflects it and future sessions skip the prompt. Deny is a one-off
-  // block (nothing persisted) — the agent degrades and may ask again next turn.
+  // block (nothing persisted), the agent degrades and may ask again next turn.
   const handleInternalPermissionDecision = useCallback(
     (decision: 'allow' | 'always' | 'deny') => {
       agentStream.resolvePermission(decision);
@@ -1621,7 +1621,7 @@ export function RightSidebar({
       const composer = inputRef.current;
       // Already tagged (e.g. two "Ask Catalyst" selections from the same paper)?
       // selectedMentions dedupes for the payload, but the visible chip would
-      // double up — skip inserting a second identical pill.
+      // double up, skip inserting a second identical pill.
       if (
         composer?.querySelector(
           `[data-caty-tag-id="${item.id}"][data-caty-tag-kind="${item.kind}"]`,
@@ -1971,8 +1971,8 @@ export function RightSidebar({
         try {
           const p = JSON.parse(unifiedRaw) as CatalystMentionDragPayload;
           // Literature rows imported without metadata store their UUID (or blank)
-          // as the title. Route them through the shared resolver — the same
-          // choke-point the @-mention picker uses — so the chip shows a human
+          // as the title. Route them through the shared resolver, the same
+          // choke-point the @-mention picker uses, so the chip shows a human
           // title, not a UUID, whatever the drag source is. Other kinds keep theirs.
           const title =
             p?.kind === 'literature_review'
@@ -2107,7 +2107,7 @@ export function RightSidebar({
   }, [isPageVariant, messages.length, isLoading, onActiveChange]);
   const isUploading = uploadQueue.length > 0;
 
-  // Smart auto-scroll — only follows when the user is pinned to the bottom.
+  // Smart auto-scroll, only follows when the user is pinned to the bottom.
   // The previous unconditional auto-scroll fought the user any time they
   // tried to read earlier output while a response was still streaming.
   const {
@@ -2145,7 +2145,7 @@ export function RightSidebar({
       formData.append('file', file);
       // Register the upload against the current session so (a) catalyst's
       // read_document tool can fetch it and (b) the 7-day TTL cron reaps it.
-      // First message may not have a session yet — that's fine, the row is
+      // First message may not have a session yet, that's fine, the row is
       // created without a session_id and the file still gets a signed URL.
       const sid = currentSessionRef.current;
       if (sid) formData.append('session_id', sid);
@@ -2155,7 +2155,7 @@ export function RightSidebar({
         throw new Error(data.error || 'Upload failed');
       }
       const data = await response.json();
-      // Uploaded but not registered — the model can read it this turn (signed
+      // Uploaded but not registered, the model can read it this turn (signed
       // URL) but not on later turns. Tell the user instead of failing silently.
       if (data.attachmentWarning) {
         toast.warning(data.attachmentWarning);
@@ -2187,7 +2187,7 @@ export function RightSidebar({
         });
         return false;
       }
-      // Accept by declared MIME OR filename extension — browsers report a blank
+      // Accept by declared MIME OR filename extension, browsers report a blank
       // or generic type for .docx/.xlsx on some OS/browser combos.
       if (!isAcceptedAttachment(file)) {
         toast.error(`${file.name} type not supported`);
@@ -2225,7 +2225,7 @@ export function RightSidebar({
         });
         return false;
       }
-      // Accept by declared MIME OR filename extension — browsers report a blank
+      // Accept by declared MIME OR filename extension, browsers report a blank
       // or generic type for .docx/.xlsx on some OS/browser combos.
       if (!isAcceptedAttachment(file)) {
         toast.error(`${file.name} type not supported`);
@@ -2344,7 +2344,7 @@ export function RightSidebar({
     // If a paper attachment is still being fetched (just pressed "Ask Catalyst"),
     // briefly wait so the first message carries the paper rather than racing ahead
     // without it. pendingAttachRef is cleared when the attachment lands, a notice
-    // fires, or the 8s arm-timeout elapses — and we cap our own wait at 3s.
+    // fires, or the 8s arm-timeout elapses, and we cap our own wait at 3s.
     if (pendingAttachRef.current) {
       await new Promise<void>((resolve) => {
         const started = Date.now();
@@ -2423,7 +2423,7 @@ export function RightSidebar({
       return out;
     })();
 
-    /** Must be read before clearLiteratureEditablePlainText — that call strips typed text from the composer. */
+    /** Must be read before clearLiteratureEditablePlainText, that call strips typed text from the composer. */
     const userLiteratureMarkdownBeforeClear =
       agentMode === 'literature' && isLiteratureRoute && litEl
         ? segmentsToLiteratureMessageMarkdown(getLiteratureSegmentsFromEl(litEl))
@@ -2465,7 +2465,7 @@ export function RightSidebar({
 
     // Back-fill chat_attachments rows for files uploaded before this session
     // existed (first message of a new chat). Gives them the 7-day TTL + makes
-    // them readable by read_document in later turns. Fire-and-forget — the
+    // them readable by read_document in later turns. Fire-and-forget, the
     // signed URL in file_attachments already lets the agent read them this turn.
     {
       const sid = currentSessionRef.current;
@@ -2629,7 +2629,7 @@ export function RightSidebar({
       // Cap at 5 (backend MAX_FILE_ATTACHMENTS_PER_REQUEST). Tell the user when extras
       // are dropped instead of silently truncating.
       if ((attachments ?? []).length > 5) {
-        toast.info(`Catalyst uses up to 5 attachments per message — using the first 5 of ${attachments!.length}.`);
+        toast.info(`Catalyst uses up to 5 attachments per message, using the first 5 of ${attachments!.length}.`);
       }
       const fileAttachments: AgentFileAttachment[] = (attachments ?? [])
         .slice(0, 5) // mirror backend MAX_FILE_ATTACHMENTS_PER_REQUEST
@@ -2642,13 +2642,13 @@ export function RightSidebar({
             : []
         );
       // Literature grounding: prepend the search context (papers + abstracts +
-      // summary) to the MODEL query only — the user's visible message stays the
+      // summary) to the MODEL query only, the user's visible message stays the
       // clean question. Prefer the DURABLE context persisted on the session
       // (metadata.literature) so a reopened/continued literature chat still
       // grounds follow-ups; fall back to the volatile live co-pilot bridge for
       // the window before the session is persisted. Fixes: follow-ups lost the
       // summary because the co-pilot is cleared on session load and
-      // /api/agent/stream never read metadata.literature (endpoint mismatch —
+      // /api/agent/stream never read metadata.literature (endpoint mismatch
       // only the unused /api/chat path read it).
       const activeLitSession = sessions.find((s) => s.id === sessionId);
       const persistedLitCtx =
@@ -2679,7 +2679,7 @@ export function RightSidebar({
         ? `Earlier you gave this literature summary:\n\n${litSummary}\n\n${ctxPreamble}`.trim()
         : ctxPreamble;
       // Fold pending PDF excerpts into the MODEL query only (one-shot, like
-      // litPreamble) — the visible user bubble stays the clean typed question.
+      // litPreamble), the visible user bubble stays the clean typed question.
       const sels = pendingSelections;
       if (sels.length > 0) setPendingSelections([]);
       const selPrefix = sels.length > 0
@@ -2760,7 +2760,7 @@ export function RightSidebar({
     // branch above returns), so this general-chat send is unreachable. Removed to
     // fully decouple the live path from the /api/chat transport.
     } finally {
-      // Always release the in-flight guard so future submits can fire — even
+      // Always release the in-flight guard so future submits can fire, even
       // if an early-return above bailed out, the try/finally ensures release.
       submitInFlightRef.current = false;
     }
@@ -2909,7 +2909,7 @@ export function RightSidebar({
         const parsedEditTags = extractTagItemsFromMarkdown(newContent);
         const requestTags = mergeUniqueTags(selectedMentions, parsedEditTags);
         // Re-send the original uploaded files (not just tags) so an edited request
-        // keeps its attachments — mirrors the fresh-send file_attachments shape.
+        // keeps its attachments, mirrors the fresh-send file_attachments shape.
         const editFileAttachments: AgentFileAttachment[] = editAtts
           .slice(0, 5)
           .flatMap((a) =>
@@ -3373,7 +3373,7 @@ export function RightSidebar({
           parts: [{ type: 'text' as const, text }],
           createdAt: new Date(m.created_at),
           // Preserve metadata so persisted artifacts (metadata.artifacts) survive
-          // a history reload — the previous mapping dropped it.
+          // a history reload, the previous mapping dropped it.
           metadata: (m as { metadata?: Record<string, unknown> }).metadata,
         };
       });
@@ -3485,7 +3485,7 @@ export function RightSidebar({
         // A launch without expectAttachment resolves a pending chip. When it
         // names the paper (the card's no-PDF fallback re-open), clear ONLY that
         // chip so a parallel paper's in-flight chip survives; with no name, it's
-        // a plain panel open — clear all stale chips.
+        // a plain panel open, clear all stale chips.
         const settledName = launch.expectedAttachmentName;
         setFetchingPaperNames((prev) =>
           settledName ? prev.filter((n) => n !== settledName) : [],
@@ -3498,7 +3498,7 @@ export function RightSidebar({
         loadSession(launch.sessionId);
       }
       // "Ask Catalyst" carries the paper's abstract as a citable literature_source
-      // for the next send — attached at panel-open so a send that beats the PDF
+      // for the next send, attached at panel-open so a send that beats the PDF
       // fetch is still grounded. MERGE (like the attach event), don't replace:
       // opening the panel for paper B must not drop paper A's pending source.
       if (launch.literatureSources && launch.literatureSources.length > 0) {
@@ -3511,7 +3511,7 @@ export function RightSidebar({
       if (q) {
         setInput(q);
         // The composer is a contentEditable <div>, not a controlled input, so
-        // we also have to seed its textContent — otherwise React state and
+        // we also have to seed its textContent, otherwise React state and
         // character count update but the visible field stays empty.
         requestAnimationFrame(() => {
           if (inputRef.current) {
@@ -3527,7 +3527,7 @@ export function RightSidebar({
           inputRef.current?.focus();
           resizeInput();
           // The prompt arrived from an external composer where the user already
-          // hit Send — submit it now (using the latest handleSubmit, which sees
+          // hit Send, submit it now (using the latest handleSubmit, which sees
           // the just-seeded input) so they don't have to click Send again.
           if (launch.autoSend) {
             handleSubmitRef.current?.({
@@ -3537,7 +3537,7 @@ export function RightSidebar({
         });
       }
       if (launch.literatureMention) {
-        // "Ask Catalyst" on a saved/staged paper attaches it as an @-mention TAG —
+        // "Ask Catalyst" on a saved/staged paper attaches it as an @-mention TAG
         // the same representation as dragging it in from the library, so every
         // entry point behaves identically (appendMentionToInput also updates
         // selectedMentions, the agent's source of truth).
@@ -3631,7 +3631,7 @@ export function RightSidebar({
       autoSend: pendingLaunch.autoSend,
       sessionId: pendingLaunch.sessionId,
       // Ask-Catalyst always launches with the panel CLOSED, so every launch
-      // reaches applyCatalystLaunch through here — dropping these two fields
+      // reaches applyCatalystLaunch through here, dropping these two fields
       // silently disabled the send-gate and the optimistic paper chip.
       expectAttachment: pendingLaunch.expectAttachment,
       expectedAttachmentName: pendingLaunch.expectedAttachmentName,
@@ -3687,7 +3687,7 @@ export function RightSidebar({
       // handleSubmit resolves against up-to-date attachments.
       clearPendingAttach();
     };
-    // Post a system notice as an assistant bubble in the chat — used to tell the
+    // Post a system notice as an assistant bubble in the chat, used to tell the
     // user, in the conversation, that a paper isn't open-access or its PDF couldn't
     // be read and they should upload it. Also releases the Send gate.
     const onNotice = (e: Event) => {
@@ -3855,7 +3855,7 @@ export function RightSidebar({
         <div className="min-w-0 flex-1 leading-snug">
           <span className="font-medium text-foreground">Co-pilot is reading your search</span>
           <span className="text-muted-foreground">
-            {' '}— “{coPilot.query}” · {coPilot.papers.length} paper
+            {' '}- “{coPilot.query}” · {coPilot.papers.length} paper
             {coPilot.papers.length === 1 ? '' : 's'}. Ask about any paper or the research area.
           </span>
         </div>
@@ -3881,7 +3881,7 @@ export function RightSidebar({
       >
         {/* PDF excerpt from "Ask Catalyst" on a text selection: compact
             Cursor-style reference chip (source + snippet on one line, full
-            excerpt on hover, X to remove) — never raw text in the input; folded
+            excerpt on hover, X to remove), never raw text in the input; folded
             into the next send's model query in handleSubmit. */}
         {pendingSelections.length > 0 && (
           <div className="flex flex-wrap gap-1.5 px-3 pt-2 pb-0.5">
@@ -3928,7 +3928,7 @@ export function RightSidebar({
         {(attachments.length > 0 || uploadQueue.length > 0 || fetchingPaperNames.length > 0) && (
           <div className="flex flex-wrap gap-1.5 px-3 pt-2 pb-0.5">
             {attachments.map((a) => {
-              // Key on the stable `paperKey` — same identity the insert-dedupe
+              // Key on the stable `paperKey`, same identity the insert-dedupe
               // uses. The signed `url` rotates on every "Ask Catalyst" press, so
               // keying on it makes React reuse the wrong chip and removal filter
               // the wrong entry.
@@ -3958,7 +3958,7 @@ export function RightSidebar({
               />
             ))}
             {/* Ask-Catalyst papers whose PDF is still being fetched: same spinner
-                chip as an upload, but display-only — never blocks Send and never
+                chip as an upload, but display-only, never blocks Send and never
                 enters the message payload (swapped for the real attachment on
                 arrival, matched by name). */}
             {fetchingPaperNames
@@ -4025,7 +4025,7 @@ export function RightSidebar({
 
         <div className="mt-1 flex min-h-9 items-center justify-between gap-2 px-4 pb-2">
           <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-1.5 overflow-x-auto">
-            {/* Attach — anchored bottom-left (Claude-style leading action) */}
+            {/* Attach, anchored bottom-left (Claude-style leading action) */}
             <TooltipProvider delayDuration={400}>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -4078,8 +4078,8 @@ export function RightSidebar({
                   </TooltipTrigger>
                   <TooltipContent side="top" className="text-xs">
                     {webSearchEnabled
-                      ? 'Web search on — agent may search the web for this reply'
-                      : 'Web search off — lab data and documents only'}
+                      ? 'Web search on, agent may search the web for this reply'
+                      : 'Web search off, lab data and documents only'}
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -4088,7 +4088,7 @@ export function RightSidebar({
 
           <div className="flex h-9 shrink-0 items-center justify-end gap-0.5">
             {/* mic + waveform: flex-row-reverse keeps mic anchored to the right while
-                waveform grows to the LEFT — the mic button never shifts position */}
+                waveform grows to the LEFT, the mic button never shifts position */}
             <div className="inline-flex flex-row-reverse items-center gap-1">
               <TooltipProvider delayDuration={400}>
                 <Tooltip>
@@ -4152,13 +4152,13 @@ export function RightSidebar({
       </div>
     </div>
     <p className="mt-1.5 text-center text-2xs text-muted-foreground/50 select-none">
-      Catalyst can make mistakes — verify important information and cited sources.
+      Catalyst can make mistakes, verify important information and cited sources.
     </p>
     </>
     );
   };
 
-  /** Format session time: always 2 chars — "0m".."9m", "1h".."9h", "1d".."9d" (cap at 9 for h/d). */
+  /** Format session time: always 2 chars, "0m".."9m", "1h".."9h", "1d".."9d" (cap at 9 for h/d). */
   const formatSessionTime = (updatedAt: string): string => {
     const date = new Date(updatedAt);
     const now = new Date();
@@ -4393,7 +4393,7 @@ export function RightSidebar({
     return { folders: shownFolders, byFolder, ungrouped, query: q };
   }, [orderedSessions, folders, foldersAvailable, historyQuery]);
 
-  // One history row — supports selection checkboxes, inline rename, pin glyph,
+  // One history row, supports selection checkboxes, inline rename, pin glyph,
   // and the ⋯ actions menu.
   const renderAsideRow = (session: ChatSession) => {
     const isActive = currentSessionId === session.id;
@@ -4681,7 +4681,7 @@ export function RightSidebar({
                   </Button>
                 </>
               )}
-              {/* Resize toggle — single fixed slot; only the glyph + handler change
+              {/* Resize toggle, single fixed slot; only the glyph + handler change
                   by mode, so it never appears to move. */}
               {isPageVariant ? (
                 <Button
@@ -4776,7 +4776,7 @@ export function RightSidebar({
                   className="n9-grain m-2 flex h-[calc(100%-1rem)] min-h-0 flex-col gap-1 rounded-2xl border border-[color:var(--glass-border)] bg-sidebar/80 p-2 shadow-[0_10px_34px_-18px_rgba(20,14,8,0.4)] backdrop-blur-md dark:bg-sidebar/60 dark:shadow-[0_12px_38px_-16px_rgba(0,0,0,0.6)]"
                   style={{ width: historySidebar.width - 16 }}
                 >
-                  {/* Header row — close button + "Chats" label on the top-left,
+                  {/* Header row, close button + "Chats" label on the top-left,
                       new chat on the right. */}
                   <div className="flex h-8 shrink-0 items-center gap-1 rounded-md px-1 text-xs font-medium text-sidebar-foreground/70">
                     <Button
@@ -4831,7 +4831,7 @@ export function RightSidebar({
                       </>
                     )}
                   </div>
-                  {/* Search chats — shared rail search (compact, swells while typing) */}
+                  {/* Search chats, shared rail search (compact, swells while typing) */}
                   <SideRailSearch
                     value={historyQuery}
                     onChange={setHistoryQuery}
@@ -4927,7 +4927,7 @@ export function RightSidebar({
                                   {items.length > 0 ? (
                                     items.map(renderAsideRow)
                                   ) : (
-                                    <div className="px-3 py-1.5 text-2xs text-sidebar-foreground/45">Empty — move chats here</div>
+                                    <div className="px-3 py-1.5 text-2xs text-sidebar-foreground/45">Empty, move chats here</div>
                                   )}
                                 </MotionList>
                               )}
@@ -5006,7 +5006,7 @@ export function RightSidebar({
 
             {/* Main chat area (narrow: only this; full screen: right side) */}
             <div className="relative flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
-              {/* Floating "show chat history" button — appears only when the
+              {/* Floating "show chat history" button, appears only when the
                   history panel is collapsed (no rail), at the same vertical spot
                   as the "Chats" header so reopening feels anchored. */}
               {layoutExpanded && !expandedHistoryOpen && (
@@ -5075,7 +5075,7 @@ export function RightSidebar({
               ) : (
                 // --- Active Chat View ---
                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden relative">
-                  {/* Messages Area — native scroll so we can detect position (ScrollArea viewport is not exposed).
+                  {/* Messages Area, native scroll so we can detect position (ScrollArea viewport is not exposed).
                       h-0 + flex-1 avoids nested-flex collapse where this region gets 0 height and transcripts are
                       clipped while the composer still renders (see catalyst / flex scroll patterns). */}
                   <div
@@ -5308,7 +5308,7 @@ export function RightSidebar({
                     </div>
                   </div>
 
-                  {/* Fixed Input at Bottom — scroll-to-latest floats centered above, no full-width strip */}
+                  {/* Fixed Input at Bottom, scroll-to-latest floats centered above, no full-width strip */}
                   <div className="relative flex-shrink-0 z-20">
                     {chatShowJumpBottom ? (
                       <Button

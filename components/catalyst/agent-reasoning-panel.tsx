@@ -15,7 +15,7 @@ interface AgentReasoningPanelProps {
  * Claude-Code-style "Thinking" disclosure. While the agent streams it shows the
  * live reasoning (auto-scrolled, expanded); once the turn settles it collapses
  * to a quiet toggle so the answer stays the focus. Renders nothing when there's
- * no reasoning. The reasoning is the model's pre-tool narration — kept OUT of
+ * no reasoning. The reasoning is the model's pre-tool narration, kept OUT of
  * the answer bubble on purpose.
  */
 export function AgentReasoningPanel({ reasoning, streaming }: AgentReasoningPanelProps) {

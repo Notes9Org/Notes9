@@ -116,7 +116,7 @@ function titleHasPlaceholders(title: string): boolean {
 
 /**
  * Human label for a mention whose target entity no longer exists. Rendering
- * the raw UUID confuses users — show a clear "(deleted X)" hint instead.
+ * the raw UUID confuses users, show a clear "(deleted X)" hint instead.
  */
 function fallbackMentionLabel(kind: "experiment" | "project"): string {
   return `(deleted ${kind})`;

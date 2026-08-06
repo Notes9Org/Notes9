@@ -44,14 +44,14 @@ export type CatalystLaunchDetail = {
   projectId?: string
   attachments?: CatalystLaunchAttachment[]
   /** Transient papers (title + abstract + ids) to ground + inline-cite without a
-   *  file attachment — e.g. a CLOSED-access paper's abstract on "Ask Catalyst".
+   *  file attachment, e.g. a CLOSED-access paper's abstract on "Ask Catalyst".
    *  The sidebar forwards these as agent `literature_sources` on the next send. */
   literatureSources?: CatalystLaunchLiteratureSource[]
   webSearch?: boolean
   /** When true, the sidebar submits the query immediately instead of only
-   *  pre-filling its composer — i.e. the user already clicked Send. */
+   *  pre-filling its composer, i.e. the user already clicked Send. */
   autoSend?: boolean
-  /** Continue an existing conversation — used when minimizing the full Catalyst
+  /** Continue an existing conversation, used when minimizing the full Catalyst
    *  page back into the docked sidebar so the session carries over. */
   sessionId?: string
   /** Signals that a paper attachment is being fetched and will arrive shortly via
@@ -60,13 +60,13 @@ export type CatalystLaunchDetail = {
   expectAttachment?: boolean
   /** Display name for the attachment announced by {@link expectAttachment}. When
    *  set, the sidebar shows an optimistic spinner chip (like an in-flight upload)
-   *  until the real attachment arrives, fails, or times out — it never blocks
+   *  until the real attachment arrives, fails, or times out, it never blocks
    *  Send and is never included in a message payload. */
   expectedAttachmentName?: string
   /** Force docking into the side panel even when currently on `/catalyst`
    *  (otherwise opening from `/catalyst` just re-seeds the full page). */
   dock?: boolean
-  /** Durable `literature_reviews` row to attach as an @-mention tag — the
+  /** Durable `literature_reviews` row to attach as an @-mention tag, the
    *  canonical way to attach a SAVED/STAGED paper, identical to dragging it in
    *  from the library. The agent resolves the id to the row's metadata + imported
    *  full text, so no file attachment is needed. Unsaved search results (no id)
@@ -114,7 +114,7 @@ export function openCatalystPanel(detail: CatalystLaunchDetail = {}) {
 export type CatalystAttachDetail = {
   attachments: CatalystLaunchAttachment[]
   /** Durable citable sources to fold into the next (and later) sends alongside the
-   *  attachment — e.g. the attached paper's own metadata + abstract, so follow-ups
+   *  attachment, e.g. the attached paper's own metadata + abstract, so follow-ups
    *  keep grounding on it after the transient file chip is cleared. */
   literatureSources?: CatalystLaunchLiteratureSource[]
 }
@@ -125,7 +125,7 @@ export const CATALYST_ATTACH_EVENT = "notes9:catalyst-attach"
  * Append attachments to the already-open Catalyst composer. Dispatched
  * immediately after the paper is fetched (the fly flourish is purely cosmetic),
  * so the attachment lands in composer state right away rather than waiting for
- * the ~1.4s animation — which would let the user Send before the paper attaches.
+ * the ~1.4s animation, which would let the user Send before the paper attaches.
  * Optionally carries durable `literatureSources` so the paper stays citable on
  * follow-up turns after the file chip is cleared.
  */
@@ -150,7 +150,7 @@ export type CatalystNoticeDetail = {
 export const CATALYST_NOTICE_EVENT = "notes9:catalyst-notice"
 
 /**
- * Post a system notice into the open Catalyst chat — used to tell the user, in
+ * Post a system notice into the open Catalyst chat, used to tell the user, in
  * the conversation itself, that a paper isn't open-access or its PDF couldn't be
  * read and they should upload the document. Pairs with a toast for visibility.
  */
@@ -165,7 +165,7 @@ export type AttachPaperOptions = {
   scope?: CatalystSectionScope
   /** Display URL for the abstract-only literature_source (source page / DOI link). */
   sourceUrl?: string | null
-  /** Already-imported PDF for a saved/staged `literature_reviews` row — skips the
+  /** Already-imported PDF for a saved/staged `literature_reviews` row, skips the
    *  ephemeral OA fetch and attaches the durable viewer-pdf route directly. */
   savedPdf?: { id: string; storagePath: string } | null
   /** Durable `literature_reviews` id when the paper is saved/staged. When present
@@ -195,7 +195,7 @@ function litSourceFor(paper: SearchPaper, sourceUrl?: string | null): CatalystLa
  * result card, staged/saved paper reader). Always attaches the abstract as a
  * citable `literature_source` up front, then resolves the best-available PDF:
  * an already-imported one (`savedPdf`) if present, else an ephemeral open-access
- * fetch — falling back to web search + the abstract on failure. Web search
+ * fetch, falling back to web search + the abstract on failure. Web search
  * defaults off and only flips on when no full text is attachable, and Send is
  * gated (`expectAttachment`) until the attachment lands or fails.
  */
@@ -211,7 +211,7 @@ export async function attachPaperToCatalyst(
   const title = paper.title?.trim() || "paper"
 
   // Canonical path: a paper that lives in the library/staging (has a durable
-  // `literature_reviews` id) is attached as an @-mention TAG — the exact same
+  // `literature_reviews` id) is attached as an @-mention TAG, the exact same
   // representation as dragging it in from the library. The agent resolves the id
   // to the row's metadata + imported full text, so no transient file attachment
   // is needed. Only unsaved search results (no id) fall through to the ephemeral
@@ -239,7 +239,7 @@ export async function attachPaperToCatalyst(
     expectedAttachmentName: expectedName,
   })
 
-  // No durable id (unsaved search result) — fetch an ephemeral open-access PDF.
+  // No durable id (unsaved search result), fetch an ephemeral open-access PDF.
   const key = paperIdentityKey(paper)
 
   console.log(
@@ -262,7 +262,7 @@ export async function attachPaperToCatalyst(
             // Must equal expectedName (the spinner-chip name) so the real
             // attachment replaces the optimistic chip rather than duplicating it.
             // ponytail: name-match keys on the 80-char title prefix; two papers
-            // sharing that prefix would collide — switch to paperKey if it bites.
+            // sharing that prefix would collide, switch to paperKey if it bites.
             name: expectedName,
             contentType: "application/pdf",
             paperKey: key,
@@ -293,7 +293,7 @@ export async function attachPaperToCatalyst(
       : "This paper isn’t open access"
     toast.info(
       abstract
-        ? `${reasonLead} — Catalyst will read and cite the abstract. Upload the PDF for full-text analysis.`
+        ? `${reasonLead}, Catalyst will read and cite the abstract. Upload the PDF for full-text analysis.`
         : `${reasonLead}. Catalyst will use web search; upload the PDF for full-text analysis.`,
     )
   } catch {

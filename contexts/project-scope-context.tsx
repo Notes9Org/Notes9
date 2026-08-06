@@ -43,7 +43,7 @@ export type ProjectScope = {
   /**
    * Experiment the user explicitly pinned from the sidebar switcher (or by
    * opening its page). Unlike the display-only persisted id, the pin IS
-   * carried into scoped nav links — it's an explicit, visible, one-click-
+   * carried into scoped nav links, it's an explicit, visible, one-click-
    * clearable choice, so the leftover-URL bug liveExperimentId guards
    * against doesn't apply.
    */
@@ -62,7 +62,7 @@ export type ProjectScope = {
 const ProjectScopeContext = createContext<ProjectScope | null>(null)
 
 const ENTITY_PATH_RE =
-  /^\/(projects|experiments|lab-notes|protocols|samples|data|reports|equipment|papers|literature-reviews)\/([^/?#]+)/
+  /^\/(projects|experiments|lab-notes|protocols|samples|data|analysis|reports|equipment|papers|literature-reviews)\/([^/?#]+)/
 
 /**
  * Reads `?project=<id>` and `?experiment=<id>` from the URL and resolves names
@@ -77,7 +77,7 @@ export function ProjectScopeProvider({ children }: { children: ReactNode }) {
   const queryExperimentId =
     rawExperiment && isLikelyUuid(rawExperiment) ? rawExperiment : null
 
-  // localStorage is undefined during SSR — short-circuit on the server so the
+  // localStorage is undefined during SSR, short-circuit on the server so the
   // initializer never throws (this runs on every server render). The catch then
   // only guards real client-side failures (private mode / quota), which stay
   // silent by design: a missing key is an expected first-visit state, not an error.
@@ -255,7 +255,7 @@ export function ProjectScopeProvider({ children }: { children: ReactNode }) {
         return
       }
       // A pinned/persisted experiment from another project must never survive
-      // a project switch — otherwise pathToResolve would resolve the old
+      // a project switch, otherwise pathToResolve would resolve the old
       // experiment and drag the previous project's scope right back in.
       try {
         localStorage.removeItem("n9_last_experiment_id")

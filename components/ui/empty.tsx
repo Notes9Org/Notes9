@@ -63,7 +63,7 @@ function EmptyTitle({ className, ...props }: React.ComponentProps<'div'>) {
     <div
       data-slot="empty-title"
       className={cn(
-        // Editorial display face — every empty state in the product flows
+        // Editorial display face, every empty state in the product flows
         // through here, so the display serif (Source Serif 4) lands consistently.
         'font-display text-xl font-medium tracking-tight',
         className,

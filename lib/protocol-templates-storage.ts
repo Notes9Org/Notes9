@@ -4,7 +4,7 @@ import { LITERATURE_STORAGE_BUCKET } from "@/types/literature-pdf"
 
 /**
  * Same Supabase Storage bucket as literature PDFs (`user`).
- * Object keys: `{organization_id}/protocol/{template_id}/...` — mirrors the literature pattern
+ * Object keys: `{organization_id}/protocol/{template_id}/...`, mirrors the literature pattern
  * `{user_id}/literature/{record_id}/...` but uses org as the first segment so all org members can read/write
  * per policies in scripts/041_protocol_templates_user_bucket.sql.
  */

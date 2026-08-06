@@ -9,7 +9,7 @@ const API_BASE = process.env.CHAT_API_URL || '';
 /** Use server proxy to avoid CORS when calling from browser. */
 const AGENT_PROXY = '/api/agent/run';
 
-/** POST /notes9 — same top-level keys as chat plus agent fields. */
+/** POST /notes9, same top-level keys as chat plus agent fields. */
 export interface AgentResponse {
   role: string;
   content: string;

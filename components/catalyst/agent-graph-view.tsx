@@ -4,7 +4,7 @@
  * AgentGraphView
  *
  * Renders a real relationship graph from the `graph` SSE event (full node+edge
- * lists from map_relationships) as an interactive-feeling dagre/SVG layout —
+ * lists from map_relationships) as an interactive-feeling dagre/SVG layout
  * the high-fidelity replacement for the model hand-drawing an overlapping PNG.
  *
  * Distinct from AgentRelationshipGraph (which reconstructs an APPROXIMATE
@@ -81,7 +81,7 @@ function layout(graph: AgentGraph): Laid {
 }
 
 export function AgentGraphView({ graph, className }: { graph: AgentGraph; className?: string }) {
-  // <marker id> is document-scoped — namespace per instance so two graphs on a
+  // <marker id> is document-scoped, namespace per instance so two graphs on a
   // page don't steal each other's arrowheads.
   const ns = useId().replace(/:/g, '');
   const laid = useMemo(() => {

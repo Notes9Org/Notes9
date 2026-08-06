@@ -18,7 +18,7 @@ export function createHealthCheckHandler() {
     const url = request.url ?? "";
 
     if (url !== "/health" || request.method !== "GET") {
-      // Not a health check request — let Hocuspocus handle it
+      // Not a health check request, let Hocuspocus handle it
       return;
     }
 
@@ -52,7 +52,7 @@ export function createHealthCheckHandler() {
     // Throw a FALSY value to suppress the Hocuspocus default response handler.
     // Hocuspocus's requestHandler only re-throws truthy errors (`if (error) throw error`);
     // a falsy throw signals "handled, stop processing" without surfacing an error.
-    // This must stay falsy — throwing a real Error here would be re-thrown by
+    // This must stay falsy, throwing a real Error here would be re-thrown by
     // Hocuspocus and crash the request handler. The 200/503 response has already
     // been written above, so there is nothing left to report to error trackers.
     // eslint-disable-next-line no-throw-literal

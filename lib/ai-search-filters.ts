@@ -73,7 +73,7 @@ export function countActiveFilters(f: AiResultFilters): number {
   return n
 }
 
-/** Distinct journals in the result set, most frequent first — drives the
+/** Distinct journals in the result set, most frequent first, drives the
  *  Journal/Source filter options (grounded in the actual results, not hardcoded). */
 export function journalOptions(results: AiSearchResult[]): string[] {
   const counts = new Map<string, number>()
@@ -86,7 +86,7 @@ export function journalOptions(results: AiSearchResult[]): string[] {
 }
 
 /** Min/max publication year present in the result set (null when none have a
- *  year) — used to ground the year-range inputs in the real data. */
+ *  year), used to ground the year-range inputs in the real data. */
 export function yearBounds(results: AiSearchResult[]): { min: number; max: number } | null {
   const years = results.map((r) => r.paper?.year).filter((y): y is number => typeof y === "number" && y > 0)
   if (years.length === 0) return null
@@ -95,7 +95,7 @@ export function yearBounds(results: AiSearchResult[]): { min: number; max: numbe
 
 /**
  * Filter + sort AI results. Year / citation filters only exclude results that
- * HAVE that metadata and fall out of range — AI-cited results lacking metadata
+ * HAVE that metadata and fall out of range, AI-cited results lacking metadata
  * are kept (so a relevant citation is never silently dropped), except the
  * open-access filter which requires a confirmable OA/PDF.
  */

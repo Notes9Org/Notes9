@@ -3,12 +3,12 @@ import { getCurrentUser } from '@/lib/auth/current-user'
 import { tryCatalystBaseUrl } from '@/lib/catalyst-client'
 
 /**
- * Free-tier usage summary — proxies the catalyst backend `GET /usage/summary`.
+ * Free-tier usage summary, proxies the catalyst backend `GET /usage/summary`.
  *
  * Backs the Settings → Usage panel: literature searches used this ISO week
  * (of 20) and AI credits used this calendar month (of 100 free credits, each
  * worth $0.10 retail / $0.05 real AI cost). The backend reads two durable
- * single-row counters (short in-process cache) — cheap by design.
+ * single-row counters (short in-process cache), cheap by design.
  */
 
 export const dynamic = 'force-dynamic'

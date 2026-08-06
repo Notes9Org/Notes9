@@ -88,6 +88,13 @@ export type WorkbookSnapshot = {
   styles: Record<string, unknown>
   sheetOrder: string[]
   sheets: Record<string, unknown>
+  /**
+   * Univer plugin state (conditional formatting, data validation, filters,
+   * notes, threaded comments, hyperlinks, floating images/drawings, defined
+   * names, …) is serialized here as `[{ name, data }]`. Must survive
+   * normalization or those features silently vanish on the next load.
+   */
+  resources?: Array<{ name: string; data: string }>
 }
 
 export function buildDefaultWorkbook(fileName?: string): WorkbookSnapshot {
@@ -215,6 +222,10 @@ export function normalizeWorkbookSnapshot(workbook: any, fileName?: string): Wor
     styles: workbook.styles && typeof workbook.styles === "object" ? workbook.styles : {},
     sheetOrder: normalizedOrder,
     sheets: normalizedSheets,
+    // Preserve plugin resources (conditional formatting, data validation,
+    // filters, notes, comments, hyperlinks, drawings, defined names) so those
+    // features round-trip through save → DB → reload.
+    ...(Array.isArray(workbook.resources) ? { resources: workbook.resources } : {}),
   }
 }
 
@@ -260,7 +271,7 @@ let embedWheelIsolationHandler: ((e: WheelEvent) => void) | null = null
 
 /**
  * TipTap embeds: the grid is mostly a canvas (no native overflow scroll), so wheel "defaults"
- * can scroll the **editor** instead — especially at the top/bottom edge (scroll chaining).
+ * can scroll the **editor** instead, especially at the top/bottom edge (scroll chaining).
  *
  * One `document` listener in the **bubble** phase runs after Univer's handlers on the canvas,
  * then `preventDefault()` cancels only the browser default (parent scroll), without synthetic

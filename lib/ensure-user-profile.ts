@@ -1,12 +1,53 @@
 import "server-only"
 
 import { cache } from "react"
+import { after } from "next/server"
 import type { User } from "@supabase/supabase-js"
 import { createClient } from "@/lib/supabase/server"
+import { createServiceRoleClient } from "@/lib/supabase-service-role"
+import { seedStarterContentOnce } from "@/lib/onboarding/seed-starter-content"
 
 type EnsureResult =
   | { ok: true; profile: { id: string; organization_id: string; first_name: string | null; last_name: string | null } }
   | { ok: false; reason: string }
+
+// Warm-instance cache of users we've already confirmed seeded, to avoid a
+// post-response DB read on every page load for long-standing users.
+const seededThisInstance = new Set<string>()
+
+/**
+ * Safety net for starter content, run AFTER the response is sent (so it never
+ * delays the first page, e.g. the auto-run literature search).
+ *
+ * The common path is `seedStarterContentAction`, fired the moment the welcome
+ * wizard completes, because the demo pack is chosen from the research field the
+ * wizard collects. This path exists for users who never finish the wizard:
+ * `seedStarterContentOnce` returns "waiting-for-answers" while the wizard is
+ * still in flight and only falls back to the generic pack after a grace period.
+ */
+function scheduleDemoSeed(userId: string, organizationId: string): void {
+  if (seededThisInstance.has(userId)) return
+  try {
+    after(async () => {
+      try {
+        const outcome = await seedStarterContentOnce(
+          createServiceRoleClient(),
+          userId,
+          organizationId
+        )
+        // Only stop re-checking once the question is settled, a user still
+        // inside the wizard must be re-evaluated on their next page load.
+        if (outcome === "seeded" || outcome === "already-seeded") {
+          seededThisInstance.add(userId)
+        }
+      } catch (err) {
+        console.error("[ensureUserProfile] demo seed skipped:", err)
+      }
+    })
+  } catch {
+    // after() unavailable outside a request scope, skip.
+  }
+}
 
 /**
  * Idempotently guarantees that an authenticated user has a `profiles` row and
@@ -18,8 +59,8 @@ type EnsureResult =
  * returns a reason string suitable for logging; downstream UI should fall
  * back to an empty-workspace state.
  *
- * Wrapped in React `cache()` — same dedup technique as `requireUser()` in
- * lib/auth/current-user.ts — so every page in a request that needs
+ * Wrapped in React `cache()`, same dedup technique as `requireUser()` in
+ * lib/auth/current-user.ts, so every page in a request that needs
  * `organization_id` can call this instead of re-querying `profiles`
  * independently; within one render pass they share the same result as long
  * as they're called with the same (cached) `user` object.
@@ -37,6 +78,7 @@ export const ensureUserProfile = cache(async (user: User): Promise<EnsureResult>
     .maybeSingle()
 
   if (existing.data?.organization_id) {
+    scheduleDemoSeed(existing.data.id as string, existing.data.organization_id as string)
     return {
       ok: true,
       profile: {
@@ -85,7 +127,7 @@ export const ensureUserProfile = cache(async (user: User): Promise<EnsureResult>
       .select("id")
       .single()
     if (insertOrg.error) {
-      // Concurrent bootstrap (duplicate email) — refetch.
+      // Concurrent bootstrap (duplicate email), refetch.
       if (insertOrg.error.code === "23505" || insertOrg.error.message?.includes("duplicate")) {
         const dup = await supabase
           .from("organizations")
@@ -132,6 +174,7 @@ export const ensureUserProfile = cache(async (user: User): Promise<EnsureResult>
     return { ok: false, reason: "profile still missing after create" }
   }
 
+  scheduleDemoSeed(retry.data.id as string, retry.data.organization_id as string)
   return {
     ok: true,
     profile: {

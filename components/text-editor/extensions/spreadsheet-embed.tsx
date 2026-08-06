@@ -194,7 +194,7 @@ function SpreadsheetEmbedView({ node, updateAttributes }: { node: any; updateAtt
             className="flex items-center justify-center text-xs text-muted-foreground"
             style={{ minHeight: EMBED_PLACEHOLDER_MIN_H }}
           >
-            Spreadsheet open in fullscreen — press Esc or minimize to return
+            Spreadsheet open in fullscreen, press Esc or minimize to return
           </div>
         ) : (
           sheetPanel

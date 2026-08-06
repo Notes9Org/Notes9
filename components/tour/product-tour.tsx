@@ -16,7 +16,7 @@ export type TourStep = {
   body: string
   /** Preferred placement of the tooltip relative to the target. */
   side?: TourSide
-  /** Fired right before the step is shown — e.g. to open a panel that contains
+  /** Fired right before the step is shown, e.g. to open a panel that contains
    *  the target. Runs even if the target is ultimately not found. */
   onBeforeStep?: () => void
   /** Invite the user to click the highlighted element themselves (adds a pulse

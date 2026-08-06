@@ -21,41 +21,23 @@ import {
  */
 const UNIVER_COMMAND_TYPE_MUTATION = 2
 
-/** Dark-mode color palette for Univer: grays are inverted, white/black swapped. */
-function buildDarkUniverTheme(base: Record<string, unknown>): Record<string, unknown> {
-  return {
-    ...base,
-    white: "#1C1D22",   // cell / panel background
-    black: "#E4E6EF",   // primary text
-    gray: {
-      50:  "#2A2B30",
-      100: "#323440",
-      200: "#3C3F4D",
-      300: "#8B92A5",
-      400: "#9198AD",
-      500: "#A4AAB8",
-      600: "#C4C8D4",
-      700: "#D4D7E2",
-      800: "#E0E2EC",
-      900: "#EBEDF5",
-    },
-  }
-}
-
-/** React hook: true when the `dark` class is present on <html>. */
-function useIsDark(): boolean {
-  const [isDark, setIsDark] = useState(
-    () => typeof document !== "undefined" && document.documentElement.classList.contains("dark")
-  )
-  useEffect(() => {
-    const check = () => setIsDark(document.documentElement.classList.contains("dark"))
-    check()
-    const observer = new MutationObserver(check)
-    observer.observe(document.documentElement, { attributeFilter: ["class"] })
-    return () => observer.disconnect()
-  }, [])
-  return isDark
-}
+/**
+ * The spreadsheet grid stays light in both themes, deliberately.
+ *
+ * Univer was previously given an inverted palette in dark mode (cells at
+ * #1C1D22, text at #E4E6EF). In practice that was close to unreadable: the
+ * grid lines, the cell fills and the surrounding app chrome all collapsed into
+ * the same near-black, and any cell styling authored against a light background
+ * (which is what users actually author, and what imported .xlsx files carry)
+ * lost its contrast entirely.
+ *
+ * A light canvas inside a dark shell is the norm for document surfaces, the
+ * page in a word processor, the artboard in a design tool, and for a lab
+ * notebook it carries the right metaphor besides. It also fixes a latent bug:
+ * `isDark` was excluded from the mount effect's deps to avoid destroying
+ * unsaved edits on every theme toggle, so the grid's theme silently lagged the
+ * rest of the UI until the next remount anyway.
+ */
 
 function canonicalEncodedFromProp(enc: string, fileName?: string): string | null {
   try {
@@ -88,13 +70,33 @@ export type UniverWorkbookViewProps = {
   onPersistSnapshot?: (snapshot: Record<string, unknown>) => void
   readOnly?: boolean
   /**
-   * `embed` — compact sheet (notes). `workspace` — full ribbon (Start / Formulas / …), toolbars, closer to desktop Excel.
+   * `embed`, compact sheet (notes). `workspace`, full ribbon (Start / Formulas / …), toolbars, closer to desktop Excel.
    */
   variant?: "embed" | "workspace"
+  /**
+   * Chromeless grid: hides the toolbar / formula bar / status footer, leaving a
+   * clean sheet (column & row headers + cells). Right-click menu stays. Use for
+   * narrow rails where the full ribbon is too heavy. Opt-in; defaults off.
+   */
+  compact?: boolean
   /** Outer scroll boundary height */
   heightClass?: string
   /** Changes remount Univer instance */
   instanceKey?: string | number
+  /** Fires when the active cell/selection changes (for wiring cells → chart). */
+  onSelectionChange?: (sel: SheetSelection | null) => void
+}
+
+/** The active sheet selection surfaced to callers. */
+export type SheetSelection = {
+  /** A1 notation of the active cell, e.g. "B2". */
+  a1: string
+  row: number
+  col: number
+  /** Display text of the active cell. */
+  text: string
+  /** Text of the header cell (row 1) in the active cell's column. */
+  columnHeader: string
 }
 
 export function UniverWorkbookView({
@@ -105,10 +107,11 @@ export function UniverWorkbookView({
   onPersistSnapshot,
   readOnly = false,
   variant = "embed",
+  compact = false,
   heightClass = "h-[520px]",
   instanceKey = 0,
+  onSelectionChange,
 }: UniverWorkbookViewProps) {
-  const isDark = useIsDark()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const boundaryRef = useRef<HTMLDivElement | null>(null)
   const [fallbackHtml, setFallbackHtml] = useState<string | null>(null)
@@ -123,6 +126,8 @@ export function UniverWorkbookView({
   const onPersistSnapshotRef = useRef(onPersistSnapshot)
   onPersistEncodedRef.current = onPersistEncoded
   onPersistSnapshotRef.current = onPersistSnapshot
+  const onSelectionChangeRef = useRef(onSelectionChange)
+  onSelectionChangeRef.current = onSelectionChange
 
   const workbookEncodedPropRef = useRef(workbookEncoded)
   const workbookSnapshotPropRef = useRef(workbookSnapshot)
@@ -215,40 +220,62 @@ export function UniverWorkbookView({
 
         mountHost = document.createElement("div")
         mountHost.className = "h-full w-full"
-        if (isDark) mountHost.setAttribute("data-univer-dark", "true")
         const host = containerRef.current
         if (!host) return
         host.replaceChildren(mountHost)
 
         const presetConfig: Record<string, unknown> = {
           container: mountHost,
-          header: true,
-          toolbar: true,
-          formulaBar: true,
-          footer: true,
-          menu: true,
+          // Compact mode strips the ribbon/formula-bar/footer for a clean grid.
+          header: !compact,
+          toolbar: !compact,
+          formulaBar: !compact,
+          footer: !compact,
+          menu: !compact,
           contextMenu: true,
-          statusBarStatistic: true,
+          statusBarStatistic: !compact,
           // Always disable Univer auto-focus so it does not fight Radix Dialog focus / cell editor.
           disableAutoFocus: true,
           ribbonType: "classic",
         }
 
-        const theme = isDark ? buildDarkUniverTheme(defaultTheme as Record<string, unknown>) : defaultTheme
+        // Always the light palette, see the note at the top of this file.
+        const theme = defaultTheme
+
+        // The `workspace` variant (data-analysis workbench + full-screen data
+        // editor) gets the Excel-grade feature suite, sort, filter, find &
+        // replace, conditional formatting, data validation, structured tables,
+        // notes, threaded comments, hyperlinks, images. The lean `embed`
+        // variant used inside note pages stays core-only. Loaded dynamically so
+        // the notes editor never bundles the extra plugins.
+        let featurePresets: unknown[] = []
+        let localeBundle: typeof sheetsCoreEnUS = sheetsCoreEnUS
+        if (variant === "workspace") {
+          try {
+            const { buildWorkspaceSheetFeatures } = await import(
+              "@/components/spreadsheet/univer-workspace-presets"
+            )
+            if (disposed || !containerRef.current) return
+            const features = buildWorkspaceSheetFeatures()
+            featurePresets = features.presets
+            localeBundle = features.locale
+          } catch (error) {
+            console.warn(
+              "Univer workspace feature presets failed to load; using core preset only.",
+              error
+            )
+          }
+        }
 
         const { univer, univerAPI } = createUniver({
           locale: LocaleType.EN_US,
           locales: {
-            [LocaleType.EN_US]: sheetsCoreEnUS,
+            [LocaleType.EN_US]: localeBundle,
           },
           theme,
           presets: [
-            [
-              UniverSheetsCorePreset(presetConfig),
-              {
-                lazy: false,
-              },
-            ],
+            UniverSheetsCorePreset(presetConfig),
+            ...featurePresets,
           ],
         })
 
@@ -293,7 +320,7 @@ export function UniverWorkbookView({
               if (encoded === lastSavedEncodedRef.current && snapJson === lastSavedSnapshotJsonRef.current) return
               lastSavedEncodedRef.current = encoded
               lastSavedSnapshotJsonRef.current = snapJson
-              // Avoid setState while the user is typing — re-renders can steal focus from the cell editor.
+              // Avoid setState while the user is typing, re-renders can steal focus from the cell editor.
               isHydratingRef.current = true
               scheduleMicrotask(() => {
                 onPersistEncodedRef.current?.(encoded)
@@ -320,6 +347,48 @@ export function UniverWorkbookView({
                 }
               }),
             ]
+
+        // Surface the active selection (best-effort via the Facade API) so
+        // callers can bind sheet cells to chart title/axis/series. Defensive:
+        // if the facade shape differs, the feature simply stays inert.
+        if (onSelectionChangeRef.current) {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const api = univerAPI as any
+            const evt = api.Event?.SelectionChanged ?? api.Event?.SelectionMoveEnd
+            const emit = () => {
+              try {
+                const wb = api.getActiveWorkbook?.()
+                const sheet = wb?.getActiveSheet?.()
+                const range = sheet?.getActiveRange?.()
+                if (!range) return onSelectionChangeRef.current?.(null)
+                const rawValue = typeof range.getValue === "function" ? range.getValue() : null
+                const row = typeof range.getRow === "function" ? range.getRow() : 0
+                const col = typeof range.getColumn === "function" ? range.getColumn() : 0
+                const a1 = typeof range.getA1Notation === "function" ? range.getA1Notation() : ""
+                let columnHeader = ""
+                try {
+                  const h = sheet?.getRange?.(0, col)?.getValue?.()
+                  columnHeader = h == null ? "" : String(h)
+                } catch {
+                  /* header lookup optional */
+                }
+                onSelectionChangeRef.current?.({
+                  a1: String(a1 ?? ""),
+                  row,
+                  col,
+                  text: rawValue == null ? "" : String(rawValue),
+                  columnHeader,
+                })
+              } catch {
+                onSelectionChangeRef.current?.(null)
+              }
+            }
+            if (evt) disposables.push(univerAPI.addEvent(evt, emit))
+          } catch {
+            /* selection wiring is optional */
+          }
+        }
 
         cleanup = () => {
           mountedRef.current = false
@@ -425,11 +494,8 @@ export function UniverWorkbookView({
       }
       disposed = true
     }
-    // `isDark` intentionally excluded — including it caused a full Univer
-    // destroy+recreate on every theme toggle, wiping unsaved in-memory edits.
-    // Dark-mode appearance updates apply on the next legitimate remount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [instanceKey, variant, readOnly, fileName, dataRevision, canAttemptMount])
+  }, [instanceKey, variant, compact, readOnly, fileName, dataRevision, canAttemptMount])
 
   useEffect(() => {
     if (variant === "embed") {

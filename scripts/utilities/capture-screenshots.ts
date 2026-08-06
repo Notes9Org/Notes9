@@ -21,7 +21,7 @@ import dotenv from "dotenv"
 import puppeteer, { type Page } from "puppeteer"
 import * as fs from "fs"
 import * as path from "path"
-import { addCaptureInitScripts } from "@/lib/capture-sanitize"
+import { addCaptureInitScripts, sanitizeForDemo, sanitizeLightForDemo } from "@/lib/capture-sanitize"
 
 dotenv.config({ path: path.join(process.cwd(), ".env") })
 
@@ -32,7 +32,26 @@ const CAPTURE_OUTPUT_SUBDIR = process.env.CAPTURE_OUTPUT_SUBDIR || ""
 const OUTPUT_DIR = path.join(process.cwd(), "public", "demo", CAPTURE_OUTPUT_SUBDIR)
 const CAPTURE_THEME = (process.env.CAPTURE_THEME || "light").toLowerCase()
 
-const VIEWPORT = { width: 1920, height: 1080 }
+const DEVICE_SCALE_FACTOR = Number(process.env.CAPTURE_SCALE || "2")
+const VIEWPORT = { width: 1920, height: 1080, deviceScaleFactor: DEVICE_SCALE_FACTOR }
+
+/**
+ * Optional comma-separated filter, matched as a substring against the output
+ * filename, e.g. CAPTURE_ONLY=data-analysis,research-map.
+ *
+ * Without this the script re-captures every route, which both takes minutes and
+ * overwrites screenshots whose underlying demo data may have moved on. Being
+ * able to refresh one image is the common case.
+ */
+const CAPTURE_ONLY = (process.env.CAPTURE_ONLY || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean)
+
+function shouldCapture(output: string): boolean {
+  if (CAPTURE_ONLY.length === 0) return true
+  return CAPTURE_ONLY.some((frag) => output.includes(frag))
+}
 
 async function applyCaptureTheme(page: Page) {
   if (CAPTURE_THEME !== "dark") return
@@ -122,6 +141,8 @@ async function capture(
   output: string,
   waitFor = "main, [role='main'], .container, body"
 ) {
+  if (!shouldCapture(output)) return
+
   const fullUrl = route.startsWith("http") ? route : `${BASE_URL}${route}`
   await page.goto(fullUrl, { waitUntil: "networkidle2", timeout: 30000 })
   await page.setViewport(VIEWPORT)
@@ -139,13 +160,52 @@ async function capture(
   if (route === "/research-map") {
     console.log("Waiting 8s for research map to fully render...")
     await new Promise((r) => setTimeout(r, 8000))
+  } else if (route.startsWith("/catalyst")) {
+    console.log("Waiting 6s for Catalyst chat surface to settle...")
+    await new Promise((r) => setTimeout(r, 6000))
+  } else if (route.startsWith("/data-analysis")) {
+    // The Univer spreadsheet and the Plotly chart both mount asynchronously and
+    // then lay out again once the container is measured. Screenshotting early
+    // catches an empty canvas.
+    console.log("Waiting 8s for spreadsheet + chart to render...")
+    await new Promise((r) => setTimeout(r, 8000))
   } else {
     await new Promise((r) => setTimeout(r, 800))
   }
 
+  await sanitizeForDemo(page)
   const filePath = path.join(OUTPUT_DIR, output)
   await page.screenshot({ path: filePath, type: "png" })
   console.log(`Captured ${output} from ${route}`)
+}
+
+/**
+ * Catalyst's default route is an empty composer with a greeting, which shows
+ * nothing of what the assistant does. Open the most recent conversation first so
+ * the capture contains a real exchange, reasoning, answer and citations.
+ */
+async function captureCatalystConversation(page: Page): Promise<void> {
+  await page.goto(`${BASE_URL}/catalyst`, { waitUntil: "networkidle2", timeout: 30000 })
+  await page.setViewport(VIEWPORT)
+  await new Promise((r) => setTimeout(r, 3000))
+
+  const opened = await page.evaluate(() => {
+    // Chat rows in the history rail are links to /catalyst/<id>.
+    const row = document.querySelector<HTMLElement>('a[href^="/catalyst/"]')
+    if (!row) return false
+    row.click()
+    return true
+  })
+  if (!opened) {
+    console.warn("No existing Catalyst conversation found; keeping the empty-state capture.")
+    return
+  }
+
+  await new Promise((r) => setTimeout(r, 6000))
+  await page.addStyleTag({ content: 'nextjs-portal, #nextjs-build-indicator, [data-nextjs-toast] { display: none !important; }' })
+  await sanitizeForDemo(page)
+  await page.screenshot({ path: path.join(OUTPUT_DIR, "catalyst.png"), type: "png" })
+  console.log("Captured catalyst.png from an existing conversation")
 }
 
 async function captureExistingLabNoteFromExperiment(page: Page, experimentPath: string): Promise<void> {
@@ -170,6 +230,7 @@ async function captureExistingLabNoteFromExperiment(page: Page, experimentPath: 
     await new Promise((r) => setTimeout(r, 2000))
   }
 
+  await sanitizeForDemo(page)
   const filePath = path.join(OUTPUT_DIR, "new-lab-note.png")
   await page.screenshot({ path: filePath, type: "png" })
   console.log(`Captured new-lab-note.png from existing note at ${experimentPath}?tab=notes`)
@@ -192,22 +253,71 @@ async function captureLiteratureSearchResults(page: Page): Promise<void> {
   }
 
   await page.waitForSelector("input", { visible: true, timeout: 10000 })
-  const typed = await page.evaluate((query: string) => {
-    const input = Array.from(document.querySelectorAll<HTMLInputElement>("input")).find((el) => {
-      const placeholder = (el.placeholder || "").toLowerCase()
-      return placeholder.includes("search database") || placeholder.includes("ask a research question")
-    })
-    if (!input) return false
-    input.focus()
-    input.value = ""
-    input.dispatchEvent(new Event("input", { bubbles: true }))
-    return true
-  }, LITERATURE_QUERY)
-  if (!typed) return
+  // The search input placeholder now cycles example questions, so match it
+  // structurally: the widest visible textual input in the MAIN content area,
+  // explicitly excluding the sidebar's global ⌘K search (which appears first
+  // in the DOM and would otherwise steal the query).
+  const tagged = await page.evaluate(() => {
+    const inSidebar = (el: Element) =>
+      !!(el.closest && el.closest("[data-sidebar], aside, nav, [data-slot='sidebar']"))
+    const scopes = [
+      ...Array.from(document.querySelectorAll("main")),
+      ...Array.from(document.querySelectorAll("[role='main']")),
+      document.body,
+    ]
+    for (const scope of scopes) {
+      const inputs = Array.from(scope.querySelectorAll<HTMLInputElement>("input"))
+      const candidate = inputs
+        .filter((el) => {
+          const t = (el.getAttribute("type") || "text").toLowerCase()
+          const textual = t === "text" || t === "search"
+          const rect = el.getBoundingClientRect()
+          return textual && !inSidebar(el) && rect.width > 240 && rect.height > 0 && el.offsetParent !== null
+        })
+        .sort((a, b) => b.getBoundingClientRect().width - a.getBoundingClientRect().width)[0]
+      if (candidate) {
+        candidate.setAttribute("data-capture-search", "1")
+        return true
+      }
+    }
+    return false
+  })
+  if (!tagged) {
+    console.warn("Could not find literature search input, skipping literature-search.png")
+    return
+  }
 
-  await page.keyboard.type(LITERATURE_QUERY, { delay: 25 })
+  // page.type clicks-to-focus the exact element, so the query can't leak elsewhere.
+  await page.type('input[data-capture-search="1"]', LITERATURE_QUERY, { delay: 25 })
   await page.keyboard.press("Enter")
-  await new Promise((r) => setTimeout(r, 5000))
+  // AI literature search returns papers, then streams a cited AI overview.
+  // Wait for results to arrive, then poll until the overview stops summarizing.
+  await new Promise((r) => setTimeout(r, 6000))
+  // Wait for papers to arrive first (fast), then, when CAPTURE_WAIT_AI_OVERVIEW
+  // is set, keep waiting for the cited AI overview to finish streaming (it can
+  // take ~4 min). Default runs don't block on it.
+  await page
+    .waitForFunction(() => /\bcitations?\b/.test((document.body.innerText || "").toLowerCase()), {
+      timeout: 25000,
+      polling: 1000,
+    })
+    .catch(() => {})
+  if (process.env.CAPTURE_WAIT_AI_OVERVIEW === "1") {
+    await page
+      .waitForFunction(
+        () => {
+          const body = (document.body.innerText || "").toLowerCase()
+          const working =
+            body.includes("gathering papers") ||
+            body.includes("summarizing") ||
+            body.includes("analyzing relevance")
+          return /\bcitations?\b/.test(body) && !working
+        },
+        { timeout: 280000, polling: 2000 }
+      )
+      .catch(() => {})
+  }
+  await new Promise((r) => setTimeout(r, 2000))
 
   const totalHeight = await page.evaluate(() => Math.max(document.body.scrollHeight, document.documentElement.scrollHeight))
   await page.evaluate(async (height: number) => {
@@ -228,6 +338,12 @@ async function captureLiteratureSearchResults(page: Page): Promise<void> {
   }, totalHeight)
   await new Promise((r) => setTimeout(r, 700))
 
+  // Hide the Next.js dev indicator/error badge (covers the Next 16 badge too).
+  await page.addStyleTag({
+    content:
+      "nextjs-portal, #nextjs-build-indicator, [data-nextjs-toast], [data-next-badge-root], [data-next-badge] { display: none !important; }",
+  })
+  await sanitizeLightForDemo(page)
   const filePath = path.join(OUTPUT_DIR, "literature-search.png")
   await page.screenshot({ path: filePath, type: "png", fullPage: true })
   console.log(`Captured literature-search.png from live search for "${LITERATURE_QUERY}"`)
@@ -258,29 +374,13 @@ async function getFirstDetailLink(
 }
 
 async function captureProtocolDetails(page: Page) {
-  await page.goto(`${BASE_URL}/protocols`, { waitUntil: "networkidle2", timeout: 30000 })
-  await page.addStyleTag({ content: 'nextjs-portal, #nextjs-build-indicator, [data-nextjs-toast] { display: none !important; }' })
-  await new Promise(r => setTimeout(r, 2000))
-
-  const clicked = await page.evaluate(() => {
-    const spans = Array.from(document.querySelectorAll("span"))
-    const target = spans.find(s => s.textContent?.trim() === "View Details")
-    if (target) {
-      ;(target as HTMLElement).click()
-      return true
-    }
-    return false
-  })
-  
-  if (clicked) {
-    await new Promise(r => setTimeout(r, 3000))
-    await page.addStyleTag({ content: 'nextjs-portal, #nextjs-build-indicator, [data-nextjs-toast] { display: none !important; }' })
-    const filePath = path.join(OUTPUT_DIR, "protocol-details.png")
-    await page.screenshot({ path: filePath, type: "png" })
-    console.log("Captured protocol-details.png from /protocols")
-  } else {
-    console.warn("Could not find 'View Details' button in /protocols")
+  // Protocols link out via /protocols/<id> anchors (no "View Details" button).
+  const protoPath = await getFirstDetailLink(page, "/protocols", "/protocols")
+  if (!protoPath) {
+    console.warn("No protocol detail link found in /protocols, skipping protocol-details.png")
+    return
   }
+  await capture(page, protoPath, "protocol-details.png")
 }
 
 async function captureResearchMapLiterature(page: Page) {
@@ -301,6 +401,7 @@ async function captureResearchMapLiterature(page: Page) {
   if (clicked) {
     console.log("Clicked Literature filter, waiting 4s for rerender...")
     await new Promise(r => setTimeout(r, 4000))
+    await sanitizeForDemo(page)
     const filePath = path.join(OUTPUT_DIR, "research-map-literature.png")
     await page.screenshot({ path: filePath, type: "png" })
     console.log("Captured research-map-literature.png from /research-map")
@@ -370,6 +471,7 @@ async function captureWritingEditor(page: Page) {
 
     await new Promise(r => setTimeout(r, 4000)) // wait for sidebar to open
     await page.addStyleTag({ content: 'nextjs-portal, #nextjs-build-indicator, [data-nextjs-toast] { display: none !important; }' })
+    await sanitizeForDemo(page)
     const filePath = path.join(OUTPUT_DIR, "writing-editor.png")
     await page.screenshot({ path: filePath, type: "png" })
     console.log("Captured writing-editor.png from /papers")
@@ -419,15 +521,19 @@ async function main() {
     }
 
     // Static routes
+    await capture(page, "/data-analysis", "data-analysis.png")
+    if (shouldCapture("catalyst.png")) await captureCatalystConversation(page)
     await capture(page, "/projects", "projects.png")
     await capture(page, "/literature-reviews", "literature-list.png")
     await capture(page, "/lab-notes", "lab-memory.png")
 
-    await captureLiteratureSearchResults(page)
+    if (shouldCapture("literature-search.png")) await captureLiteratureSearchResults(page)
 
     // Experiment details
     let expPath: string | null = null
-    if (process.env.CAPTURE_EXPERIMENT_ID) {
+    if (!shouldCapture("experiment-details.png") && !shouldCapture("new-lab-note.png")) {
+      // skipped by CAPTURE_ONLY
+    } else if (process.env.CAPTURE_EXPERIMENT_ID) {
       expPath = `/experiments/${process.env.CAPTURE_EXPERIMENT_ID}`
       await capture(page, expPath, "experiment-details.png")
     } else {
@@ -441,7 +547,7 @@ async function main() {
 
     // Existing lab note view (from experiment details)
     if (expPath) {
-      await captureExistingLabNoteFromExperiment(page, expPath)
+      if (shouldCapture("new-lab-note.png")) await captureExistingLabNoteFromExperiment(page, expPath)
     }
 
     // Dashboard
@@ -458,7 +564,9 @@ async function main() {
 
     // Project report
     const projectId = process.env.CAPTURE_PROJECT_ID
-    if (projectId) {
+    if (!shouldCapture("project-report.png")) {
+      // skipped by CAPTURE_ONLY
+    } else if (projectId) {
       await capture(page, `/projects/${projectId}`, "project-report.png")
     } else {
       const projPath = await getFirstDetailLink(page, "/projects", "/projects")
@@ -470,8 +578,8 @@ async function main() {
     }
 
     // Interactive custom pages
-    await captureProtocolDetails(page)
-    await captureResearchMapLiterature(page)
+    if (shouldCapture("protocol-details.png")) await captureProtocolDetails(page)
+    if (shouldCapture("research-map-literature.png")) await captureResearchMapLiterature(page)
     await captureWritingEditor(page)
 
     console.log("Screenshot capture complete.")

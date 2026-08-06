@@ -10,7 +10,7 @@
  *                  sources/citations panel.
  *   - `manifest`:  CitationsManifest    → drives the inline `[N]` chips.
  *
- * Deterministic string/regex only — no LLM (see [[feedback_deterministic_for_mechanical_ui]]).
+ * Deterministic string/regex only, no LLM (see [[feedback_deterministic_for_mechanical_ui]]).
  */
 import type { GroundingResource } from '@/lib/agent-stream-types'
 import type { CitationsManifest, CitationsManifestEntry } from '@/hooks/use-agent-stream'
@@ -175,7 +175,7 @@ export function literatureContextToSystemMessage(ctx: LiteratureSessionContext):
     const meta = [p.title, p.year ? `(${p.year})` : null, p.doi ? `doi:${p.doi}` : null]
       .filter(Boolean)
       .join(' ')
-    const abs = p.abstract ? ` — ${p.abstract}` : ''
+    const abs = p.abstract ? `, ${p.abstract}` : ''
     return `[${p.label}] ${meta}${abs}`
   })
   return (
@@ -187,7 +187,7 @@ export function literatureContextToSystemMessage(ctx: LiteratureSessionContext):
 }
 
 /**
- * Map a persisted literature session's papers into agent `literature_sources` — the
+ * Map a persisted literature session's papers into agent `literature_sources`, the
  * content-bearing channel that the backend materializes into citable sources so
  * follow-ups get real inline [N] citations (not just an ungrounded text preamble).
  * Papers with no title are skipped. See agents/core/literature_preflight.py.
@@ -249,13 +249,13 @@ export function dedupeLiteratureSources<T extends LiteratureSource>(sources: T[]
  * Citation-chip click handler for the literature AI summary surfaces: scroll
  * the results list to the cited paper's card when it is rendered in-page.
  * Returns false when no card exists so the renderer falls back to its default
- * (web-sourced chips open their external link) — users only leave the product
+ * (web-sourced chips open their external link), users only leave the product
  * when the paper genuinely isn't in the results below.
  */
 export function scrollToLiteratureCitationCard(label: string): boolean {
   if (typeof document === 'undefined') return false
   // Sub-citations like "3.1" anchor to their base paper card. Exclude the
-  // citation chips themselves (`.notes9-cite`) — they also carry data-cite-label
+  // citation chips themselves (`.notes9-cite`), they also carry data-cite-label
   // and sit above the cards, so an unscoped query would match the clicked chip.
   const base = label.split('.')[0]
   const card =
