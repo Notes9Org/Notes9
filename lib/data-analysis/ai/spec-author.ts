@@ -25,6 +25,26 @@ import { MUTATION_CONTRACT, parseMutation } from "@/lib/data-analysis/spec/mutat
  * talk their way around.
  */
 
+/* ── Wire bounds, mirrored from Catalyst ───────────────────────────────────*/
+
+/**
+ * Hard bounds mirrored from Catalyst's own pydantic model, `SpecAuthorRequest`
+ * in the AI repo at catalyst/api/analysis_spec.py:70-84. A violation over
+ * there is a 422 raised by pydantic before any handler code runs, and until
+ * now Notes9 did not know these numbers existed: an over-long prompt made the
+ * round trip anyway and came back reported as a generic outage, not as the
+ * malformed request it was (ADR-004). Checking here, before the request
+ * leaves this process, turns that into a message the researcher can act on.
+ *
+ * Exported by name and re-exported nowhere else: this is the one place either
+ * number is allowed to live, so a sibling that needs one (the spec-prompt
+ * textarea's character cap, for instance) imports it rather than repeating it.
+ */
+/** Mirrors `prompt: str = Field(min_length=1, max_length=4000)`. */
+export const SPEC_AUTHOR_PROMPT_MAX_CHARS = 4000
+/** Mirrors `system: str = Field(max_length=8000)`. */
+export const SPEC_AUTHOR_SYSTEM_MAX_CHARS = 8000
+
 /* ── The tool schema the model emits ───────────────────────────────────────*/
 
 /**
