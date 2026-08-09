@@ -227,7 +227,20 @@ Inside one `requestAnimationFrame`, in this order:
 ```
 
 The invariant, which the test asserts: **a launch's mentions are on the request
-its `autoSend` produces.** Step 2 must stay after step 1, because
+its `autoSend` produces.**
+
+**As built (N02b), this is two frames, not one.** Collapsing everything into a
+single frame would have meant guarding every `q`-specific statement inside it,
+rewriting code that already worked. Instead the existing query frame gained the
+mention append immediately before its `autoSend`, and a second frame handles the
+mention-only case, where there is no text seeding to race with and nothing being
+submitted. The with-query path is otherwise byte-identical to what shipped, which
+matters because the previous attempt broke it by rewriting it.
+
+Note also that `CatalystLaunchDetail` is declared twice: the exported type in
+`lib/catalyst-launch.ts` and a structural inline copy on the event handler's
+parameter in `right-sidebar.tsx` (~`:3474`). Both must be migrated together or
+`tsc` fails on one of them. Step 2 must stay after step 1, because
 `appendMentionToInput` appends into a composer that already holds its text; that
 is why the mention frame is late today and reversing the two frames naively
 reintroduces the bug the current ordering was written to solve.

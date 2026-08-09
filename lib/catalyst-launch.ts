@@ -1,4 +1,5 @@
 import type { SearchPaper } from "@/types/paper-search"
+import type { CatalystMentionKind } from "@/lib/catalyst-mention-types"
 import { paperIdentityKey } from "@/lib/paper-search"
 import { toast } from "sonner"
 
@@ -70,11 +71,17 @@ export type CatalystLaunchDetail = {
    *  canonical way to attach a SAVED/STAGED paper, identical to dragging it in
    *  from the library. The agent resolves the id to the row's metadata + imported
    *  full text, so no file attachment is needed. Unsaved search results (no id)
-   *  use the file-attachment path instead. */
-  literatureMention?: { id: string; title: string }
+   *  use the file-attachment path instead.
+   *
+   *  Generalized from `literatureMention` so any workspace record can seed a tag.
+   *  The kind is explicit because the sidebar forwards it straight to
+   *  `appendMentionToInput`, which has always been generic over
+   *  `CatalystMentionKind`; only this field and its one consumer hardcoded
+   *  literature. */
+  mention?: { kind: CatalystMentionKind; id: string; title: string }
   /** Text the user selected in the open PDF. Rendered as a dismissible excerpt
    *  strip near the composer and folded into the NEXT send's model query; the
-   *  paper itself rides as the literatureMention tag, so no wire change. */
+   *  paper itself rides as the `mention` tag, so no wire change. */
   literatureSelection?: { text: string; title?: string }
 }
 
@@ -222,7 +229,7 @@ export async function attachPaperToCatalyst(
       scope,
       webSearch: false,
       autoSend: false,
-      literatureMention: { id: reviewId, title },
+      mention: { kind: 'literature_review', id: reviewId, title },
     })
     return
   }
