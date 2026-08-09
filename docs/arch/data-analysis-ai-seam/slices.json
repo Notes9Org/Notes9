@@ -35,7 +35,7 @@
       ],
       "depends_on": [],
       "brief": "slices/N02a-mention-kind.md",
-      "status": "pr_open",
+      "status": "merged",
       "branch": "slice/data-analysis-ai-seam-N02a-mention-kind",
       "agents": {
         "build": "voltagent-lang:typescript-pro",
@@ -59,7 +59,7 @@
         "N02a"
       ],
       "brief": "slices/N02b-mention-rail.md",
-      "status": "ready",
+      "status": "merged",
       "branch": "slice/data-analysis-ai-seam-N02b-mention-rail",
       "agents": {
         "build": "human:claude-opus-5",
@@ -67,7 +67,8 @@
         "test": "ecc:tdd-guide"
       },
       "kind": "feature",
-      "note": "Re-cut from N02 after two agent attempts failed on the 5339-line right-sidebar.tsx. Implemented directly, then gated by the same review+test agents."
+      "note": "Re-cut from N02 after two agent attempts failed on the 5339-line right-sidebar.tsx. Implemented directly, then gated by the same review+test agents. Landed 2026-08-15: 19/19 vitest green, tsc clean, both Vercel builds green.",
+      "pr": 236
     },
     {
       "id": "N03",
@@ -89,7 +90,8 @@
         "test": "ecc:tdd-guide"
       },
       "kind": "feature",
-      "branch": "slice/data-analysis-ai-seam-N03-data-page-wiring"
+      "branch": "slice/data-analysis-ai-seam-N03-data-page-wiring",
+      "note": "All three dependencies are merged to dev as of 2026-08-15. Last slice in the Notes9 half."
     }
   ]
 }
