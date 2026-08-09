@@ -83,3 +83,9 @@ __pycache__/
 /public/pyodide/
 CLAUDE.local.md
 supabase/.temp/
+
+# Personal internal strategy note (field-survey comparison, roadmap candour).
+# Deliberately never published: it names gaps and sequencing decisions that are
+# not for the public repo. Lives in both repos so it travels with either checkout.
+RESEARCH_JOURNEY.md
+.gbrain-source

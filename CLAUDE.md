@@ -47,3 +47,33 @@ have crashed the DB before. See `docs/rls-quick-reference.md` and
 - `docs/DATA_MODEL.md` · `docs/GLOSSARY.md` — schema & domain terms
 - `docs/CATALYST_INTEGRATION.md` · `docs/AGENT_STREAM_API.md` — backend + SSE contracts
 - `docs/ENVIRONMENT_VARIABLES.md` — config
+
+## Feature pipeline
+
+The stages and modes live in `~/.claude/CLAUDE.md`. Repo specifics:
+
+- Run from this repo root on `dev`. `/slice` records the current branch as the PR target,
+  and `/fleet` hard-blocks on an uncommitted tree.
+- Artifacts land in `docs/arch/<feature>/`: ARCHITECTURE.md, ADR-*.md, slices.json, briefs.
+- Weak interfaces in ARCHITECTURE.md were the Tier 0 root cause here, showing up as
+  rail-over-spec in four disguises. Every slice passed its own tests and the assembled
+  feature was still broken. Read that section hardest.
+
+## Skill routing
+
+For one-off work that is not a whole feature. When the user's request matches an available skill, invoke it via the Skill tool. When in doubt, invoke the skill.
+
+Key routing rules:
+- Product ideas/brainstorming → invoke /office-hours
+- Strategy/scope → invoke /plan-ceo-review
+- Architecture → invoke /plan-eng-review
+- Design system/plan review → invoke /design-consultation or /plan-design-review
+- Full review pipeline → invoke /autoplan
+- Bugs/errors → invoke /investigate
+- QA/testing site behavior → invoke /qa or /qa-only
+- Code review/diff check → invoke /review
+- Visual polish → invoke /design-review
+- Ship/deploy/PR → invoke /ship or /land-and-deploy
+- Save progress → invoke /context-save
+- Resume context → invoke /context-restore
+- Author a backlog-ready spec/issue → invoke /spec

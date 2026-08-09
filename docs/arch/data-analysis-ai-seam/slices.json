@@ -1,0 +1,70 @@
+{
+  "feature": "data-analysis-ai-seam",
+  "source_branch": "dev",
+  "created": "2026-08-08",
+  "note": "Cross-repo feature. The Catalyst half is sliced separately in AI/docs/arch/data-analysis-ai-seam/slices.json and must DEPLOY first; it is not a build dependency for anything here.",
+  "slices": [
+    {
+      "id": "N01",
+      "name": "spec-author-bounds",
+      "owns": [
+        "lib/data-analysis/ai/spec-author.ts",
+        "app/api/data-analysis/spec-author/**"
+      ],
+      "depends_on": [],
+      "brief": "slices/N01-spec-author-bounds.md",
+      "status": "pr_open",
+      "agents": {
+        "build": "voltagent-lang:typescript-pro",
+        "review": "ecc:security-reviewer",
+        "test": "ecc:tdd-guide"
+      },
+      "kind": "bugfix",
+      "branch": "slice/data-analysis-ai-seam-N01-spec-author-bounds",
+      "pr": 232
+    },
+    {
+      "id": "N02",
+      "name": "mention-rail",
+      "owns": [
+        "lib/catalyst-mention-types.ts",
+        "lib/catalyst-launch.ts",
+        "components/layout/right-sidebar.tsx",
+        "components/literature-reviews/literature-pdf-panel.tsx",
+        "__tests__/catalyst-mention-kinds.test.ts",
+        "__tests__/catalyst-launch-ordering.test.tsx"
+      ],
+      "depends_on": [],
+      "brief": "slices/N02-mention-rail.md",
+      "status": "gate_failed",
+      "agents": {
+        "build": "voltagent-lang:react-specialist",
+        "review": "ecc:react-reviewer",
+        "test": "ecc:tdd-guide"
+      },
+      "kind": "feature",
+      "branch": "slice/data-analysis-ai-seam-N02-mention-rail"
+    },
+    {
+      "id": "N03",
+      "name": "data-page-wiring",
+      "owns": [
+        "components/catalyst/catalyst-section-hero.tsx",
+        "components/data-analysis/data-analysis-workspace.tsx"
+      ],
+      "depends_on": [
+        "N01",
+        "N02"
+      ],
+      "brief": "slices/N03-data-page-wiring.md",
+      "status": "ready",
+      "agents": {
+        "build": "voltagent-lang:react-specialist",
+        "review": "ecc:react-reviewer",
+        "test": "ecc:tdd-guide"
+      },
+      "kind": "feature",
+      "branch": "slice/data-analysis-ai-seam-N03-data-page-wiring"
+    }
+  ]
+}
