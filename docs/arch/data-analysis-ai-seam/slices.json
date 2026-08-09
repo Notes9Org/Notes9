@@ -28,18 +28,23 @@
       "name": "mention-kind",
       "owns": [
         "lib/catalyst-mention-types.ts",
-        "__tests__/catalyst-mention-kinds.test.ts"
+        "lib/notes9-agent-request.ts",
+        "hooks/use-agent-stream.ts",
+        "__tests__/catalyst-mention-kinds.test.ts",
+        "docs/arch/data-analysis-ai-seam/ARCHITECTURE.md"
       ],
       "depends_on": [],
       "brief": "slices/N02a-mention-kind.md",
-      "status": "building",
+      "status": "pr_open",
       "branch": "slice/data-analysis-ai-seam-N02a-mention-kind",
       "agents": {
         "build": "voltagent-lang:typescript-pro",
         "review": "ecc:typescript-reviewer",
         "test": "ecc:tdd-guide"
       },
-      "kind": "feature"
+      "kind": "feature",
+      "note": "Widened from 2 files to 4 after the reviewer found that CatalystMentionKind is one of FOUR copies of the attachment-kind set; widening it alone broke tsc in right-sidebar.tsx (a file this slice does not own). Parity test now pins every edge.",
+      "pr": 234
     },
     {
       "id": "N02b",
