@@ -1340,7 +1340,7 @@ export function RightSidebar({
         const merged = await mentionItemsInflight;
         if (!cancelled) setAllMentionItems(merged);
       } catch (err) {
-        // One of the 5 mention-catalog queries failed (network/auth/RLS).
+        // One of the 6 mention-catalog queries failed (network/auth/RLS).
         // Leave the existing (possibly empty) list in place rather than
         // crashing the sidebar; surface the cause for debugging.
         console.error('[RightSidebar] Failed to load @-mention catalog:', err);
@@ -3546,7 +3546,21 @@ export function RightSidebar({
           // why this used to be a second rAF and why the tag was dropped: no
           // producer set both `autoSend` and a mention until the Data Analysis
           // composer did.
+          //
+          // Why this works despite React batching: appendMentionToInput's own
+          // setSelectedMentions has NOT flushed by the time handleSubmit runs in
+          // this same frame. It does not need to. handleSubmit (~:2394) derives
+          // its tags from the DOM --
+          //   serializeComposerToUserMarkdown(inputRef.current)
+          //     -> extractTagItemsFromMarkdown -> mergeUniqueTags(selectedMentions, ...)
+          // -- and appendMentionToInput inserts the chip node synchronously (its
+          // internal rAF only re-syncs setInput/focus/resize). So the chip is in
+          // the composer before it is serialized. Do not "fix" this by awaiting
+          // a state flush; the DOM is the source that submit actually reads.
           if (mention) {
+            // Re-collapse the caret to the end before appending: the chip must
+            // land after the text just written above, not at the caret's old
+            // position.
             const el = inputRef.current;
             if (el) {
               el.focus();
