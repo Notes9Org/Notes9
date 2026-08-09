@@ -14,7 +14,7 @@
       ],
       "depends_on": [],
       "brief": "slices/01-db-observability-and-status.md",
-      "status": "ready",
+      "status": "pr_open",
       "agents": {
         "build": "ruflo-migrations:migration-engineer",
         "review": "ecc:database-reviewer",
@@ -22,7 +22,16 @@
       },
       "kind": "migration",
       "wave": 1,
-      "solo_wave_reason": "Owns SQL. A worktree isolates files, not the live Postgres every sibling tests against."
+      "solo_wave_reason": "Owns SQL. A worktree isolates files, not the live Postgres every sibling tests against.",
+      "pr": 233,
+      "branch": "slice/context-activation-01-db-observability-and-status",
+      "gate": {
+        "ownership": "pass",
+        "docs": "pass",
+        "edge_cases": "4/4 mapped",
+        "review": "pass (1 medium fixed: DISTINCT ON tiebreaker)",
+        "test_gate": "pass on re-run (2 unfalsifiable checks rewritten)"
+      }
     }
   ]
 }
