@@ -1,6 +1,13 @@
 # scripts/ — Supabase migration index
 
-Definitive index of the SQL migration folder. As of **2026-07-18 the live database is applied through 105**.
+Definitive index of the SQL migration folder. What has actually been applied to the live
+database is `public.schema_migrations` — the only migration tracker
+([ADR-006](../docs/arch/context-activation/ADR-006-the-ledger-is-the-only-migration-tracker.md)).
+Query it, don't infer it from this file or hand-maintain a marker here:
+
+```sql
+SELECT filename, applied_at FROM public.schema_migrations ORDER BY 1;
+```
 
 ## How this folder works
 
@@ -160,7 +167,12 @@ Two signals feed the agent's context: **focus/recency** — a frontend beacon up
 
 - **Backfills must enqueue with `operation='update'`.** The 102 backfill inserts `chunk_jobs` rows with `'update'` so the worker treats them as idempotent upserts; 105 re-enqueues failures the same way. A backfill enqueued as an insert-type operation would duplicate chunks on re-run.
 - **Refreshing `000`**: regenerate the tables-only dump from the live database (it is a snapshot, not a migration) and keep its header warning intact; update its "notable migrations" pointers if a new subsystem lands.
-- **Applied-through marker**: as of 2026-07-18 the live DB is applied through **105**. Update this line whenever a new migration is applied.
+- **Migration ledger**: `public.schema_migrations` is the single source of truth for what
+  is applied (ADR-006) — query `SELECT filename, applied_at FROM public.schema_migrations
+  ORDER BY 1;` rather than hand-maintaining a marker in this file. Its 109 backfill omits
+  five filenames present in this folder: `102_profile_demo_seeded.sql`,
+  `103_data_analysis_templates.sql`, `104_onboarding_checklist.sql`,
+  `105_saved_analyses.sql`, `106_analyses.sql`. Real, but cosmetic; not yet backfilled.
 - **Large files time out in the SQL editor**: 053 must be run in parts (header references `scripts/053_supabase_rls_parts/` 01→05, but that directory is not present in this repo — reconstruct by splitting the file at its section dividers); 057 says run statements one at a time (storage.objects DDL can time out).
 - **Known number collisions** (both files of a pair are applied): 003, 004, 012 (twins with identical content), 019, 025, 027 (+`_down` rollback), 030, 046, 047, 066, 092.
 - **Numbering gaps** (numbers never used): 006–008, 017, 022, 029, 031–035, 054, 055 (a "055 README" is referenced by 057's header but no 055 file exists here).
