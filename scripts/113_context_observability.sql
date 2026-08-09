@@ -116,11 +116,20 @@ BEGIN
   -- DISTINCT ON + ORDER BY is one sort/dedup pass over chunk_jobs as a whole
   -- -- a grouped scan, not a correlated subquery re-run per source, so this
   -- stays an aggregate at 10x volume (23k chunk_jobs rows).
+  -- j.id DESC is a required tiebreaker, not decoration. created_at is
+  -- NOT NULL DEFAULT now(), and now() is transaction-stable, so every row
+  -- inserted by one bulk statement shares a created_at to the microsecond.
+  -- That is the normal case here, not a corner: the redrive runbook requeues
+  -- jobs for many sources in a single INSERT. Without a tiebreaker, when a
+  -- source has a tied 'skipped' and non-'skipped' job, which one counts as
+  -- "latest" is unspecified, so gap_pct and alert can flip between runs on
+  -- identical data. ADR-007's exclusion has to be deterministic to be worth
+  -- anything.
   latest_job_status AS (
     SELECT DISTINCT ON (j.source_type, j.source_id)
            j.source_type, j.source_id, j.status
     FROM public.chunk_jobs j
-    ORDER BY j.source_type, j.source_id, j.created_at DESC
+    ORDER BY j.source_type, j.source_id, j.created_at DESC, j.id DESC
   ),
   -- ADR-007: a source whose latest job is 'skipped' is correctly not
   -- indexed (too short to chunk, e.g. a twelve-character note) and must
@@ -287,18 +296,39 @@ ON CONFLICT (filename) DO NOTHING;
 --     SELECT DISTINCT ON (j.source_type, j.source_id)
 --            j.source_type, j.source_id, j.status
 --     FROM public.chunk_jobs j
---     ORDER BY j.source_type, j.source_id, j.created_at DESC
+--     ORDER BY j.source_type, j.source_id, j.created_at DESC, j.id DESC
 --   ),
 --   expected AS (
 --     SELECT er.source_type, er.id FROM expected_raw er
 --     LEFT JOIN latest_job_status ljs
 --       ON ljs.source_type = er.source_type AND ljs.source_id = er.id
 --     WHERE ljs.status IS DISTINCT FROM 'skipped'
+--   ),
+--   -- The semantic_chunks half MUST be in the plan too. An earlier draft of
+--   -- this check EXPLAIN-ed only the chunk_jobs side, which meant a
+--   -- regression turning `covered` into a per-source correlated subquery
+--   -- would have planned clean and shipped. Both tables the brief names have
+--   -- to appear, or the check is only half a check.
+--   covered AS (
+--     SELECT sc.source_type, sc.source_id
+--     FROM public.semantic_chunks sc
+--     WHERE sc.source_type = 'lab_note'
+--       AND (sc.expires_at IS NULL OR sc.expires_at > now())
+--     GROUP BY sc.source_type, sc.source_id
 --   )
---   SELECT * FROM expected;
---     -> plan shows Sort + Unique (the DISTINCT ON) and a Hash/Merge Join,
---        no Nested Loop whose inner side is a per-outer-row SubPlan; cost
---        scales with table size, not with expected_sources row count.
+--   SELECT e.source_type,
+--          count(*) AS expected_sources,
+--          count(c.source_id) AS covered_sources
+--   FROM expected e
+--   LEFT JOIN covered c
+--     ON c.source_type = e.source_type AND c.source_id = e.id
+--   GROUP BY e.source_type;
+--     -> plan shows Sort + Unique (the DISTINCT ON), a HashAggregate for
+--        `covered` over semantic_chunks, and Hash/Merge Joins throughout.
+--        PASS requires ALL of: no `SubPlan` node anywhere, and no Nested Loop
+--        whose inner side rescans lab_notes, chunk_jobs or semantic_chunks.
+--        A single `SubPlan` in this plan is the regression this check exists
+--        to catch -- fail it, do not rationalise it.
 
 -- Edge case (Shape, unknown source_type): a 7th source_type is silently
 -- absent from the report, not counted as a 0% gap, and does not error.
@@ -315,12 +345,34 @@ ON CONFLICT (filename) DO NOTHING;
 
 -- Edge case (Boundaries, zero gap reachable): a source type whose every
 -- source is either chunked or skipped reports gap_pct = 0.00, alert = false.
---   -- e.g. for a source type with a small fixture: chunk every source that
---   -- isn't already chunked, mark every remaining uncovered source's latest
---   -- job 'skipped', then:
---   SELECT source_type, gap_pct, alert FROM public.run_chunk_coverage_check()
---     WHERE source_type = '<that type>';
---     -> gap_pct = 0.00, alert = false
+-- If this is not reachable the 2% alert fires forever and gets muted, which
+-- is the same end state as having no alert at all (ADR-007).
+--
+-- Runnable as written. Wrapped in a transaction and rolled back, so it also
+-- discards the chunk_coverage_gaps rows the function writes. 'report' is
+-- chosen because it is the smallest of the six types (32 sources).
+--   BEGIN;
+--   -- mark every currently-uncovered 'report' source as skipped, with a
+--   -- created_at strictly newer than any existing job for that source so it
+--   -- wins DISTINCT ON regardless of the tiebreaker
+--   INSERT INTO public.chunk_jobs
+--     (source_type, source_id, operation, status, created_at)
+--   SELECT 'report', r.id, 'update', 'skipped', now() + interval '1 minute'
+--   FROM public.reports r
+--   WHERE coalesce(r.content, '') <> ''
+--     AND NOT EXISTS (
+--       SELECT 1 FROM public.semantic_chunks sc
+--       WHERE sc.source_type = 'report' AND sc.source_id = r.id
+--         AND (sc.expires_at IS NULL OR sc.expires_at > now())
+--     );
+--   SELECT source_type, expected_sources, covered_sources, gap_pct, alert
+--   FROM public.run_chunk_coverage_check() WHERE source_type = 'report';
+--     -> gap_pct = 0.00, alert = false, and expected_sources now equals
+--        covered_sources (both drop to the already-chunked count, 23)
+--   ROLLBACK;
+--   -- confirm the fixture is gone:
+--   SELECT count(*) FROM public.chunk_jobs WHERE status = 'skipped';
+--     -> 0
 
 -- Edge case (Idempotency): re-running the whole migration leaves exactly one
 -- cron job, one 108 ledger row, and one status constraint (all three
