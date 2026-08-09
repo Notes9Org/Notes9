@@ -32,7 +32,25 @@ import {
 const PROXY_STREAM_URL = '/api/agent/stream';
 
 /** Workspace entity the user explicitly tagged for this turn. Catalyst preflights
- * each via fetch_full_records before the LLM loop runs. */
+ * each via fetch_full_records before the LLM loop runs.
+ *
+ * This is the union `tagsToAttachments()` in right-sidebar.tsx actually assigns
+ * into, and it is one of FOUR hand-written copies of the same set that must
+ * agree:
+ *
+ *   1. `ATTACHMENT_KINDS`             AI/catalyst/core/contracts/request.py
+ *   2. `CatalystMentionKind`          lib/catalyst-mention-types.ts
+ *   3. `Notes9AgentAttachment['kind']` lib/notes9-agent-request.ts
+ *   4. this
+ *
+ * (2) is assigned into (4) and (3), which are serialized and validated against
+ * (1). A kind missing from (1) is not a dropped attachment, it is a pydantic
+ * 422 that fails the ENTIRE agent request.
+ *
+ * This duplication is the bug class that created the feature this member is part
+ * of: the backend supported `data_file` end to end while its allowlist omitted
+ * it, so the Data Analysis chat could never tag a file.
+ * `__tests__/catalyst-mention-kinds.test.ts` now pins all four. */
 export type AgentAttachment = {
   kind:
     | 'lab_note'
@@ -41,7 +59,8 @@ export type AgentAttachment = {
     | 'experiment'
     | 'project'
     | 'sample'
-    | 'report';
+    | 'report'
+    | 'data_file';
   id: string;
   title?: string;
 };

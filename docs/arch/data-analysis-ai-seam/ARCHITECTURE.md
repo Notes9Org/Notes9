@@ -139,6 +139,36 @@ case 'data_file': return `/data-analysis?file=${encodeURIComponent(id)}`
 The literal `'data_file'` must equal I1's allowlist entry exactly. It travels on
 the wire as `attachments[].kind`.
 
+### I2b. The other two copies of the same union (`Notes9`)
+
+Found while building N02a, and not in the original design. `CatalystMentionKind`
+is **not** the only client-side copy of this set. `tagsToAttachments()` in
+`right-sidebar.tsx` assigns `CatalystMentionKind`-typed objects into two separate
+hand-written literal unions, so widening the mention kind alone fails `tsc` with
+three TS2322 errors in a file N02a does not own:
+
+```ts
+// hooks/use-agent-stream.ts:36        AgentAttachment['kind']
+// lib/notes9-agent-request.ts:29      Notes9AgentAttachment['kind']
+//   both gain: | 'data_file'
+```
+
+So the set exists in **four** places, in two repos:
+
+```
+CatalystMentionKind ─┬─> AgentAttachment['kind']         ─> ATTACHMENT_KINDS
+ (what the UI tags)  └─> Notes9AgentAttachment['kind']   ─>  (backend allowlist)
+```
+
+Each must be a subset of the next. This is the same defect class the feature
+exists to fix, one layer deeper: the backend supported `data_file` end to end
+while its allowlist omitted it, and the client repeats the set three more times
+with nothing keeping them in step. A missing kind in the backend copy is not a
+dropped attachment, it is a pydantic 422 that fails the entire agent request.
+
+Both files are owned by N02a and its parity test pins every edge, not just the
+end-to-end one.
+
 ### I3. Mention catalog query (`Notes9`, `components/layout/right-sidebar.tsx:1307`)
 
 Sixth entry in the existing `Promise.all`, same limits and ordering as the other
