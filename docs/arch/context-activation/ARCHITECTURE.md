@@ -167,9 +167,17 @@ other's code; anything not written here will not be compatible.
 
 ### `GET /health/context` (AI, new)
 
-Unauthenticated, read-only, same posture as `/health` and `/health/ready`.
-Always returns `200`; degradation is expressed in the body, not the status code, so a
-monitoring probe never confuses "context is degraded" with "service is down".
+**Authenticated**, read-only. Requires the same service bearer token the agent API uses;
+returns `401` without it.
+
+This differs deliberately from `/health` and `/health/ready`, which are unauthenticated
+because they return a fixed liveness shape. `/health/context` returns migration filenames,
+corpus size, queue depth, and which code paths are live. That is an infrastructure map, and
+an unauthenticated endpoint that hands out a map of what is applied and what is switched
+off is reconnaissance material. Liveness probes stay open; state disclosure does not.
+
+Always returns `200` when authorised; degradation is expressed in the body, not the status
+code, so a monitoring probe never confuses "context is degraded" with "service is down".
 
 ```jsonc
 {

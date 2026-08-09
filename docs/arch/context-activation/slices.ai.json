@@ -1,0 +1,72 @@
+{
+  "feature": "context-activation",
+  "repo": "AI",
+  "repo_root": "/Users/ramanareddy/Desktop/ELN/AI",
+  "source_branch": "dev",
+  "created": "2026-08-08",
+  "note": "Run /fleet for these from the AI repo root, only after Notes9 slice 01 has merged and been applied. Slice 03 cannot pass its tests before 01 lands: chunk_jobs has a CHECK constraint that rejects the 'skipped' status.",
+  "BLOCKING_PRECONDITION": "AI 'dev' is 9 commits behind origin/main and 1 ahead (a7eb656, docs only). Merge origin/main into dev BEFORE running /fleet. Two concrete reasons: (1) catalyst/docs/ROLLOUT_2026-08-04_context_flags.md, which slice 04 must edit, was added by 5d9ba76 and exists only on origin/main, so slice 04 has no file to edit on dev today; (2) catalyst/main.py differs between dev and origin/main, so slice 02 would build its route registration against a stale base. The gap also contains 5a78d0e (model-agnostic refactor, removes complexity tiering and starts Bedrock removal), which touches the model layer the retrieval code sits on. The merge is low risk: dev is ahead by one docs-only commit.",
+  "slices": [
+    {
+      "id": "02",
+      "name": "health-context",
+      "owns": [
+        "catalyst/api/health_context.py",
+        "catalyst/tests/test_health_context.py",
+        "catalyst/main.py"
+      ],
+      "depends_on": ["01"],
+      "brief": "slices/02-health-context.md",
+      "status": "ready",
+      "agents": {
+        "build": "voltagent-lang:python-pro",
+        "review": "ecc:security-reviewer",
+        "test": "ecc:tdd-guide"
+      },
+      "kind": "feature",
+      "wave": 2,
+      "review_override_reason": "Authenticated endpoint disclosing migration state, corpus size and live code paths. Information disclosure outranks Python idiom, so security-reviewer replaces python-reviewer."
+    },
+    {
+      "id": "03",
+      "name": "worker-status",
+      "owns": [
+        "worker/worker.py",
+        "worker/services/db.py",
+        "worker/test_worker_status.py"
+      ],
+      "depends_on": ["01"],
+      "brief": "slices/03-worker-status.md",
+      "status": "ready",
+      "agents": {
+        "build": "voltagent-lang:python-pro",
+        "review": "ecc:python-reviewer",
+        "test": "ecc:tdd-guide"
+      },
+      "kind": "bugfix",
+      "wave": 2,
+      "build_override_reason": "Routed to python-pro rather than the debugger the bugfix default suggests: ADR-007 already completed the diagnosis, so this is implementing a fully specified change, not hunting a root cause."
+    },
+    {
+      "id": "04",
+      "name": "flag-hygiene",
+      "owns": [
+        "catalyst/core/memory/store.py",
+        "catalyst/core/memory/context_builder.py",
+        "catalyst/tests/test_flag_parsing.py",
+        "catalyst/docs/ROLLOUT_2026-08-04_context_flags.md"
+      ],
+      "depends_on": ["01"],
+      "depends_on_reason": "Not a code dependency: slice 04 touches no database and its tests are pure env-var parsing. The edge is wave discipline. Slice 01 owns SQL and must run in a wave alone, because a git worktree isolates files but every parallel agent tests against the same live Postgres. Without this edge the DAG places 04 alongside 01 in wave 1.",
+      "brief": "slices/04-flag-hygiene.md",
+      "status": "ready",
+      "agents": {
+        "build": "voltagent-lang:python-pro",
+        "review": "ecc:python-reviewer",
+        "test": "ecc:tdd-guide"
+      },
+      "kind": "bugfix",
+      "wave": 2
+    }
+  ]
+}

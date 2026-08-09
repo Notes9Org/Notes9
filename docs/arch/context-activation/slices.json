@@ -1,0 +1,28 @@
+{
+  "feature": "context-activation",
+  "repo": "Notes9",
+  "source_branch": "dev",
+  "created": "2026-08-08",
+  "note": "This feature spans two repos. AI-repo slices live in slices.ai.json and are run by a separate /fleet invocation from the AI repo root. Wave order is global across both files: slice 01 here lands before any AI slice starts.",
+  "slices": [
+    {
+      "id": "01",
+      "name": "db-observability-and-status",
+      "owns": [
+        "scripts/113_context_observability.sql",
+        "scripts/README.md"
+      ],
+      "depends_on": [],
+      "brief": "slices/01-db-observability-and-status.md",
+      "status": "ready",
+      "agents": {
+        "build": "ruflo-migrations:migration-engineer",
+        "review": "ecc:database-reviewer",
+        "test": "ecc:tdd-guide"
+      },
+      "kind": "migration",
+      "wave": 1,
+      "solo_wave_reason": "Owns SQL. A worktree isolates files, not the live Postgres every sibling tests against."
+    }
+  ]
+}

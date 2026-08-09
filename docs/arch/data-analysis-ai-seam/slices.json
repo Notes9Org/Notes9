@@ -13,13 +13,15 @@
       ],
       "depends_on": [],
       "brief": "slices/N01-spec-author-bounds.md",
-      "status": "ready",
+      "status": "pr_open",
       "agents": {
         "build": "voltagent-lang:typescript-pro",
         "review": "ecc:security-reviewer",
         "test": "ecc:tdd-guide"
       },
-      "kind": "bugfix"
+      "kind": "bugfix",
+      "branch": "slice/data-analysis-ai-seam-N01-spec-author-bounds",
+      "pr": 232
     },
     {
       "id": "N02",
@@ -34,13 +36,14 @@
       ],
       "depends_on": [],
       "brief": "slices/N02-mention-rail.md",
-      "status": "ready",
+      "status": "gate_failed",
       "agents": {
         "build": "voltagent-lang:react-specialist",
         "review": "ecc:react-reviewer",
         "test": "ecc:tdd-guide"
       },
-      "kind": "feature"
+      "kind": "feature",
+      "branch": "slice/data-analysis-ai-seam-N02-mention-rail"
     },
     {
       "id": "N03",
@@ -49,7 +52,10 @@
         "components/catalyst/catalyst-section-hero.tsx",
         "components/data-analysis/data-analysis-workspace.tsx"
       ],
-      "depends_on": ["N01", "N02"],
+      "depends_on": [
+        "N01",
+        "N02"
+      ],
       "brief": "slices/N03-data-page-wiring.md",
       "status": "ready",
       "agents": {
@@ -57,7 +63,8 @@
         "review": "ecc:react-reviewer",
         "test": "ecc:tdd-guide"
       },
-      "kind": "feature"
+      "kind": "feature",
+      "branch": "slice/data-analysis-ai-seam-N03-data-page-wiring"
     }
   ]
 }
