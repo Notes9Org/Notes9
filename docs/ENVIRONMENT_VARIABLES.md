@@ -39,12 +39,12 @@ All variables are configured in `.env.local` (never committed). This file lists 
 
 ---
 
-## AWS (Bedrock / Transcribe)
+## AWS (Transcribe)
 
 | Variable | Required | Runtime | Purpose |
 |----------|----------|---------|---------|
 | `AWS_REGION` | If AWS used | Server | AWS region (e.g. `us-east-1`) |
-| `AWS_ACCESS_KEY_ID` | If AWS used | Server | AWS access key for Bedrock / Transcribe |
+| `AWS_ACCESS_KEY_ID` | If AWS used | Server | AWS access key for Transcribe (speech-to-text) |
 | `AWS_SECRET_ACCESS_KEY` | If AWS used | Server | AWS secret key |
 | `AWS_SESSION_TOKEN` | If STS role | Server | Temporary session token (when using assumed roles) |
 

@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { motion } from "framer-motion"
-import { CaretUp as ChevronUp, CaretUpDown, Check, Flask as FlaskConical, Folder, FolderOpen, NotePencil as NotebookPen, SidebarSimple as PanelLeft, Plus, MagnifyingGlass as Search, Gear as Settings, TestTube, FileText, NotePencil as FileEdit, CircleNotch as Loader2 } from "@phosphor-icons/react/ssr"
+import { CaretUp as ChevronUp, CaretUpDown, Check, Flask as FlaskConical, Folder, FolderOpen, NotePencil as NotebookPen, SidebarSimple as PanelLeft, Plus, MagnifyingGlass as Search, Gear as Settings, TestTube, FileText, NotePencil as FileEdit, CircleNotch as Loader2, Keyboard } from "@phosphor-icons/react/ssr"
 import {
   Sidebar,
   SidebarContent,
@@ -39,6 +39,7 @@ import { ClipboardInfoIcon } from "@/components/ui/clipboard-info-icon"
 import { APP_PRIMARY_NAV } from "@/lib/app-primary-nav"
 import { TOUR, navTourKey } from "@/lib/tour/anchors"
 import { useProjectScope } from "@/contexts/project-scope-context"
+import { useShortcuts, CREATE_LAB_NOTE_EVENT } from "@/contexts/shortcuts-context"
 import { sortByRecentProjectOrder } from "@/lib/recent-projects"
 import { toast } from "sonner"
 import { Button } from "../ui/button"
@@ -123,6 +124,7 @@ export function AppSidebar() {
   // we render a project chip + scoped section nav so the sidebar reflects ONE
   // hierarchy instead of the two parallel ones the audit flagged.
   const scope = useProjectScope()
+  const { openPalette, openCheatSheet } = useShortcuts()
   const [searchQuery, setSearchQuery] = useState("")
   const [searchFocused, setSearchFocused] = useState(false)
   const [projects, setProjects] = useState<Project[]>([])
@@ -301,20 +303,15 @@ export function AppSidebar() {
     setMounted(true)
   }, [])
 
-  // ⌘K / Ctrl+K focuses the sidebar search from anywhere (expanding the
-  // collapsed rail first). Skips when the user is typing in another field.
+  // ⌘K belongs to the command palette now (contexts/shortcuts-context.tsx);
+  // the collapsed-rail search icon and the ⌘K chip below are the mouse routes.
+
+  // `c n` — the shortcut has no way to reach this dialog except by event.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "k") return
-      const t = e.target as HTMLElement | null
-      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return
-      e.preventDefault()
-      setOpen(true)
-      setTimeout(() => searchInputRef.current?.focus(), open ? 0 : 120)
-    }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [open, setOpen])
+    const openLabNote = () => setLabNoteOpen(true)
+    window.addEventListener(CREATE_LAB_NOTE_EVENT, openLabNote)
+    return () => window.removeEventListener(CREATE_LAB_NOTE_EVENT, openLabNote)
+  }, [])
 
   // Debounced sidebar search (file/document level)
   useEffect(() => {
@@ -617,9 +614,17 @@ export function AppSidebar() {
                     }}
                   />
                   {searchQuery.length === 0 && (
-                    <kbd className="pointer-events-none absolute right-2 top-1/2 hidden h-5 -translate-y-1/2 select-none items-center rounded-[5px] border border-sidebar-border/80 bg-sidebar px-1.5 font-sans text-[10px] font-medium tracking-wide text-muted-foreground sm:flex">
+                    /* ⌘K opens the command palette, not this field — so the
+                       chip is the button that does exactly that. */
+                    <button
+                      type="button"
+                      onClick={openPalette}
+                      aria-label="Open command palette"
+                      title="Open command palette"
+                      className="absolute right-2 top-1/2 hidden h-5 -translate-y-1/2 select-none items-center rounded-[5px] border border-sidebar-border/80 bg-sidebar px-1.5 font-sans text-[10px] font-medium tracking-wide text-muted-foreground transition-colors hover:border-sidebar-border hover:text-foreground sm:flex"
+                    >
                       ⌘K
-                    </kbd>
+                    </button>
                   )}
                 </motion.div>
               </PopoverAnchor>
@@ -1135,6 +1140,10 @@ export function AppSidebar() {
                       <Settings className="mr-2 size-4" />
                       <span>Account Settings</span>
                     </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={openCheatSheet} className="cursor-pointer">
+                    <Keyboard className="mr-2 size-4" />
+                    <span>Keyboard shortcuts</span>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleSignOut}>

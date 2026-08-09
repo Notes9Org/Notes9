@@ -20,7 +20,7 @@ User types query in Catalyst chat
   → useAgentStream hook (hooks/use-agent-stream.ts)
     → POST /api/agent/stream (Next.js Edge route)
       → POST CHAT_API_URL/notes9/stream (FastAPI SSE)
-        → Catalyst agent: ReAct loop, tools, Bedrock Claude
+        → Catalyst agent: ReAct loop, tools, Claude via the Catalyst model gateway
       ← SSE event stream (pipe-through)
     ← SSE events rendered by agent-stream-reply.tsx
 ```

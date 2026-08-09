@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
 import { useProjectScope } from "@/contexts/project-scope-context"
+import { useMediaQuery } from "@/hooks/use-media-query"
 import {
   Table,
   TableBody,
@@ -12,6 +13,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import { ViewModeToggle } from "@/components/ui/view-mode-toggle"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -35,6 +44,7 @@ import {
   ResourceListFilter,
 } from "@/components/ui/resource-list-filters"
 import {
+  ArrowUpRight,
   Database,
   File,
   FileImage,
@@ -67,11 +77,11 @@ export type DataFileRow = {
 type Option = { id: string; name: string }
 type ExperimentOption = Option & { project_id: string | null }
 
-function getFileIcon(fileName: string, fileType: string | null) {
+function getFileIcon(fileName: string, fileType: string | null, className = "size-4") {
   const type = fileType || ""
   const lower = fileName.toLowerCase()
-  if (type.startsWith("image/")) return <FileImage className="size-4" />
-  if (type.includes("pdf")) return <FileText className="size-4" />
+  if (type.startsWith("image/")) return <FileImage className={className} />
+  if (type.includes("pdf")) return <FileText className={className} />
   if (
     type.includes("spreadsheet") ||
     type.includes("csv") ||
@@ -80,9 +90,9 @@ function getFileIcon(fileName: string, fileType: string | null) {
     lower.endsWith(".xlsx") ||
     lower.endsWith(".xls")
   ) {
-    return <FileSpreadsheet className="size-4" />
+    return <FileSpreadsheet className={className} />
   }
-  return <File className="size-4" />
+  return <File className={className} />
 }
 
 function formatFileSize(bytes: number | null): string {
@@ -92,6 +102,9 @@ function formatFileSize(bytes: number | null): string {
   const i = Math.floor(Math.log(bytes) / Math.log(k))
   return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i]
 }
+
+/** Same ISO short form the other resource tables print in their Created column. */
+const formatDate = (dateStr: string): string => new Date(dateStr).toISOString().split("T")[0]
 
 export function DataFilesListClient({
   files,
@@ -108,6 +121,17 @@ export function DataFilesListClient({
 
   const [projectFilter, setProjectFilter] = useState(FILTER_ALL)
   const [experimentFilter, setExperimentFilter] = useState(FILTER_ALL)
+
+  // Grid/table switch, same contract as the other resource lists: table by
+  // default on desktop, locked to cards on mobile where the columns can't
+  // render readably.
+  const isMobile = useMediaQuery("(max-width: 768px)")
+  const [viewMode, setViewMode] = useState<"grid" | "table">("table")
+  const effectiveViewMode = isMobile ? "grid" : viewMode
+
+  useEffect(() => {
+    if (isMobile) setViewMode("grid")
+  }, [isMobile])
 
   // In-place file viewers (mirror the experiment Data tab): spreadsheets open in
   // the Univer viewer, images/PDF/text in the preview dialog, anything else in a
@@ -302,7 +326,8 @@ export function DataFilesListClient({
           Every data file across your experiments. Change the filters to browse other
           projects and experiments.
         </p>
-        <div className="shrink-0">
+        <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+          <ViewModeToggle value={viewMode} onChange={setViewMode} tableDisabled={isMobile} />
           <UploadFileDialog
             experimentId={uploadExperimentId}
             onUploadComplete={() => router.refresh()}
@@ -355,66 +380,135 @@ export function DataFilesListClient({
             Clear filters
           </Button>
         </div>
-      ) : (
-        <div className="rounded-xl border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead className="hidden md:table-cell">Type</TableHead>
-                <TableHead>Experiment</TableHead>
-                <TableHead className="hidden lg:table-cell">Project</TableHead>
-                <TableHead className="hidden md:table-cell">Size</TableHead>
-                <TableHead className="hidden lg:table-cell">Uploaded</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredFiles.map((file) => (
-                <TableRow
-                  key={file.id}
-                  className="cursor-pointer"
-                  onClick={() => openFileRow(file)}
-                >
-                  <TableCell>
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="shrink-0 text-muted-foreground">
-                        {getFileIcon(file.file_name, file.file_type)}
-                      </span>
-                      <span className="truncate font-medium" title={file.file_name}>
-                        {file.file_name}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="hidden md:table-cell">
-                    {file.data_type ? (
-                      <Badge variant="secondary" className="capitalize">
-                        {file.data_type}
-                      </Badge>
-                    ) : (
-                      "-"
+      ) : effectiveViewMode === "grid" ? (
+        <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(280px,1fr))]">
+          {filteredFiles.map((file) => (
+            <Card
+              key={file.id}
+              ribbon="var(--kind-experiment)"
+              className="bg-card hover:border-primary hover:shadow-md transition-all duration-200 motion-safe:hover:-translate-y-0.5 animate-n9-turn-in flex flex-col min-w-0 overflow-hidden cursor-pointer"
+              onClick={() => openFileRow(file)}
+            >
+              <CardHeader className="pb-3 min-w-0">
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    {getFileIcon(file.file_name, file.file_type, "h-5 w-5")}
+                  </div>
+                  <div className="min-w-0 flex-1 space-y-1 overflow-hidden">
+                    <CardTitle
+                      className="text-base text-foreground leading-tight min-w-0 overflow-hidden text-ellipsis"
+                      title={file.file_name}
+                    >
+                      {file.file_name}
+                    </CardTitle>
+                    {file.project_name && (
+                      <CardDescription className="text-xs truncate">
+                        {file.project_name}
+                      </CardDescription>
                     )}
-                  </TableCell>
-                  <TableCell className="max-w-[180px]">
-                    <span className="truncate block" title={file.experiment_name ?? undefined}>
-                      {file.experiment_name ?? "-"}
-                    </span>
-                  </TableCell>
-                  <TableCell className="hidden lg:table-cell max-w-[160px]">
-                    <span className="truncate block" title={file.project_name ?? undefined}>
-                      {file.project_name ?? "-"}
-                    </span>
-                  </TableCell>
-                  <TableCell className="hidden md:table-cell whitespace-nowrap">
+                  </div>
+                </div>
+                <div className="flex items-center justify-between pt-2 gap-2 min-w-0">
+                  {file.data_type && (
+                    <Badge variant="secondary" className="text-xs capitalize shrink-0">
+                      {file.data_type}
+                    </Badge>
+                  )}
+                  <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
                     {formatFileSize(file.file_size)}
-                  </TableCell>
-                  <TableCell className="hidden lg:table-cell whitespace-nowrap text-muted-foreground">
-                    {new Date(file.created_at).toLocaleDateString()}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                  </span>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3 flex-1 flex flex-col pt-0 min-w-0">
+                <div className="space-y-2 flex-1 min-w-0">
+                  {file.experiment_name && (
+                    <div className="flex items-center gap-1 text-sm text-muted-foreground min-w-0 overflow-hidden">
+                      <span className="text-xs font-semibold shrink-0">Experiment:</span>
+                      <span className="truncate text-xs">{file.experiment_name}</span>
+                    </div>
+                  )}
+                  <div className="text-xs text-muted-foreground">
+                    Uploaded {formatDate(file.created_at)}
+                  </div>
+                </div>
+                <Button variant="outline" size="sm" className="w-full mt-auto shrink-0">
+                  <ArrowUpRight className="h-4 w-4 mr-2" />
+                  <span className="truncate">Open file</span>
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
         </div>
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-foreground">All Data Files</CardTitle>
+            <CardDescription>Complete list of experiment data files</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="relative w-full overflow-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="min-w-[260px]">File Name</TableHead>
+                    <TableHead className="min-w-[120px]">Type</TableHead>
+                    <TableHead className="min-w-[100px]">Size</TableHead>
+                    <TableHead className="min-w-[120px]">Uploaded</TableHead>
+                    <TableHead className="text-right min-w-[80px]">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredFiles.map((file) => (
+                    <TableRow
+                      key={file.id}
+                      className="cursor-pointer"
+                      onClick={() => openFileRow(file)}
+                    >
+                      <TableCell className="font-medium text-foreground">
+                        <div className="flex items-center gap-2">
+                          <span className="shrink-0 text-primary">
+                            {getFileIcon(file.file_name, file.file_type)}
+                          </span>
+                          <span className="truncate" title={file.file_name}>
+                            {file.file_name}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {file.data_type ? (
+                          <Badge variant="secondary" className="capitalize">
+                            {file.data_type}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground italic">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground whitespace-nowrap">
+                        {formatFileSize(file.file_size)}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground whitespace-nowrap">
+                        {formatDate(file.created_at)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`Open ${file.file_name}`}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            openFileRow(file)
+                          }}
+                        >
+                          <ArrowUpRight className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
       )}
     </>
   )
