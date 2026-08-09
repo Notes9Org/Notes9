@@ -13,7 +13,7 @@
       ],
       "depends_on": [],
       "brief": "slices/N01-spec-author-bounds.md",
-      "status": "pr_open",
+      "status": "merged",
       "agents": {
         "build": "voltagent-lang:typescript-pro",
         "review": "ecc:security-reviewer",
@@ -24,26 +24,45 @@
       "pr": 232
     },
     {
-      "id": "N02",
-      "name": "mention-rail",
+      "id": "N02a",
+      "name": "mention-kind",
       "owns": [
         "lib/catalyst-mention-types.ts",
+        "__tests__/catalyst-mention-kinds.test.ts"
+      ],
+      "depends_on": [],
+      "brief": "slices/N02a-mention-kind.md",
+      "status": "building",
+      "branch": "slice/data-analysis-ai-seam-N02a-mention-kind",
+      "agents": {
+        "build": "voltagent-lang:typescript-pro",
+        "review": "ecc:typescript-reviewer",
+        "test": "ecc:tdd-guide"
+      },
+      "kind": "feature"
+    },
+    {
+      "id": "N02b",
+      "name": "mention-rail",
+      "owns": [
         "lib/catalyst-launch.ts",
         "components/layout/right-sidebar.tsx",
         "components/literature-reviews/literature-pdf-panel.tsx",
-        "__tests__/catalyst-mention-kinds.test.ts",
         "__tests__/catalyst-launch-ordering.test.tsx"
       ],
-      "depends_on": [],
-      "brief": "slices/N02-mention-rail.md",
-      "status": "gate_failed",
+      "depends_on": [
+        "N02a"
+      ],
+      "brief": "slices/N02b-mention-rail.md",
+      "status": "ready",
+      "branch": "slice/data-analysis-ai-seam-N02b-mention-rail",
       "agents": {
-        "build": "voltagent-lang:react-specialist",
+        "build": "human:claude-opus-5",
         "review": "ecc:react-reviewer",
         "test": "ecc:tdd-guide"
       },
       "kind": "feature",
-      "branch": "slice/data-analysis-ai-seam-N02-mention-rail"
+      "note": "Re-cut from N02 after two agent attempts failed on the 5339-line right-sidebar.tsx. Implemented directly, then gated by the same review+test agents."
     },
     {
       "id": "N03",
@@ -54,7 +73,8 @@
       ],
       "depends_on": [
         "N01",
-        "N02"
+        "N02a",
+        "N02b"
       ],
       "brief": "slices/N03-data-page-wiring.md",
       "status": "ready",
