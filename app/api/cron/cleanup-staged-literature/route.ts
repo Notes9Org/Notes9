@@ -18,6 +18,7 @@
  */
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase-service-role";
+import { isAuthorizedCron } from "../_lib/cron-auth";
 
 const BATCH_SIZE = Number(process.env.STAGED_LITERATURE_CLEANUP_BATCH ?? "500");
 const MAX_ROWS_PER_RUN = Number(
@@ -29,17 +30,6 @@ export const dynamic = "force-dynamic";
 
 function unauthorized(reason: string): NextResponse {
   return NextResponse.json({ ok: false, error: reason }, { status: 401 });
-}
-
-function isAuthorizedCron(request: Request): { ok: boolean; reason?: string } {
-  const expected = process.env.CRON_SECRET;
-  if (!expected) return { ok: false, reason: "CRON_SECRET not configured" };
-  const auth = request.headers.get("authorization") ?? "";
-  const bearer = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-  const admin = request.headers.get("x-admin-secret") ?? "";
-  if (bearer && bearer === expected) return { ok: true };
-  if (admin && admin === expected) return { ok: true };
-  return { ok: false, reason: "invalid cron credential" };
 }
 
 export async function GET(request: Request): Promise<NextResponse> {
