@@ -12,12 +12,19 @@ is capped at the length the backend actually accepts.
 
 - `components/catalyst/catalyst-section-hero.tsx`
 - `components/data-analysis/data-analysis-workspace.tsx`
+- `__tests__/data-page-wiring.test.tsx`
 
 Touching anything outside this list is a bug. If you believe you must, stop and
 report it instead. You do **not** own `lib/catalyst-launch.ts`,
 `lib/catalyst-mention-types.ts`, `components/layout/right-sidebar.tsx`, or
-`lib/data-analysis/ai/spec-author.ts`. All four land before you start and you
-consume them.
+`lib/data-analysis/ai/spec-author.ts`. All four are **already merged to `dev`**
+and present in your worktree; you import and read them, you do not edit them.
+
+**Reading a file you do not own is fine and expected. Writing one is the bug.**
+Edge cases 1-3 below assert behaviour that lives in `right-sidebar.tsx`
+(N02b, merged as PR #236). Render it, assert against it, and if it misbehaves,
+**report it — do not patch it here.** That is a real regression in a shipped
+sibling and belongs in its own change.
 
 ## Context
 

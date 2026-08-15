@@ -75,7 +75,8 @@
       "name": "data-page-wiring",
       "owns": [
         "components/catalyst/catalyst-section-hero.tsx",
-        "components/data-analysis/data-analysis-workspace.tsx"
+        "components/data-analysis/data-analysis-workspace.tsx",
+        "__tests__/data-page-wiring.test.tsx"
       ],
       "depends_on": [
         "N01",
@@ -91,7 +92,7 @@
       },
       "kind": "feature",
       "branch": "slice/data-analysis-ai-seam-N03-data-page-wiring",
-      "note": "All three dependencies are merged to dev as of 2026-08-15. Last slice in the Notes9 half."
+      "note": "All three dependencies are merged to dev as of 2026-08-15. Last slice in the Notes9 half. Brief linted 2026-08-15: added the test file to owns (it had none, so the test gate was unsatisfiable without an ownership violation), and marked edge cases 1-3 as read-only integration assertions against N02b's already-merged right-sidebar seeding rather than work in this slice. NOT superseded by catalyst-seam-determinism — that document's Superseded section made a wrong claim and has been corrected."
     }
   ]
 }
