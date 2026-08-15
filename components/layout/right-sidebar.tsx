@@ -29,7 +29,7 @@ const Tooltip = ({ children }: TooltipStubProps) => <>{children}</>
 const TooltipTrigger = ({ children }: TooltipStubProps) => <>{children}</>
 const TooltipContent = (_props: TooltipStubProps) => null
 
-import { Square, ArrowUp, ClockCounterClockwise as History, ArrowsOut as Maximize, ArrowsIn as Minimize, SidebarSimple as PanelLeft, Plus, Paperclip, Globe, Chat as MessageSquare, NotePencil as NotebookPen, NotePencil as PenBox, DotsThree as MoreHorizontal, PushPin as Pin, PushPinSlash as PinOff, PencilSimple as Pencil, Check, CaretRight as ChevronRight, Folder, FolderPlus, FolderOpen as FolderInput, CheckSquare, MagnifyingGlass as Search, Trash as Trash2, CaretDown as ChevronDown, X, Binoculars as Telescope, List as Menu, Sun, Moon, Question as CircleHelp, Microphone as Mic, BookOpen, Flask as FlaskConical, FolderOpen, FileText, CircleNotch as Loader2, At as AtSign, Info, Warning, UploadSimple, Quotes } from "@phosphor-icons/react/ssr";
+import { Square, ArrowUp, ClockCounterClockwise as History, ArrowsOut as Maximize, ArrowsIn as Minimize, SidebarSimple as PanelLeft, Plus, Paperclip, Globe, Chat as MessageSquare, NotePencil as NotebookPen, NotePencil as PenBox, DotsThree as MoreHorizontal, PushPin as Pin, PushPinSlash as PinOff, PencilSimple as Pencil, Check, CaretRight as ChevronRight, Folder, FolderPlus, FolderOpen as FolderInput, CheckSquare, MagnifyingGlass as Search, Trash as Trash2, CaretDown as ChevronDown, X, Binoculars as Telescope, List as Menu, Sun, Moon, Question as CircleHelp, Microphone as Mic, BookOpen, Flask as FlaskConical, FolderOpen, FileText, CircleNotch as Loader2, At as AtSign, Info, Warning, UploadSimple, Quotes, Table } from "@phosphor-icons/react/ssr";
 import { cn } from '@/lib/utils';
 import { SideRailSearch } from '@/components/patterns/side-rail';
 import { recordRumEvent } from '@/lib/rum';
@@ -1312,12 +1312,17 @@ export function RightSidebar({
             { data: experiments },
             { data: projects },
             { data: protocols },
+            { data: dataFiles },
           ] = await Promise.all([
             supabase.from('literature_reviews').select('id,title').order('updated_at', { ascending: false }).limit(120),
             supabase.from('lab_notes').select('id,title').order('created_at', { ascending: false }).limit(120),
             supabase.from('experiments').select('id,name').order('created_at', { ascending: false }).limit(120),
             supabase.from('projects').select('id,name').order('created_at', { ascending: false }).limit(120),
             supabase.from('protocols').select('id,name').order('created_at', { ascending: false }).limit(120),
+            // experiment_data has NO `name` column - the identifier is `file_name`.
+            // Selecting one errors at runtime and the catch below drops the WHOLE
+            // catalog, silently disabling every @-mention in the app.
+            supabase.from('experiment_data').select('id,file_name').order('created_at', { ascending: false }).limit(120),
           ]);
           const merged: MentionItem[] = [
             ...(lit ?? []).map((r: { id: string; title: string | null }) => ({ kind: 'literature_review' as const, id: r.id, title: resolveLiteratureTitle(r) })),
@@ -1325,6 +1330,7 @@ export function RightSidebar({
             ...(experiments ?? []).map((r: { id: string; name: string | null }) => ({ kind: 'experiment' as const, id: r.id, title: r.name ?? 'Untitled experiment' })),
             ...(projects ?? []).map((r: { id: string; name: string | null }) => ({ kind: 'project' as const, id: r.id, title: r.name ?? 'Untitled project' })),
             ...(protocols ?? []).map((r: { id: string; name: string | null }) => ({ kind: 'protocol' as const, id: r.id, title: r.name ?? 'Untitled protocol' })),
+            ...(dataFiles ?? []).map((r: { id: string; file_name: string | null }) => ({ kind: 'data_file' as const, id: r.id, title: r.file_name ?? 'Untitled data file' })),
           ];
           mentionItemsCache = { fetchedAt: Date.now(), items: merged };
           return merged;
@@ -1334,7 +1340,7 @@ export function RightSidebar({
         const merged = await mentionItemsInflight;
         if (!cancelled) setAllMentionItems(merged);
       } catch (err) {
-        // One of the 5 mention-catalog queries failed (network/auth/RLS).
+        // One of the 6 mention-catalog queries failed (network/auth/RLS).
         // Leave the existing (possibly empty) list in place rather than
         // crashing the sidebar; surface the cause for debugging.
         console.error('[RightSidebar] Failed to load @-mention catalog:', err);
@@ -1611,7 +1617,9 @@ export function RightSidebar({
             ? renderToStaticMarkup(<FlaskConical className={common} />)
             : kind === 'project'
               ? renderToStaticMarkup(<FolderOpen className={common} />)
-              : renderToStaticMarkup(<ClipboardInfoIcon className={common} />);
+              : kind === 'data_file'
+                ? renderToStaticMarkup(<Table className={common} />)
+                : renderToStaticMarkup(<ClipboardInfoIcon className={common} />);
     MENTION_ICON_MARKUP_CACHE[kind] = markup;
     return markup;
   }, []);
@@ -3465,7 +3473,7 @@ export function RightSidebar({
   }, [isPageVariant, router]);
 
   const applyCatalystLaunch = useCallback(
-    (launch: { query?: string; projectId?: string; attachments?: Array<{ url: string; name: string; contentType: string; size?: number }>; literatureSources?: AgentLiteratureSource[]; webSearch?: boolean; autoSend?: boolean; sessionId?: string; expectAttachment?: boolean; expectedAttachmentName?: string; literatureMention?: { id: string; title: string }; literatureSelection?: { text: string; title?: string } }) => {
+    (launch: { query?: string; projectId?: string; attachments?: Array<{ url: string; name: string; contentType: string; size?: number }>; literatureSources?: AgentLiteratureSource[]; webSearch?: boolean; autoSend?: boolean; sessionId?: string; expectAttachment?: boolean; expectedAttachmentName?: string; mention?: { kind: CatalystMentionKind; id: string; title: string }; literatureSelection?: { text: string; title?: string } }) => {
       // Gate the first Send while a paper attachment is being fetched, so the user
       // can't fire the message before it lands. A later launch (the closed-access
       // fallback re-open) or the attach/notice events release the gate.
@@ -3508,6 +3516,7 @@ export function RightSidebar({
         ]);
       }
       const q = launch.query?.trim();
+      const mention = launch.mention;
       if (q) {
         setInput(q);
         // The composer is a contentEditable <div>, not a controlled input, so
@@ -3529,6 +3538,41 @@ export function RightSidebar({
           // The prompt arrived from an external composer where the user already
           // hit Send, submit it now (using the latest handleSubmit, which sees
           // the just-seeded input) so they don't have to click Send again.
+          // The tag must land BEFORE autoSend fires. appendMentionToInput is
+          // what updates `selectedMentions`, the agent's source of truth, so a
+          // submit that runs first sends the turn UNTAGGED. It must also land
+          // AFTER the textContent assignment above, which would wipe the chip.
+          // Those two constraints cannot both hold across two frames, which is
+          // why this used to be a second rAF and why the tag was dropped: no
+          // producer set both `autoSend` and a mention until the Data Analysis
+          // composer did.
+          //
+          // Why this works despite React batching: appendMentionToInput's own
+          // setSelectedMentions has NOT flushed by the time handleSubmit runs in
+          // this same frame. It does not need to. handleSubmit (~:2394) derives
+          // its tags from the DOM --
+          //   serializeComposerToUserMarkdown(inputRef.current)
+          //     -> extractTagItemsFromMarkdown -> mergeUniqueTags(selectedMentions, ...)
+          // -- and appendMentionToInput inserts the chip node synchronously (its
+          // internal rAF only re-syncs setInput/focus/resize). So the chip is in
+          // the composer before it is serialized. Do not "fix" this by awaiting
+          // a state flush; the DOM is the source that submit actually reads.
+          if (mention) {
+            // Re-collapse the caret to the end before appending: the chip must
+            // land after the text just written above, not at the caret's old
+            // position.
+            const el = inputRef.current;
+            if (el) {
+              el.focus();
+              const range = document.createRange();
+              range.selectNodeContents(el);
+              range.collapse(false);
+              const sel = window.getSelection();
+              sel?.removeAllRanges();
+              sel?.addRange(range);
+            }
+            appendMentionToInput({ kind: mention.kind, id: mention.id, title: mention.title });
+          }
           if (launch.autoSend) {
             handleSubmitRef.current?.({
               preventDefault() {},
@@ -3536,15 +3580,10 @@ export function RightSidebar({
           }
         });
       }
-      if (launch.literatureMention) {
-        // "Ask Catalyst" on a saved/staged paper attaches it as an @-mention TAG
-        // the same representation as dragging it in from the library, so every
-        // entry point behaves identically (appendMentionToInput also updates
-        // selectedMentions, the agent's source of truth).
-        const m = launch.literatureMention;
-        // Queued AFTER the query rAF above: seeding the contentEditable via
-        // textContent would wipe an already-appended chip, so the chip must
-        // land second when a launch carries both a query and a mention.
+      if (mention && !q) {
+        // No query to seed, so nothing can wipe the chip and nothing is being
+        // submitted. Kept as its own frame so the with-query path above stays
+        // byte-identical to what shipped.
         requestAnimationFrame(() => {
           const el = inputRef.current;
           if (el) {
@@ -3556,7 +3595,7 @@ export function RightSidebar({
             sel?.removeAllRanges();
             sel?.addRange(range);
           }
-          appendMentionToInput({ kind: 'literature_review', id: m.id, title: m.title });
+          appendMentionToInput({ kind: mention.kind, id: mention.id, title: mention.title });
         });
       }
       if (launch.literatureSelection?.text) {
@@ -3635,7 +3674,7 @@ export function RightSidebar({
       // silently disabled the send-gate and the optimistic paper chip.
       expectAttachment: pendingLaunch.expectAttachment,
       expectedAttachmentName: pendingLaunch.expectedAttachmentName,
-      literatureMention: pendingLaunch.literatureMention,
+      mention: pendingLaunch.mention,
       literatureSelection: pendingLaunch.literatureSelection,
     });
     onPendingLaunchConsumed?.();
