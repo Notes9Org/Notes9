@@ -18,6 +18,7 @@ import {
   upgradeInsecurePdfUrlIfKnownHost,
 } from "@/lib/literature-pdf-urls"
 import { resolvePmcOaPdfUrls } from "@/lib/literature-pdf-import"
+import { safeFetch } from "@/lib/net/safe-fetch"
 import { resolveUnpaywallPdfUrls } from "@/lib/unpaywall"
 import { unstable_cache } from "next/cache"
 
@@ -67,7 +68,7 @@ async function fetchSemanticScholarPdfUrl(idParam: string): Promise<string | nul
   const timeoutId = setTimeout(() => controller.abort(), TIER2_FETCH_TIMEOUT_MS)
   try {
     const apiKey = process.env.SEMANTIC_SCHOLAR_API_KEY?.trim()
-    const res = await fetch(
+    const res = await safeFetch(
       `https://api.semanticscholar.org/graph/v1/paper/${idParam}?fields=openAccessPdf`,
       {
         headers: {
@@ -134,7 +135,7 @@ async function fetchCorePdfUrl(normalizedDoi: string): Promise<string | null> {
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), TIER2_FETCH_TIMEOUT_MS)
   try {
-    const res = await fetch(
+    const res = await safeFetch(
       `https://api.core.ac.uk/v3/search/works?q=${encodeURIComponent(`doi:"${normalizedDoi}"`)}&limit=10`,
       {
         headers: { Accept: "application/json", Authorization: `Bearer ${apiKey}` },
@@ -222,9 +223,8 @@ async function resolveFromBiorxivApi(
   if (!server) return null
   try {
     const url = `https://api.biorxiv.org/details/${server}/${encodeURIComponent(doi)}`
-    const res = await fetch(url, {
+    const res = await safeFetch(url, {
       headers: { "User-Agent": OA_USER_AGENT, Accept: "application/json" },
-      next: { revalidate: 0 },
     })
     if (!res.ok) return null
     const data = (await res.json()) as {
@@ -241,9 +241,8 @@ async function resolveFromArxivAtom(arxivId: string | null): Promise<string | nu
   if (!arxivId) return null
   try {
     const url = `https://export.arxiv.org/api/query?id_list=${encodeURIComponent(arxivId)}`
-    const res = await fetch(url, {
+    const res = await safeFetch(url, {
       headers: { "User-Agent": OA_USER_AGENT, Accept: "application/atom+xml" },
-      next: { revalidate: 0 },
     })
     if (!res.ok) return null
     const xml = await res.text()
@@ -285,9 +284,8 @@ async function resolveFromOpenAlex(
   if (!normalizedDoi) return { pdfUrls: [], abstract: null }
   try {
     const url = `https://api.openalex.org/works/doi:${encodeURIComponent(normalizedDoi)}`
-    const res = await fetch(url, {
+    const res = await safeFetch(url, {
       headers: { "User-Agent": OA_USER_AGENT, Accept: "application/json" },
-      next: { revalidate: 0 },
     })
     if (!res.ok) return { pdfUrls: [], abstract: null }
     const data = (await res.json()) as {
@@ -344,9 +342,8 @@ async function resolveFromEuropePmc(
     const url =
       `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(query)}` +
       `&format=json&pageSize=1&resultType=core`
-    const res = await fetch(url, {
+    const res = await safeFetch(url, {
       headers: { "User-Agent": OA_USER_AGENT, Accept: "application/json" },
-      next: { revalidate: 0 },
     })
     if (!res.ok) return { pdfUrl: null, abstract: null }
     const data = (await res.json()) as {
@@ -454,7 +451,12 @@ export async function resolveOaSourcesUncached(
   ])
   const preprintUrls = paper.doi ? preprintPdfUrlsFromDoi(paper.doi, paper.source) : []
 
-  const seen = new Set<string>()
+  // SEC-001/N9-14: every candidate — regardless of which upstream source
+  // produced it — funnels through `addCandidate` (SSRF allowlist), not just a
+  // bare `https?://` shape check. This used to be the merge's own ad-hoc
+  // regex, which is exactly the "forgot to call the allowlist" bug this
+  // slice closes: a source returning a non-allowlisted (or private-IP) URL
+  // would previously reach the downloader untouched.
   const pdfUrls: string[] = []
   for (const u of [
     ...openAlex.pdfUrls,
@@ -463,11 +465,7 @@ export async function resolveOaSourcesUncached(
     ...preprintUrls,
     s2Url,
   ]) {
-    const url = u?.trim()
-    if (url && /^https?:\/\//i.test(url) && !seen.has(url)) {
-      seen.add(url)
-      pdfUrls.push(url)
-    }
+    addCandidate(pdfUrls, u)
   }
   console.log(
     `[oa] resolve doi=${normalizedDoi ?? "none"} pmid=${paper.pmid ?? "none"}` +
