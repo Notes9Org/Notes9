@@ -390,8 +390,18 @@ from wave 2 carrying `facts` and `thread`.
 ## Superseded
 
 - `docs/arch/data-analysis-ai-seam/ADR-002` — its **placement** decision only. The mention
-  rail mechanism it specifies stands; interfaces I6/I7 there and slice `N03-data-page-wiring`
-  are superseded by I1/I2 here.
+  rail mechanism it specifies stands.
+
+  **Correction (2026-08-15).** An earlier revision of this line also claimed that
+  `data-analysis-ai-seam` interfaces I6/I7 and slice `N03-data-page-wiring` were superseded
+  by I1/I2 here. That was wrong, and it was wrong in a way worth recording: the two documents
+  have independent interface numbering, and the claim conflated *this* document's I6 (limits)
+  with *that* document's I6. They are unrelated. I1/I2 here are the seam contract package and
+  the HTTP outcome envelope — a wire-protocol concern. I6/I7 there are the `mention?`
+  pass-through prop on `CatalystSectionHero` and the Data Analysis page wiring — a Notes9 UI
+  concern that nothing in this feature implements. **N03 is not superseded and must still be
+  built.** When cross-referencing another architecture's interfaces, quote the interface's
+  title, never its bare number.
 - ADR-001, ADR-003, ADR-004 stand unchanged. ADR-004 is *extended* by I6: it enforced the
   Catalyst request bound at the Notes9 seam by mirroring a constant, and I6 replaces the
   mirrored constant with a shared file, which is the same decision made structural.
