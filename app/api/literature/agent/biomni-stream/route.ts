@@ -1,8 +1,41 @@
+import { createClient } from '@supabase/supabase-js';
 import { verifyBearerToken } from "@/lib/verify-bearer-token"
 import { biomniAgentStreamUrl } from '@/lib/catalyst-client'
 
 /** Long Biomni design-mode runs can exceed 120s; 300s matches typical Vercel Pro serverless max (raise on Fluid/self-host if needed). */
 export const maxDuration = 300;
+
+/**
+ * SEC-006 pre-validation (defense-in-depth, CONTRACTS.md C1c / closes N9-9):
+ * reject any `literature_review_ids` the caller can't see under RLS before
+ * forwarding to the AI backend. The AI backend re-validates by calling back
+ * to Notes9 with the caller's JWT (RLS is the ultimate gate), but a foreign
+ * id should never cross the repo boundary in the first place.
+ */
+async function assertOwnsLiteratureReviews(
+  token: string,
+  ids: string[]
+): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return { ok: false, status: 500, error: 'Unable to validate literature_review_ids ownership' };
+  }
+  const client = createClient(supabaseUrl, supabaseAnonKey, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data, error } = await client.from('literature_reviews').select('id').in('id', ids);
+  if (error) {
+    return { ok: false, status: 500, error: 'Unable to validate literature_review_ids ownership' };
+  }
+  const ownedIds = new Set((data ?? []).map((row: { id: string }) => row.id));
+  const foreignIds = ids.filter((id) => !ownedIds.has(id));
+  if (foreignIds.length > 0) {
+    return { ok: false, status: 403, error: 'literature_review_ids includes ids you do not have access to' };
+  }
+  return { ok: true };
+}
 
 /** Defaults aligned with `POST /biomni/literature/stream`. */
 const DEFAULT_BIOMNI_OPTIONS = {
@@ -76,6 +109,14 @@ export async function POST(req: Request) {
       JSON.stringify({ error: 'literature_review_ids must include at least one id' }),
       { status: 400, headers: { 'Content-Type': 'application/json' } }
     );
+  }
+
+  const ownership = await assertOwnsLiteratureReviews(token, literature_review_ids);
+  if (!ownership.ok) {
+    return new Response(JSON.stringify({ error: ownership.error }), {
+      status: ownership.status,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 
   const modeRaw = typeof body.mode === 'string' ? body.mode.trim() : '';
