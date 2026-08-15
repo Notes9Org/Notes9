@@ -111,10 +111,12 @@ Nothing. Runs in parallel with W1-N1.
 3. **Exactly at each cap, and one past.** A `query` of exactly 10,000 characters is
    accepted; 10,001 is rejected. Same for all four rows. An off-by-one here rejects a valid
    request, which is the user-visible harm this whole slice exists to remove.
-4. **The compound bound binds.** A request under every individual cap but over
-   `total_request_bytes` is rejected. Build it from `history` entries, since that is the
-   ~3.2 MB path. Guaranteed behaviour: rejected at the seam with our own message, never a
-   raw upstream 422.
+4. **The compound bound is expressible.** `limits.json` carries `total_request_bytes`, and a
+   payload under every individual cap can still exceed it — assert that arithmetic against
+   the real exported constants, built from `history` entries since that is the ~3.2 MB path.
+   Asserting the *rejection* is **not** yours: no guard for this bound exists in any file you
+   own, and building one here would put enforcement in the wrong layer. W2-N1 owns the
+   rejection; see Out of scope.
 5. **Caps are imported, not redefined.** Assert `lib/limits/config.ts` resolves to the
    fixture values, and that changing `limits.json` changes what the module exports. A
    copied literal passes every test above.
@@ -123,11 +125,22 @@ Nothing. Runs in parallel with W1-N1.
    unknown field still validates. Guaranteed behaviour: accepted and preserved, never
    silently dropped.
 
+   **This test must exercise real code.** Constructing two object literals and spreading one
+   into the other proves only that JavaScript has spread semantics — it can never fail, no
+   matter what Notes9 does, and it is worthless as a regression guard. The assertion must run
+   through an actual parse/validate path, or against `request.schema.json` /
+   `response.schema.json` themselves (e.g. that `additionalProperties` is not `false`). If no
+   parsing path exists in a file you own, assert the schema property and say so plainly in
+   the test name — do not dress up a tautology as a behavioural test.
+
 ## Out of scope
 
-- Creating `.github/` or any CI workflow. W1-N1 owns that and is writing it right now.
-  Until it lands, no claim about "CI fails on mismatch" is true for this repo — write the
-  test anyway; W1-N1 is what makes it run.
+- Creating `.github/` or any CI workflow. W1-N1 owns that and now runs **after** you, because
+  CI legitimately reports red until your four caps go green.
+- **Enforcing `total_request_bytes`.** Carry the number in `limits.json` and assert the
+  arithmetic; do not build a guard. W2-N1 owns the seam client, which is the only layer that
+  sees a whole envelope, and rejection belongs there. A guard here would be enforcement in
+  the wrong layer and would collide with W2-N1's.
 - The seam client, the `outcome` discriminant, and route changes. W2-N1 and W2-N2 own those
   and consume `limits.json` from you.
 - Widening any cap. Widening requires Catalyst to deploy first and hold both bounds for one

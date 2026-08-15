@@ -9,7 +9,7 @@
       "id": "W1-N1",
       "name": "notes9-ci",
       "owns": [".github/**"],
-      "depends_on": [],
+      "depends_on": ["W1-N2"],
       "brief": "slices/W1-N1-notes9-ci.md",
       "status": "ready",
       "branch": "slice/catalyst-seam-determinism-W1-N1-notes9-ci",
