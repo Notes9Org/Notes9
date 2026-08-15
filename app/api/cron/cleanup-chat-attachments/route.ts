@@ -20,6 +20,7 @@
  */
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase-service-role";
+import { isAuthorizedCron } from "../_lib/cron-auth";
 
 // Tuneable via env. Defaults match the catalyst spec, small batches keep
 // each Vercel function call well under the 60s execution budget.
@@ -52,22 +53,6 @@ function unauthorized(reason: string): NextResponse {
     { ok: false, error: reason },
     { status: 401 },
   );
-}
-
-function isAuthorizedCron(request: Request): { ok: boolean; reason?: string } {
-  const expected = process.env.CRON_SECRET;
-  if (!expected) {
-    return { ok: false, reason: "CRON_SECRET not configured" };
-  }
-  // Vercel Cron sends `Authorization: Bearer <CRON_SECRET>`. We also accept
-  // an `X-Admin-Secret` header so the same endpoint is callable manually
-  // (e.g. during incident response) with the same secret.
-  const auth = request.headers.get("authorization") ?? "";
-  const bearer = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-  const admin = request.headers.get("x-admin-secret") ?? "";
-  if (bearer && bearer === expected) return { ok: true };
-  if (admin && admin === expected) return { ok: true };
-  return { ok: false, reason: "invalid cron credential" };
 }
 
 export async function GET(request: Request): Promise<NextResponse> {

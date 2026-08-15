@@ -12,11 +12,27 @@ export type SearchResultItem = {
 
 const LIMIT_PER_TYPE = 5;
 
+// PostgREST parses `.or()`/`.ilike()` filter strings itself: `,` separates filter
+// atoms, `.` separates column/operator/value, `()` nests logical groups, `"` opens
+// a quoted literal, and `*` is its own wildcard token. Interpolating raw user input
+// into one of these strings lets an atom "break out" of the intended ilike value and
+// inject an arbitrary sibling filter (e.g. `id.not.is.null`), turning a substring
+// search into an always-true OR branch. Stripping these metacharacters from the
+// user term keeps the value a plain, inert literal inside the filter string — no
+// PostgREST escaping/quoting scheme is relied on. `%`/`_` (SQL ilike wildcards) are
+// intentionally left alone: they can only widen/narrow the match within the already
+// scoped value, they cannot escape it.
+const POSTGREST_FILTER_METACHARS = /[,()."*]/g;
+
+function sanitizeSearchTerm(q: string): string {
+  return q.replace(POSTGREST_FILTER_METACHARS, '');
+}
+
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
-  const q = url.searchParams.get('q')?.trim();
+  const rawQ = url.searchParams.get('q')?.trim();
 
-  if (!q || q.length < 2) {
+  if (!rawQ || rawQ.length < 2) {
     return NextResponse.json({ results: [] });
   }
 
@@ -25,6 +41,11 @@ export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const q = sanitizeSearchTerm(rawQ);
+  if (q.length < 2) {
+    return NextResponse.json({ results: [] });
   }
 
   const term = `%${q}%`;
