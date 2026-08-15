@@ -45,6 +45,87 @@ async function supabaseRequest(
   });
 }
 
+/**
+ * Matches a canonical UUID (any RFC 4122 version/variant). `documentName`
+ * is client-controlled input (the WebSocket handshake URL), so it must be
+ * validated as a UUID before it is ever interpolated into a PostgREST query
+ * string or used to look up a paper — malformed input is rejected without
+ * making any request.
+ */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Authorization check for the collaboration server's service-role Supabase
+ * client (SEC-002 / N9-1).
+ *
+ * The server talks to the Supabase REST API with SUPABASE_SERVICE_ROLE_KEY,
+ * which bypasses Postgres RLS entirely. Before this check existed, any
+ * authenticated user could open a Hocuspocus connection for *any* paper
+ * UUID and read/write its content, regardless of ownership — a
+ * service-role client acting on a client-supplied resource id with no
+ * authorization check performed by the service itself.
+ *
+ * This mirrors the `papers_select` / `papers_update` RLS policies
+ * (scripts/053_supabase_rls_migration.sql) that would apply if the request
+ * went through a user-scoped client instead: the paper's creator, or any
+ * member of the paper's project's organization (`profiles.organization_id`
+ * == `projects.organization_id`), may access it.
+ */
+export async function canAccessDocument(
+  userId: string,
+  documentName: string
+): Promise<boolean> {
+  if (!UUID_RE.test(documentName)) {
+    return false;
+  }
+
+  const paperId = encodeURIComponent(documentName);
+
+  const paperResponse = await supabaseRequest(
+    `papers?id=eq.${paperId}&select=created_by,project_id`,
+    { headers: { Accept: "application/json" } }
+  );
+  const paperRows = (await paperResponse.json()) as Array<{
+    created_by: string | null;
+    project_id: string | null;
+  }>;
+  const paper = paperRows[0];
+
+  if (!paper) {
+    return false;
+  }
+  if (paper.created_by === userId) {
+    return true;
+  }
+  if (!paper.project_id) {
+    return false;
+  }
+
+  const profileResponse = await supabaseRequest(
+    `profiles?id=eq.${encodeURIComponent(userId)}&select=organization_id`,
+    { headers: { Accept: "application/json" } }
+  );
+  const profileRows = (await profileResponse.json()) as Array<{
+    organization_id: string | null;
+  }>;
+  const userOrgId = profileRows[0]?.organization_id;
+
+  if (!userOrgId) {
+    return false;
+  }
+
+  const projectResponse = await supabaseRequest(
+    `projects?id=eq.${encodeURIComponent(paper.project_id)}&select=organization_id`,
+    { headers: { Accept: "application/json" } }
+  );
+  const projectRows = (await projectResponse.json()) as Array<{
+    organization_id: string | null;
+  }>;
+  const projectOrgId = projectRows[0]?.organization_id;
+
+  return !!projectOrgId && projectOrgId === userOrgId;
+}
+
 const RETRY_DELAYS_MS = [500, 1000, 2000];
 
 function jitter(ms: number): number {
@@ -123,7 +204,7 @@ export function createDatabaseExtension(): Database {
       return withRetry("fetch", paperId, async () => {
         // Load HTML content from papers table
         const paperResponse = await supabaseRequest(
-          `papers?id=eq.${paperId}&select=content`,
+          `papers?id=eq.${encodeURIComponent(paperId)}&select=content`,
           { headers: { Accept: "application/json" } }
         );
 
@@ -153,7 +234,7 @@ export function createDatabaseExtension(): Database {
         ydoc.destroy();
 
         if (html) {
-          await supabaseRequest(`papers?id=eq.${paperId}`, {
+          await supabaseRequest(`papers?id=eq.${encodeURIComponent(paperId)}`, {
             method: "PATCH",
             body: {
               content: html,
