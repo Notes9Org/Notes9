@@ -226,4 +226,42 @@ describe("safeFetch — redirects", () => {
     // hop is rejected as exceeding the cap.
     expect(n).toBe(4)
   })
+
+  it("strips Authorization/Cookie on a cross-origin redirect", async () => {
+    dnsLookupMock.mockImplementation(async (hostname: string) => {
+      if (hostname === "public-a.example.com") return [{ address: "93.184.216.34", family: 4 }]
+      if (hostname === "public-b.example.com") return [{ address: "1.2.3.4", family: 4 }]
+      throw new Error("unexpected hostname")
+    })
+    const { captured } = mockTransport("https", [
+      fakeIncomingMessage({ status: 302, headers: { location: "https://public-b.example.com/final" } }),
+      fakeIncomingMessage({ status: 200, body: "final-body" }),
+    ])
+    const res = await safeFetch("https://public-a.example.com/start", {
+      headers: { Authorization: "Bearer secret", Cookie: "sid=abc", "x-keep": "yes" },
+    })
+    expect(res.status).toBe(200)
+    // First hop (same origin as the request itself) still carries the secrets...
+    expect(captured[0].headers).toMatchObject({ Authorization: "Bearer secret", Cookie: "sid=abc" })
+    // ...but the cross-origin redirect target must not receive them.
+    const secondHeaders = captured[1].headers as Record<string, string>
+    expect(secondHeaders.Authorization).toBeUndefined()
+    expect(secondHeaders.Cookie).toBeUndefined()
+    expect(secondHeaders["x-keep"]).toBe("yes")
+  })
+
+  it("keeps Authorization/Cookie on a same-origin redirect", async () => {
+    dnsLookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }])
+    const { captured } = mockTransport("https", [
+      fakeIncomingMessage({ status: 302, headers: { location: "https://public-a.example.com/final" } }),
+      fakeIncomingMessage({ status: 200, body: "final-body" }),
+    ])
+    const res = await safeFetch("https://public-a.example.com/start", {
+      headers: { Authorization: "Bearer secret", Cookie: "sid=abc" },
+    })
+    expect(res.status).toBe(200)
+    const secondHeaders = captured[1].headers as Record<string, string>
+    expect(secondHeaders.Authorization).toBe("Bearer secret")
+    expect(secondHeaders.Cookie).toBe("sid=abc")
+  })
 })

@@ -19,6 +19,11 @@
  *  4. Redirects are followed manually, capped at `maxRedirects` (default 3),
  *     re-running steps 1-3 for every hop — an allowlisted public host that
  *     302s to an internal IP is blocked on that hop, not the first one.
+ *  5. A redirect that crosses origin (scheme/host/port changes) strips
+ *     `Authorization`/`Cookie`/`Proxy-Authorization` before the next hop,
+ *     matching WHATWG fetch / undici — otherwise secrets sent to a
+ *     first-party host (e.g. an API key in `lib/literature-oa-resolve.ts`)
+ *     would replay to whatever host a 3xx redirects to.
  */
 import * as http from "node:http"
 import * as https from "node:https"
@@ -217,6 +222,26 @@ function normalizeHeaders(h: RequestInit["headers"]): Record<string, string> {
   return { ...(h as Record<string, string>) }
 }
 
+// ── Cross-origin redirect header stripping ───────────────────────────────
+// Mirrors WHATWG fetch / undici: a redirect that crosses origin (scheme,
+// host, or port changes) must not replay credential-bearing headers to the
+// new target. `lib/literature-oa-resolve.ts` sends `Authorization`/
+// `x-api-key`-style secrets through safeFetch — without this, a malicious or
+// compromised redirect target on the far side of a 3xx could exfiltrate them.
+const SENSITIVE_REDIRECT_HEADERS = new Set(["authorization", "cookie", "proxy-authorization"])
+
+function originOf(url: URL): string {
+  return `${url.protocol}//${url.host}`
+}
+
+function stripSensitiveHeaders(headers: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(headers)) {
+    if (!SENSITIVE_REDIRECT_HEADERS.has(k.toLowerCase())) out[k] = v
+  }
+  return out
+}
+
 function bodyToWire(body: RequestInit["body"]): string | Buffer | undefined {
   if (body == null) return undefined
   if (typeof body === "string") return body
@@ -233,6 +258,7 @@ type NodeResponse = http.IncomingMessage
 function performOneRequest(
   urlObj: URL,
   opts: RequestInit | undefined,
+  headers: Record<string, string>,
   target: ResolvedTarget
 ): Promise<NodeResponse> {
   return new Promise((resolve, reject) => {
@@ -244,7 +270,7 @@ function performOneRequest(
         port: urlObj.port ? Number(urlObj.port) : undefined,
         path: `${urlObj.pathname}${urlObj.search}`,
         method: opts?.method ?? "GET",
-        headers: normalizeHeaders(opts?.headers),
+        headers,
         lookup: pinnedLookup(target.ip, target.family) as unknown as typeof import("node:dns").lookup,
         ...(isHttps ? { servername: urlObj.hostname } : {}),
         signal: opts?.signal ?? undefined,
@@ -355,11 +381,12 @@ export async function safeFetch(
 ): Promise<Response> {
   const maxRedirects = opts?.maxRedirects ?? DEFAULT_MAX_REDIRECTS
   let currentUrl = parseHttpUrl(url)
+  let currentHeaders = normalizeHeaders(opts?.headers)
   let redirectCount = 0
 
   for (;;) {
     const target = await resolveValidatedTarget(currentUrl.hostname)
-    const nodeRes = await performOneRequest(currentUrl, opts, target)
+    const nodeRes = await performOneRequest(currentUrl, opts, currentHeaders, target)
     const status = nodeRes.statusCode ?? 0
     const location = nodeRes.headers.location
 
@@ -369,7 +396,11 @@ export async function safeFetch(
         throw new SsrfBlocked(`Redirect limit (${maxRedirects}) exceeded fetching ${url}`)
       }
       redirectCount++
-      currentUrl = parseHttpUrl(new URL(location, currentUrl).toString())
+      const nextUrl = parseHttpUrl(new URL(location, currentUrl).toString())
+      if (originOf(nextUrl) !== originOf(currentUrl)) {
+        currentHeaders = stripSensitiveHeaders(currentHeaders)
+      }
+      currentUrl = nextUrl
       continue
     }
 

@@ -19,8 +19,13 @@ const OWNED_FETCHER_FILES = [
 const REPO_ROOT = join(__dirname, "..", "..")
 
 // Matches a bare `fetch(` call — i.e. NOT preceded by a letter, so
-// `safeFetch(` (and any other `...Fetch(`) is correctly excluded.
-const RAW_FETCH_CALL = /(?<![A-Za-z])fetch\(/
+// `safeFetch(` (and any other `...Fetch(`) is correctly excluded. Also
+// catches the `globalThis.fetch(` / `window.fetch(` escape hatches and a
+// stray space before the paren (`fetch (`). This is a lint-shaped regression
+// guard against accidental literal reintroductions, not a general dataflow
+// analysis — it won't catch e.g. `const f = fetch; f(...)` or a re-exported
+// alias.
+const RAW_FETCH_CALL = /(?<![A-Za-z])(?:globalThis\.|window\.)?fetch\s*\(/
 
 describe("SEC-001 egress guard — no raw fetch() survives in the owned fetchers", () => {
   for (const relPath of OWNED_FETCHER_FILES) {
