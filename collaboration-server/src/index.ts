@@ -58,9 +58,14 @@ const server = new Server({
     return healthCheck(request, response);
   },
 
-  // Authentication hook, validates JWT and returns user context
+  // Authentication hook, validates JWT and returns user context. Also
+  // enforces document-level authorization (SEC-002 / N9-1) — see
+  // auth.ts::onAuthenticate.
   async onAuthenticate(data: onAuthenticatePayload) {
-    return onAuthenticate({ token: data.token });
+    return onAuthenticate({
+      token: data.token,
+      documentName: data.documentName,
+    });
   },
 
   // Connection hook, enforce allowed origins
