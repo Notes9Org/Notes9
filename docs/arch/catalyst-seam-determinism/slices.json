@@ -1,0 +1,126 @@
+{
+  "feature": "catalyst-seam-determinism",
+  "source_branch": "dev",
+  "created": "2026-08-15",
+  "contracts": "docs/arch/catalyst-seam-determinism/CONTRACTS.md",
+  "note": "Cross-repo feature. The Catalyst half is sliced at AI/docs/arch/catalyst-seam-determinism/slices.json. Deploy order for C1-C4 is Notes9 FIRST (it narrows its own caps to values Catalyst already enforces, so a Notes9-only deploy is strictly safe). Supersedes data-analysis-ai-seam interfaces I6/I7 and slice N03-data-page-wiring.",
+  "slices": [
+    {
+      "id": "W1-N1",
+      "name": "notes9-ci",
+      "owns": [".github/**"],
+      "depends_on": [],
+      "brief": "slices/W1-N1-notes9-ci.md",
+      "status": "ready",
+      "branch": "slice/catalyst-seam-determinism-W1-N1-notes9-ci",
+      "agents": {
+        "build": "voltagent-infra:deployment-engineer",
+        "review": "ecc:code-reviewer",
+        "test": "ecc:tdd-guide"
+      },
+      "kind": "feature",
+      "note": "New-file slice: .github/ does not exist. Until this lands, every fail-closed guard in the Data Analysis path is enforced by tests nothing runs automatically, and no claim in ARCHITECTURE.md about 'CI fails on mismatch' is true for Notes9."
+    },
+    {
+      "id": "W1-N2",
+      "name": "n9-contracts-and-caps",
+      "owns": [
+        "contracts/**",
+        "lib/seam/contracts/**",
+        "lib/limits/config.ts",
+        "lib/__tests__/contract-notes9-catalyst.test.ts",
+        "lib/__tests__/contract-hash.test.ts"
+      ],
+      "depends_on": [],
+      "brief": "slices/W1-N2-contracts-and-caps.md",
+      "status": "ready",
+      "branch": "slice/catalyst-seam-determinism-W1-N2-contracts-and-caps",
+      "agents": {
+        "build": "voltagent-core-dev:api-designer",
+        "review": "ecc:typescript-reviewer",
+        "test": "ecc:tdd-guide"
+      },
+      "kind": "bugfix",
+      "note": "Acceptance criteria already exist as 4 failing assertions in lib/__tests__/contract-notes9-catalyst.test.ts (C1-C4). Go green by NARROWING Notes9, never by editing the fixture upward: that reintroduces the raw 422."
+    },
+    {
+      "id": "W2-N1",
+      "name": "n9-seam-client",
+      "owns": [
+        "lib/seam/client.ts",
+        "lib/seam/sse.ts",
+        "lib/seam/errors.ts",
+        "lib/seam/index.ts",
+        "lib/__tests__/seam-client.test.ts"
+      ],
+      "depends_on": ["W1-N2"],
+      "brief": "slices/W2-N1-seam-client.md",
+      "status": "blocked",
+      "branch": "slice/catalyst-seam-determinism-W2-N1-seam-client",
+      "agents": {
+        "build": "voltagent-lang:typescript-pro",
+        "review": "ecc:typescript-reviewer",
+        "test": "ecc:tdd-guide"
+      },
+      "kind": "feature",
+      "note": "Owns per-thread turn serialisation (failure mode: 10x turns/sec -> 409 contract-mismatch) and pre-flight size rejection against limits.json."
+    },
+    {
+      "id": "W2-N2",
+      "name": "n9-route-envelope",
+      "owns": ["app/api/agent/**", "app/api/data-analysis/**"],
+      "depends_on": ["W2-N1"],
+      "brief": "slices/W2-N2-route-envelope.md",
+      "status": "blocked",
+      "branch": "slice/catalyst-seam-determinism-W2-N2-route-envelope",
+      "agents": {
+        "build": "voltagent-lang:typescript-pro",
+        "review": "ecc:security-reviewer",
+        "test": "ecc:tdd-guide"
+      },
+      "kind": "refactor",
+      "note": "security-reviewer, not typescript-reviewer: these routes are the trust boundary where Notes9 hands user input to Catalyst."
+    },
+    {
+      "id": "W4-N1",
+      "name": "n9-fact-minting",
+      "owns": [
+        "lib/seam/facts.ts",
+        "lib/data-analysis/ai/spec-author.ts",
+        "lib/__tests__/facts.test.ts"
+      ],
+      "depends_on": ["W2-N2"],
+      "brief": "slices/W4-N1-fact-minting.md",
+      "status": "blocked",
+      "branch": "slice/catalyst-seam-determinism-W4-N1-fact-minting",
+      "agents": {
+        "build": "voltagent-lang:typescript-pro",
+        "review": "ecc:security-reviewer",
+        "test": "ecc:tdd-guide"
+      },
+      "kind": "feature",
+      "note": "Lifts the default-deny rule at spec-author.ts:392-438 into a shared producer. ADR-010 rule 5 (withholding must be strictly safer) is reviewed explicitly: at spec-author.ts:480-484, nulling a refused clarification ENABLED the Execute button."
+    },
+    {
+      "id": "W4-N2",
+      "name": "n9-thread-identity",
+      "owns": [
+        "lib/seam/thread.ts",
+        "lib/catalyst-launch.ts",
+        "hooks/use-agent-stream.ts",
+        "lib/__tests__/thread-identity.test.ts"
+      ],
+      "depends_on": ["W2-N2"],
+      "brief": "slices/W4-N2-thread-identity.md",
+      "status": "blocked",
+      "branch": "slice/catalyst-seam-determinism-W4-N2-thread-identity",
+      "agents": {
+        "build": "voltagent-lang:typescript-pro",
+        "review": "ecc:typescript-reviewer",
+        "test": "ecc:tdd-guide"
+      },
+      "kind": "feature",
+      "note": "thread.id is the surface's own natural key; no new identifier is minted. History rides payload.context.turns, NEVER the prompt string."
+    }
+  ]
+}
