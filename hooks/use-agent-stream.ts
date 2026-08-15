@@ -158,9 +158,13 @@ export interface CitationsManifestEntry {
   /** Support strength 0–1 for this specific claim↔span pairing. */
   support_score?: number;
   /** Grounding verdict for the claim. Subtle signal, never "wrong". */
-  support_status?: 'supported' | 'partial' | 'unsupported' | null;
+  support_status?: 'supported' | 'partial' | 'unsupported' | 'computed' | null;
   /** How the span was located: model-native citation, heuristic match, or none. */
-  grounding?: 'native' | 'heuristic' | 'none' | null;
+  grounding?: 'native' | 'heuristic' | 'computed' | 'none' | null;
+  /** Records behind an aggregate claim; set only when grounding='computed'.
+   * There is no quotable span in that case — render "derived from N records"
+   * instead of a span highlight. */
+  derived_from_count?: number | null;
 }
 
 export interface CitationsManifest {

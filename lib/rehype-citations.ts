@@ -105,7 +105,8 @@ function buildChipNode(
   const supportStatus =
     entry?.support_status === 'supported' ||
     entry?.support_status === 'partial' ||
-    entry?.support_status === 'unsupported'
+    entry?.support_status === 'unsupported' ||
+    entry?.support_status === 'computed'
       ? entry.support_status
       : entry?.grounding === 'none'
         ? 'unsupported'
@@ -113,7 +114,10 @@ function buildChipNode(
   // Span provenance: how the supporting span was located (native exact vs
   // heuristic approximate vs none). Drives the provenance badge (G5).
   const grounding =
-    entry?.grounding === 'native' || entry?.grounding === 'heuristic' || entry?.grounding === 'none'
+    entry?.grounding === 'native' ||
+    entry?.grounding === 'heuristic' ||
+    entry?.grounding === 'computed' ||
+    entry?.grounding === 'none'
       ? entry.grounding
       : '';
   // Advisory char offsets for the cited span (G3 highlight precision).
@@ -152,6 +156,11 @@ function buildChipNode(
   if (charStart) properties.dataCiteCharStart = charStart;
   if (charEnd) properties.dataCiteCharEnd = charEnd;
   if (provenance) properties.dataCiteProvenance = provenance;
+  // Aggregate claims have no quotable span, so they carry a record count
+  // instead. Emitted only alongside grounding='computed'; the renderer shows
+  // it as "derived from N records" in place of a span highlight.
+  if (grounding === 'computed' && Number.isFinite(entry?.derived_from_count))
+    properties.dataCiteDerivedFrom = String(entry?.derived_from_count);
   properties.ariaLabel = ariaLabel;
 
   const children: ElementContent[] = [{ type: 'text', value: n }];
