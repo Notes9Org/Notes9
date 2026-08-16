@@ -95,9 +95,15 @@ REVOKE ALL ON FUNCTION public.match_chat_memories(
 GRANT EXECUTE ON FUNCTION public.match_chat_memories(
   uuid, extensions.vector, integer, double precision
 ) TO service_role;
-GRANT EXECUTE ON FUNCTION public.match_chat_memories(
-  uuid, extensions.vector, integer, double precision
-) TO authenticated;
+-- N9-8 (SEC-005): this file, applied in isolation, would re-expose
+-- match_chat_memories at /rest/v1/rpc/match_chat_memories to any anon-key
+-- holder -- the exact hole 111_revoke_security_definer_grants.sql closes
+-- live. Catalyst calls this via the service role only (see 111's header);
+-- Notes9 never calls it. Neutralized so 071 is safe standalone; 111/112
+-- remain the source of truth for the revoke and are NOT modified here.
+-- GRANT EXECUTE ON FUNCTION public.match_chat_memories(
+--   uuid, extensions.vector, integer, double precision
+-- ) TO authenticated;
 
 -- ────────────────────────────────────────────────────────────────────────────
 -- match_episode_summaries — per-session episodic summaries
@@ -146,6 +152,8 @@ REVOKE ALL ON FUNCTION public.match_episode_summaries(
 GRANT EXECUTE ON FUNCTION public.match_episode_summaries(
   uuid, extensions.vector, integer, double precision
 ) TO service_role;
-GRANT EXECUTE ON FUNCTION public.match_episode_summaries(
-  uuid, extensions.vector, integer, double precision
-) TO authenticated;
+-- N9-8 (SEC-005): same hole as match_chat_memories above -- neutralized so
+-- this file is safe standalone. See 111_revoke_security_definer_grants.sql.
+-- GRANT EXECUTE ON FUNCTION public.match_episode_summaries(
+--   uuid, extensions.vector, integer, double precision
+-- ) TO authenticated;
