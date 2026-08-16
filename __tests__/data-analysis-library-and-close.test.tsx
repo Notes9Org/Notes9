@@ -52,6 +52,70 @@ vi.mock("@/lib/data-analysis/ai/analysis-thread-store", () => ({
   updateAnalysisTurnPlan: vi.fn(async () => {}),
   loadAnalysisThread: vi.fn(async () => []),
 }))
+// The Save flow (§3A) reaches Supabase through these two modules; stubbed so
+// `commitSave` resolves without a network round trip. Only what the AC-6
+// per-tab regression test below actually calls is overridden — everything
+// else is the real module.
+vi.mock("@/lib/data-analysis/saved-analysis", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/data-analysis/saved-analysis")>()
+  return {
+    ...actual,
+    createAnalysis: vi.fn(async (input: { name: string; experimentId: string | null }) => ({
+      id: "saved-1",
+      experimentId: input.experimentId,
+      projectId: null,
+      name: input.name,
+      draftSpec: {},
+      sourceDataFileId: null,
+      workspaceState: {},
+      currentRevisionNo: 0,
+      updatedAt: new Date().toISOString(),
+    })),
+  }
+})
+vi.mock("@/lib/data-analysis/workspace/saved-analysis-session", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/data-analysis/workspace/saved-analysis-session")>()
+  return {
+    ...actual,
+    saveRevision: vi.fn(async ({ analysisId }: { analysisId: string }) => ({
+      id: "rev-1",
+      analysisId,
+      revisionNo: 1,
+      name: null,
+      changeSummary: null,
+      spec: {},
+      specHash: "h",
+      dataVersionHash: "d",
+      dataSnapshot: null,
+      results: null,
+      engineVersion: "1",
+      conversationThread: [],
+      isFrozen: false,
+      frozenAt: null,
+      forkedFromRevisionId: null,
+      authorId: "u1",
+      createdAt: new Date().toISOString(),
+    })),
+    autosaveDraft: vi.fn(async () => {}),
+  }
+})
+// Owned by another slice (§3A); stubbed the same way `AnalysisConsole` is
+// below — a capturing/triggering double, not a re-test of its own internals.
+vi.mock("@/components/data-analysis/workspace/analysis-library", () => ({
+  SaveAnalysisDialog: ({
+    open,
+    onSave,
+  }: {
+    open: boolean
+    onSave: (input: { name: string; experimentId: string | null; changeSummary: string }) => void | Promise<void>
+  }) =>
+    open ? (
+      <button type="button" onClick={() => void onSave({ name: "Saved analysis", experimentId: null, changeSummary: "" })}>
+        mock-confirm-save
+      </button>
+    ) : null,
+  RevisionHistoryDialog: () => null,
+}))
 
 // `AnalysisConsole` is slice 02's component, already tested on its own
 // (docked/collapsed/40vh/overlay). This slice's job is only the mount
@@ -352,6 +416,157 @@ describe("data-analysis library and close (AC-1, AC-3, AC-4, AC-5, AC-6, AC-7)",
       expect(screen.getAllByRole("button", { name: CLOSE_TAB_NAME })).toHaveLength(1)
     })
     expect(lastConsoleProps?.turns.length).toBe(0)
+  })
+
+  // ── AC-6 (defect a): the unsaved check is per-tab, not per-page ───────────
+  it("still confirms closing a different, never-saved tab after another tab has been saved", async () => {
+    const fileA = file({ id: "fA", file_name: "tab-a.csv" })
+    const fileB = file({ id: "fB", file_name: "tab-b.csv" })
+    mockWorkbookFetch({
+      fA: { snapshot: snapshot("tab-a.csv") },
+      fB: { snapshot: snapshot("tab-b.csv") },
+    })
+
+    render(<DataAnalysisWorkspace files={[fileA, fileB]} />)
+    await openLibrary()
+    fireEvent.click(screen.getByText("tab-a.csv"))
+    await waitFor(() => expect(lastConsoleProps?.variant).toBe("docked"))
+
+    // A second tab, loaded with a different file, then saved.
+    fireEvent.click(screen.getByRole("button", { name: "New analysis" }))
+    await waitFor(() => expect(lastConsoleProps?.variant).toBe("empty"))
+    await openLibrary()
+    fireEvent.click(screen.getByText("tab-b.csv"))
+    await waitFor(() => expect(lastConsoleProps?.variant).toBe("docked"))
+
+    // Exact match: a second, unrelated icon button ("Save to data files
+    // library") also starts with "Save" and would otherwise collide.
+    fireEvent.click(screen.getByRole("button", { name: "Save" }))
+    fireEvent.click(await screen.findByRole("button", { name: "mock-confirm-save" }))
+    await waitFor(() => expect(screen.queryByText("mock-confirm-save")).not.toBeInTheDocument())
+
+    // Back to the first tab — its own dataset, never saved itself.
+    fireEvent.click(screen.getAllByRole("tab")[0])
+    await waitFor(() => expect(lastConsoleProps?.variant).toBe("docked"))
+    expect(lastConsoleProps?.datasetName).toBe("tab-a")
+
+    // The page has saved something (tab b), but not THIS tab — closing it
+    // must still ask, rather than reading the page-level "has anything ever
+    // been saved" flag and discarding it silently.
+    fireEvent.click(screen.getAllByRole("button", { name: CLOSE_TAB_NAME })[0])
+    expect(await screen.findByText("Discard unsaved work?")).toBeInTheDocument()
+  })
+
+  // ── Edge case 6: closing a dataset mid-request aborts it ──────────────────
+  it("closeDataset aborts an in-flight request, clears aiBusy, and drops a reply that resolves afterward", async () => {
+    const loaded = file({ id: "f1", file_name: "growth-curve.csv" })
+    mockWorkbookFetch({ f1: { snapshot: snapshot("growth-curve.csv") } })
+    const specAuthor = await import("@/lib/data-analysis/ai/spec-author-client")
+    // Never settles on its own — only the `signal`'s abort event resolves it,
+    // mirroring `spec-author-client.ts`'s own `catch (isAbort) -> { outcome:
+    // "aborted" }`, so this proves the abort wiring, not a canned reply.
+    vi.spyOn(specAuthor, "requestSpecPatch").mockImplementation(
+      ({ signal }) =>
+        new Promise((resolve) => {
+          // requestSpecPatch's real signature has `signal` as optional, but the
+          // production caller always passes one — assert it here rather than
+          // widen the mock's type for a branch that never runs.
+          signal!.addEventListener("abort", () => resolve({ outcome: "aborted" }))
+        }),
+    )
+
+    render(<DataAnalysisWorkspace files={[loaded]} />)
+    await openLibrary()
+    fireEvent.click(screen.getByText("growth-curve.csv"))
+    await waitFor(() => expect(lastConsoleProps?.variant).toBe("docked"))
+
+    fireEvent.click(screen.getByRole("button", { name: "mock-send" }))
+    await waitFor(() => expect(lastConsoleProps?.busy).toBe(true))
+    const turnsBeforeClose = lastConsoleProps!.turns.length
+
+    // Close the dataset while the request is still in flight (unsaved: confirm first).
+    fireEvent.click(screen.getByRole("button", { name: "Close dataset" }))
+    fireEvent.click(await screen.findByRole("button", { name: "Discard and close" }))
+
+    // Not stuck "Thinking…" forever.
+    await waitFor(() => expect(lastConsoleProps?.busy).toBe(false))
+    // The aborted reply never lands.
+    expect(lastConsoleProps?.turns.length).toBe(turnsBeforeClose)
+  })
+
+  it("closeAnalysis aborts the closed tab's in-flight request so a late reply does not land on the neighbour", async () => {
+    const loaded = file({ id: "f1", file_name: "growth-curve.csv" })
+    mockWorkbookFetch({ f1: { snapshot: snapshot("growth-curve.csv") } })
+    const specAuthor = await import("@/lib/data-analysis/ai/spec-author-client")
+    vi.spyOn(specAuthor, "requestSpecPatch").mockImplementation(
+      ({ signal }) =>
+        new Promise((resolve) => {
+          // requestSpecPatch's real signature has `signal` as optional, but the
+          // production caller always passes one — assert it here rather than
+          // widen the mock's type for a branch that never runs.
+          signal!.addEventListener("abort", () => resolve({ outcome: "aborted" }))
+        }),
+    )
+
+    render(<DataAnalysisWorkspace files={[loaded]} />)
+    await openLibrary()
+    fireEvent.click(screen.getByText("growth-curve.csv"))
+    await waitFor(() => expect(lastConsoleProps?.variant).toBe("docked"))
+
+    // A second, empty tab to act as the neighbour `closeAnalysis` switches to.
+    fireEvent.click(screen.getByRole("button", { name: "New analysis" }))
+    await waitFor(() => expect(lastConsoleProps?.variant).toBe("empty"))
+
+    // Back to the first (loaded) tab and start a request there.
+    fireEvent.click(screen.getAllByRole("tab")[0])
+    await waitFor(() => expect(lastConsoleProps?.variant).toBe("docked"))
+    fireEvent.click(screen.getByRole("button", { name: "mock-send" }))
+    await waitFor(() => expect(lastConsoleProps?.busy).toBe(true))
+
+    // Close that tab (not just its dataset) while the request is in flight.
+    fireEvent.click(screen.getAllByRole("button", { name: CLOSE_TAB_NAME })[0])
+    fireEvent.click(await screen.findByRole("button", { name: "Discard and close" }))
+
+    // Now on the neighbour: empty, not busy, and the aborted reply did not
+    // land in its transcript either.
+    await waitFor(() => expect(lastConsoleProps?.variant).toBe("empty"))
+    expect(lastConsoleProps?.busy).toBe(false)
+    expect(lastConsoleProps?.turns.length).toBe(0)
+  })
+
+  // ── Edge case 1: the 500-row library ceiling ───────────────────────────────
+  it("truncates the picker at 500 rows and says so, and filters client-side by name/experiment/project", async () => {
+    mockWorkbookFetch({})
+    const files = Array.from({ length: 510 }, (_, i) =>
+      file({
+        id: `f${i}`,
+        file_name: `file-${i}.csv`,
+        experiment_name: `Experiment ${i}`,
+        project_name: `Project ${i}`,
+      }),
+    )
+    // One findable-only-by-filter row past the raw 500-row slice, so the test
+    // fails if truncation happens before filtering instead of after it.
+    files.push(file({ id: "needle", file_name: "unique-needle.csv", experiment_name: "Exp X", project_name: "Proj X" }))
+
+    render(<DataAnalysisWorkspace files={files} />)
+    await openLibrary()
+
+    expect(screen.getByText("file-0.csv")).toBeInTheDocument()
+    expect(screen.getByText(/showing the first 500 files/i)).toBeInTheDocument()
+    expect(screen.queryByText("unique-needle.csv")).not.toBeInTheDocument()
+
+    fireEvent.change(screen.getByPlaceholderText(/search files/i), { target: { value: "unique-needle" } })
+    expect(await screen.findByText("unique-needle.csv")).toBeInTheDocument()
+    expect(screen.queryByText("file-0.csv")).not.toBeInTheDocument()
+    // The truncation note is about the unfiltered list, not this narrowed one.
+    expect(screen.queryByText(/showing the first 500 files/i)).not.toBeInTheDocument()
+
+    fireEvent.change(screen.getByPlaceholderText(/search files/i), { target: { value: "Experiment 7" } })
+    expect(await screen.findByText("file-7.csv")).toBeInTheDocument()
+
+    fireEvent.change(screen.getByPlaceholderText(/search files/i), { target: { value: "Project 12" } })
+    expect(await screen.findByText("file-12.csv")).toBeInTheDocument()
   })
 
   // ── AC-4: closeDataset keeps the transcript but leaves no approvable plan ─

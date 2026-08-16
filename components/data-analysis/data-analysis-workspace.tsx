@@ -1646,6 +1646,11 @@ export function DataAnalysisWorkspace({
     }[]
   >([])
   const [activeAnalysisId, setActiveAnalysisId] = useState<string>("a1")
+  // Read by `commitSave` and the reopen/bind flow, both declared later in this
+  // component — a ref so a save always tags the tab active when it happened,
+  // never a stale one from whenever those callbacks were created.
+  const activeAnalysisIdRef = useRef(activeAnalysisId)
+  activeAnalysisIdRef.current = activeAnalysisId
   const analysisSeq = useRef(1)
   const buildConfigRef = useRef<() => unknown>(() => ({}))
   /**
@@ -1877,6 +1882,18 @@ export function DataAnalysisWorkspace({
       const index = list.findIndex((a) => a.id === id)
       if (index === -1) return
 
+      // Only the active tab can have a spec-author request in flight — a
+      // background tab's turns are already a settled snapshot. Abort it
+      // before swapping state below, the same way `closeDataset` does,
+      // otherwise a reply that resolves after the swap is appended via
+      // `setTurns`/`appendAnalysisTurn` against whatever tab is current by
+      // then: the neighbour here, or the fresh tab below.
+      if (id === activeAnalysisId) {
+        aiAbortRef.current?.abort()
+        aiAbortRef.current = null
+        setAiBusy(false)
+      }
+
       if (list.length === 1) {
         const newId = `a${++analysisSeq.current}`
         const fresh = {
@@ -1942,9 +1959,14 @@ export function DataAnalysisWorkspace({
   const closeDataset = useCallback(() => {
     // A pending spec-author reply is answering a question about the dataset
     // that is about to disappear; discard it rather than let it land on the
-    // empty analysis. `askForChange` already aborts the same way on supersede.
+    // empty analysis. Unlike `askForChange`'s own supersede path, nothing is
+    // taking over `aiAbortRef` here, so its `finally` block's
+    // `aiAbortRef.current === controller` check can never hold once the ref
+    // is nulled — `setAiBusy(false)` has to happen here instead, or the
+    // console is stuck "Thinking…" forever.
     aiAbortRef.current?.abort()
     aiAbortRef.current = null
+    setAiBusy(false)
     const keptTurns = turnsRef.current
     loadSnapshotRef.current(emptySnapshot())
     setTurns(keptTurns)
@@ -1956,18 +1978,23 @@ export function DataAnalysisWorkspace({
   /**
    * ADR-018, AC-6: the only confirmation this feature has, and it guards the
    * only irreversible thing in it. "Never saved" is judged against
-   * `savedAnalysis` — the workspace's one persisted draft slot (§3A) — rather
-   * than reintroducing a second, competing notion of dirtiness.
+   * `savedAnalysis` — the workspace's one persisted draft slot (§3A) — but
+   * that slot belongs to whichever tab was active the moment it was written
+   * (`savedForAnalysisIdRef`, set alongside it below), never to the page as a
+   * whole: once any tab has been saved, `savedAnalysisRef.current` stays
+   * non-null forever, so checking it alone would silently clear a different,
+   * never-saved tab's dataset and turns on close.
    */
   const [pendingClose, setPendingClose] = useState<PendingClose | null>(null)
 
   const confirmCloseDataset = useCallback(() => {
-    if (savedAnalysisRef.current === null && (hasDataRef.current || turnsRef.current.length > 0)) {
+    const savedThisTab = savedAnalysisRef.current !== null && savedForAnalysisIdRef.current === activeAnalysisId
+    if (!savedThisTab && (hasDataRef.current || turnsRef.current.length > 0)) {
       setPendingClose({ kind: "dataset", hasDataset: hasDataRef.current, turnCount: turnsRef.current.length })
       return
     }
     closeDataset()
-  }, [closeDataset])
+  }, [activeAnalysisId, closeDataset])
 
   const confirmCloseAnalysis = useCallback(
     (id: string) => {
@@ -1977,7 +2004,8 @@ export function DataAnalysisWorkspace({
       const target = isActive ? null : analysesRef.current.find((a) => a.id === id)
       const dataset = isActive ? hasDataRef.current : (target?.hasData ?? false)
       const turnCount = isActive ? turnsRef.current.length : (target?.turns.length ?? 0)
-      if (savedAnalysisRef.current === null && (dataset || turnCount > 0)) {
+      const savedThisTab = savedAnalysisRef.current !== null && savedForAnalysisIdRef.current === id
+      if (!savedThisTab && (dataset || turnCount > 0)) {
         setPendingClose({ kind: "analysis", id, hasDataset: dataset, turnCount })
         return
       }
@@ -2738,6 +2766,13 @@ export function DataAnalysisWorkspace({
   // Declared after the AI block that reads it, so a ref rather than the value.
   const savedAnalysisRef = useRef<SavedAnalysis | null>(null)
   savedAnalysisRef.current = savedAnalysis
+  /**
+   * Which tab `savedAnalysis` belongs to. The workspace has one persisted
+   * draft slot, not one per tab (§3A), so this is what turns "is anything on
+   * the page saved" into "is THIS tab saved" for the close confirmation —
+   * set in `commitSave`, alongside `setSavedAnalysis`.
+   */
+  const savedForAnalysisIdRef = useRef<string | null>(null)
   const [openRevisionRow, setOpenRevisionRow] = useState<AnalysisRevision | null>(null)
   const [reopenVerdict, setReopenVerdict] = useState<ReopenVerdict | null>(null)
   const [revisions, setRevisions] = useState<AnalysisRevision[]>([])
@@ -2859,6 +2894,7 @@ export function DataAnalysisWorkspace({
         }
 
         setSavedAnalysis(analysis)
+        savedForAnalysisIdRef.current = activeAnalysisIdRef.current
         setOpenRevisionRow(verdict.revision)
         // The reasoning comes back with the figure. Its plans are historical —
         // they were computed in another session, so `canApprovePlan` will not
@@ -2892,6 +2928,7 @@ export function DataAnalysisWorkspace({
         const list = await listRevisions(analysis.id)
         setRevisions(list)
         setSavedAnalysis(analysis)
+        savedForAnalysisIdRef.current = activeAnalysisIdRef.current
         if (list[0]) {
           await openSavedRevision(analysis, list[0], false)
         } else {
@@ -2971,6 +3008,9 @@ export function DataAnalysisWorkspace({
         await autosaveDraft(analysis.id, derivedSpec, config)
 
         setSavedAnalysis({ ...analysis, currentRevisionNo: revision.revisionNo })
+        // AC-6: this save belongs to whichever tab was active when it ran, not
+        // to the page — see `savedForAnalysisIdRef`'s declaration.
+        savedForAnalysisIdRef.current = activeAnalysisIdRef.current
         setOpenRevisionRow(revision)
         setRevisions((rs) => [revision, ...rs.filter((r) => r.id !== revision.id)])
         setReopenVerdict(null)
