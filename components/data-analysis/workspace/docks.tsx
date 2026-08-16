@@ -23,6 +23,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react"
 import { motion, useReducedMotion } from "framer-motion"
@@ -41,6 +42,20 @@ export interface DockConfig {
 }
 
 export type DockLayout = Record<DockSide, DockConfig>
+
+/**
+ * One tab inside a dock that hosts more than one panel (e.g. the right rail's
+ * Chart settings / Ask Notes9 pair). `label` is rendered verbatim rather than
+ * derived, because with two right-docked chat surfaces on screen (ADR-024),
+ * the label is the only thing telling the researcher which one edits the chart.
+ */
+export type DockPanel = {
+  id: string
+  label: string
+  /** A positive count renders a badge, visible even while another tab is active. */
+  badge?: number | null
+  content: ReactNode
+}
 
 const DEFAULT_LAYOUT: DockLayout = {
   left: { size: 400, open: true },
@@ -80,6 +95,12 @@ function isLayout(value: unknown): value is DockLayout {
  */
 export function useDockLayout(storageKey: string) {
   const [layout, setLayout] = useState<DockLayout>(DEFAULT_LAYOUT)
+  // Which panel is active in a tabbed dock (e.g. "settings" | "ask"). Persisted
+  // alongside size/open so a researcher's tab choice survives a reload the same
+  // way the rest of the dock geometry does. `null` until a consumer sets one;
+  // which panel that resolves to when unset or stale is the tabbed Dock's call,
+  // not this hook's — it doesn't know the panel list.
+  const [activePanelId, setActivePanelId] = useState<string | null>(null)
   const loaded = useRef(false)
 
   useEffect(() => {
@@ -93,6 +114,10 @@ export function useDockLayout(storageKey: string) {
             right: { ...parsed.right, size: clamp("right", parsed.right.size) },
             bottom: { ...parsed.bottom, size: clamp("bottom", parsed.bottom.size) },
           })
+          const storedActivePanelId = (parsed as { activePanelId?: unknown }).activePanelId
+          if (typeof storedActivePanelId === "string") {
+            setActivePanelId(storedActivePanelId)
+          }
         }
       }
     } catch {
@@ -104,11 +129,11 @@ export function useDockLayout(storageKey: string) {
   useEffect(() => {
     if (!loaded.current) return
     try {
-      window.localStorage.setItem(storageKey, JSON.stringify(layout))
+      window.localStorage.setItem(storageKey, JSON.stringify({ ...layout, activePanelId }))
     } catch {
       // Private mode and quota errors are non-fatal: the session still works.
     }
-  }, [layout, storageKey])
+  }, [layout, activePanelId, storageKey])
 
   const toggle = useCallback((side: DockSide) => {
     setLayout((l) => ({ ...l, [side]: { ...l[side], open: !l[side].open } }))
@@ -122,7 +147,7 @@ export function useDockLayout(storageKey: string) {
     setLayout((l) => ({ ...l, [side]: { ...l[side], size: clamp(side, size) } }))
   }, [])
 
-  return { layout, toggle, setOpen, resize }
+  return { layout, toggle, setOpen, resize, activePanelId, setActivePanelId }
 }
 
 /**
@@ -224,9 +249,107 @@ function ResizeHandle({
 }
 
 /**
+ * The tab strip for a dock holding more than one panel. Follows the WAI-ARIA
+ * tabs pattern: roving tabindex, and Left/Right/Home/End move focus *and*
+ * selection together (automatic activation) — there is no separate "activate"
+ * step to discover with two tabs.
+ *
+ * A per-tab badge renders regardless of which tab is active, because ADR-024's
+ * rule carried over from the collapsed console bar is that a pending plan must
+ * never be hidden by which tab happens to be open.
+ */
+function DockTabStrip({
+  panels,
+  activeId,
+  onChange,
+}: {
+  panels: DockPanel[]
+  activeId: string
+  onChange: (id: string) => void
+}) {
+  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({})
+
+  const move = (id: string) => {
+    onChange(id)
+    tabRefs.current[id]?.focus()
+  }
+
+  const onKeyDown = (e: ReactKeyboardEvent<HTMLButtonElement>, index: number) => {
+    let nextIndex: number
+    switch (e.key) {
+      case "ArrowLeft":
+        nextIndex = (index - 1 + panels.length) % panels.length
+        break
+      case "ArrowRight":
+        nextIndex = (index + 1) % panels.length
+        break
+      case "Home":
+        nextIndex = 0
+        break
+      case "End":
+        nextIndex = panels.length - 1
+        break
+      default:
+        return
+    }
+    e.preventDefault()
+    move(panels[nextIndex].id)
+  }
+
+  return (
+    <div role="tablist" className="flex min-w-0 items-center gap-1">
+      {panels.map((panel, index) => {
+        const selected = panel.id === activeId
+        const badgeCount =
+          typeof panel.badge === "number" && panel.badge > 0 ? panel.badge : null
+        return (
+          <button
+            key={panel.id}
+            ref={(el) => {
+              tabRefs.current[panel.id] = el
+            }}
+            type="button"
+            role="tab"
+            id={`dock-tab-${panel.id}`}
+            aria-selected={selected}
+            aria-controls={`dock-panel-${panel.id}`}
+            tabIndex={selected ? 0 : -1}
+            onClick={() => move(panel.id)}
+            onKeyDown={(e) => onKeyDown(e, index)}
+            className={cn(
+              "relative flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-[13px] font-medium transition-colors",
+              selected
+                ? "bg-muted text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {panel.label}
+            {badgeCount !== null && (
+              <span
+                aria-label={`${badgeCount} pending`}
+                className="inline-flex min-w-[16px] items-center justify-center rounded-full bg-[var(--n9-accent)] px-1 text-[10px] font-semibold leading-4 text-white"
+              >
+                {badgeCount}
+              </span>
+            )}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/**
  * One dock. Renders its own header with the collapse control, and animates its
  * extent rather than unmounting, so the panel's scroll position and any live
  * editor inside it survive being closed and reopened.
+ *
+ * `panels` is additive: when omitted the dock behaves exactly as before
+ * (a static title, `children` as the body). When two or more panels are
+ * supplied, the title is replaced by a tab strip and the body renders the
+ * active panel's `content`. A single-entry `panels` array intentionally skips
+ * the tab strip — one tab has nothing to switch to — and falls back to the
+ * plain-title rendering.
  */
 export function Dock({
   side,
@@ -240,6 +363,9 @@ export function Dock({
   children,
   className,
   bodyClassName,
+  panels,
+  activePanelId,
+  onActivePanelChange,
 }: {
   side: DockSide
   open: boolean
@@ -249,9 +375,12 @@ export function Dock({
   title: string
   icon?: ReactNode
   actions?: ReactNode
-  children: ReactNode
+  children?: ReactNode
   className?: string
   bodyClassName?: string
+  panels?: DockPanel[]
+  activePanelId?: string
+  onActivePanelChange?: (id: string) => void
 }) {
   const reduce = useReducedMotion()
   const vertical = side !== "bottom"
@@ -261,6 +390,14 @@ export function Dock({
 
   const CollapseIcon =
     side === "left" ? CaretLeft : side === "right" ? CaretRight : CaretDown
+
+  // Two or more panels get a tab strip; zero or one behaves like the classic API.
+  const showTabs = !!panels && panels.length > 1
+  const activePanel =
+    panels && panels.length > 0
+      ? (panels.find((p) => p.id === activePanelId) ?? panels[0])
+      : null
+  const handleActivePanelChange = (id: string) => onActivePanelChange?.(id)
 
   return (
     <>
@@ -297,7 +434,15 @@ export function Dock({
         >
           <header className="flex items-center gap-2 border-b border-border/40 px-4 py-2.5">
             {icon}
-            <h2 className="text-[13px] font-medium text-muted-foreground">{title}</h2>
+            {showTabs && panels ? (
+              <DockTabStrip
+                panels={panels}
+                activeId={activePanel?.id ?? panels[0].id}
+                onChange={handleActivePanelChange}
+              />
+            ) : (
+              <h2 className="text-[13px] font-medium text-muted-foreground">{title}</h2>
+            )}
             <div className="ml-auto flex items-center gap-1.5">
               {actions}
               <Button
@@ -312,7 +457,18 @@ export function Dock({
               </Button>
             </div>
           </header>
-          <div className={cn("min-h-0 flex-1 overflow-auto", bodyClassName)}>{children}</div>
+          <div
+            className={cn("min-h-0 flex-1 overflow-auto", bodyClassName)}
+            {...(showTabs && activePanel
+              ? {
+                  role: "tabpanel",
+                  id: `dock-panel-${activePanel.id}`,
+                  "aria-labelledby": `dock-tab-${activePanel.id}`,
+                }
+              : {})}
+          >
+            {panels && panels.length > 0 ? activePanel?.content : children}
+          </div>
         </div>
       </motion.section>
 
