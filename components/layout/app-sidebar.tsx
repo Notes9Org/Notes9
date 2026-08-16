@@ -46,6 +46,7 @@ import { Button } from "../ui/button"
 import { NewLabNoteDialog } from "@/app/(app)/lab-notes/new-lab-note-dialog"
 import { withFromDashboard } from "@/lib/from-dashboard"
 import { ShortcutHint } from '@/components/shortcuts/shortcut-hint'
+import { trackShortcutInvocation } from '@/lib/analytics/shortcut-usage'
 import { ariaKeyshortcutsFor } from '@/lib/shortcuts/keycaps'
 import { useIsMac } from '@/components/providers/platform-provider'
 
@@ -625,7 +626,10 @@ export function AppSidebar() {
                        have survived any rebind (ADR-021). */
                     <button
                       type="button"
-                      onClick={openPalette}
+                      onClick={() => {
+                        trackShortcutInvocation('palette.open', 'pointer')
+                        openPalette()
+                      }}
                       aria-label="Open command palette"
                       aria-keyshortcuts={ariaKeyshortcutsFor('palette.open', isMac)}
                       title="Open command palette"
