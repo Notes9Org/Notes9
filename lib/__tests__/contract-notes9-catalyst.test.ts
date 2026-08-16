@@ -77,11 +77,12 @@ describe("seam contract: fixture integrity", () => {
     expect(fixture.contract_version).toBe("1")
   })
 
-  it("names all 20 SSE events, so a client can be built from this file alone", () => {
-    // The AI-side test asserts this list equals Catalyst's live registry. Here we only
-    // assert the shape, because Notes9 has no registry of its own to compare against —
-    // which is itself the finding: the stream client is written from prose today.
-    expect(fixture.sse_events).toHaveLength(20)
+  it("names all 21 SSE events, so a client can be built from this file alone", () => {
+    // The AI-side test asserts this list equals Catalyst's live registry. The
+    // client-side comparison is no longer missing: KNOWN_EVENT_TYPES is exported
+    // and __tests__/agent-stream-contract.test.ts diffs it against this list in
+    // BOTH directions. Keep this as the shape check.
+    expect(fixture.sse_events).toHaveLength(21)
     expect(fixture.sse_events).toContain("text_reset")
     expect([...fixture.sse_events].sort()).toEqual(fixture.sse_events)
   })

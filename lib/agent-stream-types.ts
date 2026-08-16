@@ -420,7 +420,10 @@ export function sourceNamesFromEvent(
 
 // ── Type guard ────────────────────────────────────────────────────────────────
 
-const KNOWN_EVENT_TYPES = new Set([
+// Set<string> (not the inferred literal union) so callers can test an arbitrary
+// string against it — e.g. the contract conformance test. isSseEvent still
+// narrows via `as never`.
+export const KNOWN_EVENT_TYPES: Set<string> = new Set([
   "run_started",
   "permission_request",
   "thinking",
