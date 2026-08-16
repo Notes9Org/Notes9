@@ -45,6 +45,10 @@ import { toast } from "sonner"
 import { Button } from "../ui/button"
 import { NewLabNoteDialog } from "@/app/(app)/lab-notes/new-lab-note-dialog"
 import { withFromDashboard } from "@/lib/from-dashboard"
+import { ShortcutHint } from '@/components/shortcuts/shortcut-hint'
+import { trackShortcutInvocation } from '@/lib/analytics/shortcut-usage'
+import { ariaKeyshortcutsFor, shortcutIdForHref } from '@/lib/shortcuts/keycaps'
+import { useIsMac } from '@/components/providers/platform-provider'
 
 /**
  * Nav items that carry the active scope forward (`?project=` always; plus
@@ -125,6 +129,7 @@ export function AppSidebar() {
   // hierarchy instead of the two parallel ones the audit flagged.
   const scope = useProjectScope()
   const { openPalette, openCheatSheet } = useShortcuts()
+  const isMac = useIsMac()
   const [searchQuery, setSearchQuery] = useState("")
   const [searchFocused, setSearchFocused] = useState(false)
   const [projects, setProjects] = useState<Project[]>([])
@@ -614,16 +619,23 @@ export function AppSidebar() {
                     }}
                   />
                   {searchQuery.length === 0 && (
-                    /* ⌘K opens the command palette, not this field — so the
-                       chip is the button that does exactly that. */
+                    /* The chip opens the command palette, not this field — so it
+                       is the button that does exactly that. The keys come from
+                       the registry: this used to be a hardcoded "⌘K" string,
+                       which showed the wrong key to every Windows user and would
+                       have survived any rebind (ADR-021). */
                     <button
                       type="button"
-                      onClick={openPalette}
+                      onClick={() => {
+                        trackShortcutInvocation('palette.open', 'pointer')
+                        openPalette()
+                      }}
                       aria-label="Open command palette"
+                      aria-keyshortcuts={ariaKeyshortcutsFor('palette.open', isMac)}
                       title="Open command palette"
-                      className="absolute right-2 top-1/2 hidden h-5 -translate-y-1/2 select-none items-center rounded-[5px] border border-sidebar-border/80 bg-sidebar px-1.5 font-sans text-[10px] font-medium tracking-wide text-muted-foreground transition-colors hover:border-sidebar-border hover:text-foreground sm:flex"
+                      className="absolute right-2 top-1/2 hidden -translate-y-1/2 select-none items-center transition-opacity hover:opacity-100 sm:flex"
                     >
-                      ⌘K
+                      <ShortcutHint id="palette.open" />
                     </button>
                   )}
                 </motion.div>
@@ -819,6 +831,10 @@ export function AppSidebar() {
                             ? scope.experimentName
                             : null
                         : null
+                    // Resolved from the registry, so a rebound or removed
+                    // `goto.*` binding simply stops advertising itself here
+                    // rather than advertising a key that no longer works.
+                    const navShortcutId = shortcutIdForHref(item.href)
 
                     return (
                       <SidebarMenuItem key={item.name} data-tour={navTourKey(item.href)}>
@@ -841,6 +857,11 @@ export function AppSidebar() {
                           <Link
                             href={carriesScope ? `${item.href}${scope.scopedQueryString}` : item.href}
                             aria-label={isIconMode ? item.name : undefined}
+                            aria-keyshortcuts={
+                              navShortcutId
+                                ? ariaKeyshortcutsFor(navShortcutId, isMac)
+                                : undefined
+                            }
                             // In the collapsed rail, navigating also expands the
                             // sidebar so the user lands on the page with the full
                             // nav open (per request: clicking an icon opens it).
@@ -870,6 +891,17 @@ export function AppSidebar() {
                               >
                                 {contextName ?? item.name}
                               </span>
+                              {/* Twelve `g`-then-letter bindings nobody knows —
+                                  but twelve chips stacked down the densest column
+                                  in the app is the "grey chips everyone stops
+                                  seeing" failure this feature has to avoid. So
+                                  the row stays quiet at rest and teaches on
+                                  approach: hover, or keyboard focus. */}
+                              {navShortcutId && !showSwitcher && (
+                                <span className="ml-auto hidden opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 sm:inline-flex">
+                                  <ShortcutHint id={navShortcutId} />
+                                </span>
+                              )}
                             </span>
                           </Link>
                         </SidebarMenuButton>

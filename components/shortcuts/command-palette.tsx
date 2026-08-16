@@ -29,6 +29,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { keycapsOf } from '@/lib/shortcuts/keycaps'
 import { Kbd, KbdRow } from '@/components/ui/kbd'
 import { CREATE_LAB_NOTE_EVENT, useShortcuts } from '@/contexts/shortcuts-context'
 import { CREATE_ACTIONS, createActionHref } from '@/lib/app-create-actions'
@@ -84,17 +85,6 @@ type PaletteCommand = {
   run: () => void
 }
 
-/**
- * Keycaps for a registry entry. Mirrors the cheat sheet's local helper — a
- * sequence renders one cap per key, a chord renders the parsed combo.
- */
-function keycaps(def: ShortcutDef, isMac: boolean): string[] {
-  if (def.display) return def.display
-  if (isSequence(def.keys)) {
-    return def.keys.map((key) => formatCombo(key, isMac).join(''))
-  }
-  return def.keys[0] ? formatCombo(def.keys[0], isMac) : []
-}
 
 /**
  * The command palette — search plus every navigable and creatable thing, with
@@ -185,7 +175,7 @@ export function CommandPalette({
       out.push({
         id: def.id,
         label: def.label,
-        caps: keycaps(def, isMac),
+        caps: keycapsOf(def, isMac),
         sequence: isSequence(def.keys),
         icon: <GoToIcon className="size-4" aria-hidden />,
         run: () => router.push(href),
@@ -207,7 +197,7 @@ export function CommandPalette({
       const row = {
         id,
         label: def?.label ?? `New ${action.label.toLowerCase()}`,
-        caps: def ? keycaps(def, isMac) : [],
+        caps: def ? keycapsOf(def, isMac) : [],
         sequence: def ? isSequence(def.keys) : false,
         icon: <CreateIcon className="size-4" aria-hidden />,
       }
@@ -232,7 +222,7 @@ export function CommandPalette({
     out.push({
       id: 'shortcuts.open',
       label: 'Keyboard shortcuts',
-      caps: cheatSheet ? keycaps(cheatSheet, isMac) : [],
+      caps: cheatSheet ? keycapsOf(cheatSheet, isMac) : [],
       sequence: cheatSheet ? isSequence(cheatSheet.keys) : false,
       icon: <KeyboardIcon className="size-4" aria-hidden />,
       run: openCheatSheet,

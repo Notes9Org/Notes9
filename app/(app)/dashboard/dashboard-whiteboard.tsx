@@ -23,6 +23,8 @@ import {
 } from "@/components/ui/alert-dialog"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { keycapsFor } from '@/lib/shortcuts/keycaps'
+import { useIsMac } from '@/components/providers/platform-provider'
 import {
   createWhiteboardNote,
   deleteWhiteboardNote,
@@ -95,6 +97,7 @@ export function DashboardWhiteboard({
   initialNotes: Row[]
   projectId?: string | null
 }) {
+  const isMac = useIsMac()
   const [notes, setNotes] = useState<WhiteboardNote[]>(() =>
     initialNotes.map(fromRow)
   )
@@ -821,7 +824,9 @@ export function DashboardWhiteboard({
         )}
 
         <div className="pointer-events-none absolute bottom-2 right-3 text-[9px] font-mono uppercase tracking-wider text-muted-foreground/70">
-          drag · ⇧-click selects · ⌫ deletes · ⌘D dupes
+          drag · {keycapsFor('canvas.selectAll', isMac).join('')} selects ·{' '}
+          {keycapsFor('canvas.delete', isMac).join('')} deletes ·{' '}
+          {keycapsFor('canvas.duplicate', isMac).join('')} dupes
         </div>
       </div>
 

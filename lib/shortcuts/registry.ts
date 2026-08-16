@@ -38,7 +38,7 @@ export const LEADER_TOOLBAR = '\\';
 /** How long a leader stays armed before it expires, in ms. */
 export const LEADER_TIMEOUT_MS = 1200;
 
-const essentials: ShortcutDef[] = [
+const essentials = [
   {
     id: 'palette.open',
     keys: ['mod+k'],
@@ -104,39 +104,46 @@ const essentials: ShortcutDef[] = [
     scope: 'global',
     handled: 'external',
   },
-];
+] as const satisfies readonly ShortcutDef[];
 
 /** `g` then a letter. Hrefs are asserted against APP_PRIMARY_NAV in tests. */
-const goTo: ShortcutDef[] = (
+/**
+ * The third column is the route slug, not the href — `href` and `id` are both
+ * derived from it. Deriving the id with `href.replace(...)` instead widens it to
+ * `string`, which silently collapses `ShortcutId` (see ADR-021) and disarms the
+ * compile-time check that stops a renamed binding leaving a stale hint on screen.
+ * A template literal over an `as const` union keeps both literal, with no cast.
+ */
+const goTo = (
   [
-    ['d', 'Dashboard', '/dashboard'],
-    ['p', 'Projects', '/projects'],
-    ['e', 'Experiments', '/experiments'],
-    ['n', 'Lab notes', '/lab-notes'],
-    ['l', 'Literature', '/literature-reviews'],
-    ['o', 'Protocols', '/protocols'],
-    ['s', 'Samples', '/samples'],
-    ['w', 'Writing', '/papers'],
-    ['a', 'Data analysis', '/data-analysis'],
-    ['r', 'Reports', '/reports'],
-    ['c', 'Catalyst', '/catalyst'],
-    ['m', 'Research map', '/research-map'],
+    ['d', 'Dashboard', 'dashboard'],
+    ['p', 'Projects', 'projects'],
+    ['e', 'Experiments', 'experiments'],
+    ['n', 'Lab notes', 'lab-notes'],
+    ['l', 'Literature', 'literature-reviews'],
+    ['o', 'Protocols', 'protocols'],
+    ['s', 'Samples', 'samples'],
+    ['w', 'Writing', 'papers'],
+    ['a', 'Data analysis', 'data-analysis'],
+    ['r', 'Reports', 'reports'],
+    ['c', 'Catalyst', 'catalyst'],
+    ['m', 'Research map', 'research-map'],
   ] as const
-).map(([key, label, href]) => ({
-  id: `goto${href.replace(/\//g, '.')}`,
+).map(([key, label, slug]) => ({
+  id: `goto.${slug}` as const,
   keys: [LEADER_GO, key],
   label: `Go to ${label}`,
   group: GROUP.goTo,
   scope: 'global' as const,
   handled: 'registry' as const,
-  href,
-}));
+  href: `/${slug}`,
+})) satisfies readonly ShortcutDef[];
 
 /**
  * `c` then a letter. Ids match keys in lib/app-create-actions.ts so the
  * dispatcher, the sidebar New menu and the palette all resolve the same action.
  */
-const create: ShortcutDef[] = (
+const create = (
   [
     ['n', 'lab note', 'labNote'],
     ['e', 'experiment', 'experiment'],
@@ -147,15 +154,15 @@ const create: ShortcutDef[] = (
     ['r', 'report', 'report'],
   ] as const
 ).map(([key, noun, slug]) => ({
-  id: `create.${slug}`,
+  id: `create.${slug}` as const,
   keys: [LEADER_CREATE, key],
   label: `New ${noun}`,
   group: GROUP.create,
   scope: 'global' as const,
   handled: 'registry' as const,
-}));
+})) satisfies readonly ShortcutDef[];
 
-const ai: ShortcutDef[] = [
+const ai = [
   {
     id: 'catalyst.toggle',
     keys: ['mod+j'],
@@ -191,9 +198,9 @@ const ai: ShortcutDef[] = [
     scope: 'composer',
     handled: 'external',
   },
-];
+] as const satisfies readonly ShortcutDef[];
 
-const inserts: ShortcutDef[] = [
+const inserts = [
   {
     id: 'insert.slash',
     keys: [],
@@ -232,9 +239,9 @@ const inserts: ShortcutDef[] = [
     scope: 'editor',
     handled: 'external',
   },
-];
+] as const satisfies readonly ShortcutDef[];
 
-const writing: ShortcutDef[] = [
+const writing = [
   {
     id: 'editor.indent',
     keys: ['tab'],
@@ -277,7 +284,10 @@ const writing: ShortcutDef[] = [
       ['e', 'Open the equation menu'],
     ] as const
   ).map(([key, label]) => ({
-    id: `editor.toolbar.${key}`,
+    // `as const` keeps this a literal union. Without it the template widens to
+    // `string`, and because a union with `string` collapses to `string`, this
+    // one line would silently disarm `ShortcutId` for the entire app (ADR-021).
+    id: `editor.toolbar.${key}` as const,
     // A genuine sequence — press \, release, then the letter — so it must
     // render as "\ then B", not "\ B". Only `keys` gets the "then" treatment.
     keys: [LEADER_TOOLBAR, key],
@@ -286,9 +296,9 @@ const writing: ShortcutDef[] = [
     scope: 'editor' as const,
     handled: 'external' as const,
   })),
-];
+] as const satisfies readonly ShortcutDef[];
 
-const whiteboard: ShortcutDef[] = [
+const whiteboard = [
   {
     id: 'canvas.selectAll',
     keys: ['mod+a'],
@@ -323,9 +333,9 @@ const whiteboard: ShortcutDef[] = [
     scope: 'canvas',
     handled: 'external',
   },
-];
+] as const satisfies readonly ShortcutDef[];
 
-const analysis: ShortcutDef[] = [
+const analysis = [
   {
     id: 'analysis.undo',
     keys: ['mod+z'],
@@ -342,9 +352,15 @@ const analysis: ShortcutDef[] = [
     scope: 'analysis',
     handled: 'external',
   },
-];
+] as const satisfies readonly ShortcutDef[];
 
-export const SHORTCUTS: ShortcutDef[] = [
+/**
+ * Internal, deliberately un-annotated: keeping the precise union of every entry
+ * is what makes `ShortcutId` a literal union. Do not export it — the narrow
+ * union hides optional fields (`display`, `href`, `allowInInput`) on entries
+ * that omit them, which is useless to consumers.
+ */
+const ALL_SHORTCUTS = [
   ...essentials,
   ...goTo,
   ...create,
@@ -354,6 +370,21 @@ export const SHORTCUTS: ShortcutDef[] = [
   ...whiteboard,
   ...analysis,
 ];
+
+/**
+ * Every shortcut id that exists, as a literal union.
+ *
+ * This is the type that makes a stale on-screen hint impossible: hint call
+ * sites take a `ShortcutId`, so renaming or removing a binding turns every
+ * place that displays it into a compile error rather than a wrong keycap.
+ * See ADR-021. It only stays a union while the group arrays above are declared
+ * `as const satisfies readonly ShortcutDef[]` — annotating one of them
+ * `: ShortcutDef[]` again silently collapses this to `string`, which the test
+ * suite guards against.
+ */
+export type ShortcutId = (typeof ALL_SHORTCUTS)[number]['id'];
+
+export const SHORTCUTS: readonly ShortcutDef[] = ALL_SHORTCUTS;
 
 /** Cheat-sheet section order. */
 export const GROUP_ORDER: string[] = [

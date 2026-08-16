@@ -25,6 +25,8 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { createClient } from "@/lib/supabase/client"
 import { recordRumEvent } from "@/lib/rum"
 import type { ReportGenerationRequest } from "@/lib/report-agent-types"
+import { formatCombo } from '@/lib/shortcuts/match'
+import { useIsMac } from '@/components/providers/platform-provider'
 
 // ---------------------------------------------------------------------------
 // useReportGeneration hook
@@ -131,6 +133,7 @@ export function ReportGeneratorDialog({
   scopedProjectId,
 }: ReportGeneratorDialogProps) {
   const router = useRouter()
+  const isMac = useIsMac()
   const { isGenerating, content, error, generate, reset } =
     useReportGeneration()
 
@@ -351,7 +354,7 @@ export function ReportGeneratorDialog({
             <Label htmlFor="query-textarea">
               Analysis Query *{" "}
               <span className="text-xs font-normal text-muted-foreground">
-                (⌘/Ctrl+Enter to generate)
+                ({formatCombo('mod+enter', isMac).join('')} to generate)
               </span>
             </Label>
             <Textarea
