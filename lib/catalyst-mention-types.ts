@@ -3,7 +3,8 @@ export type CatalystMentionKind =
   | 'lab_note'
   | 'experiment'
   | 'project'
-  | 'protocol';
+  | 'protocol'
+  | 'data_file';
 
 export type CatalystMentionDragPayload = {
   kind: CatalystMentionKind;
@@ -25,6 +26,8 @@ export function catalystMentionPath(kind: CatalystMentionKind, id: string): stri
       return `/projects/${encodeURIComponent(id)}`;
     case 'protocol':
       return `/protocols/${encodeURIComponent(id)}`;
+    case 'data_file':
+      return `/data-analysis?file=${encodeURIComponent(id)}`;
     default:
       return `/notes/${encodeURIComponent(id)}`;
   }

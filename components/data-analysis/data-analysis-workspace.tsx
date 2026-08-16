@@ -38,7 +38,6 @@ import {
   TextAa,
   FolderOpen,
   FloppyDisk,
-  MagnifyingGlass,
   SquaresFour,
   Cube,
   Cursor,
@@ -49,6 +48,7 @@ import {
   Sparkle,
   ArrowUUpLeft,
   ArrowUUpRight,
+  X,
   ClockCounterClockwise,
   Prohibit,
   DotsThree,
@@ -60,11 +60,19 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { cn } from "@/lib/utils"
 import type { DataFileRow } from "@/components/data-analysis/data-files-list"
 import { UniverWorkbookView, type SheetSelection } from "@/components/spreadsheet/univer-workbook-view"
-import { CatalystSectionHero } from "@/components/catalyst/catalyst-section-hero"
 import { PlotlyChart, type PlotlyEdits, type ChartExportFn, type ChartElement, type ChartMenuGroup } from "@/components/data-analysis/plotly-chart"
 import { ExportMenu } from "@/components/data-analysis/export-menu"
 import { openCatalystPanel } from "@/lib/catalyst-launch"
@@ -127,6 +135,11 @@ import {
 } from "@/lib/data-analysis/workspace/chart-state-spec"
 import { ReopenBanner } from "@/components/data-analysis/workspace/reopen-banner"
 import {
+  LibraryDialog,
+  isWorkbookUnreadableReason,
+  type WorkbookUnreadableReason,
+} from "@/components/data-analysis/workspace/library-dialog"
+import {
   RevisionHistoryDialog,
   SaveAnalysisDialog,
 } from "@/components/data-analysis/workspace/analysis-library"
@@ -156,12 +169,37 @@ import {
   canRedo as canRedoOf,
   canUndo as canUndoOf,
   commit as commitEdit,
+  historyMutations,
   emptyHistory,
   redo as redoEdit,
   undo as undoEdit,
   type ConfigHistory,
 } from "@/lib/data-analysis/workspace/edit-history"
 import { PipelineBar } from "@/components/data-analysis/pipeline-bar"
+// ADR-019 / slice 03 AC-7: mount the console slice 02 built instead of the bare
+// `AnalysisComposer`, which rendered in normal document flow above the phase
+// tabs and pushed the sheet below the fold after a few turns. `AnalysisConsole`
+// decides `empty` vs `docked` internally and, for `docked`, overlays the
+// transcript rather than reflowing the workspace beneath it.
+import { AnalysisConsole } from "@/components/data-analysis/workspace/analysis-console"
+import {
+  appendAnalysisTurn,
+  createAnalysisThread,
+  loadAnalysisThread,
+  updateAnalysisTurnPlan,
+} from "@/lib/data-analysis/ai/analysis-thread-store"
+import {
+  ANALYSIS_TURN_VERSION,
+  canApprovePlan,
+  markStalePlans,
+  setPlanStatus,
+  toHistory,
+  toStoredThread,
+  fromStoredThread,
+  type AnalysisAssistantTurn,
+  type AnalysisTurn,
+  type AnalysisUserTurn,
+} from "@/lib/data-analysis/ai/analysis-thread"
 import { prepOffers, profilePreparation } from "@/lib/data-analysis/workspace/prep-offers"
 import { computeAnalysis } from "@/lib/data-analysis/engine/client"
 import type { EngineResult } from "@/lib/data-analysis/engine/contract"
@@ -557,6 +595,77 @@ const DATA_W = 400
 const SET_W = 344
 const SESSION_KEY = "n9-data-analysis-session"
 
+/**
+ * Each open analysis now holds its own Univer workbook in memory (ADR-012), so
+ * the tab strip has a real cost per tab. Eight is generous for the work and low
+ * enough that a runaway "+" cannot exhaust the tab.
+ * ponytail: a flat cap. Evict least-recently-used to disk if anyone hits it.
+ */
+const MAX_OPEN_ANALYSES = 8
+
+/**
+ * Turn a route outcome into the assistant's turn.
+ *
+ * Every outcome produces a turn, including the failures. A request that timed
+ * out and left nothing behind is a transcript that lies about what happened, and
+ * the researcher is left wondering whether their figure changed.
+ */
+function assistantTurnFor(
+  outcome: SpecPatchOutcome,
+  steps: string[],
+  specToken: string,
+): AnalysisAssistantTurn {
+  const now = new Date().toISOString()
+  const base = {
+    v: ANALYSIS_TURN_VERSION,
+    id: `a${now}-${Math.random().toString(36).slice(2, 8)}`,
+    role: "assistant" as const,
+    specHashAtProposal: specToken,
+    createdAt: now,
+  }
+  if (outcome.outcome === "patch") {
+    return {
+      ...base,
+      content: outcome.rationale,
+      plan: {
+        steps,
+        mutations: outcome.mutations,
+        rejected: outcome.rejected.map((r) => ({ reason: r.reason })),
+        clarificationNeeded: outcome.clarificationNeeded,
+        status: "proposed",
+      },
+      ...(outcome.historyDropped ? { historyDropped: outcome.historyDropped } : {}),
+    }
+  }
+  if (outcome.outcome === "refused") {
+    return { ...base, content: outcome.reason, plan: null, error: outcome.alternative }
+  }
+  return {
+    ...base,
+    content: "",
+    plan: null,
+    error: "reason" in outcome ? outcome.reason : "The assistant could not answer that.",
+  }
+}
+
+/**
+ * The sheet an analysis has before it has data. A single blank cell rather than
+ * a zero-row workbook, because Univer needs something to mount and every
+ * downstream derivation is already correct for "no rows".
+ *
+ * A factory, not a shared constant: Univer takes ownership of the snapshot it
+ * mounts, so handing every empty analysis the same object would let one tab's
+ * typing leak into the next one that opens.
+ */
+const emptySnapshot = (): UniverWorkbookSnapshot =>
+  buildSnapshotFromAoa([[""]], "Sheet1", "Untitled analysis")
+
+/**
+ * Identity marker for "this analysis has no data yet". Kept separate from the
+ * snapshot itself precisely because the snapshots are no longer shared.
+ */
+const EMPTY_SHEET_NAME = "Untitled analysis"
+
 /** Matches at ≥1280px, the width where the 3-pane side rails make sense. */
 function useIsWide() {
   const [wide, setWide] = useState(true)
@@ -619,6 +728,23 @@ const PHASES: { id: Phase; label: string; Icon: React.ComponentType<{ className?
   { id: "workspace", label: "Figure layout", Icon: GridFour },
 ]
 
+/**
+ * ADR-018, AC-6. Both close paths (`closeDataset`, `closeAnalysis`) reduce to
+ * this one confirmation, so it carries what it needs to word the prompt
+ * rather than the workspace recomputing "what's unsaved" a second time at
+ * confirm-click.
+ */
+type PendingClose =
+  | { kind: "dataset"; hasDataset: boolean; turnCount: number }
+  | { kind: "analysis"; id: string; hasDataset: boolean; turnCount: number }
+
+function unsavedSummary(p: PendingClose): string {
+  const parts: string[] = []
+  if (p.hasDataset) parts.push("the loaded dataset")
+  if (p.turnCount > 0) parts.push(p.turnCount === 1 ? "1 unsaved message" : `${p.turnCount} unsaved messages`)
+  return parts.length > 0 ? parts.join(" and ") : "your changes"
+}
+
 export function DataAnalysisWorkspace({
   files = [],
   projects = [],
@@ -629,13 +755,28 @@ export function DataAnalysisWorkspace({
   experiments?: { id: string; name: string; project_id: string | null }[]
 }) {
   const router = useRouter()
-  const initial = useMemo(() => buildSnapshotFromAoa(ELISA_AOA, "ELISA", "ELISA standard curve.xlsx"), [])
+  /**
+   * An analysis starts with no data (ADR-015). It used to boot into the ELISA
+   * demo sheet, which meant `aiReady` was true from first paint and "the first
+   * message must carry a data file" could never be enforced — there was always a
+   * dataset, the researcher just had not chosen it. The example is still one
+   * click away in the empty state.
+   */
+  const initial = useMemo(() => emptySnapshot(), [])
   const [mountSnapshot, setMountSnapshot] = useState<UniverWorkbookSnapshot>(initial)
   const [mountKey, setMountKey] = useState(0)
   const [liveSnapshot, setLiveSnapshot] = useState<UniverWorkbookSnapshot>(initial)
+  /**
+   * Whether this analysis has a dataset at all. Distinct from "the sheet has
+   * rows": a researcher who deletes every row still has an analysis with a
+   * dataset, and should not be dropped back to the attach-a-file screen.
+   */
+  const [hasData, setHasData] = useState(false)
 
   const liveRef = useRef(liveSnapshot)
   liveRef.current = liveSnapshot
+  const hasDataRef = useRef(hasData)
+  hasDataRef.current = hasData
 
   const fileRef = useRef<HTMLInputElement>(null)
   const [phase, setPhase] = useState<Phase>("chart")
@@ -1479,10 +1620,54 @@ export function DataAnalysisWorkspace({
      costs nothing new to persist and everything the rail can express travels
      with it. Switching tabs stores the configuration you are leaving and
      applies the one you are entering. */
-  const [analyses, setAnalyses] = useState<{ id: string; name: string; config: unknown }[]>([])
+  /**
+   * The tab strip. Each entry is a whole analysis — its own dataset, its own
+   * rail — not a view onto a shared sheet (ADR-012). `snapshot` and `source`
+   * used to be workspace-level singletons, which is why loading a file in one
+   * tab changed every tab.
+   *
+   * `hasData` is not "the sheet has rows": a researcher can delete every
+   * row of a real sheet, and that is still an analysis with a dataset, not a
+   * fresh one.
+   */
+  const [analyses, setAnalyses] = useState<
+    {
+      id: string
+      name: string
+      config: unknown
+      snapshot: UniverWorkbookSnapshot
+      source: { id: string; experimentId: string } | null
+      hasData: boolean
+      /** This analysis's conversation. Per document for the same reason the
+          sheet is: a transcript about another tab's data is worse than none. */
+      turns: AnalysisTurn[]
+      /** chat_sessions.id, minted on this analysis's first send. */
+      threadId: string | null
+    }[]
+  >([])
   const [activeAnalysisId, setActiveAnalysisId] = useState<string>("a1")
+  // Read by `commitSave` and the reopen/bind flow, both declared later in this
+  // component — a ref so a save always tags the tab active when it happened,
+  // never a stale one from whenever those callbacks were created.
+  const activeAnalysisIdRef = useRef(activeAnalysisId)
+  activeAnalysisIdRef.current = activeAnalysisId
   const analysisSeq = useRef(1)
   const buildConfigRef = useRef<() => unknown>(() => ({}))
+  /**
+   * The tab callbacks below are declared before `loadSnapshot` and `sourceFile`
+   * exist, and they must not be re-created when either changes — a new
+   * `switchAnalysis` identity on every keystroke would re-render the whole tab
+   * strip. Refs, not deps.
+   */
+  const loadSnapshotRef = useRef<
+    (snap: UniverWorkbookSnapshot, source?: { id: string; experimentId: string } | null) => void
+  >(() => {})
+  const sourceFileRef = useRef<{ id: string; experimentId: string } | null>(null)
+  /**
+   * The rail as it is before anything is loaded, captured once. A new analysis
+   * gets this rather than a clone of whatever the researcher was just looking at.
+   */
+  const blankConfigRef = useRef<unknown>(null)
   const applyConfigRef = useRef<(c: unknown) => void>(() => undefined)
 
   /* ── One undo stack, both authors ──────────────────────────────────────────
@@ -1543,15 +1728,41 @@ export function DataAnalysisWorkspace({
   const analysesRef = useRef(analyses)
   analysesRef.current = analyses
 
-  /** Fold the current rail state back into the active tab before leaving it. */
+  /**
+   * Fold the current rail state AND the current sheet back into the active tab
+   * before leaving it. The sheet is part of what a tab is now (ADR-012), so
+   * capturing only the config would lose whichever file this tab had open the
+   * moment the researcher clicked another one.
+   */
   const captureActive = useCallback(
     () =>
       analysesRef.current.map((a) =>
-        a.id === activeAnalysisId ? { ...a, config: buildConfigRef.current() } : a
+        a.id === activeAnalysisId
+          ? {
+              ...a,
+              config: buildConfigRef.current(),
+              snapshot: liveRef.current,
+              source: sourceFileRef.current,
+              hasData: hasDataRef.current,
+              turns: turnsRef.current,
+              threadId: threadIdRef.current,
+            }
+          : a
       ),
     [activeAnalysisId]
   )
 
+  /**
+   * Switching tabs restores that analysis's own dataset, then its own rail.
+   * Order matters and is the same order the reopen path uses: `loadSnapshot`
+   * clears the pipeline because a new sheet invalidates it, and `swapConfig`
+   * puts this analysis's pipeline back immediately afterwards. Reversing them
+   * would hand the researcher a tab with the right sheet and no filters.
+   *
+   * The snapshot is only remounted when it is a different object. Two tabs over
+   * one file (via Duplicate) share the snapshot by reference, and remounting
+   * Univer for a sheet that has not changed would throw away cursor and zoom.
+   */
   const switchAnalysis = useCallback(
     (id: string) => {
       if (id === activeAnalysisId) return
@@ -1560,49 +1771,165 @@ export function DataAnalysisWorkspace({
       if (!target) return
       setAnalyses(saved)
       setActiveAnalysisId(id)
+      if (target.snapshot !== liveRef.current) {
+        loadSnapshotRef.current(target.snapshot, target.source ?? undefined)
+      }
+      setHasData(target.hasData)
+      setTurns(target.turns)
+      setThreadId(target.threadId)
       swapConfig(target.config)
     },
     [activeAnalysisId, captureActive, swapConfig]
   )
 
+  /**
+   * "+" opens an EMPTY analysis: no sheet, no chart, just the composer.
+   *
+   * It used to copy `buildConfigRef.current()`, which made it a duplicate of the
+   * active tab wearing a different name — the reported "+ replicates the previous
+   * analysis". A new analysis is a new question about new data (ADR-012/ADR-015);
+   * a researcher who wants the current one again has Duplicate, three pixels away.
+   */
   const newAnalysis = useCallback(() => {
+    if (analysesRef.current.length >= MAX_OPEN_ANALYSES) {
+      toast.info(
+        `You have ${MAX_OPEN_ANALYSES} analyses open. Close one before starting another.`,
+      )
+      return
+    }
     const id = `a${++analysisSeq.current}`
     setAnalyses([
       ...captureActive(),
-      { id, name: `Analysis ${analysisSeq.current}`, config: buildConfigRef.current() },
+      {
+        id,
+        name: `Analysis ${analysisSeq.current}`,
+        config: blankConfigRef.current,
+        snapshot: emptySnapshot(),
+        source: null,
+        hasData: false,
+        turns: [],
+        threadId: null,
+      },
     ])
     setActiveAnalysisId(id)
-  }, [captureActive])
+    loadSnapshotRef.current(emptySnapshot())
+    setHasData(false)
+    setTurns([])
+    setThreadId(null)
+    swapConfig(blankConfigRef.current)
+  }, [captureActive, swapConfig])
 
   const duplicateAnalysis = useCallback(
     (id: string) => {
+      if (analysesRef.current.length >= MAX_OPEN_ANALYSES) {
+        toast.info(
+          `You have ${MAX_OPEN_ANALYSES} analyses open. Close one before starting another.`,
+        )
+        return
+      }
       const saved = captureActive()
       const index = saved.findIndex((a) => a.id === id)
       if (index === -1) return
       const newId = `a${++analysisSeq.current}`
-      const copy = { id: newId, name: `${saved[index].name} (copy)`, config: saved[index].config }
+      // A duplicate is a second view of the SAME sheet, so the snapshot is shared
+      // by reference — that is what keeps `switchAnalysis` from remounting Univer
+      // between them, and what makes "two analyses of one file" cheap.
+      const copy = {
+        id: newId,
+        name: `${saved[index].name} (copy)`,
+        config: saved[index].config,
+        snapshot: saved[index].snapshot,
+        source: saved[index].source,
+        hasData: saved[index].hasData,
+        // The copy starts from the same conversation: it is the same question
+        // about the same data, and dropping the reasoning would make the
+        // duplicate look like it appeared from nowhere.
+        turns: saved[index].turns,
+        // A duplicate gets its own thread. Two analyses writing into one
+        // transcript would interleave two different lines of reasoning.
+        threadId: null,
+      }
       const next = [...saved]
       next.splice(index + 1, 0, copy)
       setAnalyses(next)
       setActiveAnalysisId(newId)
+      if (copy.snapshot !== liveRef.current) {
+        loadSnapshotRef.current(copy.snapshot, copy.source ?? undefined)
+      }
+      setHasData(copy.hasData)
+      setTurns(copy.turns)
+      setThreadId(null)
       swapConfig(copy.config)
     },
     [captureActive, swapConfig]
   )
 
+  /**
+   * ADR-018: closing is never refused. It used to bail out below two tabs,
+   * which left a researcher with one wrong file open and no way out of it
+   * except loading over the top. The strip is never empty either way — closing
+   * the last tab replaces it with a fresh empty analysis, the same shape
+   * `newAnalysis` opens, rather than leaving nothing to click "+" from.
+   *
+   * Closing the ACTIVE tab restores the neighbour's own sheet, turns and
+   * thread — `switchAnalysis`'s order, repeated here, because the previous
+   * version only swapped the rail config and left the closed tab's sheet and
+   * transcript on screen under the neighbour's name.
+   */
   const closeAnalysis = useCallback(
     (id: string) => {
       const list = analysesRef.current
-      // Never close the last one: an empty workspace has no affordance to start
-      // a new analysis from.
-      if (list.length <= 1) return
       const index = list.findIndex((a) => a.id === id)
+      if (index === -1) return
+
+      // Only the active tab can have a spec-author request in flight — a
+      // background tab's turns are already a settled snapshot. Abort it
+      // before swapping state below, the same way `closeDataset` does,
+      // otherwise a reply that resolves after the swap is appended via
+      // `setTurns`/`appendAnalysisTurn` against whatever tab is current by
+      // then: the neighbour here, or the fresh tab below.
+      if (id === activeAnalysisId) {
+        aiAbortRef.current?.abort()
+        aiAbortRef.current = null
+        setAiBusy(false)
+      }
+
+      if (list.length === 1) {
+        const newId = `a${++analysisSeq.current}`
+        const fresh = {
+          id: newId,
+          name: `Analysis ${analysisSeq.current}`,
+          config: blankConfigRef.current,
+          snapshot: emptySnapshot(),
+          source: null,
+          hasData: false,
+          turns: [],
+          threadId: null,
+        }
+        setAnalyses([fresh])
+        setActiveAnalysisId(newId)
+        loadSnapshotRef.current(emptySnapshot())
+        setTurns([])
+        setThreadId(null)
+        setEngineResult(null)
+        setEngineNote(null)
+        swapConfig(blankConfigRef.current)
+        return
+      }
+
       const next = list.filter((a) => a.id !== id)
       setAnalyses(next)
       if (id === activeAnalysisId) {
         const neighbour = next[index] ?? next[index - 1]
         if (neighbour) {
           setActiveAnalysisId(neighbour.id)
+          if (neighbour.snapshot !== liveRef.current) {
+            loadSnapshotRef.current(neighbour.snapshot, neighbour.source ?? undefined)
+          }
+          setTurns(neighbour.turns)
+          setThreadId(neighbour.threadId)
+          setEngineResult(null)
+          setEngineNote(null)
           swapConfig(neighbour.config)
         }
       }
@@ -1610,18 +1937,96 @@ export function DataAnalysisWorkspace({
     [activeAnalysisId, swapConfig]
   )
 
+  /**
+   * ADR-018: put the dataset down without closing the tab. `loadSnapshot`
+   * already clears `hasData`, `sourceFile`, the pipeline and the undo stack
+   * for any new sheet, including the empty one — that is the rail-config
+   * reset this needs. The two things it deliberately does NOT own are what
+   * this adds: the engine result (never cleared by `loadSnapshot`, so a stale
+   * chart would otherwise sit behind the empty sheet), and the transcript,
+   * which `loadSnapshot` wipes on the assumption that a new sheet invalidates
+   * old turns. Closing a dataset is not loading a new sheet, it is putting the
+   * current one down — the conversation is about the analysis, not the file —
+   * so the turns are captured before the call and restored after it.
+   *
+   * Plans inside the kept transcript still go stale: clearing the sheet
+   * changes `specTable`, which bumps `specToken` through the same
+   * `[derivedSpec]` effect `askForChange` relies on, and the `[specToken]`
+   * effect runs `markStalePlans` on whatever `turns` holds once that settles —
+   * the restored transcript, so `canApprovePlan` is false for every one of
+   * them without this function touching a plan directly.
+   */
+  const closeDataset = useCallback(() => {
+    // A pending spec-author reply is answering a question about the dataset
+    // that is about to disappear; discard it rather than let it land on the
+    // empty analysis. Unlike `askForChange`'s own supersede path, nothing is
+    // taking over `aiAbortRef` here, so its `finally` block's
+    // `aiAbortRef.current === controller` check can never hold once the ref
+    // is nulled — `setAiBusy(false)` has to happen here instead, or the
+    // console is stuck "Thinking…" forever.
+    aiAbortRef.current?.abort()
+    aiAbortRef.current = null
+    setAiBusy(false)
+    const keptTurns = turnsRef.current
+    loadSnapshotRef.current(emptySnapshot())
+    setTurns(keptTurns)
+    setEngineResult(null)
+    setEngineNote(null)
+    swapConfig(blankConfigRef.current)
+  }, [swapConfig])
+
+  /**
+   * ADR-018, AC-6: the only confirmation this feature has, and it guards the
+   * only irreversible thing in it. "Never saved" is judged against
+   * `savedAnalysis` — the workspace's one persisted draft slot (§3A) — but
+   * that slot belongs to whichever tab was active the moment it was written
+   * (`savedForAnalysisIdRef`, set alongside it below), never to the page as a
+   * whole: once any tab has been saved, `savedAnalysisRef.current` stays
+   * non-null forever, so checking it alone would silently clear a different,
+   * never-saved tab's dataset and turns on close.
+   */
+  const [pendingClose, setPendingClose] = useState<PendingClose | null>(null)
+
+  const confirmCloseDataset = useCallback(() => {
+    const savedThisTab = savedAnalysisRef.current !== null && savedForAnalysisIdRef.current === activeAnalysisId
+    if (!savedThisTab && (hasDataRef.current || turnsRef.current.length > 0)) {
+      setPendingClose({ kind: "dataset", hasDataset: hasDataRef.current, turnCount: turnsRef.current.length })
+      return
+    }
+    closeDataset()
+  }, [activeAnalysisId, closeDataset])
+
+  const confirmCloseAnalysis = useCallback(
+    (id: string) => {
+      // The active tab's true state lives in the live refs until the next
+      // capture; a background tab's is exactly what `analyses` already holds.
+      const isActive = id === activeAnalysisId
+      const target = isActive ? null : analysesRef.current.find((a) => a.id === id)
+      const dataset = isActive ? hasDataRef.current : (target?.hasData ?? false)
+      const turnCount = isActive ? turnsRef.current.length : (target?.turns.length ?? 0)
+      const savedThisTab = savedAnalysisRef.current !== null && savedForAnalysisIdRef.current === id
+      if (!savedThisTab && (dataset || turnCount > 0)) {
+        setPendingClose({ kind: "analysis", id, hasDataset: dataset, turnCount })
+        return
+      }
+      closeAnalysis(id)
+    },
+    [activeAnalysisId, closeAnalysis]
+  )
+
   /* ── Import (local + from Notes9 library) · Save ──────────────────────────── */
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [librarySearch, setLibrarySearch] = useState("")
   const [loadingFileId, setLoadingFileId] = useState<string | null>(null)
-
-  const tabularFiles = useMemo(
-    () =>
-      files.filter(
-        (f) => /\.(xlsx|xls|csv|tsv)$/i.test(f.file_name) || (f.file_type != null && /(spreadsheet|csv|excel)/i.test(f.file_type)),
-      ),
-    [files],
-  )
+  /**
+   * ADR-017: the picker stops classifying. `tabularFiles` used to filter
+   * `files` down to a `.xlsx|.xls|.csv|.tsv` name match or a spreadsheet-ish
+   * `file_type` — a guess that filtered out 34 of 72 real rows (measured
+   * against the live database) because nothing had parsed them yet, not
+   * because they weren't spreadsheets. Every row is listed now; a failed
+   * parse is what says a file can't be opened, not its name.
+   */
+  const [fileErrors, setFileErrors] = useState<Record<string, WorkbookUnreadableReason>>({})
 
   // Refs, not values: `buildConfig` closes over ~30 pieces of rail state and is
   // rebuilt every render, so a tab handler capturing it directly would save a
@@ -1629,11 +2034,27 @@ export function DataAnalysisWorkspace({
   useEffect(() => {
     buildConfigRef.current = buildConfig
     applyConfigRef.current = applyConfig as (c: unknown) => void
+    loadSnapshotRef.current = loadSnapshot
+    sourceFileRef.current = sourceFile
+    // The first config this component ever produces is the blank one, before any
+    // load has happened. Captured once and never overwritten.
+    if (blankConfigRef.current === null) blankConfigRef.current = buildConfig()
   })
 
   useEffect(() => {
     if (analyses.length === 0) {
-      setAnalyses([{ id: "a1", name: title || "Analysis 1", config: buildConfigRef.current() }])
+      setAnalyses([
+        {
+          id: "a1",
+          name: title || "Analysis 1",
+          config: buildConfigRef.current(),
+          snapshot: liveRef.current,
+          source: sourceFileRef.current,
+          hasData: hasDataRef.current,
+          turns: turnsRef.current,
+          threadId: threadIdRef.current,
+        },
+      ])
     }
   }, [analyses.length, title])
 
@@ -1672,11 +2093,27 @@ export function DataAnalysisWorkspace({
     return out
   }, [analyses, activeAnalysisId, derivedSpec, specTable, engineResult, sheetFileName])
 
+  /**
+   * The ELISA standard curve this workspace used to boot into. It is a good
+   * first-run path and a bad default — as the default it meant every analysis
+   * already had data nobody chose (ADR-015). Now it is a button.
+   */
+  const loadExample = useCallback(() => {
+    loadSnapshotRef.current(
+      buildSnapshotFromAoa(ELISA_AOA, "ELISA", "ELISA standard curve.xlsx"),
+    )
+  }, [])
+
   const loadSnapshot = useCallback((snap: UniverWorkbookSnapshot, source: { id: string; experimentId: string } | null = null) => {
     seededRef.current = false
     setLiveSnapshot(snap)
     setMountSnapshot(snap)
     setMountKey((k) => k + 1)
+    // Anything that is not the blank starting sheet is a dataset, whoever loaded
+    // it — import, library, template, reopen, or a tab switch restoring one.
+    // This is the single place all six paths pass through, so it is the only
+    // place that has to say so (ADR-015).
+    setHasData(snap.name !== EMPTY_SHEET_NAME)
     // Which library file, if any, this sheet came from. A saved analysis keeps
     // the reference so a later reopen can tell whether the source has moved
     // (§3A.3 rule 4); an ad-hoc sheet has no source and nothing to drift from.
@@ -1687,8 +2124,11 @@ export function DataAnalysisWorkspace({
     // New sheet data invalidates any pending or shown AI turn: a proposal was
     // computed against the spec that just got replaced, and a reply about it
     // would be talking about data that's gone.
-    setAiReply(null)
-    setAiProposal(null)
+    // A new sheet invalidates the conversation with it: the plans in that
+    // transcript were computed against data that is no longer loaded, and an
+    // approvable plan pointing at a previous dataset is the exact wrong answer
+    // this feature exists to prevent.
+    setTurns([])
     // Approved edits go with it for the same reason: an annotation or an
     // exclusion authored against the sheet that was just replaced is pointing
     // at rows that no longer exist. The undo stack goes for the third time for
@@ -1831,9 +2271,35 @@ export function DataAnalysisWorkspace({
 
      Nothing below is load-bearing for the deterministic path. If the assistant
      is off, every control, the engine and the statistics still work. */
-  const [aiPrompt, setAiPrompt] = useState("")
   const [aiBusy, setAiBusy] = useState(false)
-  const [aiReply, setAiReply] = useState<{ outcome: SpecPatchOutcome; applied: string[] } | null>(null)
+  /**
+   * The conversation for THIS analysis. Replaces the single `aiReply` /
+   * `aiProposal` slot, which each new prompt destroyed — so a researcher could
+   * not refer to what they had just been told, and the reasoning behind a figure
+   * was gone the moment they asked a second question (ADR-014).
+   */
+  const [turns, setTurns] = useState<AnalysisTurn[]>([])
+  const turnsRef = useRef(turns)
+  turnsRef.current = turns
+  /**
+   * The persisted thread behind this analysis's transcript. Minted on the first
+   * send rather than on mount, so opening a tab and closing it again does not
+   * leave an empty conversation behind.
+   */
+  const [threadId, setThreadId] = useState<string | null>(null)
+  const threadIdRef = useRef(threadId)
+  threadIdRef.current = threadId
+  /**
+   * Identity of the spec as it is now. A plan records the token it was computed
+   * against; when the token moves, open plans go stale rather than staying
+   * approvable against a figure they never saw.
+   *
+   * A per-mount random prefix, not a content hash: it is deliberately unstable
+   * across reloads, so a plan restored from a saved analysis is never live.
+   */
+  const specTokenSeedRef = useRef(`s${Math.random().toString(36).slice(2, 10)}`)
+  const specRevRef = useRef(0)
+  const [specToken, setSpecToken] = useState(() => `${specTokenSeedRef.current}:0`)
   const aiAbortRef = useRef<AbortController | null>(null)
 
   /** The hard precondition, mirrored from the route: no resolved rows, no ask. */
@@ -1846,16 +2312,60 @@ export function DataAnalysisWorkspace({
      produce: the list is exactly what the reply card describes to the user, so
      Execute cannot do more or less than what was read, and a stale proposal
      cannot smuggle in a spec field discardProposal never touched. */
-  interface AiProposal {
-    approved: AppliedMutation[]
-    mutationCount: number
-    clarificationNeeded: string | null
-  }
-  const [aiProposal, setAiProposal] = useState<AiProposal | null>(null)
+  useEffect(() => {
+    specRevRef.current += 1
+    setSpecToken(`${specTokenSeedRef.current}:${specRevRef.current}`)
+  }, [derivedSpec])
 
-  const askForChange = useCallback(async () => {
-    const prompt = aiPrompt.trim()
+  // Any spec change that was not this plan's own approval invalidates every
+  // still-open plan. Cheap to run on every change: `markStalePlans` returns the
+  // same array when nothing moved.
+  useEffect(() => {
+    setTurns((current) => markStalePlans(current, specToken))
+  }, [specToken])
+
+  const askForChange = useCallback(async (rawPrompt: string) => {
+    const prompt = rawPrompt.trim()
     if (!prompt || !derivedSpec || specTable.rows.length === 0) return
+
+    // The question joins the transcript before the answer exists, so the
+    // researcher can see what they asked while it is being answered.
+    const askedAt = new Date().toISOString()
+    const userTurn: AnalysisUserTurn = {
+      v: ANALYSIS_TURN_VERSION,
+      id: `u${askedAt}-${Math.random().toString(36).slice(2, 8)}`,
+      role: "user",
+      content: prompt,
+      dataFileId: sourceFileRef.current?.id ?? null,
+      specHash: specToken,
+      createdAt: askedAt,
+    }
+    // Captured before the await: the history the assistant answers is the
+    // conversation as it stood when the question was asked.
+    const history = toHistory(turnsRef.current)
+    const edits = historyMutations(editHistory)
+      .slice(-10)
+      .map((entry) => ({ description: entry.description, origin: entry.origin }))
+    setTurns((current) => [...current, userTurn])
+
+    // The thread is created on the first send, and persistence is deliberately
+    // fire-and-forget: `analysis-thread-store` never throws, and a transcript
+    // that failed to save must not cost the researcher the answer.
+    void (async () => {
+      let id = threadIdRef.current
+      if (!id) {
+        id = await createAnalysisThread({
+          title: prompt,
+          analysisId: savedAnalysisRef.current?.id ?? null,
+          sourceDataFileId: sourceFileRef.current?.id ?? null,
+        })
+        if (id) {
+          setThreadId(id)
+          threadIdRef.current = id
+        }
+      }
+      if (id) await appendAnalysisTurn(id, userTurn)
+    })()
 
     // A new request supersedes the one in flight. The old one resolves as
     // "aborted", which is deliberately silent: it was replaced, not failed.
@@ -1868,6 +2378,8 @@ export function DataAnalysisWorkspace({
         prompt,
         spec: derivedSpec,
         table: specTable,
+        history,
+        recentEdits: edits,
         signal: controller.signal,
       })
       if (outcome.outcome === "aborted") return
@@ -1883,26 +2395,17 @@ export function DataAnalysisWorkspace({
         //
         // This only COMPUTES the patch, `applyMutation` underneath is pure
         // and never touches `derivedSpec`, and stops. Nothing is applied
-        // until the researcher presses Execute (`executeProposal`, below).
+        // until the researcher approves the plan (`approvePlan`, below).
         const patched = applyAiPatch(initHistory(derivedSpec), outcome.mutations)
+        // The sentences the user reads and the mutations Approve runs come from
+        // the same result, so the plan on screen cannot describe something other
+        // than what lands. That is why the plan is the dry-run rather than a
+        // separate thing the model wrote (ADR-014).
         applied = patched.applied.map(describeMutation)
-        // The sentences the user reads and the list Execute runs are the same
-        // mutations, taken from the same result: `history.past` is what
-        // `applyAiPatch` actually dispatched, already tagged origin "ai", so
-        // the count on the card cannot drift from the count that lands.
-        setAiProposal({
-          approved: patched.history.past.map((entry) => entry.applied),
-          mutationCount: patched.applied.length,
-          clarificationNeeded: outcome.clarificationNeeded,
-        })
-      } else {
-        setAiProposal(null)
       }
-      setAiReply({ outcome, applied })
-      // The box empties only when the request is finished with. A question back
-      // means the user is about to rephrase, and deleting what they wrote would
-      // make them type it again.
-      if (outcome.outcome === "patch" && !outcome.clarificationNeeded) setAiPrompt("")
+      const assistantTurn = assistantTurnFor(outcome, applied, specToken)
+      setTurns((current) => [...current, assistantTurn])
+      if (threadIdRef.current) void appendAnalysisTurn(threadIdRef.current, assistantTurn)
     } finally {
       // A superseded request no longer owns the busy flag, the one that
       // replaced it does.
@@ -1911,34 +2414,64 @@ export function DataAnalysisWorkspace({
         setAiBusy(false)
       }
     }
-  }, [aiPrompt, derivedSpec, specTable])
+  }, [derivedSpec, specTable, specToken, editHistory])
 
-  /** Run the approved list, all of it.
+  /** Run an approved plan, all of it.
    *
    *  Each mutation goes where it can actually be held: onto the rail if a
    *  control exists for it, so the setting moves in front of the user and stays
    *  editable by hand, and onto the overlay if none does, so it is re-stated on
    *  every later derivation instead of being recomputed away on the next one.
-   *  `splitApprovedMutations` decides which; nothing is dropped either way. */
-  const executeProposal = useCallback(() => {
-    if (!aiProposal || !derivedSpec) return
-    const { edits, overlay } = splitApprovedMutations(derivedSpec, aiProposal.approved, specTable)
-    // Merged over the current configuration, not applied alone: `applyConfig`
-    // is a total setter, and handing it a partial config would reset the
-    // fields the patch never mentioned. The overlay rides the same merge, so
-    // both halves of the change land in one commit and cannot half-apply, and
-    // one commit is also one undo.
-    if (Object.keys(edits).length > 0 || overlay.length > 0) {
-      commitEdits(aiProposal.approved, { ...edits, aiOverlay: [...aiOverlay, ...overlay] })
-    }
-    setAiProposal(null)
-  }, [aiProposal, aiOverlay, derivedSpec, specTable, commitEdits])
+   *  `splitApprovedMutations` decides which; nothing is dropped either way.
+   *
+   *  The mutations are re-dry-run here rather than stored on the turn. They can
+   *  only produce a different result if the spec moved, and a plan whose spec
+   *  moved is not approvable — `canApprovePlan` has already refused it. */
+  const approvePlan = useCallback(
+    (turnId: string) => {
+      if (!derivedSpec) return
+      const turn = turnsRef.current.find((t) => t.id === turnId)
+      if (!turn || turn.role !== "assistant" || !turn.plan) return
+      if (!canApprovePlan(turn, specToken)) return
 
-  /** Never touches the spec, clearing the pending proposal is the entire
-      effect, which is what makes "byte-identical afterwards" true by
-      construction rather than by careful bookkeeping. */
-  const discardProposal = useCallback(() => {
-    setAiProposal(null)
+      const patched = applyAiPatch(initHistory(derivedSpec), turn.plan.mutations)
+      const approved = patched.history.past.map((entry) => entry.applied)
+      const { edits, overlay } = splitApprovedMutations(derivedSpec, approved, specTable)
+      // Merged over the current configuration, not applied alone: `applyConfig`
+      // is a total setter, and handing it a partial config would reset the
+      // fields the patch never mentioned. The overlay rides the same merge, so
+      // both halves of the change land in one commit and cannot half-apply, and
+      // one commit is also one undo.
+      if (Object.keys(edits).length > 0 || overlay.length > 0) {
+        commitEdits(approved, { ...edits, aiOverlay: [...aiOverlay, ...overlay] })
+      }
+      // Marked after the change lands. If persisting this ever fails the figure
+      // still stands — the spec is the truth and the transcript is the record,
+      // never the other way round.
+      setTurns((current) => {
+        const next = setPlanStatus(current, turnId, "approved")
+        const settled = next.find((t) => t.id === turnId)
+        if (settled && threadIdRef.current) {
+          void updateAnalysisTurnPlan(threadIdRef.current, settled)
+        }
+        return next
+      })
+    },
+    [aiOverlay, derivedSpec, specTable, specToken, commitEdits]
+  )
+
+  /** Never touches the spec, settling the plan is the entire effect, which is
+      what makes "byte-identical afterwards" true by construction rather than by
+      careful bookkeeping. */
+  const discardPlan = useCallback((turnId: string) => {
+    setTurns((current) => {
+      const next = setPlanStatus(current, turnId, "discarded")
+      const settled = next.find((t) => t.id === turnId)
+      if (settled && threadIdRef.current) {
+        void updateAnalysisTurnPlan(threadIdRef.current, settled)
+      }
+      return next
+    })
   }, [])
 
   /** The pipeline bar's removal path (P5): a typed mutation through the exact
@@ -2157,15 +2690,30 @@ export function DataAnalysisWorkspace({
   const loadLibraryFile = useCallback(
     async (file: DataFileRow) => {
       setLoadingFileId(file.id)
+      // A previous attempt's reason no longer applies to a fresh try.
+      setFileErrors((prev) => {
+        if (!(file.id in prev)) return prev
+        const next = { ...prev }
+        delete next[file.id]
+        return next
+      })
       try {
         const url = `/api/experiments/${file.experiment_id}/data-files/${file.id}/workbook`
         let res = await fetch(url)
         let data = await res.json()
         if (!data?.workbook_snapshot) {
-          // Backfill the snapshot from the stored file, then re-read.
-          await fetch(url, { method: "POST" })
-          res = await fetch(url)
+          // Backfill: parse from storage and cache it. The success body
+          // already carries the parsed bytes (ADR-017, "order matters"), so
+          // this is usually the last request, not a round trip to a second GET.
+          res = await fetch(url, { method: "POST" })
           data = await res.json()
+          if (data?.ok && !data.workbook_snapshot) {
+            // The idempotent `cached: true` short-circuit: another caller
+            // finished the backfill between our GET and this POST. Read what
+            // they wrote instead of treating an empty body as failure.
+            res = await fetch(url)
+            data = await res.json()
+          }
         }
         if (data?.workbook_snapshot) {
           loadSnapshot(data.workbook_snapshot as UniverWorkbookSnapshot, {
@@ -2174,11 +2722,17 @@ export function DataAnalysisWorkspace({
           })
           toast.success(`Loaded ${file.file_name}`)
           setLibraryOpen(false)
-        } else {
-          toast.error("This file has no spreadsheet content to analyze")
+          return
         }
+        // ADR-017's `{ error: "unreadable", reason }` (422). The row stays
+        // listed and wears its reason inline (AC-3) instead of a generic
+        // toast, so a researcher whose own upload just hasn't been parsed yet
+        // ("no-bytes") isn't told the same thing as one opening a PDF
+        // ("not-a-spreadsheet").
+        const reason: WorkbookUnreadableReason = isWorkbookUnreadableReason(data?.reason) ? data.reason : "parse-failed"
+        setFileErrors((prev) => ({ ...prev, [file.id]: reason }))
       } catch {
-        toast.error("Failed to load file")
+        setFileErrors((prev) => ({ ...prev, [file.id]: "no-bytes" }))
       } finally {
         setLoadingFileId(null)
       }
@@ -2209,6 +2763,16 @@ export function DataAnalysisWorkspace({
      than what a fresh run would say. */
 
   const [savedAnalysis, setSavedAnalysis] = useState<SavedAnalysis | null>(null)
+  // Declared after the AI block that reads it, so a ref rather than the value.
+  const savedAnalysisRef = useRef<SavedAnalysis | null>(null)
+  savedAnalysisRef.current = savedAnalysis
+  /**
+   * Which tab `savedAnalysis` belongs to. The workspace has one persisted
+   * draft slot, not one per tab (§3A), so this is what turns "is anything on
+   * the page saved" into "is THIS tab saved" for the close confirmation —
+   * set in `commitSave`, alongside `setSavedAnalysis`.
+   */
+  const savedForAnalysisIdRef = useRef<string | null>(null)
   const [openRevisionRow, setOpenRevisionRow] = useState<AnalysisRevision | null>(null)
   const [reopenVerdict, setReopenVerdict] = useState<ReopenVerdict | null>(null)
   const [revisions, setRevisions] = useState<AnalysisRevision[]>([])
@@ -2330,7 +2894,14 @@ export function DataAnalysisWorkspace({
         }
 
         setSavedAnalysis(analysis)
+        savedForAnalysisIdRef.current = activeAnalysisIdRef.current
         setOpenRevisionRow(verdict.revision)
+        // The reasoning comes back with the figure. Its plans are historical —
+        // they were computed in another session, so `canApprovePlan` will not
+        // offer Approve on any of them — but "why is the Y axis logged" is
+        // answerable eighteen months later, which is the whole point of storing
+        // it (§3A.2).
+        setTurns(fromStoredThread(verdict.revision.conversationThread))
         // A clean reopen says nothing; every other verdict is a screen, not a toast.
         setReopenVerdict(verdict.state === "clean" ? null : verdict)
         setHistoryOpen(false)
@@ -2357,6 +2928,7 @@ export function DataAnalysisWorkspace({
         const list = await listRevisions(analysis.id)
         setRevisions(list)
         setSavedAnalysis(analysis)
+        savedForAnalysisIdRef.current = activeAnalysisIdRef.current
         if (list[0]) {
           await openSavedRevision(analysis, list[0], false)
         } else {
@@ -2429,11 +3001,16 @@ export function DataAnalysisWorkspace({
           name: savedAnalysis ? undefined : input.name,
           changeSummary: input.changeSummary || undefined,
           openRevision: openRevisionRow,
+          // The reasoning is saved with the figure, not beside it.
+          conversationThread: toStoredThread(turnsRef.current),
         })
 
         await autosaveDraft(analysis.id, derivedSpec, config)
 
         setSavedAnalysis({ ...analysis, currentRevisionNo: revision.revisionNo })
+        // AC-6: this save belongs to whichever tab was active when it ran, not
+        // to the page — see `savedForAnalysisIdRef`'s declaration.
+        savedForAnalysisIdRef.current = activeAnalysisIdRef.current
         setOpenRevisionRow(revision)
         setRevisions((rs) => [revision, ...rs.filter((r) => r.id !== revision.id)])
         setReopenVerdict(null)
@@ -2590,6 +3167,15 @@ export function DataAnalysisWorkspace({
         const saved = JSON.parse(raw)
         if (saved?.workbook) loadSnapshot(saved.workbook as UniverWorkbookSnapshot)
         if (saved?.config) applyConfig(saved.config)
+        // The conversation resumes with the sheet. The transcript itself lives
+        // in the database, not in localStorage — only the pointer is local, so a
+        // reload does not silently fork a second copy of the thread.
+        if (typeof saved?.threadId === "string") {
+          setThreadId(saved.threadId)
+          void loadAnalysisThread(saved.threadId).then((restored) => {
+            if (restored.length > 0) setTurns(restored)
+          })
+        }
       }
     } catch {
       /* ignore corrupt session */
@@ -2602,7 +3188,7 @@ export function DataAnalysisWorkspace({
     if (!restoredRef.current) return
     const t = setTimeout(() => {
       try {
-        localStorage.setItem(SESSION_KEY, JSON.stringify({ savedAt: new Date().toISOString(), workbook: liveSnapshot, config: JSON.parse(configJson) }))
+        localStorage.setItem(SESSION_KEY, JSON.stringify({ threadId: threadIdRef.current, savedAt: new Date().toISOString(), workbook: liveSnapshot, config: JSON.parse(configJson) }))
       } catch {
         /* quota / serialize failure, non-fatal */
       }
@@ -3150,119 +3736,237 @@ export function DataAnalysisWorkspace({
     </div>
   )
 
-  const aiNote = aiReply ? aiNotice(aiReply.outcome) : null
-
-  /* One line to ask, the answer underneath. The answer is capped rather than
-     unbounded: a long rationale must not push the sheet off the screen. */
+  /**
+   * The one AI surface on this page: the transcript for this analysis and the
+   * composer under it (ADR-014). `variant="docked"` here is what makes it the
+   * bottom console (ADR-019) rather than a block in the document flow — the
+   * empty-analysis screen below passes `variant="empty"` for the centred,
+   * first-screen composer instead.
+   */
   const specPrompt = (
-    <div className="rounded-2xl border border-border bg-card/80 shadow-sm backdrop-blur-sm">
-      <form
-        onSubmit={(e) => {
-          e.preventDefault()
-          void askForChange()
-        }}
-        aria-label="Change this analysis by describing it"
-        className="flex items-center gap-2 px-3 py-2"
-      >
-        <Sparkle className="h-4 w-4 shrink-0 text-[var(--n9-accent,#965034)]" weight="fill" aria-hidden />
-        <Input
-          value={aiPrompt}
-          onChange={(e) => setAiPrompt(e.target.value)}
-          disabled={!aiReady}
-          aria-label="Describe the change you want"
-          placeholder={
-            aiReady
-              ? "Describe a change, “log the Y axis”, “colour-blind-safe palette”, “compare the groups with a Mann-Whitney”"
-              : "Import or type some data, then describe a change"
-          }
-          className="h-8 min-w-0 flex-1 border-0 bg-transparent px-0 text-[13px] shadow-none focus-visible:ring-0"
-        />
-        <Button
-          type="submit"
-          variant="outline"
-          size="sm"
-          disabled={!aiReady || aiBusy || aiPrompt.trim().length === 0}
-        >
-          {aiBusy ? "Working…" : "Apply"}
-        </Button>
-      </form>
-
-      {aiReply && (
-        <div className="max-h-56 overflow-y-auto border-t border-border/60 px-3 py-2 text-[12.5px] leading-relaxed">
-          {aiReply.outcome.outcome === "patch" ? (
-            <div className="flex flex-col gap-2">
-              {aiReply.outcome.rationale && <p className="text-foreground/90">{aiReply.outcome.rationale}</p>}
-              {aiReply.applied.length > 0 ? (
-                <ul className="list-disc space-y-0.5 pl-4 text-muted-foreground">
-                  {aiReply.applied.map((description, i) => (
-                    <li key={i}>{description}</li>
-                  ))}
-                </ul>
-              ) : aiReply.outcome.clarificationNeeded ? null : (
-                <p className="text-muted-foreground">Nothing needed changing, the figure already matches.</p>
-              )}
-              {aiReply.outcome.clarificationNeeded && (
-                // A question, not an error. Whatever was applied still stands;
-                // this is the assistant asking for the one thing it lacks.
-                <p className="rounded-lg border border-[var(--n9-accent,#965034)]/25 bg-[var(--n9-accent,#965034)]/[0.06] px-2.5 py-1.5 text-foreground/90">
-                  {aiReply.outcome.clarificationNeeded}
-                </p>
-              )}
-              {aiReply.outcome.rejected.length > 0 && (
-                // A rejection is information: something was proposed, left out,
-                // and the reason is worth reading. It is not a failure.
-                <div className="text-muted-foreground">
-                  <span className="font-medium text-foreground/80">Left out of the change:</span>
-                  <ul className="list-disc space-y-0.5 pl-4">
-                    {aiReply.outcome.rejected.map((r, i) => (
-                      <li key={i}>{r.reason || "No reason given."}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {aiProposal && (
-                // P3, the plan sits here, read before it runs. Execute is
-                // withheld for a bare clarifying question: there is nothing
-                // to run yet, only something to answer.
-                <div className="flex items-center gap-2 pt-1">
-                  {canExecuteProposal(aiProposal) && (
-                    <Button type="button" variant="outline" size="sm" onClick={executeProposal}>
-                      Execute
-                    </Button>
-                  )}
-                  <Button type="button" variant="ghost" size="sm" onClick={discardProposal}>
-                    Discard
-                  </Button>
-                </div>
-              )}
-            </div>
-          ) : aiNote ? (
-            <div className="flex flex-col gap-1">
-              <p className="font-medium text-foreground/90">{aiNote.title}</p>
-              <p className="text-muted-foreground">{aiNote.body}</p>
-            </div>
-          ) : null}
-        </div>
-      )}
-      <PipelineBar
-        filters={derivedSpec?.filters ?? []}
-        transforms={derivedSpec?.transforms ?? []}
-        exclusions={derivedSpec?.exclusions ?? []}
-        offers={preparationOffers}
-        onSetFilters={(filters) => applySpecMutation({ kind: "data.setFilters", filters })}
-        onRemoveTransform={(index) => applySpecMutation({ kind: "data.removeTransform", index })}
-        onRestoreRow={(rowId) => applySpecMutation({ kind: "data.restoreRow", rowId })}
-        // An accepted offer is the researcher's edit: the same dispatcher, the
-        // same typed mutation, origin "user". Nothing about it is a second path.
-        onAcceptOffer={(offer) => applySpecMutation(offer.mutation)}
-      />
-    </div>
+    <AnalysisConsole
+      turns={turns}
+      currentSpecHash={specToken}
+      busy={aiBusy}
+      blockedReason={
+        !hasData
+          ? "Attach a data file to start."
+          : !aiReady
+            ? "Import or type some data, then ask."
+            : null
+      }
+      onSend={(prompt) => void askForChange(prompt)}
+      onApprove={approvePlan}
+      onDiscard={discardPlan}
+      datasetName={hasData ? sheetFileName : null}
+      variant="docked"
+    />
   )
 
   const canvasForPhase = phase === "chart" ? chartCanvas : phase === "stats" ? statsCanvas : phase === "curve" ? curve.canvas : plate.canvas
   const settingsForPhase = phase === "chart" ? chartSettings : phase === "stats" ? stats.settings : phase === "curve" ? curveSettings : plate.settings
   const activePhase = PHASES.find((p) => p.id === phase)!
   const ActiveIcon = activePhase.Icon
+
+  /**
+   * Every dialog the workspace can open. Extracted so the empty-analysis
+   * screen below can offer "open from the library" too — a researcher with no
+   * data yet is exactly the one who needs the file picker most.
+   */
+  const workspaceDialogs = (
+    <>
+      <LibraryDialog
+        open={libraryOpen}
+        onOpenChange={setLibraryOpen}
+        files={files}
+        search={librarySearch}
+        onSearchChange={setLibrarySearch}
+        loadingFileId={loadingFileId}
+        fileErrors={fileErrors}
+        onSelect={loadLibraryFile}
+      />
+
+      {/* ADR-018, AC-6: the only confirmation in this feature, guarding the
+          only irreversible thing in it — a dataset or transcript that was
+          never saved and is about to be discarded, by either close path. */}
+      <AlertDialog open={pendingClose != null} onOpenChange={(open) => { if (!open) setPendingClose(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard unsaved work?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingClose && `This analysis has never been saved. Closing it discards ${unsavedSummary(pendingClose)}.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep working</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const p = pendingClose
+                setPendingClose(null)
+                if (!p) return
+                if (p.kind === "dataset") closeDataset()
+                else closeAnalysis(p.id)
+              }}
+            >
+              Discard and close
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Templates gallery (modern, server-backed) */}
+      <TemplatesDialog
+        open={templatesOpen}
+        onOpenChange={setTemplatesOpen}
+        onApplyBuiltin={applyTemplate}
+        onApplyConfig={(c, p) => applyConfig({ ...c, phase: p })}
+        getCurrentConfig={() => ({ config: buildConfig(), phase })}
+      />
+
+      {/* Save the current chart into the data-files library */}
+      <SaveChartDialog
+        open={saveChartOpen}
+        onOpenChange={setSaveChartOpen}
+        projects={projects}
+        experiments={experiments}
+        defaultName={title}
+        getPng={getChartPng}
+        onSaved={() => router.refresh()}
+      />
+
+      {/* §3A.3 rule 1 (explicitly) and rule 5 (the fork). */}
+      <SaveAnalysisDialog
+        open={saveDialogOpen}
+        onOpenChange={setSaveDialogOpen}
+        mode={savedAnalysis ? "revision" : "create"}
+        defaultName={savedAnalysis?.name ?? title}
+        projects={projects}
+        experiments={experiments}
+        saving={savingRevision}
+        frozenRevisionNo={openRevisionRow?.isFrozen ? openRevisionRow.revisionNo : null}
+        onSave={commitSave}
+      />
+
+      {/* §3A.4. Append-only, so there is no delete here and never will be. */}
+      <RevisionHistoryDialog
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        analysis={savedAnalysis}
+        revisions={revisions}
+        recent={recentAnalyses}
+        loading={historyLoading}
+        openRevisionId={openRevisionRow?.id ?? null}
+        busyRevisionId={busyRevisionId}
+        onSelectAnalysis={(a) => void bindAnalysis(a)}
+        onOpenRevision={(rev, restore) => {
+          if (savedAnalysis) void openSavedRevision(savedAnalysis, rev, restore)
+        }}
+        onFreeze={(rev) => void freezeRevisionNow(rev)}
+        onExport={exportRevision}
+      />
+
+      {/* §8.1. The one door to an exclusion, and it does not open without a
+          reason. */}
+      {exclusionRowId && (
+        <ExclusionDialog
+          open
+          rowId={exclusionRowId}
+          // Only when the sheet is actually sitting on the row being excluded.
+          // The figure can now start an exclusion too, and describing the row
+          // the cursor happens to be on instead of the point that was clicked
+          // would put the wrong row in front of the person approving it.
+          rowSummary={
+            sheetSel && selRowId === exclusionRowId
+              ? `Row ${sheetSel.row + 1}${selColumn ? ` · ${selColumn} ${sheetSel.text}` : ""}`
+              : undefined
+          }
+          preview={exclusionPreview}
+          previewLoading={exclusionPreviewLoading}
+          currentUserId={excludedBy}
+          onCancel={() => setExclusionRowId(null)}
+          onConfirm={confirmExclusion}
+        />
+      )}
+    </>
+  )
+
+  /**
+   * A new analysis, before it has data (ADR-015). The tab strip stays — the
+   * researcher may have other analyses open — and everything below it is the
+   * composer, because that is the only thing there is to do here yet.
+   */
+  if (!hasData) {
+    return (
+      <div
+        ref={shellRef}
+        style={fullscreen ? fullscreenStyle : undefined}
+        className={cn(
+          "flex flex-col gap-4",
+          fullscreen && "overflow-auto bg-[color:var(--background)] p-4 md:p-6",
+        )}
+      >
+        <PipelineTabs
+          pipelines={analyses.map((a) => ({
+            id: a.id,
+            name: a.name,
+            spec: derivedSpec!,
+            table: specTable,
+            result: null,
+            stale: true,
+          }))}
+          activeId={activeAnalysisId}
+          onActivate={switchAnalysis}
+          onNew={newAnalysis}
+          onClose={confirmCloseAnalysis}
+          onDuplicate={duplicateAnalysis}
+          onRename={(id, name) =>
+            setAnalyses((list) => list.map((a) => (a.id === id ? { ...a, name } : a)))
+          }
+        />
+
+        <AnalysisConsole
+          turns={turns}
+          currentSpecHash={specToken}
+          busy={aiBusy}
+          blockedReason="Attach a data file to start."
+          onSend={(prompt) => void askForChange(prompt)}
+          onApprove={approvePlan}
+          onDiscard={discardPlan}
+          datasetName={null}
+          variant="empty"
+          attachSlot={
+            <>
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".csv,.tsv,.txt,.xlsx,.xls,.n9a,.json"
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files?.[0]) onImport(e.target.files[0])
+                  e.target.value = ""
+                }}
+              />
+              <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
+                <UploadSimple className="mr-1.5 h-4 w-4" />
+                Import a file
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setLibraryOpen(true)}>
+                From your data files
+              </Button>
+              {/* The demo sheet this workspace used to boot into. Kept, but as a
+                  choice rather than the default. */}
+              <Button variant="ghost" size="sm" onClick={loadExample}>
+                Load example
+              </Button>
+            </>
+          }
+        />
+
+        {workspaceDialogs}
+      </div>
+    )
+  }
+
 
   return (
     <div
@@ -3304,21 +4008,11 @@ export function DataAnalysisWorkspace({
         </div>
       )}
 
-      {!fullscreen && (
-        <CatalystSectionHero
-          scope="lab"
-          placeholder="Ask Catalyst to analyze your data, pick a chart, or explain a result…"
-          // Same requirement the spec prompt below already enforces, applied to
-          // the composer a researcher actually reaches first. `aiReady` is the
-          // single source of truth for "there is something to analyse", so the
-          // two inputs cannot disagree about whether this page is usable.
-          requiresDataReason={
-            aiReady
-              ? null
-              : "Import a data file or type some data first — a statistical analysis needs at least one dataset."
-          }
-        />
-      )}
+      {/* One AI input on this page, and it is the spec prompt below (I2.1). The
+          Catalyst hero used to sit here, but it changes nothing on the page — it
+          only opens the sidebar composer, so the researcher had two boxes and no
+          way to tell which one moved their chart. Catalyst is still one click
+          away in the app header (and top-right when full screen). */}
 
       {/* Analyses. Several views of one sheet: the dose-response beside the
           timecourse beside the plate, each keeping its own chart, statistics and
@@ -3335,7 +4029,7 @@ export function DataAnalysisWorkspace({
         activeId={activeAnalysisId}
         onActivate={switchAnalysis}
         onNew={newAnalysis}
-        onClose={closeAnalysis}
+        onClose={confirmCloseAnalysis}
         onDuplicate={duplicateAnalysis}
         onRename={(id, name) =>
           setAnalyses((list) => list.map((a) => (a.id === id ? { ...a, name } : a)))
@@ -3358,8 +4052,6 @@ export function DataAnalysisWorkspace({
 
       {/* Scoped to the analysis above it, and deliberately below the tabs: what
           it changes is this analysis, not the page. */}
-      {specPrompt}
-
       {/* Tabs + toolbar */}
       <div className="flex flex-wrap items-center gap-2">
         <Tabs value={phase} onValueChange={(v) => setPhase(v as Phase)} className="w-auto">
@@ -3412,9 +4104,9 @@ export function DataAnalysisWorkspace({
             <DropdownMenuItem onClick={() => fileRef.current?.click()}>
               <UploadSimple className="mr-2 h-4 w-4" /> Upload from computer
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setLibraryOpen(true)} disabled={tabularFiles.length === 0}>
+            <DropdownMenuItem onClick={() => setLibraryOpen(true)} disabled={files.length === 0}>
               <FolderOpen className="mr-2 h-4 w-4" /> From your data files
-              {tabularFiles.length > 0 && <span className="ml-auto text-xs text-muted-foreground">{tabularFiles.length}</span>}
+              {files.length > 0 && <span className="ml-auto text-xs text-muted-foreground">{files.length}</span>}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -3505,6 +4197,20 @@ export function DataAnalysisWorkspace({
             <ArrowUUpRight className="h-4 w-4" />
           </Button>
         </div>
+        {/* ADR-018: put the dataset down without closing the tab — the gap
+            this feature exists for. Unloaded, not exported: exporting already
+            has its own menu above. */}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 shrink-0 touch-manipulation text-muted-foreground hover:text-foreground"
+          onClick={confirmCloseDataset}
+          aria-label="Close dataset"
+          title="Close dataset — back to an empty analysis, conversation kept"
+        >
+          <X className="h-4 w-4" />
+        </Button>
         <span className="ml-auto text-xs text-muted-foreground">{table.rows.length} rows · {table.columns.length} cols</span>
         {/* Same control the lab-note and protocol editors carry: an icon-only
             ghost button at the far right of the toolbar, using the platform's
@@ -3655,118 +4361,13 @@ export function DataAnalysisWorkspace({
       </div>
       )}
 
+      {/* ADR-019: docked to the bottom of the pane, below the sheet/chart/stats
+          it acts on — not above the tabs, where three turns used to push the
+          whole workspace below the fold. */}
+      {specPrompt}
+
       {/* Import from the Notes9 library */}
-      <Dialog open={libraryOpen} onOpenChange={setLibraryOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Import from your data files</DialogTitle>
-            <DialogDescription>Load a spreadsheet or CSV you&rsquo;ve uploaded to an experiment straight into the analysis workspace.</DialogDescription>
-          </DialogHeader>
-          <div className="relative">
-            <MagnifyingGlass className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={librarySearch} onChange={(e) => setLibrarySearch(e.target.value)} placeholder="Search files…" className="pl-8" />
-          </div>
-          <div className="max-h-[50vh] space-y-1 overflow-y-auto">
-            {tabularFiles
-              .filter((f) => {
-                const q = librarySearch.toLowerCase()
-                return !q || f.file_name.toLowerCase().includes(q) || (f.experiment_name ?? "").toLowerCase().includes(q) || (f.project_name ?? "").toLowerCase().includes(q)
-              })
-              .map((f) => (
-                <button
-                  key={f.id}
-                  onClick={() => loadLibraryFile(f)}
-                  disabled={loadingFileId != null}
-                  className="flex w-full items-center gap-3 rounded-lg border border-border px-3 py-2 text-left transition-colors hover:bg-muted/50 disabled:opacity-50"
-                >
-                  <TableIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium">{f.file_name}</div>
-                    <div className="truncate text-xs text-muted-foreground">{f.experiment_name ?? "-"}{f.project_name ? ` · ${f.project_name}` : ""}</div>
-                  </div>
-                  <span className="shrink-0 text-xs font-medium text-[var(--n9-accent,#965034)]">{loadingFileId === f.id ? "Loading…" : "Load"}</span>
-                </button>
-              ))}
-            {tabularFiles.length === 0 && (
-              <p className="py-6 text-center text-sm text-muted-foreground">No spreadsheet or CSV files in your library yet.</p>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Templates gallery (modern, server-backed) */}
-      <TemplatesDialog
-        open={templatesOpen}
-        onOpenChange={setTemplatesOpen}
-        onApplyBuiltin={applyTemplate}
-        onApplyConfig={(c, p) => applyConfig({ ...c, phase: p })}
-        getCurrentConfig={() => ({ config: buildConfig(), phase })}
-      />
-
-      {/* Save the current chart into the data-files library */}
-      <SaveChartDialog
-        open={saveChartOpen}
-        onOpenChange={setSaveChartOpen}
-        projects={projects}
-        experiments={experiments}
-        defaultName={title}
-        getPng={getChartPng}
-        onSaved={() => router.refresh()}
-      />
-
-      {/* §3A.3 rule 1 (explicitly) and rule 5 (the fork). */}
-      <SaveAnalysisDialog
-        open={saveDialogOpen}
-        onOpenChange={setSaveDialogOpen}
-        mode={savedAnalysis ? "revision" : "create"}
-        defaultName={savedAnalysis?.name ?? title}
-        projects={projects}
-        experiments={experiments}
-        saving={savingRevision}
-        frozenRevisionNo={openRevisionRow?.isFrozen ? openRevisionRow.revisionNo : null}
-        onSave={commitSave}
-      />
-
-      {/* §3A.4. Append-only, so there is no delete here and never will be. */}
-      <RevisionHistoryDialog
-        open={historyOpen}
-        onOpenChange={setHistoryOpen}
-        analysis={savedAnalysis}
-        revisions={revisions}
-        recent={recentAnalyses}
-        loading={historyLoading}
-        openRevisionId={openRevisionRow?.id ?? null}
-        busyRevisionId={busyRevisionId}
-        onSelectAnalysis={(a) => void bindAnalysis(a)}
-        onOpenRevision={(rev, restore) => {
-          if (savedAnalysis) void openSavedRevision(savedAnalysis, rev, restore)
-        }}
-        onFreeze={(rev) => void freezeRevisionNow(rev)}
-        onExport={exportRevision}
-      />
-
-      {/* §8.1. The one door to an exclusion, and it does not open without a
-          reason. */}
-      {exclusionRowId && (
-        <ExclusionDialog
-          open
-          rowId={exclusionRowId}
-          // Only when the sheet is actually sitting on the row being excluded.
-          // The figure can now start an exclusion too, and describing the row
-          // the cursor happens to be on instead of the point that was clicked
-          // would put the wrong row in front of the person approving it.
-          rowSummary={
-            sheetSel && selRowId === exclusionRowId
-              ? `Row ${sheetSel.row + 1}${selColumn ? ` · ${selColumn} ${sheetSel.text}` : ""}`
-              : undefined
-          }
-          preview={exclusionPreview}
-          previewLoading={exclusionPreviewLoading}
-          currentUserId={excludedBy}
-          onCancel={() => setExclusionRowId(null)}
-          onConfirm={confirmExclusion}
-        />
-      )}
+      {workspaceDialogs}
     </div>
   )
 }

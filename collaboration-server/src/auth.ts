@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import { canAccessDocument } from "./database.js";
 
 /**
  * User context extracted from a valid JWT token.
@@ -30,8 +31,22 @@ interface JwtPayload {
  * against the JWT_SECRET environment variable, checks expiration, and returns
  * user context on success. Throws on failure, which causes Hocuspocus to reject
  * the connection.
+ *
+ * SEC-002 / N9-1: also verifies (via `canAccessDocument`) that the
+ * authenticated user may access `documentName` before returning context —
+ * without this, a valid JWT for *any* user was sufficient to read/write
+ * *any* paper, since the collaboration server's Supabase client uses the
+ * service-role key and RLS never runs. This check must happen inside
+ * `onAuthenticate` because it is the only hook that runs before Hocuspocus's
+ * `fetch`/`store` (database.ts) can read or write document content.
  */
-export function onAuthenticate({ token }: { token: string }): UserContext {
+export async function onAuthenticate({
+  token,
+  documentName,
+}: {
+  token: string;
+  documentName: string;
+}): Promise<UserContext> {
   const secret = process.env.JWT_SECRET;
 
   if (!secret) {
@@ -71,6 +86,14 @@ export function onAuthenticate({ token }: { token: string }): UserContext {
     decoded.user_metadata?.name ??
     email.split("@")[0] ??
     "Anonymous";
+
+  const allowed = await canAccessDocument(userId, documentName);
+  if (!allowed) {
+    // Deliberately generic: don't reveal whether the document exists,
+    // whether documentName was malformed, or whether it's an access
+    // problem — all three collapse to the same rejection.
+    throw new Error("Access to document denied");
+  }
 
   return { userId, email, name };
 }

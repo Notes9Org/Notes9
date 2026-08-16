@@ -25,7 +25,23 @@ export type Notes9AgentHistoryItem = { role: string; content: string };
 
 /** Workspace entity the user explicitly tagged for this turn. Catalyst preflights
  * each attachment via fetch_full_records before the LLM loop runs, so tagged
- * records arrive in the LLM's context immediately. */
+ * records arrive in the LLM's context immediately.
+ *
+ * This union is the WIRE type, and it is the third of three copies of the same
+ * set that must agree:
+ *
+ *   1. `ATTACHMENT_KINDS` in AI/catalyst/core/contracts/request.py - the backend
+ *      allowlist. A kind absent there fails pydantic validation, and that is a
+ *      422 for the ENTIRE request, not a dropped attachment.
+ *   2. `CatalystMentionKind` in lib/catalyst-mention-types.ts - what the UI can
+ *      tag. `tagsToAttachments()` in right-sidebar.tsx assigns objects typed by
+ *      that union straight into this one, so (2) must be a subset of (3).
+ *   3. this.
+ *
+ * Divergence here is silent in exactly the way that caused this feature to exist:
+ * the backend supported `data_file` end to end (fetch_full_records, citations,
+ * scope enforcement) while `ATTACHMENT_KINDS` omitted it, so it could never be
+ * tagged. `__tests__/catalyst-mention-kinds.test.ts` now pins all three. */
 export type Notes9AgentAttachment = {
   kind:
     | 'lab_note'
@@ -34,7 +50,8 @@ export type Notes9AgentAttachment = {
     | 'experiment'
     | 'project'
     | 'sample'
-    | 'report';
+    | 'report'
+    | 'data_file';
   id: string;
   title?: string;
 };

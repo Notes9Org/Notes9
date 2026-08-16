@@ -423,12 +423,15 @@ export async function forkFrozenRevision(input: {
   spec: AnalysisSpec
   results: EngineResult | null
   dataSnapshot: unknown
+  /** Carried across the fork: the reasoning belongs with the figure. */
+  conversationThread?: unknown[]
 }): Promise<AnalysisRevision> {
   return commitRevision({
     analysisId: input.analysisId,
     spec: input.spec,
     results: input.results,
     dataSnapshot: input.dataSnapshot,
+    conversationThread: input.conversationThread,
     changeSummary: `Forked from frozen revision ${input.frozenRevision.revisionNo}.`,
     forkedFromRevisionId: input.frozenRevision.id,
   })

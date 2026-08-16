@@ -25,6 +25,26 @@ import { MUTATION_CONTRACT, parseMutation } from "@/lib/data-analysis/spec/mutat
  * talk their way around.
  */
 
+/* ── Wire bounds, mirrored from Catalyst ───────────────────────────────────*/
+
+/**
+ * Hard bounds mirrored from Catalyst's own pydantic model, `SpecAuthorRequest`
+ * in the AI repo at catalyst/api/analysis_spec.py:70-84. A violation over
+ * there is a 422 raised by pydantic before any handler code runs, and until
+ * now Notes9 did not know these numbers existed: an over-long prompt made the
+ * round trip anyway and came back reported as a generic outage, not as the
+ * malformed request it was (ADR-004). Checking here, before the request
+ * leaves this process, turns that into a message the researcher can act on.
+ *
+ * Exported by name and re-exported nowhere else: this is the one place either
+ * number is allowed to live, so a sibling that needs one (the spec-prompt
+ * textarea's character cap, for instance) imports it rather than repeating it.
+ */
+/** Mirrors `prompt: str = Field(min_length=1, max_length=4000)`. */
+export const SPEC_AUTHOR_PROMPT_MAX_CHARS = 4000
+/** Mirrors `system: str = Field(max_length=8000)`. */
+export const SPEC_AUTHOR_SYSTEM_MAX_CHARS = 8000
+
 /* ── The tool schema the model emits ───────────────────────────────────────*/
 
 /**
@@ -204,11 +224,51 @@ export interface ProjectContext {
   protocolNames?: string[]
 }
 
+/** One prior turn of the analysis conversation, oldest first. */
+export interface SpecAuthorTurn {
+  role: "user" | "assistant"
+  content: string
+}
+
+/**
+ * How much of the conversation crosses the seam. Two bounds because either can
+ * bind first: twelve short turns and two very long ones are both a problem, and
+ * the model's budget is characters while the researcher's mental model is turns.
+ * Exported so the composer and the route trim to the same numbers — a client
+ * that trims to a different one produces a 400 the user cannot explain.
+ */
+export const SPEC_AUTHOR_HISTORY_MAX_TURNS = 12
+export const SPEC_AUTHOR_HISTORY_MAX_CHARS = 20_000
+
+/**
+ * Trim to the most recent turns that fit both bounds. Oldest first in, oldest
+ * first out, and the caller is told what was dropped so it can say so rather
+ * than silently shortening the researcher's memory.
+ */
+export function trimHistory(turns: SpecAuthorTurn[]): { turns: SpecAuthorTurn[]; dropped: number } {
+  const recent = turns.slice(-SPEC_AUTHOR_HISTORY_MAX_TURNS)
+  const kept: SpecAuthorTurn[] = []
+  let chars = 0
+  // Walk backwards so the character budget is spent on the newest turns.
+  for (let i = recent.length - 1; i >= 0; i--) {
+    const size = recent[i].content.length
+    if (chars + size > SPEC_AUTHOR_HISTORY_MAX_CHARS) break
+    chars += size
+    kept.unshift(recent[i])
+  }
+  return { turns: kept, dropped: turns.length - kept.length }
+}
+
 export interface SpecAuthorContext {
   prompt: string
   spec: AnalysisSpec
   profile: DataProfile
   project?: ProjectContext
+  /**
+   * Prior turns of this analysis's conversation, oldest first, already trimmed.
+   * Absent or empty is the single-turn behaviour this route shipped with.
+   */
+  history?: SpecAuthorTurn[]
   /** Recent edits, so the assistant knows what the user changed by hand. */
   recentEdits?: { description: string; origin: "user" | "ai" }[]
   /**
@@ -237,6 +297,10 @@ export interface SpecAuthorContext {
 export function buildContextBundle(ctx: SpecAuthorContext): Record<string, unknown> {
   return {
     request: ctx.prompt,
+    // The turns before this one, so "now do the same for the other group" means
+    // something. Trimmed by the caller, not here: the caller is the one that can
+    // tell the researcher their conversation was shortened.
+    conversation: ctx.history ?? [],
     project: ctx.project ?? null,
     data: {
       fileName: ctx.profile.fileName,

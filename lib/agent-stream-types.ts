@@ -202,9 +202,16 @@ export interface GroundingResource {
   /** Support strength 0–1 for this specific claim↔span pairing. */
   support_score?: number | null;
   /** Grounding verdict for the claim. Display as a subtle signal, never "wrong". */
-  support_status?: 'supported' | 'partial' | 'unsupported' | null;
+  support_status?: 'supported' | 'partial' | 'unsupported' | 'computed' | null;
   /** How the span was located: model-native citation, heuristic match, or none. */
-  grounding?: 'native' | 'heuristic' | 'none' | null;
+  grounding?: 'native' | 'heuristic' | 'computed' | 'none' | null;
+  /**
+   * Number of already-cited records behind an aggregate claim ("you have 3
+   * experiments past their deadline"). Sent only when grounding === 'computed',
+   * where there is no single quotable span to highlight; render it as a
+   * "derived from N records" chip instead of a span badge.
+   */
+  derived_from_count?: number | null;
 }
 
 /** @deprecated Use GroundingResource; kept for imports that still say Citation */
@@ -413,7 +420,10 @@ export function sourceNamesFromEvent(
 
 // ── Type guard ────────────────────────────────────────────────────────────────
 
-const KNOWN_EVENT_TYPES = new Set([
+// Set<string> (not the inferred literal union) so callers can test an arbitrary
+// string against it — e.g. the contract conformance test. isSseEvent still
+// narrows via `as never`.
+export const KNOWN_EVENT_TYPES: Set<string> = new Set([
   "run_started",
   "permission_request",
   "thinking",

@@ -21,6 +21,7 @@ import { cn } from '@/lib/utils'
 import { formatCombo, isMacPlatform } from '@/lib/shortcuts/match'
 import { groupedShortcuts } from '@/lib/shortcuts/registry'
 import type { ShortcutDef } from '@/lib/shortcuts/types'
+import { keycapsOf } from '@/lib/shortcuts/keycaps'
 
 /** The registry is static, so the sections only need building once. */
 const SECTIONS = groupedShortcuts()
@@ -36,25 +37,10 @@ const INDICATOR_SPRING = {
   mass: 0.7,
 } as const
 
-/**
- * Keycap tokens for one entry.
- *
- * Three shapes, in priority order: literal `display` tokens ('@', '\\' 'B'),
- * a leader sequence (two or more plain keys, shown as separate caps), and a
- * single combo run through `formatCombo` so ⌘/Ctrl matches the platform.
- */
-function keycaps(item: ShortcutDef, isMac: boolean): string[] {
-  if (item.display?.length) return item.display
-  if (item.keys.length > 1) {
-    return item.keys.map((key) => formatCombo(key, isMac).join(''))
-  }
-  if (item.keys.length === 1) return formatCombo(item.keys[0], isMac)
-  return []
-}
 
 /** Everything a search term is allowed to hit, lowercased once per entry. */
 function haystack(item: ShortcutDef, isMac: boolean): string {
-  return [item.label, item.hint ?? '', ...item.keys, ...keycaps(item, isMac)]
+  return [item.label, item.hint ?? '', ...item.keys, ...keycapsOf(item, isMac)]
     .join(' ')
     .toLowerCase()
 }
@@ -234,7 +220,7 @@ export function ShortcutsDialog({
                         </div>
                         <KbdRow
                           className="shrink-0 justify-end pt-0.5"
-                          tokens={keycaps(item, isMac)}
+                          tokens={keycapsOf(item, isMac)}
                           joiner={item.keys.length > 1 ? 'then' : undefined}
                         />
                       </li>

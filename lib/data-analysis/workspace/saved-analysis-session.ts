@@ -131,6 +131,13 @@ export function saveRevision(
     changeSummary?: string
     /** The revision currently on screen, if this analysis was reopened. */
     openRevision?: AnalysisRevision | null
+    /**
+     * The analysis conversation, snapshotted into the revision. Catalyst's
+     * reasoning is part of the scientific record (§3A.2) — a figure without the
+     * reasoning that produced it is just a picture. The column has existed since
+     * 105 and was written as `[]` by every caller until now.
+     */
+    conversationThread?: unknown[]
   }
 ): Promise<AnalysisRevision> {
   const dataSnapshot = buildDataSnapshot(input.table, input.workbook, input.config)
@@ -143,6 +150,7 @@ export function saveRevision(
       spec: input.spec,
       results: input.results,
       dataSnapshot,
+      conversationThread: input.conversationThread,
     })
   }
 
@@ -156,6 +164,7 @@ export function saveRevision(
     dataSnapshot,
     name: input.name,
     changeSummary: input.changeSummary,
+    conversationThread: input.conversationThread,
   })
 }
 

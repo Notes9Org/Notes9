@@ -8,6 +8,11 @@
  *   ii.  a request with no resolved table is refused at the ROUTE with 400;
  *   iii. a proposed test the data cannot support never reaches the client.
  * Plus the privacy claim: raw rows never appear in the outbound payload.
+ *
+ * ADR-004 added a fourth: the route's own request-shape bugs (an over-long
+ * prompt, a repair round that outgrows Catalyst's own limit) must be caught
+ * HERE, before they cross the seam and come back misreported as an outage.
+ * See "the request-shape bound" below.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 
@@ -39,6 +44,7 @@ import type { Table } from "@/lib/data-analysis/engine/resolver"
 // The far end of the interlock. Asserting the route's field alone would only
 // restate the route; asserting the button the field controls is the guarantee.
 import { canExecuteProposal } from "@/lib/data-analysis/workspace/spec-prompt"
+import { SPEC_AUTHOR_PROMPT_MAX_CHARS } from "@/lib/data-analysis/ai/spec-author"
 
 /* ── Fixtures ──────────────────────────────────────────────────────────────*/
 
@@ -106,6 +112,28 @@ function replyInTurn(...proposals: unknown[]) {
       ok: true,
       json: async () => ({ proposal }),
     } as unknown as Response)
+  }
+}
+
+/**
+ * A big, real `figure.addAnnotation` payload with one invalid field (`id`
+ * must be a string), so it is REJECTED while still being the size a real
+ * annotation mutation actually is. A `{kind: "x"}` toy object is small enough
+ * that the repair prompt's length bound never engages, which is exactly the
+ * mistake that let the unbounded repair prompt through in the first place.
+ */
+function bigRejectedAnnotation(i: number) {
+  return {
+    kind: "figure.addAnnotation",
+    annotation: {
+      kind: "text",
+      id: i, // invalid: `Annotation`'s `id` is a string (analysis-spec.ts)
+      x: 10,
+      y: 20,
+      text: `Note ${i}: ${"x".repeat(140)}`,
+      fontSize: 12,
+      colour: "#1a2b3c",
+    },
   }
 }
 
@@ -371,19 +399,34 @@ describe("a patch the gate rejected gets one repair round", () => {
     expect(body.mutations).toHaveLength(0)
   })
 
-  it("keeps the first answer when the repair call itself fails", async () => {
+  it("keeps the first answer when the repair call itself fails, even on a 4xx", async () => {
     replyInTurn({
       rationale: "Setting the comparison.",
       mutations: [{ kind: "analysis.setNonsense", value: "whatever" }],
       clarificationNeeded: null,
     })
-    fetchMock.mockRejectedValue(new Error("ECONNREFUSED"))
+    // The repair call itself gets REJECTED by Catalyst (a 422), not merely
+    // dropped by the network. Before ADR-004 this test used a generic
+    // `Error("ECONNREFUSED")`, which passed for the wrong reason: it only
+    // proved that a failed repair is swallowed, the same thing that was
+    // already true for every error shape. It never proved that a 4xx
+    // specifically — now special-cased for the FIRST call, see "the
+    // request-shape bound" below — is NOT given that same special treatment
+    // on the repair call. A second failure is an answer, not another retry,
+    // and that has to hold for a bad-request exactly as much as an outage.
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 422,
+      json: async () => ({ detail: [{ loc: ["body", "prompt"], msg: "field required" }] }),
+    } as unknown as Response)
 
     const res = await POST(request({ prompt: "compare the groups", spec: spec(), table: table() }))
     const body = await res.json()
 
-    // A failed repair is not a failed request; the route never 503s here.
+    // A failed repair is not a failed request; the route never reports the
+    // repair round's own failure, 4xx or otherwise, to the researcher.
     expect(res.status).toBe(200)
+    expect(body.outcome).toBeUndefined()
     expect(body.rejected.length).toBeGreaterThan(0)
   })
 
@@ -399,6 +442,179 @@ describe("a patch the gate rejected gets one repair round", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(body.clarificationNeeded).toBe("Which column is the response?")
+  })
+})
+
+/* ── ADR-004: the route's own request-shape bugs ────────────────────────────*/
+
+describe("the request-shape bound (ADR-004)", () => {
+  it("refuses a prompt over the limit before spending a Catalyst call", async () => {
+    const res = await POST(
+      request({
+        prompt: "x".repeat(SPEC_AUTHOR_PROMPT_MAX_CHARS + 1),
+        spec: spec(),
+        table: table(),
+      })
+    )
+    const body = await res.json()
+
+    expect(res.status).toBe(400)
+    expect(body.outcome).toBe("bad-request")
+    // The one guarantee this whole slice exists for: an over-long prompt
+    // never crosses the seam, retried or not.
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it("accepts a prompt at exactly the limit, calling Catalyst once", async () => {
+    replyWith({ rationale: "Running the comparison.", mutations: [], clarificationNeeded: null })
+    const prompt = "x".repeat(SPEC_AUTHOR_PROMPT_MAX_CHARS)
+
+    const res = await POST(request({ prompt, spec: spec(), table: table() }))
+    const body = await res.json()
+
+    // The bound is inclusive: exactly the limit is a legal request.
+    expect(res.status).toBe(200)
+    expect(body.outcome).toBeUndefined()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(promptSent(0)).toBe(prompt)
+  })
+
+  it("reports a 4xx from Catalyst as a bad request, not an outage", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 422,
+      json: async () => ({ detail: [{ loc: ["body", "prompt"], msg: "field required" }] }),
+    } as unknown as Response)
+
+    const res = await POST(request({ prompt: "run a t-test", spec: spec(), table: table() }))
+    const body = await res.json()
+
+    expect(res.status).toBe(400)
+    expect(body.outcome).toBe("bad-request")
+    expect(body.reason).toContain("prompt")
+    // Not retried: 422 is not in `RETRY_STATUS` (catalyst-client.ts), so a
+    // deterministic rejection must not cost a second call.
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("still reports a 5xx as unavailable, with today's exact wording", async () => {
+    // `callCatalyst` retries once on a 502/503 (`RETRY_STATUS`), so both
+    // attempts have to answer the same way for this to be deterministic.
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 503,
+      json: async () => ({ detail: "Service Unavailable" }),
+    } as unknown as Response)
+
+    const res = await POST(request({ prompt: "run a t-test", spec: spec(), table: table() }))
+    const body = await res.json()
+
+    // Regression guard: a 5xx must keep reading as an outage worth retrying,
+    // in the researcher's own words, unchanged by this slice.
+    expect(res.status).toBe(503)
+    expect(body.outcome).toBe("unavailable")
+    expect(body.reason).toBe(
+      "The analysis assistant is unreachable right now. Your analysis is unaffected; try the request again shortly."
+    )
+  })
+})
+
+/* ── ADR-004: the repair round fits inside Catalyst's own bound ─────────────*/
+
+describe("the repair prompt fits its own budget", () => {
+  it("bounds a 40-mutation repair prompt and reports the elision truthfully", async () => {
+    const bigMutations = Array.from({ length: 40 }, (_, i) => bigRejectedAnnotation(i))
+    replyInTurn(
+      { rationale: "Adding the annotations.", mutations: bigMutations, clarificationNeeded: null },
+      {
+        rationale: "Using the unpaired t-test instead.",
+        mutations: [{ kind: "analysis.setTest", value: "t-unpaired" }],
+        clarificationNeeded: null,
+      }
+    )
+
+    const res = await POST(request({ prompt: "annotate every outlier", spec: spec(), table: table() }))
+    await res.json()
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    const repairText = promptSent(1)
+    // Verification 3: at most the shared budget, built from the REAL
+    // `SpecMutationSchema` shape (a toy `{kind: "x"}` fixture is small enough
+    // that this bound never engages, and the test would prove nothing).
+    expect(repairText.length).toBeLessThanOrEqual(SPEC_AUTHOR_PROMPT_MAX_CHARS)
+
+    // Verification 4: the elision count is TRUE, not just present. Every
+    // rejection is either shown in full or counted in "…and N more", never
+    // both and never neither.
+    const includedCount = (repairText.match(/Rejected because:/g) ?? []).length
+    const elisionMatch = repairText.match(/…and (\d+) more were rejected\./)
+    expect(elisionMatch).not.toBeNull()
+    const elidedCount = Number(elisionMatch![1])
+    expect(includedCount + elidedCount).toBe(40)
+    // Both bounds have to bind for this to be a meaningful test: some
+    // rejections fit (there is a repair prompt at all) and some do not
+    // (there is something to elide).
+    expect(includedCount).toBeGreaterThan(0)
+    expect(includedCount).toBeLessThan(40)
+  })
+
+  it("skips the repair round when not even one rejection fits the budget", async () => {
+    const hugeAnnotationText = "z".repeat(950)
+    replyInTurn({
+      rationale: "Adding one big annotation.",
+      mutations: [
+        {
+          kind: "figure.addAnnotation",
+          annotation: {
+            kind: "text",
+            id: 99, // invalid: forces this into `rejected`
+            x: 0,
+            y: 0,
+            text: hugeAnnotationText,
+            fontSize: 12,
+            colour: "#000000",
+          },
+        },
+      ],
+      clarificationNeeded: null,
+    })
+    // A prompt near the cap: the header alone (the prompt plus the fixed
+    // repair scaffold) already leaves no room for the huge rejected mutation,
+    // so `repairPrompt` cannot fit even one and must return `null`.
+    const prompt = "annotate the outlier point please. ".repeat(120).slice(0, SPEC_AUTHOR_PROMPT_MAX_CHARS - 20)
+
+    const res = await POST(request({ prompt, spec: spec(), table: table() }))
+    const body = await res.json()
+
+    // Verification 5: skipped, not attempted-and-failed. Exactly one
+    // Catalyst call, and the first, still-usable answer stands.
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(res.status).toBe(200)
+    expect(body.rejected.length).toBeGreaterThan(0)
+  })
+
+  it("skips the repair round, without starting a call, when the budget is nearly spent", async () => {
+    replyWith({
+      rationale: "Setting the comparison.",
+      mutations: [{ kind: "analysis.setNonsense", value: "whatever" }],
+      clarificationNeeded: null,
+    })
+
+    const base = 1_000_000_000
+    const now = vi.spyOn(Date, "now")
+    now.mockReturnValueOnce(base) // deadline = base + CATALYST_BUDGET_MS (45_000)
+    now.mockReturnValueOnce(base) // the first ask()'s timeoutMs calculation
+    // Only 5s of the 45s budget remain: below REPAIR_MIN_MS (10s), so the
+    // repair gate must refuse to even start a second call, not start one and
+    // have it time out.
+    now.mockReturnValue(base + 45_000 - 5_000)
+
+    const res = await POST(request({ prompt: "compare the groups", spec: spec(), table: table() }))
+    const body = await res.json()
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(res.status).toBe(200)
+    expect(body.rejected.length).toBeGreaterThan(0)
   })
 })
 

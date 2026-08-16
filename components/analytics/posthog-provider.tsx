@@ -116,9 +116,15 @@ export function PostHogProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  // When unconfigured, render children without the provider wrapper.
-  if (!isPostHogConfigured()) return <>{children}</>
-
+  // Render the same tree whether or not PostHog is configured. Branching here
+  // changed the component nesting above the entire app (an extra provider +
+  // Suspense level), which shifts every `useId` below it — the whole Radix
+  // surface — the moment server and client disagree on the key. That happens
+  // routinely: NEXT_PUBLIC_* is inlined at build time for the browser but read
+  // at runtime on the server, so a key present at runtime and absent at build
+  // (or a stale dev chunk) hydration-mismatches every dropdown and dialog id.
+  // posthog-js is inert when never init'd and PostHogPageView already no-ops
+  // when unconfigured, so the wrapper costs nothing in that case.
   return (
     <PHProvider client={posthog}>
       <Suspense fallback={null}>

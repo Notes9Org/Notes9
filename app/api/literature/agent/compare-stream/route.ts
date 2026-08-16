@@ -1,8 +1,41 @@
+import { createClient } from '@supabase/supabase-js';
 import { verifyBearerToken } from "@/lib/verify-bearer-token"
 import { compareAgentStreamUrl } from '@/lib/catalyst-client'
 
 /** Paper-analyzer SSE can run long on large batches; align with Vercel Pro max unless you use Fluid. */
 export const maxDuration = 300;
+
+/**
+ * SEC-006 pre-validation (defense-in-depth, CONTRACTS.md C1c / closes N9-9):
+ * reject any `literature_review_ids` the caller can't see under RLS before
+ * forwarding to the AI backend. The AI backend re-validates by calling back
+ * to Notes9 with the caller's JWT (RLS is the ultimate gate), but a foreign
+ * id should never cross the repo boundary in the first place.
+ */
+async function assertOwnsLiteratureReviews(
+  token: string,
+  ids: string[]
+): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return { ok: false, status: 500, error: 'Unable to validate literature_review_ids ownership' };
+  }
+  const client = createClient(supabaseUrl, supabaseAnonKey, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data, error } = await client.from('literature_reviews').select('id').in('id', ids);
+  if (error) {
+    return { ok: false, status: 500, error: 'Unable to validate literature_review_ids ownership' };
+  }
+  const ownedIds = new Set((data ?? []).map((row: { id: string }) => row.id));
+  const foreignIds = ids.filter((id) => !ownedIds.has(id));
+  if (foreignIds.length > 0) {
+    return { ok: false, status: 403, error: 'literature_review_ids includes ids you do not have access to' };
+  }
+  return { ok: true };
+}
 
 type Body = {
   query?: string;
@@ -50,6 +83,16 @@ export async function POST(req: Request) {
       status: 400,
       headers: { 'Content-Type': 'application/json' },
     });
+  }
+
+  if (literature_review_ids.length > 0) {
+    const ownership = await assertOwnsLiteratureReviews(token, literature_review_ids);
+    if (!ownership.ok) {
+      return new Response(JSON.stringify({ error: ownership.error }), {
+        status: ownership.status,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
   }
 
   const forwardBody = {

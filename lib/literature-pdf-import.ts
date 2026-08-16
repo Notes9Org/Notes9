@@ -41,6 +41,7 @@ import {
   upgradeInsecurePdfUrlIfKnownHost,
 } from "@/lib/literature-pdf-urls"
 import { resolveOaSources } from "@/lib/literature-oa-resolve"
+import { safeFetch } from "@/lib/net/safe-fetch"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 // ── Shared OA-PDF download cache ─────────────────────────────────────────────
@@ -288,7 +289,7 @@ export async function fetchPmcIdFromEuropePmc(
     `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(query)}` +
     `&format=json&pageSize=1&resultType=lite`
   try {
-    const res = await fetch(url, {
+    const res = await safeFetch(url, {
       headers: pdfFetchHeaders(url),
       signal: AbortSignal.timeout(NCBI_METADATA_TIMEOUT_MS),
     })
@@ -323,9 +324,8 @@ export async function fetchPmcIdFromPmid(pmid: string): Promise<string | null> {
     }>
   }
   try {
-    const res = await fetch(url.toString(), {
+    const res = await safeFetch(url.toString(), {
       headers: { "User-Agent": NCBI_USER_AGENT },
-      next: { revalidate: 0 },
       signal: AbortSignal.timeout(NCBI_METADATA_TIMEOUT_MS),
     })
     if (!res.ok) return null
@@ -405,9 +405,8 @@ async function queryPmcOpenAccessSubset(pmcNumeric: string): Promise<
   const id = `PMC${pmcNumeric.replace(/^PMC/i, "")}`
   const requestUrl = `https://www.ncbi.nlm.nih.gov/pmc/utils/oa/oa.fcgi?id=${encodeURIComponent(id)}`
   try {
-    const res = await fetch(requestUrl, {
+    const res = await safeFetch(requestUrl, {
       headers: { "User-Agent": NCBI_USER_AGENT },
-      next: { revalidate: 0 },
       signal: AbortSignal.timeout(NCBI_METADATA_TIMEOUT_MS),
     })
     if (!res.ok) return { ok: false }
@@ -497,9 +496,8 @@ export async function resolvePmcOaPdfUrls(paper: SearchPaper): Promise<{
 }
 
 export async function fetchPdfFromOaPackageTgz(tgzHttpsUrl: string): Promise<{ buffer: ArrayBuffer; usedUrl: string } | null> {
-  const response = await fetch(tgzHttpsUrl, {
+  const response = await safeFetch(tgzHttpsUrl, {
     headers: pdfFetchHeaders(tgzHttpsUrl),
-    redirect: "follow",
   })
   if (!response.ok) return null
   const compressed = Buffer.from(await response.arrayBuffer())
@@ -633,7 +631,7 @@ async function fetchPmcPdfWithPow(
 ): Promise<PdfDownloadResult | null> {
   try {
     const headers = pdfFetchHeaders(url)
-    const first = await fetch(url, { headers, redirect: "follow", signal })
+    const first = await safeFetch(url, { headers, signal })
     if (!first.ok || !first.body) return null
 
     const ct = (first.headers.get("content-type") || "").toLowerCase()
@@ -653,9 +651,8 @@ async function fetchPmcPdfWithPow(
     // bound to the final path (e.g. /pdf/main.pdf). Re-requesting the original
     // bare /pdf/ folder would 301 again and the PoW cookie would not validate.
     const resolvedUrl = first.url || url
-    const second = await fetch(resolvedUrl, {
+    const second = await safeFetch(resolvedUrl, {
       headers: { ...headers, Cookie: `${PMC_POW_COOKIE}=${challenge},${nonce}` },
-      redirect: "follow",
       signal,
     })
     if (!second.ok) return null
@@ -684,7 +681,7 @@ async function fetchAndValidatePdf(
         (extra ? " " + Object.entries(extra).map(([k, v]) => `${k}=${v}`).join(" ") : ""),
     )
 
-  const res = await fetch(url, { headers: pdfFetchHeaders(url), redirect: "follow", signal })
+  const res = await safeFetch(url, { headers: pdfFetchHeaders(url), signal })
   const ct = (res.headers.get("content-type") || "").toLowerCase()
   if (!res.ok || !res.body) {
     const retryable = res.status === 403 || res.status === 429
@@ -761,6 +758,13 @@ async function tryDownloadOnePdf(
   maxBytes: number,
   perFetchTimeoutMs: number,
 ): Promise<PdfDownloadResult | null> {
+  // SEC-001 (N9-2/N9-14): this is the SINGLE choke point every PDF download
+  // URL passes through — `downloadFirstPdf` (called by the remote-import path,
+  // `fetchOpenAccessPdfBufferByIds`, AND `ephemeral-attach/route.ts` with the
+  // paper's raw, unvalidated `pdfUrl`) always funnels here. The allowlist check
+  // used to be an opt-in the caller had to remember; enforcing it here makes it
+  // impossible to bypass regardless of which caller supplied the URL.
+  if (!shouldTrySearchCardPdfUrl(url)) return null
   const { signal, dispose } = pdfDownloadSignal(parentSignal, perFetchTimeoutMs)
   try {
     let host = ""

@@ -1,0 +1,45 @@
+{
+  "_comment": "Shared seam contract between Notes9 (Next.js) and Catalyst (AI). This exact file is committed to BOTH repos and each side has a conformance test asserting its own constants match it. If you widen a value here, the other repo's test goes red on its next build, which is the point. See docs/arch/catalyst-seam-determinism/CONTRACTS.md in the Notes9 repo.",
+  "contract_version": "1",
+  "limits": {
+    "_rule": "Where the two repos currently disagree, the SMALLER value wins, because the smaller one is what production already enforces: Notes9 defaults LIMITS_MODE to shadow, so Catalyst's pydantic is the effective ceiling and the user receives a raw 422.",
+    "query_chars_max": 10000,
+    "history_items_max": 100,
+    "message_content_chars_max": 100000,
+    "attachments_items_max": 10,
+    "file_attachments_items_max": 5,
+    "literature_sources_items_max": 12,
+    "spec_author_prompt_chars_max": 4000,
+    "spec_author_system_chars_max": 8000,
+    "spec_author_mutations_max": 40
+  },
+  "sse_events": [
+    "artifact",
+    "citations_manifest",
+    "citations_update",
+    "clarify",
+    "context_usage",
+    "done",
+    "error",
+    "graph",
+    "notice",
+    "permission_request",
+    "ping",
+    "run_started",
+    "synthesis_plan",
+    "synthesis_step",
+    "text_reset",
+    "thinking",
+    "thinking_token",
+    "token",
+    "tool_call",
+    "tool_result",
+    "tool_start"
+  ],
+  "sse_notes": {
+    "text_reset": "Instructs the client to DISCARD its accumulated token buffer and restart. A client that ignores this renders corrupted text. It is absent from API_DOCUMENTATION.md, which documents 5 of these 20 events.",
+    "clarify": "Terminal. Its question is NOT also streamed as token events, so rendering the card does not double-render text.",
+    "done": "Authoritative. Its content supersedes the accumulated token buffer. An error stream ends error then done, never a bare error.",
+    "ping": "Sent as the very first frame before any await, to commit response headers. Clients must tolerate a leading ping."
+  }
+}

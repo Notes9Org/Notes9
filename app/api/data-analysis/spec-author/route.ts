@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentUser } from "@/lib/auth/current-user"
-import { callCatalyst, CatalystUnavailableError } from "@/lib/catalyst-client"
+import { callCatalyst, CatalystHttpError, CatalystUnavailableError } from "@/lib/catalyst-client"
 import { parseSpec, type AnalysisSpec } from "@/lib/data-analysis/spec/analysis-spec"
 import type { Table } from "@/lib/data-analysis/engine/resolver"
 import { profileTable, offerableTests } from "@/lib/data-analysis/semantic/infer"
@@ -12,10 +12,13 @@ import {
   containsFabricatedStatistic,
   sanitiseRationale,
   screenRequest,
+  SPEC_AUTHOR_PROMPT_MAX_CHARS,
   SPEC_AUTHOR_SYSTEM_PROMPT,
+  trimHistory,
   validateProposal,
   type ColumnProfile,
   type DataProfile,
+  type SpecAuthorTurn,
 } from "@/lib/data-analysis/ai/spec-author"
 
 /**
@@ -34,6 +37,14 @@ import {
  * And one affordance: a reply the gate mostly rejected gets ONE repair round
  * before the researcher sees it, so the seam answers with a plan rather than a
  * list of things it refused to do.
+ *
+ * Two more guarantees, added for ADR-004: an over-long prompt is rejected
+ * before it ever reaches Catalyst (`SPEC_AUTHOR_PROMPT_MAX_CHARS`, mirroring
+ * pydantic's own bound there, so this side of the seam finally knows the other
+ * side's contract), and a 4xx Catalyst raises for a malformed request is
+ * reported as `bad-request`, not replayed to the researcher as "the assistant
+ * is unreachable" — that wording stays reserved for an actual outage (5xx,
+ * timeout, or transport failure), where retrying is the correct advice.
  */
 
 export const maxDuration = 60
@@ -54,6 +65,9 @@ interface SpecAuthorRequest {
   prompt?: unknown
   spec?: unknown
   table?: unknown
+  /** Optional by contract — the client deployed before this existed sends neither. */
+  history?: unknown
+  recentEdits?: unknown
 }
 
 /** What Catalyst sends back. The proposal may be at the top level or wrapped. */
@@ -120,19 +134,120 @@ function toDataProfile(spec: AnalysisSpec, table: Table): DataProfile {
  * contract and the legal test set, and repeating them would not be new
  * information.
  */
-function repairPrompt(prompt: string, rejected: { mutation: unknown; reason: string }[]): string {
-  const list = rejected
-    .map((r, i) => `${i + 1}. ${JSON.stringify(r.mutation)}\n   Rejected because: ${r.reason}`)
-    .join("\n")
-  return `${prompt}
+/**
+ * Rebuild the prompt for the one repair round, bounded to `budget` characters
+ * (the caller passes `SPEC_AUTHOR_PROMPT_MAX_CHARS`, Catalyst's own bound).
+ *
+ * The prompt echoes the original request in full, and a rejected mutation can
+ * carry an `annotation` or `patch` payload of real size (see
+ * `lib/data-analysis/spec/mutation-schema.ts`); with up to 40 of those, the
+ * unbounded version of this function could and did produce a prompt bigger
+ * than Catalyst would accept, which turned the repair round itself into
+ * exactly the malformed request this file's other guard exists to catch
+ * (ADR-004).
+ *
+ * Rejections are included MOST-RECENTLY-REJECTED FIRST: the tail of `rejected`
+ * is the gate's verdict on the model's own last attempt, so it is the most
+ * useful context to keep when not everything fits. Whatever is left out is
+ * named by count ("…and N more were rejected."), never silently dropped, so
+ * the repair round is never told a rejection list shorter than the real one
+ * without being told it is short.
+ *
+ * Returns `null` when not even ONE rejection fits inside `budget` alongside
+ * the fixed scaffold and the (already-bounded) original prompt. A repair
+ * prompt with no rejection detail at all would be worse than no repair round:
+ * the caller skips the second Catalyst call entirely rather than spend it on
+ * a prompt with nothing for the model to act on.
+ */
+function repairPrompt(
+  prompt: string,
+  rejected: { mutation: unknown; reason: string }[],
+  budget: number
+): string | null {
+  const header = `${prompt}
 
 Your previous reply to this request was rejected and never reached the researcher. These mutations did not survive validation:
-${list}
+`
+  const footer = `
 
 Answer the request again. Use only mutation kinds and fields listed under "contract" in the bundle, and only tests listed as legal under "offerableTests". Do not repeat a rejected mutation. If nothing legal satisfies the request, leave mutations empty, set clarificationNeeded, and ask one specific question instead.`
+
+  const mostRecentFirst = [...rejected].reverse()
+
+  // Try the whole list first (no elision note needed), then progressively
+  // drop the oldest entries until what remains, plus a truthful count of what
+  // was dropped, fits. Rejections top out at 40 (`SpecPatchProposal`), so this
+  // is at most 40 string builds, trivial next to the network round trip.
+  for (let k = mostRecentFirst.length; k >= 1; k--) {
+    const list = mostRecentFirst
+      .slice(0, k)
+      .map((r, i) => `${i + 1}. ${JSON.stringify(r.mutation)}\n   Rejected because: ${r.reason}`)
+      .join("\n")
+    const elided = mostRecentFirst.length - k
+    const body = elided > 0 ? `${list}\n…and ${elided} more were rejected.` : list
+    if (header.length + body.length + footer.length <= budget) {
+      return `${header}${body}${footer}`
+    }
+  }
+  return null
+}
+
+/**
+ * Turn a 4xx `CatalystHttpError` into a message that names what was wrong,
+ * rather than "bad request" on its own. Catalyst is FastAPI/pydantic, whose
+ * 422 body is `{"detail": [{"loc": [...], "msg": "..."}]}`; the field name is
+ * the last segment of `loc` that isn't the literal `"body"`. Any other 4xx
+ * body shape falls back to a generic message rather than throwing here, a
+ * malformed error body must not itself become an unhandled exception.
+ */
+function describeCatalystRejection(err: CatalystHttpError): string {
+  const detail = (err.body as { detail?: unknown } | null | undefined)?.detail
+  const first = Array.isArray(detail) ? (detail[0] as { loc?: unknown; msg?: unknown }) : undefined
+  const loc = Array.isArray(first?.loc) ? first.loc : []
+  const field = [...loc].reverse().find((seg) => seg !== "body")
+  if (typeof field === "string" && typeof first?.msg === "string") {
+    return `The assistant rejected the request: ${field} ${first.msg}.`
+  }
+  return `The assistant rejected this request as malformed (HTTP ${err.status}).`
 }
 
 /* ── Route ─────────────────────────────────────────────────────────────────*/
+
+/**
+ * Keep the turns that are actually turns and drop the rest. Deliberately lenient:
+ * this is a transcript the client replays, not a trust boundary that decides
+ * anything. The trust boundary is `spec` and `table`, which are parsed strictly
+ * below. A single malformed row must not 400 the researcher's question.
+ *
+ * Content is clamped per turn as well as in aggregate, so one enormous turn
+ * cannot eat the whole budget and starve every other turn out of the window.
+ */
+function sanitiseHistory(raw: unknown): SpecAuthorTurn[] {
+  if (!Array.isArray(raw)) return []
+  const out: SpecAuthorTurn[] = []
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue
+    const { role, content } = item as { role?: unknown; content?: unknown }
+    if (role !== "user" && role !== "assistant") continue
+    if (typeof content !== "string" || content.trim().length === 0) continue
+    out.push({ role, content: content.slice(0, SPEC_AUTHOR_PROMPT_MAX_CHARS) })
+  }
+  return out
+}
+
+/** Same leniency, and the same reason. Bounded to the last 10 the bundle keeps. */
+function sanitiseRecentEdits(raw: unknown): { description: string; origin: "user" | "ai" }[] {
+  if (!Array.isArray(raw)) return []
+  const out: { description: string; origin: "user" | "ai" }[] = []
+  for (const item of raw.slice(-10)) {
+    if (!item || typeof item !== "object") continue
+    const { description, origin } = item as { description?: unknown; origin?: unknown }
+    if (typeof description !== "string" || description.trim().length === 0) continue
+    if (origin !== "user" && origin !== "ai") continue
+    out.push({ description: description.slice(0, 400), origin })
+  }
+  return out
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -158,6 +273,19 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       )
     }
+    // Catalyst's own pydantic model 422s past this length before any handler
+    // code runs there; checking it here first turns that into a message the
+    // researcher can act on instead of a round trip that fails identically on
+    // every retry (ADR-004). Inclusive: exactly the limit is legal.
+    if (prompt.length > SPEC_AUTHOR_PROMPT_MAX_CHARS) {
+      return NextResponse.json(
+        {
+          outcome: "bad-request",
+          reason: `That request is too long. Shorten it to ${SPEC_AUTHOR_PROMPT_MAX_CHARS} characters or fewer.`,
+        },
+        { status: 400 }
+      )
+    }
 
     // (b) HARD CONSTRAINT. Without a resolved table there is no data profile, so
     // any answer would be the model reasoning about nothing. Enforced at the
@@ -179,6 +307,15 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       )
     }
+
+    // (b2) The conversation, if the caller sent one. Optional by contract: a
+    // client that omits it — including the one deployed before this field
+    // existed — behaves exactly as it did. Unrecognised turns are dropped rather
+    // than 400'd, because a malformed transcript must never cost the researcher
+    // the question they just asked.
+    const history = sanitiseHistory(body.history)
+    const trimmed = trimHistory(history)
+    const recentEdits = sanitiseRecentEdits(body.recentEdits)
 
     const parsed = parseSpec(body.spec)
     if (!parsed.ok) {
@@ -213,17 +350,18 @@ export async function POST(req: NextRequest) {
     const legalTests = offerableTests(spec, table)
 
     // (d) Only the bundle crosses the seam. `buildContextBundle` is profile-only
-    // by construction; raw rows never leave this process.
+    // by construction; raw rows never leave this process — that holds for the
+    // conversation too, which is prose the client already had.
     //
-    // `project`, `recentEdits`, and `result` are left unpopulated: this route
-    // has no producer for a notes9 project record, an edit-history feed, or a
-    // live engine result at this call site (confirmed against
-    // spec-author-client.ts, whose wire contract is just { prompt, spec, table
-    // }), inventing one here would be a new data source, not a bundle fix.
+    // `history` and `recentEdits` now have a producer (the analysis composer);
+    // `project` and `result` still do not, and are left unpopulated rather than
+    // invented here — that would be a new data source, not a bundle fix.
     const bundle = buildContextBundle({
       prompt,
       spec,
       profile: toDataProfile(spec, table),
+      history: trimmed.turns,
+      recentEdits,
       offerableTests: legalTests,
     })
 
@@ -242,8 +380,21 @@ export async function POST(req: NextRequest) {
     try {
       reply = await ask(prompt)
     } catch (err) {
-      // (f) Fail CLOSED and legibly. Unset env, timeout and HTTP error all land
-      // here; the workspace keeps computing without the assistant.
+      // A 4xx means OUR request was malformed (the bundle, the system prompt,
+      // a field Catalyst validates that this route does not) — that is a bad
+      // request, not an outage, and the fix is to change the request, not to
+      // retry it verbatim (ADR-004). `RETRY_STATUS` (catalyst-client.ts) never
+      // includes a 4xx, so this never races the client's own retry.
+      if (err instanceof CatalystHttpError && err.status >= 400 && err.status < 500) {
+        console.error("[spec-author] catalyst rejected the request:", err)
+        return NextResponse.json(
+          { outcome: "bad-request", reason: describeCatalystRejection(err) },
+          { status: 400 }
+        )
+      }
+      // (f) Fail CLOSED and legibly. Unset env, timeout, 5xx and transport
+      // errors all land here; the workspace keeps computing without the
+      // assistant. Wording unchanged: for these, retrying is the right advice.
       const reason =
         err instanceof CatalystUnavailableError
           ? "The analysis assistant is not configured on this deployment. Everything else still works, the spec you edit by hand is computed the same way."
@@ -350,28 +501,45 @@ export async function POST(req: NextRequest) {
       patch.rejected.length > patch.mutations.length &&
       deadline - Date.now() > REPAIR_MIN_MS
     ) {
-      try {
-        const retry = await ask(repairPrompt(prompt, patch.rejected))
-        const repaired = review(retry?.proposal ?? retry)
-        // Only adopt a repair that actually recovered something. A worse second
-        // reply must not throw away a partially good first one.
-        //
-        // A question counts as recovery when nothing at all survived the first
-        // round: the repair prompt asks for one in exactly that case, and a
-        // specific question the researcher can answer beats a list of refusals
-        // they cannot act on. Without this the model doing what it was told is
-        // the one reply the route throws away.
-        const recovered =
-          repaired.mutations.length > patch.mutations.length ||
-          (patch.mutations.length === 0 && asksAQuestion(repaired))
-        if (recovered) patch = repaired
-      } catch (err) {
-        // The first answer still stands; a failed repair is not a failed request.
-        console.error("[spec-author] repair round failed:", err)
+      // Bounded to Catalyst's own prompt limit (ADR-004): `repairPrompt` may
+      // have to elide the oldest rejections to fit, and returns `null` when
+      // not even one fits. `null` means skip, not "call anyway and let it
+      // 422" — that would spend the repair round on a request already known
+      // to fail, and turn a bounded, legible skip into an unbounded one.
+      const retryPrompt = repairPrompt(prompt, patch.rejected, SPEC_AUTHOR_PROMPT_MAX_CHARS)
+      if (retryPrompt === null) {
+        console.error("[spec-author] repair round skipped: no rejection fit the prompt budget")
+      } else {
+        try {
+          const retry = await ask(retryPrompt)
+          const repaired = review(retry?.proposal ?? retry)
+          // Only adopt a repair that actually recovered something. A worse
+          // second reply must not throw away a partially good first one.
+          //
+          // A question counts as recovery when nothing at all survived the
+          // first round: the repair prompt asks for one in exactly that case,
+          // and a specific question the researcher can answer beats a list of
+          // refusals they cannot act on. Without this the model doing what it
+          // was told is the one reply the route throws away.
+          const recovered =
+            repaired.mutations.length > patch.mutations.length ||
+            (patch.mutations.length === 0 && asksAQuestion(repaired))
+          if (recovered) patch = repaired
+        } catch (err) {
+          // The first answer still stands; a failed repair is not a failed request.
+          console.error("[spec-author] repair round failed:", err)
+        }
       }
     }
 
-    return NextResponse.json(patch)
+    // Say when the conversation was shortened. A silent trim is how an assistant
+    // ends up confidently answering a question whose context it never saw, and
+    // the researcher is the only one who can tell whether the dropped turns
+    // mattered. Omitted entirely when nothing was dropped, so the common reply
+    // is byte-identical to what this route returned before history existed.
+    return NextResponse.json(
+      trimmed.dropped > 0 ? { ...patch, historyDropped: trimmed.dropped } : patch,
+    )
   } catch (error) {
     console.error("[spec-author] unexpected failure:", error)
     return NextResponse.json(

@@ -187,3 +187,56 @@ describe("requestSpecPatch, failures the route never sees", () => {
     expect(await pending).toEqual({ outcome: "aborted" })
   })
 })
+
+/* ── The conversation on the wire ─────────────────────────────────────────── */
+
+describe("history and recentEdits on the wire", () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it("omits both keys when the caller sends neither, so the body is what it always was", async () => {
+    const fetchMock = reply(JSON.stringify({ rationale: "", mutations: [], rejected: [] }))
+    await ask()
+    const body = JSON.parse(
+      ((fetchMock.mock.calls[0] as unknown[])[1] as RequestInit).body as string,
+    )
+    expect(Object.keys(body).sort()).toEqual(["prompt", "spec", "table"])
+  })
+
+  it("omits them when they are empty rather than sending [] — same reason", async () => {
+    const fetchMock = reply(JSON.stringify({ rationale: "", mutations: [], rejected: [] }))
+    await requestSpecPatch({ prompt: "go", spec: spec(), table, history: [], recentEdits: [] })
+    const body = JSON.parse(
+      ((fetchMock.mock.calls[0] as unknown[])[1] as RequestInit).body as string,
+    )
+    expect(body).not.toHaveProperty("history")
+    expect(body).not.toHaveProperty("recentEdits")
+  })
+
+  it("sends the conversation when there is one", async () => {
+    const fetchMock = reply(JSON.stringify({ rationale: "", mutations: [], rejected: [] }))
+    await requestSpecPatch({
+      prompt: "now the other group",
+      spec: spec(),
+      table,
+      history: [{ role: "user", content: "log the y axis" }],
+      recentEdits: [{ description: "changed the palette", origin: "user" }],
+    })
+    const body = JSON.parse(
+      ((fetchMock.mock.calls[0] as unknown[])[1] as RequestInit).body as string,
+    )
+    expect(body.history).toEqual([{ role: "user", content: "log the y axis" }])
+    expect(body.recentEdits).toEqual([{ description: "changed the palette", origin: "user" }])
+  })
+
+  it("surfaces a trimmed conversation, and stays quiet when nothing was trimmed", async () => {
+    reply(JSON.stringify({ rationale: "ok", mutations: [], rejected: [], historyDropped: 3 }))
+    const trimmed = await ask()
+    expect(trimmed.outcome).toBe("patch")
+    if (trimmed.outcome === "patch") expect(trimmed.historyDropped).toBe(3)
+
+    vi.unstubAllGlobals()
+    reply(JSON.stringify({ rationale: "ok", mutations: [], rejected: [] }))
+    const whole = await ask()
+    if (whole.outcome === "patch") expect(whole.historyDropped).toBeUndefined()
+  })
+})

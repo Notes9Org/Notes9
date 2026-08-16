@@ -135,6 +135,13 @@ export function useChatSessions(protocolId?: string) {
         q = q.is('protocol_id', null);
       }
 
+      // Data Analysis conversations live in this table too, under their own
+      // `kind` (ADR-013), and they are a different product surface — "log the Y
+      // axis" does not belong in the Catalyst history. Excluded by kind rather
+      // than selected by it, because legacy Catalyst rows predate the column and
+      // have it NULL; `kind.neq` alone would drop every one of them.
+      q = q.or('kind.is.null,kind.neq.data_analysis');
+
       const { data, error } = await q.order('updated_at', { ascending: false });
 
       if (error) {

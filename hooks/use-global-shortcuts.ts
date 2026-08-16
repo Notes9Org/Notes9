@@ -10,6 +10,7 @@ import {
   normalizeEventKey,
 } from '@/lib/shortcuts/match';
 import type { ShortcutActionMap } from '@/lib/shortcuts/types';
+import { trackShortcutInvocation } from '@/lib/analytics/shortcut-usage';
 
 /** Any modifier at all. Leaders are bare keys, so any of these disqualifies one. */
 function hasModifier(event: KeyboardEvent): boolean {
@@ -51,6 +52,9 @@ export function useGlobalShortcuts(actions: ShortcutActionMap): void {
       const action = actionsRef.current[id];
       if (!action) return false;
       event.preventDefault();
+      // Every keyboard invocation in the app funnels through here, which is what
+      // makes one line enough to answer "is anyone using the shortcuts?".
+      trackShortcutInvocation(id, 'keyboard');
       action();
       return true;
     };

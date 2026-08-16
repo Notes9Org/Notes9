@@ -16,14 +16,12 @@ import { ShortcutsProvider, useShortcuts, CATALYST_TOGGLE_EVENT } from "@/contex
 import { CommandPalette } from "@/components/shortcuts/command-palette"
 import { ShortcutsDialog } from "@/components/shortcuts/shortcuts-dialog"
 import { Button } from "@/components/ui/button"
-import { Kbd } from "@/components/ui/kbd"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { formatCombo, isMacPlatform } from "@/lib/shortcuts/match"
 import { ResizeHandle } from "@/components/ui/resize-handle"
 import { SidebarProvider, SidebarInset, useSidebar } from "@/components/ui/sidebar"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
@@ -46,6 +44,7 @@ import {
   getHeaderTitleFromPath,
   resolveHeaderBreadcrumbs,
 } from "@/lib/breadcrumb-from-path"
+import { ShortcutHint } from '@/components/shortcuts/shortcut-hint'
 
 export const MOBILE_BREADCRUMB_MAX_LABEL_LENGTH = 18
 
@@ -540,11 +539,7 @@ function AppLayoutBody({ children }: AppLayoutProps) {
                   <DropdownMenuItem className="cursor-pointer" onSelect={openCheatSheet}>
                     <Keyboard className="mr-2 size-4" />
                     <span>Keyboard shortcuts</span>
-                    {/* Portal content only mounts on click, so reading the
-                        platform here can't mismatch the server render. */}
-                    <Kbd className="ml-auto">
-                      {formatCombo("mod+/", isMacPlatform()).join("")}
-                    </Kbd>
+                    <ShortcutHint id="shortcuts.open" variant="menu" />
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

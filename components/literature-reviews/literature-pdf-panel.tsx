@@ -217,7 +217,7 @@ export function LiteraturePdfPanel({
       scope: 'literature',
       webSearch: false,
       autoSend: false,
-      literatureMention: { id: literatureId, title: chipTitle },
+      mention: { kind: 'literature_review', id: literatureId, title: chipTitle },
       literatureSelection: trimmedSelection
         ? { text: trimmedSelection, title: chipTitle }
         : undefined,
