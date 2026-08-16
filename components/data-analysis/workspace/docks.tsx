@@ -262,10 +262,12 @@ function DockTabStrip({
   panels,
   activeId,
   onChange,
+  label,
 }: {
   panels: DockPanel[]
   activeId: string
   onChange: (id: string) => void
+  label: string
 }) {
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({})
 
@@ -297,7 +299,7 @@ function DockTabStrip({
   }
 
   return (
-    <div role="tablist" className="flex min-w-0 items-center gap-1">
+    <div role="tablist" aria-label={label} className="flex min-w-0 items-center gap-1">
       {panels.map((panel, index) => {
         const selected = panel.id === activeId
         const badgeCount =
@@ -399,6 +401,21 @@ export function Dock({
       : null
   const handleActivePanelChange = (id: string) => onActivePanelChange?.(id)
 
+  // A dock with tabs but no change handler is a controlled-without-onChange
+  // trap: move() below still shifts DOM focus to the clicked/arrow-selected
+  // tab, but aria-selected and the rendered panel never follow, because
+  // activePanel derives solely from the activePanelId prop. Warn loudly in
+  // dev instead of leaving that half-broken state silent.
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "production" && showTabs && !onActivePanelChange) {
+      console.error(
+        `Dock: "${title}" renders a tab strip (${panels?.length ?? 0} panels) but received no ` +
+          "onActivePanelChange. Selecting a tab will move focus without changing the active panel. " +
+          "Pass onActivePanelChange, or omit panels/activePanelId to use the single-panel API."
+      )
+    }
+  }, [showTabs, onActivePanelChange, title, panels?.length])
+
   return (
     <>
       {side === "right" && open && (
@@ -439,6 +456,7 @@ export function Dock({
                 panels={panels}
                 activeId={activePanel?.id ?? panels[0].id}
                 onChange={handleActivePanelChange}
+                label={title}
               />
             ) : (
               <h2 className="text-[13px] font-medium text-muted-foreground">{title}</h2>

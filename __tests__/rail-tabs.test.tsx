@@ -138,6 +138,26 @@ describe("Dock — tabbed rendering with two or more panels", () => {
     expect(askTab).toHaveAttribute("tabindex", "0")
   })
 
+  it("gives the tablist an accessible name matching the dock title (no unlabeled tablist landmark)", () => {
+    render(
+      <Dock
+        side="right"
+        open
+        size={340}
+        onToggle={vi.fn()}
+        onResize={vi.fn()}
+        title="Chart settings"
+        panels={makePanels()}
+        activePanelId="settings"
+        onActivePanelChange={vi.fn()}
+      />
+    )
+    // The static <h2>{title}</h2> is gone once tabs render — the tablist
+    // itself must carry the dock's name, or two docks on screen (e.g. left
+    // and right) produce indistinguishable unlabeled tablist landmarks.
+    expect(screen.getByRole("tablist", { name: "Chart settings" })).toBeInTheDocument()
+  })
+
   it("moves focus and selection with ArrowRight / ArrowLeft (wrapping)", () => {
     const onActivePanelChange = vi.fn()
     render(
@@ -255,6 +275,52 @@ describe("Dock — edge case: unset or stale activePanelId falls back to the fir
       "aria-selected",
       "true"
     )
+  })
+})
+
+describe("Dock — tabs enabled without onActivePanelChange (controlled-without-onChange)", () => {
+  it("warns in development: clicking a tab would move focus without changing the active panel", () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+    render(
+      <Dock
+        side="right"
+        open
+        size={340}
+        onToggle={vi.fn()}
+        onResize={vi.fn()}
+        title="Chart settings"
+        panels={makePanels()}
+        activePanelId="settings"
+      />
+    )
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("onActivePanelChange"))
+    errorSpy.mockRestore()
+  })
+
+  it("does not warn once onActivePanelChange is supplied", () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+    render(
+      <Dock
+        side="right"
+        open
+        size={340}
+        onToggle={vi.fn()}
+        onResize={vi.fn()}
+        title="Chart settings"
+        panels={makePanels()}
+        activePanelId="settings"
+        onActivePanelChange={vi.fn()}
+      />
+    )
+    expect(errorSpy).not.toHaveBeenCalled()
+    errorSpy.mockRestore()
+  })
+
+  it("does not warn for the single-panel API, which never renders tabs", () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+    renderDock()
+    expect(errorSpy).not.toHaveBeenCalled()
+    errorSpy.mockRestore()
   })
 })
 
