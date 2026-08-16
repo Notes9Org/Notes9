@@ -77,3 +77,50 @@ Key routing rules:
 - Save progress → invoke /context-save
 - Resume context → invoke /context-restore
 - Author a backlog-ready spec/issue → invoke /spec
+
+## Documentation discipline (keep the tree clean)
+
+**A PR contains code + tests only.** Do NOT commit agent-generated scaffolding or working documents — they pollute the codebase and make it harder to maintain.
+- SDLC-skill artifacts (`docs/arch/<feature>/` — ARCHITECTURE.md, ADR-*/SEC-*, CONTRACTS.md, slices.json, briefs), pentest/security reports, `PENTEST.md`, and agent transcripts are **local scaffolding** — they are gitignored. Do not `git add -f` them into a feature PR.
+- Do not create new top-level or per-change markdown to "explain" work. If a note has lasting value, promote it deliberately as ONE reviewed doc — never a pile of generated files.
+- Fewest files. No generated markdown in commits. No scaffolding "for later."
+
+**Write the logs. Just don't ship them.** A pipeline run legitimately produces a lot of
+paper — architecture, ADRs, slice briefs, gate reports, review findings, per-slice runner
+output. That is not waste; it is how the next run avoids repeating this one. But a reader
+of the repo did not ask for the transcript of how the code was made, and a tree full of
+`FINDINGS-03.md` and `runs/*/test_output.txt` reads as unfinished rather than thorough.
+So the artifacts stay where they are useful and out of where they are noise:
+
+| Artifact | Lives in |
+|---|---|
+| Code, tests, migrations | git, in the PR |
+| Long-lived reference docs (`docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`, …) | git, promoted deliberately |
+| `docs/arch/<feature>/**` — ARCHITECTURE, ADRs, briefs, slices.json, GATE/REVIEW/FLEET, FINDINGS, runs/ | local disk + **gbrain** |
+| Agent transcripts, pentest reports, `PENTEST.md` | local disk only |
+
+A PR whose diff contains only code and tests is the goal, and it is checkable:
+`git diff --name-only origin/dev...HEAD` should list no `docs/arch/**` path.
+
+**Update gbrain before every PR.** The brain is the durable home for everything the repo
+deliberately does not carry — it is why the artifacts can stay out of git without being
+lost. Capturing after the PR is opened is too late: the reviewer's questions arrive first,
+and the next `/arch` reads the brain, not the branch. Before running `/pr`:
+
+```bash
+A=docs/arch/<feature>
+gbrain capture --file "$A/ARCHITECTURE.md" --slug "projects/<feature>" --type project --quiet
+for f in "$A"/ADR-*.md; do
+  gbrain capture --file "$f" --slug "analysis/$(basename "$f" .md)" --type analysis --quiet
+  gbrain link "projects/<feature>" "analysis/$(basename "$f" .md)" --link-type decided_by
+done
+for f in FLEET GATE REVIEW; do
+  [ -f "$A/$f.md" ] && gbrain capture --file "$A/$f.md" --slug "analysis/<feature>-$(echo $f | tr A-Z a-z)" --type analysis --quiet
+done
+gbrain timeline-add "projects/<feature>" "$(date +%F)" "PR #<n> opened: <one line>. <n> slices, <n> attempts, <what the gates caught>."
+gbrain graph-query "projects/<feature>" --direction out --depth 1   # verify the edges landed
+```
+
+Record what the gates *caught*, not just that they passed. A timeline entry saying "3
+slices, all green" teaches nothing; "slice 01 took 3 attempts — swallowed error at an
+authorization-classification point" is what stops the next feature repeating it.

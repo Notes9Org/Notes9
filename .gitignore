@@ -89,3 +89,19 @@ supabase/.temp/
 # not for the public repo. Lives in both repos so it travels with either checkout.
 RESEARCH_JOURNEY.md
 .gbrain-source
+
+# --- Agent/SDLC scaffolding: design & working docs stay LOCAL, never committed ---
+# (see CLAUDE.md > "Documentation discipline"). Already-tracked arch docs are unaffected;
+# this only stops NEW agent-generated scaffolding from being added. Promote a doc
+# deliberately with `git add -f` if it has lasting value.
+/docs/arch/*/
+/security-report-*.md
+/PENTEST.md
+*.agent.output
+# Agent working dirs & generated scaffolding (worktrees, gbrain captures, flow state, contract fixtures)
+.claude/worktrees/
+.claude-flow/
+/analysis/
+/projects/
+/.sources/
+/contracts/security-*.v1.json
