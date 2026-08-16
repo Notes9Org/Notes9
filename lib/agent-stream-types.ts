@@ -420,7 +420,7 @@ export function sourceNamesFromEvent(
 
 // ── Type guard ────────────────────────────────────────────────────────────────
 
-const KNOWN_EVENT_TYPES = new Set([
+export const KNOWN_EVENT_TYPES = new Set([
   "run_started",
   "permission_request",
   "thinking",

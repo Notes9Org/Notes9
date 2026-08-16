@@ -12,6 +12,13 @@
 // ---------------------------------------------------------------------------
 // Limit constants
 // ---------------------------------------------------------------------------
+//
+// The four caps the seam shares (history / query / message content / attachments)
+// are pinned to contracts/notes9-catalyst.v1.json and enforced by
+// lib/__tests__/contract-notes9-catalyst.test.ts. Do not raise them here alone.
+// Raising one on this side does NOT raise the limit: LIMITS_MODE defaults to
+// 'shadow', so Catalyst's pydantic is the effective ceiling, and anything above
+// it just turns our own message into a raw 422 in the user's face.
 
 /** Maximum raw body size in bytes (25 MB). Checked via Content-Length header
  *  before the body is buffered. Stops a 100 MB spray before req.json() runs. */
@@ -20,16 +27,16 @@ export const BODY_BYTES_MAX = 25 * 1024 * 1024;
 /** Maximum number of items in a raw history array POSTed in a single request.
  *  This is a backstop against a malicious 100k-item array, not a conversation
  *  length limit, the real sliding window lives in the Redis / summarization layer. */
-export const HISTORY_ITEMS_MAX = 400;
+export const HISTORY_ITEMS_MAX = 100;
 
 /** Maximum characters in the query / prompt string. */
-export const QUERY_CHARS_MAX = 100_000;
+export const QUERY_CHARS_MAX = 10_000;
 
 /** Maximum characters in a single message content field. */
-export const MESSAGE_CONTENT_CHARS_MAX = 200_000;
+export const MESSAGE_CONTENT_CHARS_MAX = 100_000;
 
 /** Maximum number of attachment objects in a single request. */
-export const ATTACHMENTS_ITEMS_MAX = 50;
+export const ATTACHMENTS_ITEMS_MAX = 10;
 
 /** Maximum number of entity IDs in a single request. */
 export const ENTITY_ID_ITEMS_MAX = 200;
