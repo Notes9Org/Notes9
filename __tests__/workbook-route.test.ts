@@ -41,7 +41,6 @@ type ExperimentDataRow = {
 function makeSupabaseMock(opts: {
   row: ExperimentDataRow | null
   rowError?: { message: string } | null
-  organizationId?: string | null
   updateError?: { message: string } | null
   download?: () => Promise<{ data: Blob | null; error: unknown }>
 }) {
@@ -62,18 +61,6 @@ function makeSupabaseMock(opts: {
           update: (payload: Record<string, unknown>) => ({
             eq: (_c1: string, _v1: string) => ({
               eq: (_c2: string, _v2: string) => updateSpy(payload),
-            }),
-          }),
-        }
-      }
-      if (table === "profiles") {
-        return {
-          select: (_cols: string) => ({
-            eq: (_c: string, _v: string) => ({
-              maybeSingle: async () => ({
-                data: opts.organizationId !== undefined ? { organization_id: opts.organizationId } : null,
-                error: null,
-              }),
             }),
           }),
         }
@@ -101,6 +88,15 @@ function csvBytes(): ArrayBuffer {
 
 function truncatedZipBytes(): ArrayBuffer {
   return new Uint8Array([0x50, 0x4b, 0x03, 0x04, 1, 2, 3]).buffer
+}
+
+/** `buildSpreadsheetWorkbookSnapshot` mints a fresh random workbook/sheet id
+ *  on every parse, by design, so two independent parses of the same bytes
+ *  are never *literally* identical objects -- "identical content" means the
+ *  actual cell data converges, not the opaque generated ids around it. */
+function cellContent(snapshot: unknown): unknown {
+  const sheets = (snapshot as { sheets: Record<string, { cellData: unknown }> }).sheets
+  return Object.values(sheets).map((sheet) => sheet.cellData)
 }
 
 beforeEach(() => {
@@ -164,7 +160,6 @@ describe("POST /api/experiments/{experimentId}/data-files/{fileId}/workbook", ()
         workbook_snapshot: null,
         metadata: { storage_path: "org-1/experiment/exp-1/file-1/data.csv" },
       },
-      organizationId: "org-1",
       download: async () => ({ data: new Blob([csvBytes()]), error: null }),
     })
     mockClient = client
@@ -183,6 +178,72 @@ describe("POST /api/experiments/{experimentId}/data-files/{fileId}/workbook", ()
     const [payload] = updateSpy.mock.calls[0] as [Record<string, unknown>]
     expect(payload.tabular_format).toBe("csv")
     expect(payload.workbook_snapshot).toBeTruthy()
+  })
+
+  it("edge case 7 (version skew): POST success payload matches the pre-slice shape { ok, snapshot_updated_at, tabular_format }, with snapshot_updated_at populated", async () => {
+    // Old clients only ever read these three keys; `workbook_snapshot` below
+    // is additive, never a replacement (ARCHITECTURE.md "Version skew: old
+    // client, new route" -- "the success body is unchanged").
+    const { client } = makeSupabaseMock({
+      row: {
+        id: "file-1",
+        file_name: "data.csv",
+        file_url: null,
+        workbook_snapshot: null,
+        metadata: { storage_path: "org-1/experiment/exp-1/file-1/data.csv" },
+      },
+      download: async () => ({ data: new Blob([csvBytes()]), error: null }),
+    })
+    mockClient = client
+    const { POST } = await import("@/app/api/experiments/[experimentId]/data-files/[fileId]/workbook/route")
+    const res = (await POST(makeRequest(), paramsFor("exp-1", "file-1"))) as unknown as {
+      status: number
+      json: () => Promise<Record<string, unknown>>
+    }
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.ok).toBe(true)
+    expect(typeof body.snapshot_updated_at).toBe("string")
+    expect(body.snapshot_updated_at).toBeTruthy()
+    expect(body.tabular_format).toBe("csv")
+  })
+
+  it("edge case 5: two concurrent first-time backfills converge on an idempotent write (last writer wins with identical content)", async () => {
+    const { client, downloadSpy, updateSpy } = makeSupabaseMock({
+      row: {
+        id: "file-1",
+        file_name: "data.csv",
+        file_url: null,
+        workbook_snapshot: null,
+        metadata: { storage_path: "org-1/experiment/exp-1/file-1/data.csv" },
+      },
+      download: async () => ({ data: new Blob([csvBytes()]), error: null }),
+    })
+    mockClient = client
+    const { POST } = await import("@/app/api/experiments/[experimentId]/data-files/[fileId]/workbook/route")
+    const [resA, resB] = (await Promise.all([
+      POST(makeRequest(), paramsFor("exp-1", "file-1")),
+      POST(makeRequest(), paramsFor("exp-1", "file-1")),
+    ])) as unknown as Array<{ status: number; json: () => Promise<Record<string, unknown>> }>
+
+    expect(resA.status).toBe(200)
+    expect(resB.status).toBe(200)
+    const [bodyA, bodyB] = await Promise.all([resA.json(), resB.json()])
+    expect(bodyA.ok).toBe(true)
+    expect(bodyB.ok).toBe(true)
+    // Both callers independently downloaded and parsed the same bytes; the
+    // write each makes is idempotent -- last writer wins with identical
+    // content, not a partial or conflicting one. (Cell content, not the
+    // whole snapshot object, is the right equality: each parse mints its own
+    // random workbook/sheet id by design -- see `cellContent`.)
+    expect(cellContent(bodyA.workbook_snapshot)).toEqual(cellContent(bodyB.workbook_snapshot))
+    expect(bodyA.tabular_format).toBe(bodyB.tabular_format)
+    expect(downloadSpy).toHaveBeenCalledTimes(2)
+    expect(updateSpy).toHaveBeenCalledTimes(2)
+    const [payloadA] = updateSpy.mock.calls[0] as [Record<string, unknown>]
+    const [payloadB] = updateSpy.mock.calls[1] as [Record<string, unknown>]
+    expect(cellContent(payloadA.workbook_snapshot)).toEqual(cellContent(payloadB.workbook_snapshot))
+    expect(payloadA.tabular_format).toBe(payloadB.tabular_format)
   })
 
   it("AC-2: falls back to file_url for a pre-migration row with no metadata.storage_path", async () => {
@@ -223,7 +284,6 @@ describe("POST /api/experiments/{experimentId}/data-files/{fileId}/workbook", ()
         workbook_snapshot: null,
         metadata: { storage_path: "org-1/experiment/exp-1/file-1/data.csv" },
       },
-      organizationId: "org-1",
       download: async () => ({ data: new Blob([csvBytes()]), error: null }),
       updateError: { message: "connection reset" },
     })
@@ -241,7 +301,12 @@ describe("POST /api/experiments/{experimentId}/data-files/{fileId}/workbook", ()
     expect(updateSpy).toHaveBeenCalledTimes(1)
   })
 
-  it("AC-3 reason=forbidden: row visible cross-org, but the storage org doesn't match the caller's own org", async () => {
+  it("AC-3 reason=forbidden: row visible cross-org, storage denies the download through the caller's own RLS-scoped session", async () => {
+    // No `profiles` org lookup: `forbidden` is derived from the actual
+    // storage denial (the real, RLS-gated `download()` call), not guessed
+    // from an org-prefix heuristic -- see route.ts. A storage path came from
+    // the row itself, so any failure to read it is classified `forbidden`,
+    // never the weaker `no-bytes` (ARCHITECTURE.md byte-resolution order).
     const { client, downloadSpy } = makeSupabaseMock({
       row: {
         id: "file-1",
@@ -250,7 +315,7 @@ describe("POST /api/experiments/{experimentId}/data-files/{fileId}/workbook", ()
         workbook_snapshot: null,
         metadata: { storage_path: "org-owner/experiment/exp-1/file-1/data.csv" },
       },
-      organizationId: "org-viewer", // caller belongs to a different org than the file
+      download: async () => ({ data: null, error: { message: "not found" } }),
     })
     mockClient = client
     const { POST } = await import("@/app/api/experiments/[experimentId]/data-files/[fileId]/workbook/route")
@@ -260,7 +325,35 @@ describe("POST /api/experiments/{experimentId}/data-files/{fileId}/workbook", ()
     }
     expect(res.status).toBe(422)
     expect(await res.json()).toEqual({ error: "unreadable", reason: "forbidden" })
-    expect(downloadSpy).not.toHaveBeenCalled()
+    expect(downloadSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it("AC-3 reason=forbidden: a storage-path download denial never falls back to a legacy file_url", async () => {
+    const fetchSpy = vi.fn(async () => new Response(csvBytes(), { status: 200 }))
+    vi.stubGlobal("fetch", fetchSpy)
+    const { client, downloadSpy } = makeSupabaseMock({
+      row: {
+        id: "file-1",
+        file_name: "data.csv",
+        // A legacy file_url is present too, to prove a storage-path denial
+        // doesn't fall through to it: the fallback fires only when there is
+        // no storage path at all.
+        file_url: "https://project.supabase.co/storage/v1/object/sign/user/legacy.csv",
+        workbook_snapshot: null,
+        metadata: { storage_path: "org-owner/experiment/exp-1/file-1/data.csv" },
+      },
+      download: async () => ({ data: null, error: { message: "not found" } }),
+    })
+    mockClient = client
+    const { POST } = await import("@/app/api/experiments/[experimentId]/data-files/[fileId]/workbook/route")
+    const res = (await POST(makeRequest(), paramsFor("exp-1", "file-1"))) as unknown as {
+      status: number
+      json: () => Promise<Record<string, unknown>>
+    }
+    expect(res.status).toBe(422)
+    expect(await res.json()).toEqual({ error: "unreadable", reason: "forbidden" })
+    expect(downloadSpy).toHaveBeenCalledTimes(1)
+    expect(fetchSpy).not.toHaveBeenCalled()
   })
 
   it("AC-3 reason=too-large: a known oversized row skips downloading altogether", async () => {
@@ -273,7 +366,6 @@ describe("POST /api/experiments/{experimentId}/data-files/{fileId}/workbook", ()
         workbook_snapshot: null,
         metadata: { storage_path: "org-1/experiment/exp-1/file-1/huge.xlsx" },
       },
-      organizationId: "org-1",
     })
     mockClient = client
     const { POST } = await import("@/app/api/experiments/[experimentId]/data-files/[fileId]/workbook/route")
@@ -296,7 +388,6 @@ describe("POST /api/experiments/{experimentId}/data-files/{fileId}/workbook", ()
         workbook_snapshot: null,
         metadata: { storage_path: "org-1/experiment/exp-1/file-1/report.pdf" },
       },
-      organizationId: "org-1",
       download: async () => ({ data: new Blob([pdfBytes]), error: null }),
     })
     mockClient = client
@@ -318,7 +409,6 @@ describe("POST /api/experiments/{experimentId}/data-files/{fileId}/workbook", ()
         workbook_snapshot: null,
         metadata: { storage_path: "org-1/experiment/exp-1/file-1/broken.xlsx" },
       },
-      organizationId: "org-1",
       download: async () => ({ data: new Blob([truncatedZipBytes()]), error: null }),
     })
     mockClient = client
@@ -331,17 +421,15 @@ describe("POST /api/experiments/{experimentId}/data-files/{fileId}/workbook", ()
     expect(await res.json()).toEqual({ error: "unreadable", reason: "parse-failed" })
   })
 
-  it("AC-3 reason=no-bytes: storage download fails and there is no legacy file_url to fall back to", async () => {
-    const { client } = makeSupabaseMock({
+  it("AC-3 reason=no-bytes: no storage path and no usable legacy file_url", async () => {
+    const { client, downloadSpy } = makeSupabaseMock({
       row: {
         id: "file-1",
         file_name: "data.csv",
         file_url: null,
         workbook_snapshot: null,
-        metadata: { storage_path: "org-1/experiment/exp-1/file-1/data.csv" },
+        metadata: null,
       },
-      organizationId: "org-1",
-      download: async () => ({ data: null, error: { message: "object not found" } }),
     })
     mockClient = client
     const { POST } = await import("@/app/api/experiments/[experimentId]/data-files/[fileId]/workbook/route")
@@ -351,5 +439,6 @@ describe("POST /api/experiments/{experimentId}/data-files/{fileId}/workbook", ()
     }
     expect(res.status).toBe(422)
     expect(await res.json()).toEqual({ error: "unreadable", reason: "no-bytes" })
+    expect(downloadSpy).not.toHaveBeenCalled()
   })
 })

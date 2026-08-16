@@ -46,7 +46,6 @@ describe("openWorkbookFromStorage", () => {
       fileName: "data.csv",
       storagePath: "org-1/experiment/exp-1/file-1/data.csv",
       legacyFileUrl: null,
-      forbidden: false,
       isSafeStorageUrl: neverSafe, // legacy fetch must never be reached when storage succeeds
       storage: { download },
     })
@@ -63,7 +62,6 @@ describe("openWorkbookFromStorage", () => {
       fileName: "data.tsv",
       storagePath: "org-1/experiment/exp-1/file-1/data.tsv",
       legacyFileUrl: null,
-      forbidden: false,
       isSafeStorageUrl: neverSafe,
       storage: downloaderReturning(new Blob([tsvBytes()])),
     })
@@ -74,20 +72,21 @@ describe("openWorkbookFromStorage", () => {
     }
   })
 
-  it("falls back to legacyFileUrl only when the storage download comes back empty", async () => {
+  it("falls back to legacyFileUrl only when there is no storage path at all (pre-migration rows)", async () => {
+    const download = vi.fn()
     const fetchImpl = vi.fn(async (url: string) => {
       expect(url).toBe("https://project.supabase.co/storage/v1/object/public/user/legacy.csv")
       return new Response(csvBytes(), { status: 200 })
     })
     const result = await openWorkbookFromStorage({
       fileName: "legacy.csv",
-      storagePath: "org-1/experiment/exp-1/file-1/legacy.csv",
+      storagePath: null,
       legacyFileUrl: "https://project.supabase.co/storage/v1/object/public/user/legacy.csv",
-      forbidden: false,
       isSafeStorageUrl: alwaysSafe,
-      storage: downloaderReturning(null, { message: "not found" }),
+      storage: { download },
       fetchImpl,
     })
+    expect(download).not.toHaveBeenCalled()
     expect(fetchImpl).toHaveBeenCalledTimes(1)
     expect(result.ok).toBe(true)
   })
@@ -98,7 +97,6 @@ describe("openWorkbookFromStorage", () => {
       fileName: "legacy.csv",
       storagePath: null,
       legacyFileUrl: "https://evil.example/legacy.csv",
-      forbidden: false,
       isSafeStorageUrl: neverSafe,
       storage: downloaderReturning(null),
       fetchImpl,
@@ -107,30 +105,23 @@ describe("openWorkbookFromStorage", () => {
     expect(result).toEqual({ ok: false, reason: "no-bytes" })
   })
 
-  it("AC-3 reason=forbidden: short-circuits before any download when the caller flags cross-org access", async () => {
-    const download = vi.fn()
+  it("AC-3 reason=forbidden: a storage download denial is forbidden, never no-bytes, and never falls back to legacyFileUrl even when one is present", async () => {
+    const download = vi.fn(async () => ({ data: null, error: { message: "not found" } }))
+    const fetchImpl = vi.fn(async () => new Response(csvBytes(), { status: 200 }))
     const result = await openWorkbookFromStorage({
       fileName: "data.csv",
       storagePath: "other-org/experiment/exp-1/file-1/data.csv",
-      legacyFileUrl: null,
-      forbidden: true,
+      // A legacy URL is present too, to prove a storage-path denial doesn't
+      // fall through to it -- the fallback fires only when there is no
+      // storage path at all (ARCHITECTURE.md byte-resolution order).
+      legacyFileUrl: "https://project.supabase.co/storage/v1/object/public/user/legacy.csv",
       isSafeStorageUrl: alwaysSafe,
       storage: { download },
+      fetchImpl,
     })
-    expect(download).not.toHaveBeenCalled()
+    expect(download).toHaveBeenCalledTimes(1)
+    expect(fetchImpl).not.toHaveBeenCalled()
     expect(result).toEqual({ ok: false, reason: "forbidden" })
-  })
-
-  it("AC-3 reason=no-bytes: storage download fails and there is no usable legacy fallback", async () => {
-    const result = await openWorkbookFromStorage({
-      fileName: "data.csv",
-      storagePath: "org-1/experiment/exp-1/file-1/data.csv",
-      legacyFileUrl: null,
-      forbidden: false,
-      isSafeStorageUrl: alwaysSafe,
-      storage: downloaderReturning(null, { message: "object not found" }),
-    })
-    expect(result).toEqual({ ok: false, reason: "no-bytes" })
   })
 
   it("AC-3 reason=no-bytes: no storage path, no file name at all", async () => {
@@ -138,7 +129,17 @@ describe("openWorkbookFromStorage", () => {
       fileName: null,
       storagePath: null,
       legacyFileUrl: null,
-      forbidden: false,
+      isSafeStorageUrl: alwaysSafe,
+      storage: downloaderReturning(null),
+    })
+    expect(result).toEqual({ ok: false, reason: "no-bytes" })
+  })
+
+  it("AC-3 reason=no-bytes: no storage path and no usable legacy file_url", async () => {
+    const result = await openWorkbookFromStorage({
+      fileName: "data.csv",
+      storagePath: null,
+      legacyFileUrl: null,
       isSafeStorageUrl: alwaysSafe,
       storage: downloaderReturning(null),
     })
@@ -151,7 +152,6 @@ describe("openWorkbookFromStorage", () => {
       fileName: "huge.xlsx",
       storagePath: "org-1/experiment/exp-1/file-1/huge.xlsx",
       legacyFileUrl: null,
-      forbidden: false,
       isSafeStorageUrl: alwaysSafe,
       storage: { download },
       knownSizeBytes: MAX_WORKBOOK_BYTES + 1,
@@ -166,7 +166,6 @@ describe("openWorkbookFromStorage", () => {
       fileName: "huge.csv",
       storagePath: "org-1/experiment/exp-1/file-1/huge.csv",
       legacyFileUrl: null,
-      forbidden: false,
       isSafeStorageUrl: alwaysSafe,
       storage: downloaderReturning(new Blob([oversized])),
     })
@@ -182,7 +181,6 @@ describe("openWorkbookFromStorage", () => {
       fileName: "report.pdf",
       storagePath: "org-1/experiment/exp-1/file-1/report.pdf",
       legacyFileUrl: null,
-      forbidden: false,
       isSafeStorageUrl: alwaysSafe,
       storage: downloaderReturning(new Blob([pdfBytes])),
     })
@@ -194,7 +192,6 @@ describe("openWorkbookFromStorage", () => {
       fileName: "broken.xlsx",
       storagePath: "org-1/experiment/exp-1/file-1/broken.xlsx",
       legacyFileUrl: null,
-      forbidden: false,
       isSafeStorageUrl: alwaysSafe,
       storage: downloaderReturning(new Blob([truncatedZipBytes()])),
     })

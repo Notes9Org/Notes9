@@ -209,24 +209,14 @@ export async function POST(_request: Request, { params }: RouteParams) {
   // Cross-org project-member case (ARCHITECTURE.md "Authorization is not the
   // problem, with one exception"): the row's SELECT policy can let a project
   // member from another org see this row, while the storage policy keys on
-  // organization_id. Compare the storage path's own org prefix
-  // (`{organizationId}/experiment/...`) to the caller's org instead of
-  // trying to read intent out of a storage error — Supabase Storage returns
-  // the same "not found" for "RLS denied" and "genuinely missing", by design.
-  let forbidden = false
-  if (storagePath) {
-    const orgFromPath = storagePath.split("/")[0]
-    const { data: profile } = await supabase.from("profiles").select("organization_id").eq("id", user.id).maybeSingle()
-    if (orgFromPath && profile?.organization_id && profile.organization_id !== orgFromPath) {
-      forbidden = true
-    }
-  }
-
+  // organization_id. RLS is the only thing correctly denying that download,
+  // so `forbidden` is derived by `openWorkbookFromStorage` from the actual
+  // storage denial, not guessed here from a `profiles` lookup — a second,
+  // weaker copy of an authorization decision RLS already makes correctly.
   const result = await openWorkbookFromStorage({
     fileName: row.file_name,
     storagePath,
     legacyFileUrl: row.file_url,
-    forbidden,
     isSafeStorageUrl,
     storage: supabase.storage.from(USER_STORAGE_BUCKET),
     knownSizeBytes: typeof row.file_size === "number" ? row.file_size : null,
