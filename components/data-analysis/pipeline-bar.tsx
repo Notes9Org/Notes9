@@ -130,12 +130,12 @@ export function PipelineBar({
             key={offer.id}
             type="button"
             className={OFFER_CLASS}
-            title={offer.detail}
-            aria-label={`Apply: ${offer.label}`}
+            title={offer.evidence}
+            aria-label={`Apply: ${offer.summary}`}
             onClick={() => onAcceptOffer?.(offer)}
           >
             <Plus className="size-3 shrink-0" weight="bold" aria-hidden />
-            {offer.label}
+            {offer.summary}
           </button>
         ))}
     </div>

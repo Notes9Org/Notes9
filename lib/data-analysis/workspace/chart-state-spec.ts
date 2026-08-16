@@ -174,7 +174,19 @@ const POINT_SHAPES = new Set(["circle", "square", "diamond", "triangle", "cross"
 const isLegal = (test: TestKind, capabilities: TestCapability[]) =>
   capabilities.find((c) => c.test === test)?.legal === true
 
-function testForChart(chartType: string, capabilities: TestCapability[]): TestKind {
+/**
+ * A statistical-test RECOMMENDATION for the chart type, evidence attached.
+ *
+ * ADR-025: this used to decide `analysis.test` outright. It only offers now —
+ * `specFromChartState` never calls it, and the return value is surfaced as a
+ * `PrepOffer` (`prep-offers.ts`) the researcher accepts or ignores. `null`
+ * means there is nothing to recommend, not "none": the caller must not turn
+ * that into a written choice either.
+ */
+export function recommendTestForChart(
+  chartType: string,
+  capabilities: TestCapability[]
+): { test: TestKind; rationale: string } | null {
   const wanted: TestKind | null =
     chartType === "km"
       ? "kaplan-meier"
@@ -182,13 +194,16 @@ function testForChart(chartType: string, capabilities: TestCapability[]): TestKi
         ? "correlation-pearson"
         : chartType === "corrMatrix"
           ? "correlation-pearson"
-          : chartType === "bar" || chartType === "box" || chartType === "violin" || chartType === "barStacked" || chartType === "barH"
-            ? null // decided by the design below
-            : null
+          : null
 
-  if (wanted && isLegal(wanted, capabilities)) return wanted
+  if (wanted && isLegal(wanted, capabilities)) {
+    return { test: wanted, rationale: `"${chartType}" charts are conventionally analysed with ${wanted}.` }
+  }
   const recommended = capabilities.find((c) => c.legal && c.recommended)
-  return recommended?.test ?? "none"
+  if (recommended) {
+    return { test: recommended.test, rationale: `The data's design supports ${recommended.test}.` }
+  }
+  return null
 }
 
 /**
@@ -286,15 +301,14 @@ export function specFromChartState(
   }
 
   const capabilities = legalTests(draft.spec, table)
-  // A deliberate choice beats the chart-derived default, that is the same
-  // sticky-manual-edit rule the column mapping already follows. Except when the
-  // named test is not legal for this data: the resolver would reject it, so a
-  // spec that cannot run must not be reachable from here, and we fall back to
-  // the derived test rather than shipping the impossible one.
-  const test =
-    state.test && isLegal(state.test, capabilities)
-      ? state.test
-      : testForChart(state.chartType, capabilities)
+  // ADR-025: `analysis.test` is only ever what the researcher accepted, never
+  // a chart-type guess substituted on their behalf — that is precisely the
+  // artefact-records-a-test-no-human-chose failure ADR-025 exists to close.
+  // `recommendTestForChart` offers a recommendation elsewhere; this function
+  // must not call it. A named test that is not legal for this data cannot
+  // ship either (the resolver would reject it), so that falls back to "none"
+  // rather than to a recommendation.
+  const test: TestKind = state.test && isLegal(state.test, capabilities) ? state.test : "none"
   const parsed = parseSpec({
     ...base,
     analysis: {
@@ -442,10 +456,11 @@ export function chartStateFromSpec(spec: AnalysisSpec, table: Table): Partial<Ch
  * pre-existing miss, not a deliberate omission.
  *
  * Deliberately excludes `design`/`roles` (already a pure function of
- * `versionHash`, via `inferDesign`/`inferRoles`) and `figure.kind` (a
- * chart-type change already flows through `testForChart` into
- * `analysis.test`; watching the kind directly would add a ~2s Pyodide round
- * trip to every chart-type click for analysis the signature already covers).
+ * `versionHash`, via `inferDesign`/`inferRoles`) and `figure.kind` (ADR-025:
+ * a chart-type change no longer moves `analysis.test` on its own, only a
+ * researcher's acceptance does, and that acceptance is `spec.analysis`,
+ * already covered above; watching the kind directly would add a ~2s Pyodide
+ * round trip for what the signature already covers).
  * Do not "fix" that omission, it is the point.
  */
 export function recomputeSignature(spec: AnalysisSpec): string {
