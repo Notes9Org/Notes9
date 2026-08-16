@@ -2,13 +2,12 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentUser } from "@/lib/auth/current-user"
 import {
-  buildSpreadsheetWorkbookSnapshot,
   inferTabularFormatFromFileName,
-  readSpreadsheetWorkbook,
   workbookSnapshotToCsvBuffer,
   workbookSnapshotToXlsxBuffer,
 } from "@/lib/spreadsheet-workbook"
 import { USER_STORAGE_BUCKET, resolveExperimentDataStoragePath } from "@/lib/user-storage-bucket"
+import { openWorkbookFromStorage } from "@/lib/data-analysis/workbook-open"
 
 // Next 16's generated route validator types `context.params` as
 // `Promise<unknown>`; accept that (a supertype of the specific shape) and
@@ -168,7 +167,16 @@ function isSafeStorageUrl(raw: string): boolean {
   return host.endsWith(".supabase.co") || (configured !== null && host === configured)
 }
 
-/** Backfill snapshot from public file URL (server-side fetch). */
+/**
+ * Backfill snapshot by reading the file's bytes from storage (ADR-017).
+ *
+ * `storage_path` (org-prefixed, authenticated download through the caller's
+ * own session) is authoritative; `file_url` — the old unauthenticated
+ * `fetch` of a "public" URL into a bucket that is actually private — is kept
+ * only as a fallback for rows written before the org-prefixed layout. See
+ * `lib/data-analysis/workbook-open.ts` for the storage-path → bytes →
+ * parsed-workbook decision tree and its failure reasons.
+ */
 export async function POST(_request: Request, { params }: RouteParams) {
   const { experimentId, fileId } = (await params) as WorkbookRouteParams
   const supabase = await createClient()
@@ -179,7 +187,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
 
   const { data: row, error: fetchErr } = await supabase
     .from("experiment_data")
-    .select("id, file_name, file_url, workbook_snapshot")
+    .select("id, file_name, file_url, file_size, workbook_snapshot, metadata")
     .eq("id", fileId)
     .eq("experiment_id", experimentId)
     .maybeSingle()
@@ -188,43 +196,88 @@ export async function POST(_request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: fetchErr?.message || "Not found" }, { status: fetchErr ? 500 : 404 })
   }
   if (row.workbook_snapshot) {
+    // Idempotent: two tabs racing the same backfill both land here; the
+    // second caller short-circuits on the first one's write instead of
+    // re-downloading and re-parsing (ARCHITECTURE.md "Two tabs backfilling
+    // the same file at once").
     return NextResponse.json({ ok: true, cached: true })
   }
-  if (!row.file_url || !row.file_name) {
-    return NextResponse.json({ error: "No file to parse" }, { status: 400 })
+
+  const metadata = row.metadata as { storage_path?: string } | null
+  const storagePath = resolveExperimentDataStoragePath({ metadata, file_url: row.file_url })
+
+  // Cross-org project-member case (ARCHITECTURE.md "Authorization is not the
+  // problem, with one exception"): the row's SELECT policy can let a project
+  // member from another org see this row, while the storage policy keys on
+  // organization_id. Compare the storage path's own org prefix
+  // (`{organizationId}/experiment/...`) to the caller's own org. When that
+  // can't be confirmed -- the profiles query errors, or the caller's
+  // profile has no organization_id yet (mid-onboarding) -- do NOT default
+  // to "same org": that silent default was the actual bug (FINDINGS-01),
+  // letting a real cross-org denial come back to the client as the weaker
+  // `no-bytes` instead of `forbidden`. Indeterminate is treated as
+  // forbidden, same as a confirmed mismatch.
+  let forbidden = false
+  if (storagePath) {
+    const orgFromPath = storagePath.split("/")[0]
+    const { data: profile, error: profileErr } = await supabase
+      .from("profiles")
+      .select("organization_id")
+      .eq("id", user.id)
+      .maybeSingle()
+    if (profileErr || !profile?.organization_id) {
+      forbidden = true
+    } else if (orgFromPath && profile.organization_id !== orgFromPath) {
+      forbidden = true
+    }
   }
 
-  // SSRF guard: `file_url` is row data that could have been written during
-  // import. Before fetching it server-side, require https and constrain the
-  // host to Supabase storage; reject private/loopback/link-local targets so a
-  // crafted URL can't reach internal services or cloud metadata (169.254.x).
-  if (!isSafeStorageUrl(row.file_url)) {
-    return NextResponse.json({ error: "Unsupported file URL" }, { status: 400 })
-  }
+  const result = await openWorkbookFromStorage({
+    fileName: row.file_name,
+    storagePath,
+    legacyFileUrl: row.file_url,
+    forbidden,
+    isSafeStorageUrl,
+    storage: supabase.storage.from(USER_STORAGE_BUCKET),
+    knownSizeBytes: typeof row.file_size === "number" ? row.file_size : null,
+  })
 
-  const res = await fetch(row.file_url)
-  if (!res.ok) {
-    return NextResponse.json({ error: `Fetch failed: ${res.status}` }, { status: 502 })
+  if (!result.ok) {
+    return NextResponse.json({ error: "unreadable", reason: result.reason }, { status: 422 })
   }
-  const arrayBuffer = await res.arrayBuffer()
-  const wb = readSpreadsheetWorkbook(arrayBuffer, row.file_name)
-  const snapshot = buildSpreadsheetWorkbookSnapshot(row.file_name, wb)
-  const tabular_format = inferTabularFormatFromFileName(row.file_name)
 
   const now = new Date().toISOString()
   const { error: updateErr } = await supabase
     .from("experiment_data")
     .update({
-      workbook_snapshot: snapshot,
+      workbook_snapshot: result.snapshot,
       snapshot_updated_at: now,
-      tabular_format,
+      tabular_format: result.tabularFormat,
     })
     .eq("id", fileId)
     .eq("experiment_id", experimentId)
 
   if (updateErr) {
-    return NextResponse.json({ error: updateErr.message }, { status: 500 })
+    // Never fail an open because the cache write failed (ARCHITECTURE.md
+    // "Backfill succeeds, snapshot write fails"): the parsed workbook is
+    // still handed back so the caller can render it immediately even though
+    // the next GET won't see it cached until a retry succeeds.
+    console.error("workbook snapshot cache write failed", updateErr)
+    return NextResponse.json({
+      ok: true,
+      snapshot_updated_at: null,
+      tabular_format: result.tabularFormat,
+      workbook_snapshot: result.snapshot,
+    })
   }
 
-  return NextResponse.json({ ok: true, snapshot_updated_at: now, tabular_format })
+  return NextResponse.json({
+    ok: true,
+    snapshot_updated_at: now,
+    tabular_format: result.tabularFormat,
+    // Additive field (old clients that only check `ok`/`snapshot_updated_at`
+    // and then re-GET are unaffected) so a caller doesn't have to make a
+    // second round trip just to get bytes this request already parsed.
+    workbook_snapshot: result.snapshot,
+  })
 }
