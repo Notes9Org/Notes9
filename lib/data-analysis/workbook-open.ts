@@ -6,22 +6,28 @@
  * plumbing or a full Supabase client.
  *
  * Order mirrors ARCHITECTURE.md's Interfaces §1 pseudocode:
- *   1. `storagePath` (authenticated download, org-scoped RLS) is
- *      authoritative whenever present — it exists on every row written since
- *      the org-prefixed layout. A failed download here is classified
- *      `forbidden`, not `no-bytes`, and it is *not* a trigger for the legacy
- *      `file_url` fallback: Supabase Storage returns the same "not found"
- *      response for "RLS denied" and "genuinely missing", by design, so a
- *      denial can't be told apart from a missing object from the response
- *      alone — and treating that ambiguity as `no-bytes` is exactly the
- *      swallowed-authorization bug this module exists to avoid. A storage
+ *   1. `forbidden` short-circuits everything else, without attempting a
+ *      download — a cross-org project member's download will never succeed
+ *      (storage RLS keys on organization_id, the row's SELECT policy does
+ *      not), and Supabase Storage returns the same "not found" response for
+ *      "RLS denied" and "genuinely missing", by design, so there is no
+ *      ambiguous storage error to interpret afterward. The caller (the
+ *      route) computes `forbidden` from the storage path's own org prefix
+ *      compared against the caller's own `organization_id` — and treats
+ *      that comparison as indeterminate (not "not forbidden") whenever it
+ *      can't be confirmed, rather than defaulting to same-org.
+ *   2. `storagePath` (authenticated download, org-scoped RLS) is
+ *      authoritative when present and `forbidden` is false — it exists on
+ *      every row written since the org-prefixed layout. A failed download
+ *      here (same-org, but the bytes still aren't there) is `no-bytes`, and
+ *      it is *not* a trigger for the legacy `file_url` fallback: a storage
  *      path came from the row itself, so a failure to read it is never a
  *      license to go around RLS via a URL instead.
- *   2. `legacyFileUrl` is attempted only when there is no storage path at
+ *   3. `legacyFileUrl` is attempted only when there is no storage path at
  *      all (pre-migration rows), and keeps its own SSRF allowlist
  *      (`isSafeStorageUrl`, still owned by the route since it depends on
  *      `NEXT_PUBLIC_SUPABASE_URL`).
- *   3. Anything left with no bytes, bytes too big to parse safely, an
+ *   4. Anything left with no bytes, bytes too big to parse safely, an
  *      extension that was never a spreadsheet, or bytes that fail to parse
  *      despite looking tabular, gets one of the five reasons the route
  *      returns as `422 { error: "unreadable", reason }`.
@@ -73,6 +79,15 @@ export interface OpenWorkbookFromStorageInput {
   fileName: string | null
   storagePath: string | null
   legacyFileUrl: string | null
+  /**
+   * Cross-org project-member case (ARCHITECTURE.md "Authorization is not
+   * the problem, with one exception"), computed by the caller by comparing
+   * the storage path's own org prefix to the caller's own
+   * `organization_id`. Also true when that comparison is indeterminate
+   * (the caller couldn't confirm its own org) — see the route for why that
+   * must not silently default to `false`.
+   */
+  forbidden: boolean
   isSafeStorageUrl: (url: string) => boolean
   storage: WorkbookStorageDownloader
   fetchImpl?: (url: string) => Promise<Response>
@@ -82,8 +97,18 @@ export interface OpenWorkbookFromStorageInput {
 }
 
 export async function openWorkbookFromStorage(input: OpenWorkbookFromStorageInput): Promise<WorkbookOpenResult> {
-  const { fileName, storagePath, legacyFileUrl, isSafeStorageUrl, storage, fetchImpl = fetch, knownSizeBytes } = input
+  const {
+    fileName,
+    storagePath,
+    legacyFileUrl,
+    forbidden,
+    isSafeStorageUrl,
+    storage,
+    fetchImpl = fetch,
+    knownSizeBytes,
+  } = input
 
+  if (forbidden) return { ok: false, reason: "forbidden" }
   if (typeof knownSizeBytes === "number" && knownSizeBytes > MAX_WORKBOOK_BYTES) {
     return { ok: false, reason: "too-large" }
   }
@@ -93,17 +118,11 @@ export async function openWorkbookFromStorage(input: OpenWorkbookFromStorageInpu
 
   if (storagePath) {
     const { data } = await storage.download(storagePath)
-    if (!data) {
-      // The row declares its own storage path, so a failed download here is
-      // either an RLS denial (cross-org project member) or a genuinely
-      // missing object -- Supabase Storage returns the same response for
-      // both, by design, so both are classified `forbidden` rather than
-      // guessed apart. This is *not* a `no-bytes` case, and it does not fall
-      // through to the legacy `file_url` fetch below: that fallback exists
-      // only for rows with no storage path at all.
-      return { ok: false, reason: "forbidden" }
-    }
-    bytes = await data.arrayBuffer()
+    if (data) bytes = await data.arrayBuffer()
+    // A failed download with a storage path present is never a trigger for
+    // the legacy file_url fallback below -- that fallback exists only for
+    // rows with no storage path at all. Falls through to the `no-bytes`
+    // check with `bytes` still null.
   } else if (legacyFileUrl && isSafeStorageUrl(legacyFileUrl)) {
     const res = await fetchImpl(legacyFileUrl)
     if (res.ok) bytes = await res.arrayBuffer()

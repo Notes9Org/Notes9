@@ -43,9 +43,20 @@ function makeSupabaseMock(opts: {
   rowError?: { message: string } | null
   updateError?: { message: string } | null
   download?: () => Promise<{ data: Blob | null; error: unknown }>
+  /** The caller's own `profiles.organization_id`, as the route's org-prefix
+   *  pre-check would see it. Leave undefined (with no `profileError`) to
+   *  simulate a profile row that exists but has no `organization_id` yet
+   *  (mid-onboarding) -- the "indeterminate" case the route must treat as
+   *  forbidden, not same-org. */
+  organizationId?: string | null
+  profileError?: { message: string } | null
 }) {
   const updateSpy = vi.fn(async (_payload: Record<string, unknown>) => ({ error: opts.updateError ?? null }))
   const downloadSpy = vi.fn(opts.download ?? (async () => ({ data: null, error: { message: "not found" } })))
+  const profileSpy = vi.fn(async () => ({
+    data: opts.organizationId !== undefined ? { organization_id: opts.organizationId } : null,
+    error: opts.profileError ?? null,
+  }))
 
   const client = {
     from: (table: string) => {
@@ -65,13 +76,22 @@ function makeSupabaseMock(opts: {
           }),
         }
       }
+      if (table === "profiles") {
+        return {
+          select: (_cols: string) => ({
+            eq: (_c1: string, _v1: string) => ({
+              maybeSingle: profileSpy,
+            }),
+          }),
+        }
+      }
       throw new Error(`unexpected table ${table}`)
     },
     storage: {
       from: (_bucket: string) => ({ download: downloadSpy }),
     },
   }
-  return { client, updateSpy, downloadSpy }
+  return { client, updateSpy, downloadSpy, profileSpy }
 }
 
 function makeRequest(): Request {
@@ -161,6 +181,7 @@ describe("POST /api/experiments/{experimentId}/data-files/{fileId}/workbook", ()
         metadata: { storage_path: "org-1/experiment/exp-1/file-1/data.csv" },
       },
       download: async () => ({ data: new Blob([csvBytes()]), error: null }),
+      organizationId: "org-1",
     })
     mockClient = client
     const { POST } = await import("@/app/api/experiments/[experimentId]/data-files/[fileId]/workbook/route")
@@ -193,6 +214,7 @@ describe("POST /api/experiments/{experimentId}/data-files/{fileId}/workbook", ()
         metadata: { storage_path: "org-1/experiment/exp-1/file-1/data.csv" },
       },
       download: async () => ({ data: new Blob([csvBytes()]), error: null }),
+      organizationId: "org-1",
     })
     mockClient = client
     const { POST } = await import("@/app/api/experiments/[experimentId]/data-files/[fileId]/workbook/route")
@@ -218,6 +240,7 @@ describe("POST /api/experiments/{experimentId}/data-files/{fileId}/workbook", ()
         metadata: { storage_path: "org-1/experiment/exp-1/file-1/data.csv" },
       },
       download: async () => ({ data: new Blob([csvBytes()]), error: null }),
+      organizationId: "org-1",
     })
     mockClient = client
     const { POST } = await import("@/app/api/experiments/[experimentId]/data-files/[fileId]/workbook/route")
@@ -286,6 +309,7 @@ describe("POST /api/experiments/{experimentId}/data-files/{fileId}/workbook", ()
       },
       download: async () => ({ data: new Blob([csvBytes()]), error: null }),
       updateError: { message: "connection reset" },
+      organizationId: "org-1",
     })
     mockClient = client
     const { POST } = await import("@/app/api/experiments/[experimentId]/data-files/[fileId]/workbook/route")
@@ -301,12 +325,13 @@ describe("POST /api/experiments/{experimentId}/data-files/{fileId}/workbook", ()
     expect(updateSpy).toHaveBeenCalledTimes(1)
   })
 
-  it("AC-3 reason=forbidden: row visible cross-org, storage denies the download through the caller's own RLS-scoped session", async () => {
-    // No `profiles` org lookup: `forbidden` is derived from the actual
-    // storage denial (the real, RLS-gated `download()` call), not guessed
-    // from an org-prefix heuristic -- see route.ts. A storage path came from
-    // the row itself, so any failure to read it is classified `forbidden`,
-    // never the weaker `no-bytes` (ARCHITECTURE.md byte-resolution order).
+  it("AC-3 reason=forbidden: row visible cross-org (project-member), org-prefix mismatch short-circuits before any download", async () => {
+    // The row's own SELECT policy can let a project member from a different
+    // org see this row, but storage RLS keys on organization_id -- so the
+    // route compares the storage path's own org prefix to the caller's
+    // `profiles.organization_id` *before* attempting a download at all
+    // (ARCHITECTURE.md "Authorization is not the problem, with one
+    // exception"). No download is ever attempted for a confirmed mismatch.
     const { client, downloadSpy } = makeSupabaseMock({
       row: {
         id: "file-1",
@@ -315,7 +340,7 @@ describe("POST /api/experiments/{experimentId}/data-files/{fileId}/workbook", ()
         workbook_snapshot: null,
         metadata: { storage_path: "org-owner/experiment/exp-1/file-1/data.csv" },
       },
-      download: async () => ({ data: null, error: { message: "not found" } }),
+      organizationId: "org-1", // caller's own org, distinct from the path's "org-owner" prefix
     })
     mockClient = client
     const { POST } = await import("@/app/api/experiments/[experimentId]/data-files/[fileId]/workbook/route")
@@ -325,24 +350,30 @@ describe("POST /api/experiments/{experimentId}/data-files/{fileId}/workbook", ()
     }
     expect(res.status).toBe(422)
     expect(await res.json()).toEqual({ error: "unreadable", reason: "forbidden" })
-    expect(downloadSpy).toHaveBeenCalledTimes(1)
+    expect(downloadSpy).not.toHaveBeenCalled()
   })
 
-  it("AC-3 reason=forbidden: a storage-path download denial never falls back to a legacy file_url", async () => {
+  it("AC-3 reason=forbidden: an indeterminate caller org (profiles lookup errors, or no organization_id yet) is never treated as same-org", async () => {
+    // The actual defect this slice fixes (FINDINGS-01): a swallowed
+    // `profiles` query error, or a caller mid-onboarding with no
+    // organization_id, must not silently fall through as "same org" --
+    // that default previously let a real cross-org denial come back as the
+    // weaker `no-bytes`. Both cases are indeterminate, and indeterminate is
+    // forbidden, same as a confirmed mismatch: no download is attempted,
+    // and it never falls back to a legacy file_url either.
     const fetchSpy = vi.fn(async () => new Response(csvBytes(), { status: 200 }))
     vi.stubGlobal("fetch", fetchSpy)
     const { client, downloadSpy } = makeSupabaseMock({
       row: {
         id: "file-1",
         file_name: "data.csv",
-        // A legacy file_url is present too, to prove a storage-path denial
-        // doesn't fall through to it: the fallback fires only when there is
-        // no storage path at all.
+        // A legacy file_url is present too, to prove the indeterminate case
+        // doesn't fall through to it either.
         file_url: "https://project.supabase.co/storage/v1/object/sign/user/legacy.csv",
         workbook_snapshot: null,
-        metadata: { storage_path: "org-owner/experiment/exp-1/file-1/data.csv" },
+        metadata: { storage_path: "org-1/experiment/exp-1/file-1/data.csv" },
       },
-      download: async () => ({ data: null, error: { message: "not found" } }),
+      profileError: { message: "connection reset" },
     })
     mockClient = client
     const { POST } = await import("@/app/api/experiments/[experimentId]/data-files/[fileId]/workbook/route")
@@ -352,6 +383,40 @@ describe("POST /api/experiments/{experimentId}/data-files/{fileId}/workbook", ()
     }
     expect(res.status).toBe(422)
     expect(await res.json()).toEqual({ error: "unreadable", reason: "forbidden" })
+    expect(downloadSpy).not.toHaveBeenCalled()
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it("AC-3 reason=no-bytes (not forbidden): same-org, storage download fails on a genuinely missing/broken object, and never falls back to a legacy file_url", async () => {
+    // Distinguishes the two reasons a storage-path download can fail
+    // (coordinator-requested distinction, attempt 3): a confirmed same-org
+    // caller whose object is missing or truncated is an ordinary `no-bytes`
+    // -- ~35 of 72 experiment_data rows in production have a storage path
+    // with nothing parseable behind it yet, and that is not an
+    // authorization problem. It still never gets a second chance via the
+    // legacy URL fallback, which fires only when there is no storage path
+    // at all.
+    const fetchSpy = vi.fn(async () => new Response(csvBytes(), { status: 200 }))
+    vi.stubGlobal("fetch", fetchSpy)
+    const { client, downloadSpy } = makeSupabaseMock({
+      row: {
+        id: "file-1",
+        file_name: "data.csv",
+        file_url: "https://project.supabase.co/storage/v1/object/sign/user/legacy.csv",
+        workbook_snapshot: null,
+        metadata: { storage_path: "org-1/experiment/exp-1/file-1/data.csv" },
+      },
+      download: async () => ({ data: null, error: { message: "not found" } }),
+      organizationId: "org-1",
+    })
+    mockClient = client
+    const { POST } = await import("@/app/api/experiments/[experimentId]/data-files/[fileId]/workbook/route")
+    const res = (await POST(makeRequest(), paramsFor("exp-1", "file-1"))) as unknown as {
+      status: number
+      json: () => Promise<Record<string, unknown>>
+    }
+    expect(res.status).toBe(422)
+    expect(await res.json()).toEqual({ error: "unreadable", reason: "no-bytes" })
     expect(downloadSpy).toHaveBeenCalledTimes(1)
     expect(fetchSpy).not.toHaveBeenCalled()
   })
@@ -366,6 +431,7 @@ describe("POST /api/experiments/{experimentId}/data-files/{fileId}/workbook", ()
         workbook_snapshot: null,
         metadata: { storage_path: "org-1/experiment/exp-1/file-1/huge.xlsx" },
       },
+      organizationId: "org-1",
     })
     mockClient = client
     const { POST } = await import("@/app/api/experiments/[experimentId]/data-files/[fileId]/workbook/route")
@@ -389,6 +455,7 @@ describe("POST /api/experiments/{experimentId}/data-files/{fileId}/workbook", ()
         metadata: { storage_path: "org-1/experiment/exp-1/file-1/report.pdf" },
       },
       download: async () => ({ data: new Blob([pdfBytes]), error: null }),
+      organizationId: "org-1",
     })
     mockClient = client
     const { POST } = await import("@/app/api/experiments/[experimentId]/data-files/[fileId]/workbook/route")
@@ -410,6 +477,7 @@ describe("POST /api/experiments/{experimentId}/data-files/{fileId}/workbook", ()
         metadata: { storage_path: "org-1/experiment/exp-1/file-1/broken.xlsx" },
       },
       download: async () => ({ data: new Blob([truncatedZipBytes()]), error: null }),
+      organizationId: "org-1",
     })
     mockClient = client
     const { POST } = await import("@/app/api/experiments/[experimentId]/data-files/[fileId]/workbook/route")
