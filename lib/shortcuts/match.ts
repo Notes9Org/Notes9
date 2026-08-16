@@ -122,6 +122,6 @@ export function formatCombo(combo: string, isMac: boolean): string[] {
 }
 
 /** A leader sequence is two or more successive plain keys, e.g. `g` then `d`. */
-export function isSequence(keys: string[]): boolean {
+export function isSequence(keys: readonly string[]): boolean {
   return keys.length > 1;
 }

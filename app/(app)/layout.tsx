@@ -1,5 +1,8 @@
 import { Suspense } from 'react'
+import { cookies } from 'next/headers'
 import { requireUser } from "@/lib/auth/current-user"
+import { PlatformProvider } from "@/components/providers/platform-provider"
+import { PLATFORM_COOKIE, readPlatformCookie } from "@/lib/shortcuts/platform"
 import { ensureUserProfile } from "@/lib/ensure-user-profile"
 import { AppLayout } from "@/components/layout/app-layout"
 import { TermsAcceptanceModal } from "@/components/marketing/terms-acceptance-modal"
@@ -32,12 +35,18 @@ export default async function AppGroupLayout({
     }))
   }
 
+  // Shortcut keycaps render `⌘` or `Ctrl` in the HTML itself. The server can
+  // only know which from what the browser told us last time (ADR-020); absent
+  // cookie reads as non-Mac and the provider corrects it after mount.
+  const isMac = readPlatformCookie((await cookies()).get(PLATFORM_COOKIE)?.value)
+
   const currentTermsVersion = CURRENT_TERMS_VERSION
   const userTermsVersion = user.user_metadata?.terms_accepted_version
   const mustAcceptTerms = userTermsVersion !== currentTermsVersion
 
   return (
     <AuthProvider initialUser={user}>
+      <PlatformProvider initialIsMac={isMac}>
       <ReactQueryProvider>
         {mustAcceptTerms && <TermsAcceptanceModal />}
         <Suspense>
@@ -49,6 +58,7 @@ export default async function AppGroupLayout({
         </Suspense>
         <AppLayout>{children}</AppLayout>
       </ReactQueryProvider>
+      </PlatformProvider>
     </AuthProvider>
   )
 }

@@ -34,6 +34,7 @@ import { VoiceWaveform } from '@/components/text-editor/voice-waveform';
 import { toast } from 'sonner';
 
 import { ALLOWED_MIME_TYPES, ATTACHMENT_MAX_FILE_SIZE } from '@/lib/attachment-types';
+import { ShortcutHint } from '@/components/shortcuts/shortcut-hint'
 
 const ALLOWED_ATTACHMENT_TYPES: readonly string[] = ALLOWED_MIME_TYPES;
 
@@ -799,7 +800,7 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
                         </div>
                         <p className="mt-6 text-xs text-muted-foreground/60">
                           Press <kbd className="rounded-md border border-border/60 bg-muted/60 px-1.5 py-0.5 font-mono text-2xs">Esc</kbd> to close ·{' '}
-                          <kbd className="rounded-md border border-border/60 bg-muted/60 px-1.5 py-0.5 font-mono text-2xs">⇧ Enter</kbd> for new line
+                          <ShortcutHint id="composer.newline" /> for new line
                         </p>
                       </div>
                     ) : (

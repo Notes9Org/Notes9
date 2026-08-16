@@ -45,6 +45,9 @@ import { toast } from "sonner"
 import { Button } from "../ui/button"
 import { NewLabNoteDialog } from "@/app/(app)/lab-notes/new-lab-note-dialog"
 import { withFromDashboard } from "@/lib/from-dashboard"
+import { ShortcutHint } from '@/components/shortcuts/shortcut-hint'
+import { ariaKeyshortcutsFor } from '@/lib/shortcuts/keycaps'
+import { useIsMac } from '@/components/providers/platform-provider'
 
 /**
  * Nav items that carry the active scope forward (`?project=` always; plus
@@ -125,6 +128,7 @@ export function AppSidebar() {
   // hierarchy instead of the two parallel ones the audit flagged.
   const scope = useProjectScope()
   const { openPalette, openCheatSheet } = useShortcuts()
+  const isMac = useIsMac()
   const [searchQuery, setSearchQuery] = useState("")
   const [searchFocused, setSearchFocused] = useState(false)
   const [projects, setProjects] = useState<Project[]>([])
@@ -614,16 +618,20 @@ export function AppSidebar() {
                     }}
                   />
                   {searchQuery.length === 0 && (
-                    /* ⌘K opens the command palette, not this field — so the
-                       chip is the button that does exactly that. */
+                    /* The chip opens the command palette, not this field — so it
+                       is the button that does exactly that. The keys come from
+                       the registry: this used to be a hardcoded "⌘K" string,
+                       which showed the wrong key to every Windows user and would
+                       have survived any rebind (ADR-021). */
                     <button
                       type="button"
                       onClick={openPalette}
                       aria-label="Open command palette"
+                      aria-keyshortcuts={ariaKeyshortcutsFor('palette.open', isMac)}
                       title="Open command palette"
-                      className="absolute right-2 top-1/2 hidden h-5 -translate-y-1/2 select-none items-center rounded-[5px] border border-sidebar-border/80 bg-sidebar px-1.5 font-sans text-[10px] font-medium tracking-wide text-muted-foreground transition-colors hover:border-sidebar-border hover:text-foreground sm:flex"
+                      className="absolute right-2 top-1/2 hidden -translate-y-1/2 select-none items-center transition-opacity hover:opacity-100 sm:flex"
                     >
-                      ⌘K
+                      <ShortcutHint id="palette.open" />
                     </button>
                   )}
                 </motion.div>

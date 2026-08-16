@@ -27,8 +27,13 @@ export type ShortcutDef = {
   /**
    * Either a single combo (`['mod+k']`) or a leader sequence (`['g', 'd']`).
    * `mod` resolves to Cmd on macOS and Ctrl elsewhere.
+   *
+   * `readonly` so the registry can be declared `as const` — that is what keeps
+   * `ShortcutId` a literal union instead of widening to `string`, which is the
+   * whole mechanism stopping a renamed binding from leaving a stale hint on
+   * screen. Nothing mutates these arrays; they are only mapped and joined.
    */
-  keys: string[]
+  keys: readonly string[]
   /** Short imperative label, e.g. "Open command palette". */
   label: string
   /** Optional longer copy shown under the label in the cheat sheet. */
@@ -49,7 +54,7 @@ export type ShortcutDef = {
    * documentation-only entries whose trigger isn't a modifier combo
    * (e.g. `@`, `[[`, `\` then `B`).
    */
-  display?: string[]
+  display?: readonly string[]
 }
 
 export type ShortcutAction = () => void

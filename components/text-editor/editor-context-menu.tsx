@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/context-menu"
 import { TextB as Bold, TextItalic as Italic, TextUnderline as UnderlineIcon, Scissors, Copy, Clipboard as ClipboardPaste, LinkSimple as Link2, ImageSquare as ImagePlus, Table as TableIcon, Sigma, ArrowUp, ArrowDown, Trash as Trash2, TextAlignLeft as AlignLeft, TextAlignCenter as AlignCenter, TextAlignRight as AlignRight, TextAlignLeft as WrapText, Quotes as Quote, ChatDots as MessageSquarePlus } from "@phosphor-icons/react/ssr"
 import { moveTopLevelBlock } from "./editor-block-utils"
+import { useIsMac } from "@/components/providers/platform-provider"
+import { formatCombo } from "@/lib/shortcuts/match"
 
 export type EditorContextMenuActions = {
   insertLink?: () => void
@@ -23,9 +25,6 @@ export type EditorContextMenuActions = {
   citeFromRepository?: () => void
   addComment?: () => void
 }
-
-const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform)
-const mod = isMac ? "⌘" : "Ctrl"
 
 /**
  * Word-style right-click menu for the editor. Wraps the editor content and shows
@@ -41,6 +40,12 @@ export function EditorContextMenu({
   actions?: EditorContextMenuActions
   children: ReactNode
 }) {
+  // Platform comes from the provider, not from `navigator` at module scope:
+  // that const was evaluated at import time, so it read "Ctrl" on the server and
+  // "⌘" in the browser with no way to reconcile the two (ADR-020).
+  const isMac = useIsMac()
+  const mod = (key: string) => formatCombo(`mod+${key}`, isMac).join("")
+
   const [flags, setFlags] = useState({ inTable: false, onImage: false, hasSelection: false })
 
   const onContextMenu = useCallback(
@@ -94,15 +99,15 @@ export function EditorContextMenu({
       <ContextMenuContent className="w-56">
         <ContextMenuItem disabled={!flags.hasSelection} onSelect={cut}>
           <Scissors className="mr-2 h-4 w-4" /> Cut
-          <ContextMenuShortcut>{mod}+X</ContextMenuShortcut>
+          <ContextMenuShortcut>{mod("x")}</ContextMenuShortcut>
         </ContextMenuItem>
         <ContextMenuItem disabled={!flags.hasSelection} onSelect={copy}>
           <Copy className="mr-2 h-4 w-4" /> Copy
-          <ContextMenuShortcut>{mod}+C</ContextMenuShortcut>
+          <ContextMenuShortcut>{mod("c")}</ContextMenuShortcut>
         </ContextMenuItem>
         <ContextMenuItem onSelect={() => void paste()}>
           <ClipboardPaste className="mr-2 h-4 w-4" /> Paste
-          <ContextMenuShortcut>{mod}+V</ContextMenuShortcut>
+          <ContextMenuShortcut>{mod("v")}</ContextMenuShortcut>
         </ContextMenuItem>
 
         {flags.onImage ? (
@@ -133,15 +138,15 @@ export function EditorContextMenu({
             <ContextMenuSeparator />
             <ContextMenuItem onSelect={() => editor.chain().focus().toggleBold().run()}>
               <Bold className="mr-2 h-4 w-4" /> Bold
-              <ContextMenuShortcut>{mod}+B</ContextMenuShortcut>
+              <ContextMenuShortcut>{mod("b")}</ContextMenuShortcut>
             </ContextMenuItem>
             <ContextMenuItem onSelect={() => editor.chain().focus().toggleItalic().run()}>
               <Italic className="mr-2 h-4 w-4" /> Italic
-              <ContextMenuShortcut>{mod}+I</ContextMenuShortcut>
+              <ContextMenuShortcut>{mod("i")}</ContextMenuShortcut>
             </ContextMenuItem>
             <ContextMenuItem onSelect={() => editor.chain().focus().toggleUnderline().run()}>
               <UnderlineIcon className="mr-2 h-4 w-4" /> Underline
-              <ContextMenuShortcut>{mod}+U</ContextMenuShortcut>
+              <ContextMenuShortcut>{mod("u")}</ContextMenuShortcut>
             </ContextMenuItem>
             {actions?.insertLink ? (
               <ContextMenuItem onSelect={actions.insertLink}>
