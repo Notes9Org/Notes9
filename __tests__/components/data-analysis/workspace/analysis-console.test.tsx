@@ -21,7 +21,7 @@
  */
 
 import { describe, it, expect, vi } from "vitest"
-import { render, screen, within, fireEvent, cleanup } from "@testing-library/react"
+import { render, screen, fireEvent, cleanup } from "@testing-library/react"
 import { afterEach } from "vitest"
 
 import { AnalysisConsole, type AnalysisConsoleProps } from "@/components/data-analysis/workspace/analysis-console"
@@ -130,11 +130,18 @@ describe("AnalysisConsole — variant=rail: a pending plan can never be hidden (
     expect(onApprove).toHaveBeenCalledWith("a-latest")
   })
 
-  it("counts every proposed plan but only offers Approve for the most recent one", () => {
+  it("only the most recent proposed plan offers Approve", () => {
     // Both turns are (unrealistically) `proposed` at once — upstream is expected
     // to mark a superseded plan `stale` before this ever renders, but the
     // component must not depend on that alone: approving a stale plan against a
     // spec that has moved is the hazard this guards.
+    //
+    // Renamed from "counts every proposed plan but only offers Approve for the
+    // most recent one": the "counts" half named a pending-plan-count UI (e.g.
+    // "2 pending plans") that lived in ADR-019's collapsed `docked` bar. ADR-024
+    // retired that bar entirely and no count display replaced it anywhere in
+    // AnalysisConsole/AnalysisComposer — there is nothing left to assert. This
+    // test now claims only the behaviour it actually checks.
     render(
       <AnalysisConsole
         {...baseProps({
@@ -149,6 +156,28 @@ describe("AnalysisConsole — variant=rail: a pending plan can never be hidden (
     )
 
     expect(screen.getAllByRole("button", { name: "Approve" })).toHaveLength(1)
+  })
+
+  it("clicking Approve with two proposed turns resolves to the latest turn id", () => {
+    const onApprove = vi.fn()
+    render(
+      <AnalysisConsole
+        {...baseProps({
+          turns: [
+            userTurn({ id: "u1" }),
+            proposedTurn({ id: "a1" }),
+            userTurn({ id: "u2" }),
+            proposedTurn({ id: "a2" }),
+          ],
+          onApprove,
+        })}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }))
+
+    expect(onApprove).toHaveBeenCalledTimes(1)
+    expect(onApprove).toHaveBeenCalledWith("a2")
   })
 
   it("stale plan (spec moved on): names why Approve is withheld, never a silently disabled button", () => {
@@ -194,16 +223,57 @@ describe("AnalysisConsole — a reply arriving must not steal focus mid-edit", (
   })
 })
 
-describe("AnalysisConsole — keyboard only", () => {
-  it("Approve and Discard are real, focusable buttons — in tab order", () => {
-    render(<AnalysisConsole {...baseProps({ turns: [userTurn(), proposedTurn()] })} />)
+/**
+ * jsdom does not move focus on its own when a Tab keydown is fired — that is
+ * what @testing-library/user-event's `tab()` does internally, and it is not a
+ * dependency of this repo. So this computes the DOM's real tabbable order
+ * (same exclusion rules a browser applies: disabled, tabIndex -1, aria-hidden
+ * or an aria-hidden ancestor) and steps through it with a real Tab keydown
+ * fired on the currently-focused element before each `.focus()` call. A focus
+ * trap or an aria-hidden ancestor wrapping Approve/Discard would make this
+ * land on the wrong element (or throw), which a static `.tabIndex` read
+ * cannot detect.
+ */
+function getTabbables(container: HTMLElement): HTMLElement[] {
+  return Array.from(
+    container.querySelectorAll<HTMLElement>('button, input, textarea, select, a[href], [tabindex]'),
+  ).filter(
+    (el) =>
+      !el.hasAttribute("disabled") &&
+      el.tabIndex !== -1 &&
+      el.getAttribute("aria-hidden") !== "true" &&
+      !el.closest('[aria-hidden="true"]'),
+  )
+}
 
-    const transcript = screen.getByText("Here is what I would change:").closest("div")
-    expect(transcript).not.toBeNull()
-    const approve = within(transcript as HTMLElement).getByRole("button", { name: "Approve" })
-    const discard = within(transcript as HTMLElement).getByRole("button", { name: "Discard" })
-    expect(approve.tabIndex).not.toBe(-1)
-    expect(discard.tabIndex).not.toBe(-1)
+function pressTab(container: HTMLElement): HTMLElement {
+  const from = document.activeElement as HTMLElement | null
+  fireEvent.keyDown(from ?? document.body, { key: "Tab", code: "Tab" })
+  const tabbables = getTabbables(container)
+  const fromIndex = from ? tabbables.indexOf(from) : -1
+  const next = tabbables[fromIndex + 1]
+  if (!next) throw new Error("Tab ran off the end of the tabbable order")
+  next.focus()
+  return next
+}
+
+describe("AnalysisConsole — keyboard only", () => {
+  it("real Tab navigation reaches Approve then Discard, and focus actually lands on each", () => {
+    const { container } = render(<AnalysisConsole {...baseProps({ turns: [userTurn(), proposedTurn()] })} />)
+
+    const approve = screen.getByRole("button", { name: "Approve" })
+    const discard = screen.getByRole("button", { name: "Discard" })
+
+    // Nothing is focused yet, and the transcript renders before the composer,
+    // so the first two Tab presses must land on Approve then Discard — before
+    // ever reaching the message textarea below them.
+    const first = pressTab(container)
+    expect(first).toBe(approve)
+    expect(document.activeElement).toBe(approve)
+
+    const second = pressTab(container)
+    expect(second).toBe(discard)
+    expect(document.activeElement).toBe(discard)
   })
 })
 
