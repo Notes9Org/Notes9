@@ -1,46 +1,140 @@
 /**
  * Reading the live sheet the chart workspace draws from.
  *
- * This is the one place a Univer snapshot becomes rows, and its output is
- * load-bearing for data already in the database: the column names become the
- * spec's `xKey`/`yKeys`/`responseColumns` and filter columns, the row order
- * becomes the positional `rowId`s that carry a user's exclusions
- * (`tableFromChartRows`), and the whole thing becomes `dataset.versionHash`.
+ * The primary read is deliberately dumb and unchanged from the original
+ * implementation: first sheet, row 0 as the header, verbatim. Column names
+ * become `xKey`/`yKeys` in a saved spec and row order becomes `rowId`s a saved
+ * exclusion list references — changing either for a sheet that already reads
+ * fine would silently reshuffle every analysis saved against it. That reading
+ * is only replaced when it demonstrably failed: an empty first sheet (the data
+ * lives on another sheet), or a first row `detectHeader` itself concludes is a
+ * title sitting above the real header. Both are recovered by scanning sheets
+ * with `detectHeader`/`tableFromGrid` (workspace/bootstrap.ts), which already
+ * knows how to skip a preamble, fold a unit row and drop a trailing footnote.
  *
- * That is why the reading is deliberately dumb: row 0 is the header, verbatim.
- * `detectHeader` in ./bootstrap can do much better (a title above the table, a
- * merged two-row header, a unit row, a trailing footnote), but changing how an
- * existing sheet is read silently re-points every analysis already saved
- * against it: columns it names stop resolving, and an excluded `row-5` lands on
- * a different physical row. Detection can only be turned on here once the plan
- * it chose is stored with the analysis and shown to the user, so a reopen
- * reproduces the reading it was saved under. `HeaderPlan.rationale` and
- * `HeaderOverride` already exist for exactly that; nothing persists them yet.
+ * `parseError` makes the failure visible instead of returning a silently empty
+ * table: R1 in ARCHITECTURE.md is a placeholder ("Attach a data file to
+ * start.") shown while data is plainly on screen, because the gate had no way
+ * to tell "no dataset" from "dataset that failed to parse". This module is
+ * what lets the gate tell them apart.
  */
 
 import * as XLSX from "xlsx"
 import { snapshotToXlsxWorkbook, type UniverWorkbookSnapshot } from "@/lib/spreadsheet-workbook"
+import { detectHeader, tableFromGrid } from "@/lib/data-analysis/workspace/bootstrap"
 
-/** Rows keyed by column name, the shape the chart and stats panels hold. */
-export type SnapshotTable = { columns: string[]; rows: Record<string, number | string>[] }
+/** One row keyed by column name, the shape the chart and stats panels hold. */
+export type Row = Record<string, number | string>
+
+export type SnapshotTable = {
+  columns: string[]
+  rows: Row[]
+  /** Non-null explains why the table is empty. Never set just because there are 0 rows. */
+  parseError: string | null
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err)
+}
+
+/** A grid cell as XLSX's `header: 1` mode hands it back. */
+type Grid = (string | number | null | undefined)[][]
+
+function sheetToGrid(ws: XLSX.WorkSheet): Grid {
+  return XLSX.utils.sheet_to_json<(string | number)[]>(ws, { header: 1, blankrows: true })
+}
+
+/** Coerce a `tableFromGrid` cell the way the legacy reader always has: blank
+ *  becomes `""`, a numeric-looking string becomes a number. */
+function coerceCell(v: number | string | null): number | string {
+  if (v === null) return ""
+  if (typeof v === "number") return v
+  if (v === "" || !isFinite(Number(v))) return v
+  return Number(v)
+}
+
+function legacyReadFirstSheet(ws: XLSX.WorkSheet): { columns: string[]; rows: Row[] } {
+  const aoa = sheetToGrid(ws)
+  const header = (aoa[0] ?? []).map((c) => String(c ?? "").trim()).filter(Boolean)
+  const rows: Row[] = aoa.slice(1).map((r) => {
+    const o: Row = {}
+    header.forEach((h, i) => {
+      o[h] = coerceCell((r[i] ?? null) as number | string | null)
+    })
+    return o
+  })
+  return { columns: header, rows }
+}
+
+/** Read one sheet with the preamble/unit-row-aware detector, folded into the
+ *  flat row shape every other reader here expects. */
+function detectedReadSheet(grid: Grid): { columns: string[]; rows: Row[] } | null {
+  const plan = detectHeader(grid)
+  if (plan.columns.length === 0) return null
+  const table = tableFromGrid(grid)
+  if (table.columns.length === 0) return null
+  const rows: Row[] = table.rows.map((r) => {
+    const o: Row = {}
+    for (const c of table.columns) o[c] = coerceCell(r.values[c] ?? null)
+    return o
+  })
+  return { columns: table.columns, rows }
+}
 
 export function snapshotToTable(snapshot: UniverWorkbookSnapshot): SnapshotTable {
+  let wb: XLSX.WorkBook
   try {
-    const wb = snapshotToXlsxWorkbook(snapshot)
-    const ws = wb.Sheets[wb.SheetNames[0]]
-    if (!ws) return { columns: [], rows: [] }
-    const aoa = XLSX.utils.sheet_to_json<(string | number)[]>(ws, { header: 1, blankrows: false })
-    const header = (aoa[0] ?? []).map((c) => String(c ?? "").trim()).filter(Boolean)
-    const rows = aoa.slice(1).map((r) => {
-      const o: Record<string, number | string> = {}
-      header.forEach((h, i) => {
-        const v = r[i]
-        o[h] = typeof v === "number" ? v : v == null || v === "" ? "" : isFinite(Number(v)) ? Number(v) : String(v)
-      })
-      return o
-    })
-    return { columns: header, rows }
-  } catch {
-    return { columns: [], rows: [] }
+    wb = snapshotToXlsxWorkbook(snapshot)
+  } catch (err) {
+    return { columns: [], rows: [], parseError: `Could not read this file: ${errorMessage(err)}` }
+  }
+
+  const sheetNames = wb.SheetNames ?? []
+  if (sheetNames.length === 0) {
+    return { columns: [], rows: [], parseError: "This file has no sheets." }
+  }
+
+  const firstSheet = wb.Sheets[sheetNames[0]]
+  if (firstSheet) {
+    try {
+      const legacy = legacyReadFirstSheet(firstSheet)
+      if (legacy.columns.length > 0) {
+        const grid = sheetToGrid(firstSheet)
+        const plan = detectHeader(grid)
+        // Trust the verbatim row-0 reading unless detection itself concludes
+        // row 0 is a title sitting above the real header — that is the one
+        // case the legacy reader gets silently wrong rather than just empty.
+        if (plan.startRow === 0) {
+          return { ...legacy, parseError: null }
+        }
+      }
+    } catch {
+      // Fall through to the sheet scan below.
+    }
+  }
+
+  // The legacy reading of sheet 1 was empty or a title row. Look for the real
+  // table: on sheet 1 itself (past the preamble) first, then later sheets.
+  let lastRationale: string | null = null
+  for (const name of sheetNames) {
+    const ws = wb.Sheets[name]
+    if (!ws) continue
+    try {
+      const grid = sheetToGrid(ws)
+      const found = detectedReadSheet(grid)
+      if (found) return { ...found, parseError: null }
+      lastRationale = detectHeader(grid).rationale
+    } catch (err) {
+      lastRationale = errorMessage(err)
+    }
+  }
+
+  return {
+    columns: [],
+    rows: [],
+    parseError:
+      sheetNames.length > 1
+        ? `No header row was found on any of the ${sheetNames.length} sheets in this file.`
+        : `No header row was found on this sheet.${lastRationale ? ` ${lastRationale}` : ""}`,
   }
 }

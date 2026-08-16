@@ -15,6 +15,7 @@
 import { createClient } from "@/lib/supabase/client"
 import {
   ANALYSIS_TURN_VERSION,
+  type AnalysisIntent,
   type AnalysisTurn,
 } from "@/lib/data-analysis/ai/analysis-thread"
 
@@ -83,11 +84,16 @@ export async function createAnalysisThread(input: {
  *
  * `metadata` carries the plan, which is what lets a reopened conversation still
  * show what was proposed and whether it was applied.
+ *
+ * Returns whether the write actually landed. `appendAnalysisTurn` below throws
+ * this away to stay fire-and-forget for existing callers; `appendAnalysisTurnReporting`
+ * is the same write for a caller that needs to show a "not saved" marker
+ * instead of losing the failure silently.
  */
-export async function appendAnalysisTurn(
+async function appendAnalysisTurnInner(
   sessionId: string,
   turn: AnalysisTurn,
-): Promise<void> {
+): Promise<boolean> {
   try {
     const supabase = createClient()
     const id = await messageId(sessionId, turn)
@@ -102,20 +108,49 @@ export async function appendAnalysisTurn(
             ...(turn.historyDropped ? { historyDropped: turn.historyDropped } : {}),
           }
 
-    await supabase
+    const { error: msgError } = await supabase
       .from("chat_messages")
       .upsert(
         { id, session_id: sessionId, role: turn.role, content: turn.content, metadata },
         { onConflict: "id", ignoreDuplicates: true },
       )
-    await supabase
+    if (msgError) return false
+    const { error: sessionError } = await supabase
       .from("chat_sessions")
       .update({ updated_at: new Date().toISOString() })
       .eq("id", sessionId)
+    // The turn itself landed even if the session's updated_at touch failed —
+    // that failure is not provenance loss, so it does not flip the result.
+    void sessionError
+    return true
   } catch {
-    // Swallowed on purpose: see the module header. A failed transcript write
-    // must not cost the researcher the answer they already have on screen.
+    return false
   }
+}
+
+/**
+ * Fire-and-forget append. See the module header: a failed transcript write
+ * must not cost the researcher the answer they already have on screen, so
+ * this never rejects and never reports back.
+ */
+export async function appendAnalysisTurn(
+  sessionId: string,
+  turn: AnalysisTurn,
+): Promise<void> {
+  await appendAnalysisTurnInner(sessionId, turn)
+}
+
+/**
+ * Same write as `appendAnalysisTurn`, but tells its caller whether it landed.
+ * The visible turn is never lost either way — this exists so a caller that
+ * wants to surface "not saved" on the turn can, without changing the
+ * fire-and-forget default every existing caller relies on.
+ */
+export async function appendAnalysisTurnReporting(
+  sessionId: string,
+  turn: AnalysisTurn,
+): Promise<boolean> {
+  return appendAnalysisTurnInner(sessionId, turn)
 }
 
 /**
@@ -194,5 +229,67 @@ export async function loadAnalysisThread(sessionId: string): Promise<AnalysisTur
     return turns
   } catch {
     return []
+  }
+}
+
+/**
+ * Intent (ADR-023), stored on the thread itself — `chat_sessions.metadata`,
+ * beside `analysisId`/`sourceDataFileId`, which already ride there (ADR-013:
+ * no new table). One current intent per thread, keyed to the thread rather
+ * than to a turn, since "what the researcher wants" is a property of the
+ * conversation, not of the message that most recently stated it.
+ */
+export async function writeAnalysisIntent(
+  sessionId: string,
+  intent: AnalysisIntent,
+): Promise<boolean> {
+  try {
+    const supabase = createClient()
+    const { data, error: readError } = await supabase
+      .from("chat_sessions")
+      .select("metadata")
+      .eq("id", sessionId)
+      .single()
+    if (readError) return false
+    const metadata = { ...((data?.metadata as Record<string, unknown> | null) ?? {}), intent }
+    const { error } = await supabase
+      .from("chat_sessions")
+      .update({ metadata })
+      .eq("id", sessionId)
+    return !error
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Read the thread's current intent back. `undefined` means none was ever
+ * recorded — including every thread written before intent existed, since
+ * `metadata.intent` simply is not a key on those rows. Never coerced to an
+ * empty string: an absent intent and a stated-but-empty one must not read
+ * the same to a caller deciding whether to show "not recorded".
+ */
+export async function readAnalysisIntent(sessionId: string): Promise<AnalysisIntent | undefined> {
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from("chat_sessions")
+      .select("metadata")
+      .eq("id", sessionId)
+      .single()
+    if (error || !data) return undefined
+    const meta = (data.metadata as Record<string, unknown> | null) ?? {}
+    const raw = meta.intent
+    if (!raw || typeof raw !== "object") return undefined
+    const candidate = raw as Record<string, unknown>
+    if (typeof candidate.text !== "string" || typeof candidate.statedAt !== "string") return undefined
+    return {
+      text: candidate.text,
+      statedAt: candidate.statedAt,
+      appliedToDatasetId:
+        typeof candidate.appliedToDatasetId === "string" ? candidate.appliedToDatasetId : null,
+    }
+  } catch {
+    return undefined
   }
 }
