@@ -30,9 +30,11 @@ import {
 // module-level ref the first time any `motion` component mounts, and jsdom
 // does not implement `matchMedia` at all. Stubbing it here, before the first
 // render in this file, makes every test in this file exercise the
-// reduced-motion path — which is exactly the "no height animation, just a
-// state change" edge case, proven implicitly by every other assertion still
-// holding under it, not just the one test named for it.
+// reduced-motion path. That memoisation also means this file cannot cheaply
+// contrast against `prefers-reduced-motion: false` in the same process — the
+// "reduced motion" describe block below is the one that asserts the actual
+// claim ("no height animation, just a state change") directly, rather than
+// leaving it implicit.
 beforeAll(() => {
   Object.defineProperty(window, "matchMedia", {
     writable: true,
@@ -265,7 +267,7 @@ describe("AnalysisConsole — a pending plan must never be hidden (the most impo
 
 describe("AnalysisConsole — a reply arriving must not steal focus mid-edit", () => {
   it("expands but leaves focus exactly where it was", () => {
-    render(
+    const { rerender } = render(
       <div>
         <input aria-label="a sheet cell" />
         <AnalysisConsole {...baseProps({ turns: [userTurn()] })} />
@@ -275,10 +277,21 @@ describe("AnalysisConsole — a reply arriving must not steal focus mid-edit", (
     const sheetCell = screen.getByLabelText("a sheet cell")
     sheetCell.focus()
     expect(document.activeElement).toBe(sheetCell)
+    expect(screen.queryByText("Here is what I would change:")).not.toBeInTheDocument()
 
-    // Simulate a reply landing while the researcher is mid-edit elsewhere.
-    fireEvent(sheetCell, new Event("focusin", { bubbles: true }))
+    // A reply actually lands — a new turn identity, the same mechanism that
+    // drives "expands when a reply lands" above — while focus stays on the
+    // sheet the whole time.
+    rerender(
+      <div>
+        <input aria-label="a sheet cell" />
+        <AnalysisConsole {...baseProps({ turns: [userTurn(), proposedTurn()] })} />
+      </div>,
+    )
 
+    // The console did expand...
+    expect(screen.getByText("Here is what I would change:")).toBeInTheDocument()
+    // ...but focus never moved off the sheet cell.
     expect(document.activeElement).toBe(sheetCell)
   })
 })
@@ -296,13 +309,30 @@ describe("AnalysisConsole — very long transcript scrolls internally, never gro
 })
 
 describe("AnalysisConsole — reduced motion (this whole file runs under it, see beforeAll above)", () => {
-  it("still transitions collapsed <-> expanded as a plain state change, no animation required for the DOM to update", async () => {
+  it("flips its own expanded/collapsed state — aria-expanded and content reachability — the instant it is toggled, never waiting on an animation frame", async () => {
     render(<AnalysisConsole {...baseProps({ turns: [userTurn(), proposedTurn()] })} />)
 
     fireEvent.click(screen.getByRole("button", { name: "Expand the conversation" }))
+    // No `waitFor` here: AnalysisConsole's own state — aria-expanded and the
+    // transcript becoming reachable — is not gated on any animation
+    // completing. That is "just a state change".
+    const collapseToggle = screen.getByRole("button", { name: "Collapse the conversation" })
+    expect(collapseToggle).toHaveAttribute("aria-expanded", "true")
     expect(screen.getByText("log the y axis")).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole("button", { name: "Collapse the conversation" }))
+    fireEvent.click(collapseToggle)
+    // The toggle itself flips immediately too, in the same synchronous tick —
+    // collapsing is a state change, not something that waits on an exit
+    // animation to finish.
+    expect(screen.getByRole("button", { name: "Expand the conversation" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    )
+    // The one thing still awaited is the DOM removal of the now-exiting
+    // transcript, which is gated on `AnimatePresence`'s exit animation —
+    // `motion.tsx`'s contract (not owned by this slice, not re-tested here),
+    // not this component's. `AnalysisConsole`'s own state already changed
+    // above, before this resolves.
     await waitFor(() => expect(screen.queryByText("log the y axis")).not.toBeInTheDocument())
   })
 })
