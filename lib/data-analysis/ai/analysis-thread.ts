@@ -63,6 +63,32 @@ export interface AnalysisAssistantTurn {
 export type AnalysisTurn = AnalysisUserTurn | AnalysisAssistantTurn
 
 /**
+ * What the researcher wants, stated in their own words. ADR-023: this may be
+ * captured before a dataset exists — `appliedToDatasetId` is null until the
+ * intent has actually been acted on against a chosen dataset, and stays null
+ * for as long as it was only ever stated pre-data.
+ */
+export interface AnalysisIntent {
+  text: string
+  /** ISO timestamp. */
+  statedAt: string
+  appliedToDatasetId: string | null
+}
+
+/**
+ * Who a reply belongs to (ADR-026, hardens ADR-012/013): captured at the
+ * moment a request is issued and carried through to resolution, so delivery
+ * routes by what asked, never by what happens to be mounted when the answer
+ * comes back. This slice owns the type only — slice 05 owns the wiring that
+ * checks it before delivering a reply.
+ */
+export interface RequestIdentity {
+  analysisId: string
+  threadId: string | null
+  requestId: string
+}
+
+/**
  * Whether this turn came out of a version of the format we still understand.
  * The renderer degrades an unknown turn to plain text rather than hiding it —
  * a transcript with a hole in it is worse than one with an opaque entry.
