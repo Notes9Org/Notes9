@@ -18,6 +18,11 @@ export function useHasKeyboard(): boolean {
   const [hasKeyboard, setHasKeyboard] = useState(true)
 
   useEffect(() => {
+    // Not every environment implements matchMedia (jsdom does not). Throwing
+    // from this effect would take down whatever rendered the hint, over a
+    // decoration — so bail and keep the "show it" default.
+    if (typeof window.matchMedia !== 'function') return
+
     const query = window.matchMedia('(pointer: coarse)')
     const apply = () => setHasKeyboard(!query.matches)
     apply()

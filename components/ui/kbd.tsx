@@ -38,13 +38,21 @@ function KbdRow({
   tokens,
   className,
   joiner,
-}: {
-  tokens: string[]
-  className?: string
+  ...props
+}: Omit<React.ComponentProps<'span'>, 'children'> & {
+  tokens: readonly string[]
   joiner?: string
 }) {
+  // Spread the rest: callers need to reach the wrapper with `aria-hidden` and
+  // friends. Without this the props were accepted by the type checker and then
+  // silently dropped at runtime — which is exactly how a keycap run that was
+  // supposed to be hidden from screen readers ended up announcing "place of
+  // interest sign" instead.
   return (
-    <span className={cn('inline-flex flex-wrap items-center gap-1', className)}>
+    <span
+      {...props}
+      className={cn('inline-flex flex-wrap items-center gap-1', className)}
+    >
       {tokens.map((token, i) => (
         <Fragment key={`${token}-${i}`}>
           {joiner && i > 0 && (
