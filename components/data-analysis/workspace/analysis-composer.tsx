@@ -85,6 +85,18 @@ export function AnalysisTranscript({
   onScroll,
 }: AnalysisTranscriptProps) {
   if (turns.length === 0) return null
+
+  // Only the most recent proposed plan is ever approvable, even if more than
+  // one turn is (incorrectly, or transiently) still `proposed` — approving a
+  // superseded plan against a conversation that has moved on is the hazard
+  // this guards against. Upstream is expected to mark superseded plans
+  // `stale`, but this must not depend on that alone.
+  const latestProposedId =
+    turns
+      .slice()
+      .reverse()
+      .find((t): t is AnalysisAssistantTurn => t.role === "assistant" && t.plan?.status === "proposed")?.id ?? null
+
   return (
     <div
       ref={scrollRef}
@@ -102,6 +114,7 @@ export function AnalysisTranscript({
           currentSpecHash={currentSpecHash}
           onApprove={onApprove}
           onDiscard={onDiscard}
+          latestProposedId={latestProposedId}
         />
       ))}
     </div>
@@ -116,16 +129,18 @@ function PlanCard({
   currentSpecHash,
   onApprove,
   onDiscard,
+  latestProposedId,
 }: {
   turn: AnalysisAssistantTurn
   currentSpecHash: string
   onApprove: (turnId: string) => void
   onDiscard: (turnId: string) => void
+  latestProposedId: string | null
 }) {
   const plan = turn.plan
   if (!plan) return null
 
-  const approvable = canApprovePlan(turn, currentSpecHash)
+  const approvable = canApprovePlan(turn, currentSpecHash) && turn.id === latestProposedId
   const blocked = approvalBlockedReason(turn, currentSpecHash)
   const settled = plan.status === "approved" || plan.status === "discarded"
 
@@ -199,11 +214,13 @@ function Turn({
   currentSpecHash,
   onApprove,
   onDiscard,
+  latestProposedId,
 }: {
   turn: AnalysisTurn
   currentSpecHash: string
   onApprove: (turnId: string) => void
   onDiscard: (turnId: string) => void
+  latestProposedId: string | null
 }) {
   if (turn.role === "user") {
     return (
@@ -237,6 +254,7 @@ function Turn({
         currentSpecHash={currentSpecHash}
         onApprove={onApprove}
         onDiscard={onDiscard}
+        latestProposedId={latestProposedId}
       />
       {turn.historyDropped ? (
         <p className="mt-1 text-[11.5px] text-muted-foreground">

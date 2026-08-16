@@ -98,6 +98,10 @@ describe("AnalysisConsole — variant=empty", () => {
       onApprove: vi.fn(),
       onDiscard: vi.fn(),
       datasetName: null,
+      // A real element, not undefined — otherwise the DOM-equality assertion
+      // below is vacuous: two renders that both omit attachSlot are equal
+      // whether or not the passthrough actually works.
+      attachSlot: <button type="button">Attach file</button>,
     }
 
     const { container: consoleContainer } = render(<AnalysisConsole {...props} variant="empty" />)
@@ -105,6 +109,7 @@ describe("AnalysisConsole — variant=empty", () => {
 
     expect(consoleContainer.innerHTML).toBe(composerContainer.innerHTML)
     expect(screen.getAllByText("Start an analysis")).toHaveLength(2)
+    expect(screen.getAllByRole("button", { name: "Attach file" })).toHaveLength(2)
   })
 })
 
@@ -123,6 +128,27 @@ describe("AnalysisConsole — variant=rail: a pending plan can never be hidden (
 
     fireEvent.click(screen.getByRole("button", { name: "Approve" }))
     expect(onApprove).toHaveBeenCalledWith("a-latest")
+  })
+
+  it("counts every proposed plan but only offers Approve for the most recent one", () => {
+    // Both turns are (unrealistically) `proposed` at once — upstream is expected
+    // to mark a superseded plan `stale` before this ever renders, but the
+    // component must not depend on that alone: approving a stale plan against a
+    // spec that has moved is the hazard this guards.
+    render(
+      <AnalysisConsole
+        {...baseProps({
+          turns: [
+            userTurn({ id: "u1" }),
+            proposedTurn({ id: "a1" }),
+            userTurn({ id: "u2" }),
+            proposedTurn({ id: "a2" }),
+          ],
+        })}
+      />,
+    )
+
+    expect(screen.getAllByRole("button", { name: "Approve" })).toHaveLength(1)
   })
 
   it("stale plan (spec moved on): names why Approve is withheld, never a silently disabled button", () => {
@@ -178,5 +204,45 @@ describe("AnalysisConsole — keyboard only", () => {
     const discard = within(transcript as HTMLElement).getByRole("button", { name: "Discard" })
     expect(approve.tabIndex).not.toBe(-1)
     expect(discard.tabIndex).not.toBe(-1)
+  })
+})
+
+describe("AnalysisConsole — variant=rail: a long transcript scrolls in its own box, never the page", () => {
+  // ADR-024 removes the old `max-h-[40vh]` bounded overlay entirely — the rail
+  // that docks this component now owns the outer height (that dock is slice 05,
+  // components/data-analysis/data-analysis-workspace.tsx, not yet built, so it
+  // cannot be asserted from here). What this component still owns, and what
+  // this test pins: the transcript's own scroll container never grows past
+  // its box (`overflow-y-auto`), and the flex chain around it can shrink
+  // (`min-h-0`) instead of forcing the box to grow with content — the two
+  // properties that make "scrolls internally" possible once a real height is
+  // imposed from outside.
+  it("the transcript scroll container is internally scrollable and can shrink to fit, regardless of turn count", () => {
+    const manyTurns = Array.from({ length: 40 }, (_, i) => userTurn({ id: `u${i}`, content: `message ${i}` }))
+    const { container } = render(<AnalysisConsole {...baseProps({ turns: manyTurns })} />)
+
+    const scroller = container.querySelector('[data-testid="analysis-transcript-scroll"]')
+    expect(scroller).not.toBeNull()
+    expect(scroller?.className).toContain("overflow-y-auto")
+    // The old bounded overlay is gone by design — never reintroduce it here.
+    expect(scroller?.className).not.toContain("max-h-[40vh]")
+
+    // The container the scroller lives in must be a shrinkable flex item, not
+    // one that grows to fit its content and pushes the page.
+    const scrollBox = scroller?.parentElement
+    expect(scrollBox?.className).toContain("min-h-0")
+    expect(scrollBox?.className).toContain("flex-1")
+  })
+})
+
+describe("AnalysisConsole — variant=rail: busy", () => {
+  it("shows a thinking state and withholds Send while a request is in flight, even with text typed", () => {
+    render(<AnalysisConsole {...baseProps({ busy: true })} />)
+
+    const textarea = screen.getByRole("textbox", { name: "Ask about this data" })
+    fireEvent.change(textarea, { target: { value: "log the y axis" } })
+
+    const send = screen.getByRole("button", { name: "Thinking…" })
+    expect(send).toBeDisabled()
   })
 })
