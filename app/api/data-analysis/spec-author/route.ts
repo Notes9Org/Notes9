@@ -14,9 +14,11 @@ import {
   screenRequest,
   SPEC_AUTHOR_PROMPT_MAX_CHARS,
   SPEC_AUTHOR_SYSTEM_PROMPT,
+  trimHistory,
   validateProposal,
   type ColumnProfile,
   type DataProfile,
+  type SpecAuthorTurn,
 } from "@/lib/data-analysis/ai/spec-author"
 
 /**
@@ -63,6 +65,9 @@ interface SpecAuthorRequest {
   prompt?: unknown
   spec?: unknown
   table?: unknown
+  /** Optional by contract — the client deployed before this existed sends neither. */
+  history?: unknown
+  recentEdits?: unknown
 }
 
 /** What Catalyst sends back. The proposal may be at the top level or wrapped. */
@@ -208,6 +213,42 @@ function describeCatalystRejection(err: CatalystHttpError): string {
 
 /* ── Route ─────────────────────────────────────────────────────────────────*/
 
+/**
+ * Keep the turns that are actually turns and drop the rest. Deliberately lenient:
+ * this is a transcript the client replays, not a trust boundary that decides
+ * anything. The trust boundary is `spec` and `table`, which are parsed strictly
+ * below. A single malformed row must not 400 the researcher's question.
+ *
+ * Content is clamped per turn as well as in aggregate, so one enormous turn
+ * cannot eat the whole budget and starve every other turn out of the window.
+ */
+function sanitiseHistory(raw: unknown): SpecAuthorTurn[] {
+  if (!Array.isArray(raw)) return []
+  const out: SpecAuthorTurn[] = []
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue
+    const { role, content } = item as { role?: unknown; content?: unknown }
+    if (role !== "user" && role !== "assistant") continue
+    if (typeof content !== "string" || content.trim().length === 0) continue
+    out.push({ role, content: content.slice(0, SPEC_AUTHOR_PROMPT_MAX_CHARS) })
+  }
+  return out
+}
+
+/** Same leniency, and the same reason. Bounded to the last 10 the bundle keeps. */
+function sanitiseRecentEdits(raw: unknown): { description: string; origin: "user" | "ai" }[] {
+  if (!Array.isArray(raw)) return []
+  const out: { description: string; origin: "user" | "ai" }[] = []
+  for (const item of raw.slice(-10)) {
+    if (!item || typeof item !== "object") continue
+    const { description, origin } = item as { description?: unknown; origin?: unknown }
+    if (typeof description !== "string" || description.trim().length === 0) continue
+    if (origin !== "user" && origin !== "ai") continue
+    out.push({ description: description.slice(0, 400), origin })
+  }
+  return out
+}
+
 export async function POST(req: NextRequest) {
   try {
     const user = await getCurrentUser()
@@ -267,6 +308,15 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // (b2) The conversation, if the caller sent one. Optional by contract: a
+    // client that omits it — including the one deployed before this field
+    // existed — behaves exactly as it did. Unrecognised turns are dropped rather
+    // than 400'd, because a malformed transcript must never cost the researcher
+    // the question they just asked.
+    const history = sanitiseHistory(body.history)
+    const trimmed = trimHistory(history)
+    const recentEdits = sanitiseRecentEdits(body.recentEdits)
+
     const parsed = parseSpec(body.spec)
     if (!parsed.ok) {
       return NextResponse.json(
@@ -300,17 +350,18 @@ export async function POST(req: NextRequest) {
     const legalTests = offerableTests(spec, table)
 
     // (d) Only the bundle crosses the seam. `buildContextBundle` is profile-only
-    // by construction; raw rows never leave this process.
+    // by construction; raw rows never leave this process — that holds for the
+    // conversation too, which is prose the client already had.
     //
-    // `project`, `recentEdits`, and `result` are left unpopulated: this route
-    // has no producer for a notes9 project record, an edit-history feed, or a
-    // live engine result at this call site (confirmed against
-    // spec-author-client.ts, whose wire contract is just { prompt, spec, table
-    // }), inventing one here would be a new data source, not a bundle fix.
+    // `history` and `recentEdits` now have a producer (the analysis composer);
+    // `project` and `result` still do not, and are left unpopulated rather than
+    // invented here — that would be a new data source, not a bundle fix.
     const bundle = buildContextBundle({
       prompt,
       spec,
       profile: toDataProfile(spec, table),
+      history: trimmed.turns,
+      recentEdits,
       offerableTests: legalTests,
     })
 
@@ -481,7 +532,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json(patch)
+    // Say when the conversation was shortened. A silent trim is how an assistant
+    // ends up confidently answering a question whose context it never saw, and
+    // the researcher is the only one who can tell whether the dropped turns
+    // mattered. Omitted entirely when nothing was dropped, so the common reply
+    // is byte-identical to what this route returned before history existed.
+    return NextResponse.json(
+      trimmed.dropped > 0 ? { ...patch, historyDropped: trimmed.dropped } : patch,
+    )
   } catch (error) {
     console.error("[spec-author] unexpected failure:", error)
     return NextResponse.json(

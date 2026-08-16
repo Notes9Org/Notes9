@@ -6,6 +6,9 @@ import {
   sanitiseRationale,
   screenRequest,
   validateProposal,
+  trimHistory,
+  SPEC_AUTHOR_HISTORY_MAX_TURNS,
+  SPEC_AUTHOR_HISTORY_MAX_CHARS,
 } from "./spec-author"
 
 function spec(): AnalysisSpec {
@@ -340,5 +343,40 @@ describe("context bundle (§11 decision 10: what the model sees)", () => {
       profile: { fileName: "plate.xlsx", rowCount: 24, columns: [] },
     })
     expect(bundle.offerableTests).toEqual([])
+  })
+})
+
+/* ── History trimming (ADR-014 / the failure-mode table) ──────────────────── */
+
+describe("trimHistory", () => {
+  const turn = (content: string) => ({ role: "user" as const, content })
+
+  it("keeps a short conversation whole", () => {
+    const turns = [turn("a"), turn("b")]
+    expect(trimHistory(turns)).toEqual({ turns, dropped: 0 })
+  })
+
+  it("keeps the most recent turns and reports how many it dropped", () => {
+    const turns = Array.from({ length: SPEC_AUTHOR_HISTORY_MAX_TURNS + 3 }, (_, i) =>
+      turn(`turn ${i}`),
+    )
+    const { turns: kept, dropped } = trimHistory(turns)
+    expect(kept).toHaveLength(SPEC_AUTHOR_HISTORY_MAX_TURNS)
+    expect(dropped).toBe(3)
+    // Oldest out, newest kept — a conversation trimmed from the wrong end is
+    // one that forgets what was just said.
+    expect(kept[kept.length - 1].content).toBe(`turn ${turns.length - 1}`)
+  })
+
+  it("spends the character budget on the newest turns", () => {
+    const big = "x".repeat(SPEC_AUTHOR_HISTORY_MAX_CHARS - 10)
+    const { turns: kept, dropped } = trimHistory([turn(big), turn("the latest question")])
+    expect(kept).toEqual([turn("the latest question")])
+    expect(dropped).toBe(1)
+  })
+
+  it("drops a single turn that cannot fit at all rather than sending it", () => {
+    const huge = "x".repeat(SPEC_AUTHOR_HISTORY_MAX_CHARS + 1)
+    expect(trimHistory([turn(huge)])).toEqual({ turns: [], dropped: 1 })
   })
 })

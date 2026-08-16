@@ -1,6 +1,7 @@
 import type { AnalysisSpec } from "@/lib/data-analysis/spec/analysis-spec"
 import type { SpecMutation } from "@/lib/data-analysis/spec/mutations"
 import type { Table } from "@/lib/data-analysis/engine/resolver"
+import type { SpecAuthorTurn } from "@/lib/data-analysis/ai/spec-author"
 
 /**
  * The client half of the AI seam: one POST to `/api/data-analysis/spec-author`.
@@ -32,6 +33,13 @@ export type SpecPatchOutcome =
       clarificationNeeded: string | null
       /** Mutations the route dropped, with the reason; worth showing, not hiding. */
       rejected: { mutation: unknown; reason: string }[]
+      /**
+       * How many older turns the route left out of this reply. Absent when the
+       * whole conversation fitted, which is the ordinary case. Shown to the
+       * researcher, because only they can judge whether the dropped turns
+       * mattered.
+       */
+      historyDropped?: number
     }
   /** A guardrail screened the request. `alternative` is the honest thing to do instead. */
   | { outcome: "refused"; reason: string; alternative: string }
@@ -49,6 +57,15 @@ export interface SpecPatchRequest {
   prompt: string
   spec: AnalysisSpec
   table: Table
+  /**
+   * Prior turns of this analysis's conversation, oldest first. Optional on the
+   * wire: a caller that omits it gets exactly the single-turn behaviour this
+   * route shipped with. Trimming is the route's job, not the caller's, so a
+   * stale client cannot send more than the server will accept.
+   */
+  history?: SpecAuthorTurn[]
+  /** What the researcher changed by hand since the last turn. */
+  recentEdits?: { description: string; origin: "user" | "ai" }[]
   signal?: AbortSignal
 }
 
@@ -63,14 +80,22 @@ function isAbort(err: unknown, signal?: AbortSignal): boolean {
 const asString = (v: unknown): string => (typeof v === "string" ? v : "")
 
 export async function requestSpecPatch(input: SpecPatchRequest): Promise<SpecPatchOutcome> {
-  const { prompt, spec, table, signal } = input
+  const { prompt, spec, table, history, recentEdits, signal } = input
 
   let res: Response
   try {
     res = await fetch(ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, spec, table }),
+      // Omitted rather than sent empty: the route treats both as absent, and an
+      // absent key keeps the body byte-identical to what the previous client sent.
+      body: JSON.stringify({
+        prompt,
+        spec,
+        table,
+        ...(history?.length ? { history } : {}),
+        ...(recentEdits?.length ? { recentEdits } : {}),
+      }),
       signal,
     })
   } catch (err) {
@@ -134,5 +159,8 @@ export async function requestSpecPatch(input: SpecPatchRequest): Promise<SpecPat
     rejected: Array.isArray(reply.rejected)
       ? (reply.rejected as { mutation: unknown; reason: string }[])
       : [],
+    ...(typeof reply.historyDropped === "number" && reply.historyDropped > 0
+      ? { historyDropped: reply.historyDropped }
+      : {}),
   }
 }
