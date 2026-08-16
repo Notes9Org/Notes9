@@ -395,17 +395,34 @@ export function Dock({
 
   // Two or more panels get a tab strip; zero or one behaves like the classic API.
   const showTabs = !!panels && panels.length > 1
+  const isControlled = onActivePanelChange !== undefined
+  // Uncontrolled fallback: when the caller doesn't pass onActivePanelChange,
+  // the tab strip must still switch panels on its own rather than silently
+  // ignoring clicks (see the dev warning below for why this trap exists).
+  const [uncontrolledActivePanelId, setUncontrolledActivePanelId] = useState<
+    string | undefined
+  >(undefined)
+  const effectiveActivePanelId = isControlled
+    ? activePanelId
+    : (uncontrolledActivePanelId ?? activePanelId)
   const activePanel =
     panels && panels.length > 0
-      ? (panels.find((p) => p.id === activePanelId) ?? panels[0])
+      ? (panels.find((p) => p.id === effectiveActivePanelId) ?? panels[0])
       : null
-  const handleActivePanelChange = (id: string) => onActivePanelChange?.(id)
+  const handleActivePanelChange = (id: string) => {
+    if (isControlled) {
+      onActivePanelChange?.(id)
+    } else {
+      setUncontrolledActivePanelId(id)
+    }
+  }
 
-  // A dock with tabs but no change handler is a controlled-without-onChange
-  // trap: move() below still shifts DOM focus to the clicked/arrow-selected
-  // tab, but aria-selected and the rendered panel never follow, because
-  // activePanel derives solely from the activePanelId prop. Warn loudly in
-  // dev instead of leaving that half-broken state silent.
+  // A dock with tabs but no change handler falls back to internal state above
+  // (uncontrolledActivePanelId) so tab switching still works. That fallback
+  // silently diverges from a stale `activePanelId` prop the caller may still
+  // be holding, which is easy to miss — warn loudly in dev so a consumer that
+  // meant to be controlled notices instead of wondering why their prop is
+  // being ignored.
   useEffect(() => {
     if (process.env.NODE_ENV !== "production" && showTabs && !onActivePanelChange) {
       console.error(

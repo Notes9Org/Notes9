@@ -279,7 +279,7 @@ describe("Dock — edge case: unset or stale activePanelId falls back to the fir
 })
 
 describe("Dock — tabs enabled without onActivePanelChange (controlled-without-onChange)", () => {
-  it("warns in development: clicking a tab would move focus without changing the active panel", () => {
+  it("warns in development, and a click or an arrow key on an inactive tab still switches the active panel via internal fallback state", () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
     render(
       <Dock
@@ -294,6 +294,55 @@ describe("Dock — tabs enabled without onActivePanelChange (controlled-without-
       />
     )
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("onActivePanelChange"))
+
+    const settingsTab = screen.getByRole("tab", { name: /chart settings/i })
+    const askTab = screen.getByRole("tab", { name: /ask notes9/i })
+    expect(settingsTab).toHaveAttribute("aria-selected", "true")
+    expect(askTab).toHaveAttribute("aria-selected", "false")
+
+    // Click the inactive "ask" tab. Before the fix this moved DOM focus
+    // (move() in DockTabStrip) without ever updating aria-selected or the
+    // rendered panel, because activePanel derived solely from the
+    // (never-updated) activePanelId prop.
+    fireEvent.click(askTab)
+    expect(askTab).toHaveAttribute("aria-selected", "true")
+    expect(settingsTab).toHaveAttribute("aria-selected", "false")
+    expect(screen.getByText("Ask body")).toBeInTheDocument()
+    expect(screen.queryByText("Settings body")).not.toBeInTheDocument()
+
+    // Arrow-key from the now-active "ask" tab back to the inactive
+    // "settings" tab — same fallback path, different input mechanism.
+    fireEvent.keyDown(askTab, { key: "ArrowLeft" })
+    expect(settingsTab).toHaveAttribute("aria-selected", "true")
+    expect(askTab).toHaveAttribute("aria-selected", "false")
+    expect(screen.getByText("Settings body")).toBeInTheDocument()
+    expect(screen.queryByText("Ask body")).not.toBeInTheDocument()
+
+    errorSpy.mockRestore()
+  })
+
+  it("switches panels when uncontrolled: a click with no onActivePanelChange moves aria-selected and swaps the rendered panel", () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+    render(
+      <Dock
+        side="right"
+        open
+        size={340}
+        onToggle={vi.fn()}
+        onResize={vi.fn()}
+        title="Chart settings"
+        panels={makePanels()}
+        activePanelId="settings"
+      />
+    )
+    const askTab = screen.getByRole("tab", { name: /ask notes9/i })
+
+    fireEvent.click(askTab)
+
+    expect(askTab).toHaveAttribute("aria-selected", "true")
+    expect(screen.getByText("Ask body")).toBeInTheDocument()
+    expect(screen.queryByText("Settings body")).not.toBeInTheDocument()
+
     errorSpy.mockRestore()
   })
 
