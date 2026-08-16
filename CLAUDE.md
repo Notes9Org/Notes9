@@ -77,3 +77,10 @@ Key routing rules:
 - Save progress → invoke /context-save
 - Resume context → invoke /context-restore
 - Author a backlog-ready spec/issue → invoke /spec
+
+## Documentation discipline (keep the tree clean)
+
+**A PR contains code + tests only.** Do NOT commit agent-generated scaffolding or working documents — they pollute the codebase and make it harder to maintain.
+- SDLC-skill artifacts (`docs/arch/<feature>/` — ARCHITECTURE.md, ADR-*/SEC-*, CONTRACTS.md, slices.json, briefs), pentest/security reports, `PENTEST.md`, and agent transcripts are **local scaffolding** — they are gitignored. Do not `git add -f` them into a feature PR.
+- Do not create new top-level or per-change markdown to "explain" work. If a note has lasting value, promote it deliberately as ONE reviewed doc — never a pile of generated files.
+- Fewest files. No generated markdown in commits. No scaffolding "for later."
