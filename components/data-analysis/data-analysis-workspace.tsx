@@ -38,7 +38,6 @@ import {
   TextAa,
   FolderOpen,
   FloppyDisk,
-  MagnifyingGlass,
   SquaresFour,
   Cube,
   Cursor,
@@ -49,6 +48,7 @@ import {
   Sparkle,
   ArrowUUpLeft,
   ArrowUUpRight,
+  X,
   ClockCounterClockwise,
   Prohibit,
   DotsThree,
@@ -60,7 +60,16 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { cn } from "@/lib/utils"
 import type { DataFileRow } from "@/components/data-analysis/data-files-list"
 import { UniverWorkbookView, type SheetSelection } from "@/components/spreadsheet/univer-workbook-view"
@@ -126,6 +135,11 @@ import {
 } from "@/lib/data-analysis/workspace/chart-state-spec"
 import { ReopenBanner } from "@/components/data-analysis/workspace/reopen-banner"
 import {
+  LibraryDialog,
+  isWorkbookUnreadableReason,
+  type WorkbookUnreadableReason,
+} from "@/components/data-analysis/workspace/library-dialog"
+import {
   RevisionHistoryDialog,
   SaveAnalysisDialog,
 } from "@/components/data-analysis/workspace/analysis-library"
@@ -162,7 +176,12 @@ import {
   type ConfigHistory,
 } from "@/lib/data-analysis/workspace/edit-history"
 import { PipelineBar } from "@/components/data-analysis/pipeline-bar"
-import { AnalysisComposer } from "@/components/data-analysis/workspace/analysis-composer"
+// ADR-019 / slice 03 AC-7: mount the console slice 02 built instead of the bare
+// `AnalysisComposer`, which rendered in normal document flow above the phase
+// tabs and pushed the sheet below the fold after a few turns. `AnalysisConsole`
+// decides `empty` vs `docked` internally and, for `docked`, overlays the
+// transcript rather than reflowing the workspace beneath it.
+import { AnalysisConsole } from "@/components/data-analysis/workspace/analysis-console"
 import {
   appendAnalysisTurn,
   createAnalysisThread,
@@ -708,6 +727,23 @@ const PHASES: { id: Phase; label: string; Icon: React.ComponentType<{ className?
   // figure the Chart phase shows.
   { id: "workspace", label: "Figure layout", Icon: GridFour },
 ]
+
+/**
+ * ADR-018, AC-6. Both close paths (`closeDataset`, `closeAnalysis`) reduce to
+ * this one confirmation, so it carries what it needs to word the prompt
+ * rather than the workspace recomputing "what's unsaved" a second time at
+ * confirm-click.
+ */
+type PendingClose =
+  | { kind: "dataset"; hasDataset: boolean; turnCount: number }
+  | { kind: "analysis"; id: string; hasDataset: boolean; turnCount: number }
+
+function unsavedSummary(p: PendingClose): string {
+  const parts: string[] = []
+  if (p.hasDataset) parts.push("the loaded dataset")
+  if (p.turnCount > 0) parts.push(p.turnCount === 1 ? "1 unsaved message" : `${p.turnCount} unsaved messages`)
+  return parts.length > 0 ? parts.join(" and ") : "your changes"
+}
 
 export function DataAnalysisWorkspace({
   files = [],
@@ -1610,6 +1646,11 @@ export function DataAnalysisWorkspace({
     }[]
   >([])
   const [activeAnalysisId, setActiveAnalysisId] = useState<string>("a1")
+  // Read by `commitSave` and the reopen/bind flow, both declared later in this
+  // component — a ref so a save always tags the tab active when it happened,
+  // never a stale one from whenever those callbacks were created.
+  const activeAnalysisIdRef = useRef(activeAnalysisId)
+  activeAnalysisIdRef.current = activeAnalysisId
   const analysisSeq = useRef(1)
   const buildConfigRef = useRef<() => unknown>(() => ({}))
   /**
@@ -1823,19 +1864,72 @@ export function DataAnalysisWorkspace({
     [captureActive, swapConfig]
   )
 
+  /**
+   * ADR-018: closing is never refused. It used to bail out below two tabs,
+   * which left a researcher with one wrong file open and no way out of it
+   * except loading over the top. The strip is never empty either way — closing
+   * the last tab replaces it with a fresh empty analysis, the same shape
+   * `newAnalysis` opens, rather than leaving nothing to click "+" from.
+   *
+   * Closing the ACTIVE tab restores the neighbour's own sheet, turns and
+   * thread — `switchAnalysis`'s order, repeated here, because the previous
+   * version only swapped the rail config and left the closed tab's sheet and
+   * transcript on screen under the neighbour's name.
+   */
   const closeAnalysis = useCallback(
     (id: string) => {
       const list = analysesRef.current
-      // Never close the last one: an empty workspace has no affordance to start
-      // a new analysis from.
-      if (list.length <= 1) return
       const index = list.findIndex((a) => a.id === id)
+      if (index === -1) return
+
+      // Only the active tab can have a spec-author request in flight — a
+      // background tab's turns are already a settled snapshot. Abort it
+      // before swapping state below, the same way `closeDataset` does,
+      // otherwise a reply that resolves after the swap is appended via
+      // `setTurns`/`appendAnalysisTurn` against whatever tab is current by
+      // then: the neighbour here, or the fresh tab below.
+      if (id === activeAnalysisId) {
+        aiAbortRef.current?.abort()
+        aiAbortRef.current = null
+        setAiBusy(false)
+      }
+
+      if (list.length === 1) {
+        const newId = `a${++analysisSeq.current}`
+        const fresh = {
+          id: newId,
+          name: `Analysis ${analysisSeq.current}`,
+          config: blankConfigRef.current,
+          snapshot: emptySnapshot(),
+          source: null,
+          hasData: false,
+          turns: [],
+          threadId: null,
+        }
+        setAnalyses([fresh])
+        setActiveAnalysisId(newId)
+        loadSnapshotRef.current(emptySnapshot())
+        setTurns([])
+        setThreadId(null)
+        setEngineResult(null)
+        setEngineNote(null)
+        swapConfig(blankConfigRef.current)
+        return
+      }
+
       const next = list.filter((a) => a.id !== id)
       setAnalyses(next)
       if (id === activeAnalysisId) {
         const neighbour = next[index] ?? next[index - 1]
         if (neighbour) {
           setActiveAnalysisId(neighbour.id)
+          if (neighbour.snapshot !== liveRef.current) {
+            loadSnapshotRef.current(neighbour.snapshot, neighbour.source ?? undefined)
+          }
+          setTurns(neighbour.turns)
+          setThreadId(neighbour.threadId)
+          setEngineResult(null)
+          setEngineNote(null)
           swapConfig(neighbour.config)
         }
       }
@@ -1843,18 +1937,96 @@ export function DataAnalysisWorkspace({
     [activeAnalysisId, swapConfig]
   )
 
+  /**
+   * ADR-018: put the dataset down without closing the tab. `loadSnapshot`
+   * already clears `hasData`, `sourceFile`, the pipeline and the undo stack
+   * for any new sheet, including the empty one — that is the rail-config
+   * reset this needs. The two things it deliberately does NOT own are what
+   * this adds: the engine result (never cleared by `loadSnapshot`, so a stale
+   * chart would otherwise sit behind the empty sheet), and the transcript,
+   * which `loadSnapshot` wipes on the assumption that a new sheet invalidates
+   * old turns. Closing a dataset is not loading a new sheet, it is putting the
+   * current one down — the conversation is about the analysis, not the file —
+   * so the turns are captured before the call and restored after it.
+   *
+   * Plans inside the kept transcript still go stale: clearing the sheet
+   * changes `specTable`, which bumps `specToken` through the same
+   * `[derivedSpec]` effect `askForChange` relies on, and the `[specToken]`
+   * effect runs `markStalePlans` on whatever `turns` holds once that settles —
+   * the restored transcript, so `canApprovePlan` is false for every one of
+   * them without this function touching a plan directly.
+   */
+  const closeDataset = useCallback(() => {
+    // A pending spec-author reply is answering a question about the dataset
+    // that is about to disappear; discard it rather than let it land on the
+    // empty analysis. Unlike `askForChange`'s own supersede path, nothing is
+    // taking over `aiAbortRef` here, so its `finally` block's
+    // `aiAbortRef.current === controller` check can never hold once the ref
+    // is nulled — `setAiBusy(false)` has to happen here instead, or the
+    // console is stuck "Thinking…" forever.
+    aiAbortRef.current?.abort()
+    aiAbortRef.current = null
+    setAiBusy(false)
+    const keptTurns = turnsRef.current
+    loadSnapshotRef.current(emptySnapshot())
+    setTurns(keptTurns)
+    setEngineResult(null)
+    setEngineNote(null)
+    swapConfig(blankConfigRef.current)
+  }, [swapConfig])
+
+  /**
+   * ADR-018, AC-6: the only confirmation this feature has, and it guards the
+   * only irreversible thing in it. "Never saved" is judged against
+   * `savedAnalysis` — the workspace's one persisted draft slot (§3A) — but
+   * that slot belongs to whichever tab was active the moment it was written
+   * (`savedForAnalysisIdRef`, set alongside it below), never to the page as a
+   * whole: once any tab has been saved, `savedAnalysisRef.current` stays
+   * non-null forever, so checking it alone would silently clear a different,
+   * never-saved tab's dataset and turns on close.
+   */
+  const [pendingClose, setPendingClose] = useState<PendingClose | null>(null)
+
+  const confirmCloseDataset = useCallback(() => {
+    const savedThisTab = savedAnalysisRef.current !== null && savedForAnalysisIdRef.current === activeAnalysisId
+    if (!savedThisTab && (hasDataRef.current || turnsRef.current.length > 0)) {
+      setPendingClose({ kind: "dataset", hasDataset: hasDataRef.current, turnCount: turnsRef.current.length })
+      return
+    }
+    closeDataset()
+  }, [activeAnalysisId, closeDataset])
+
+  const confirmCloseAnalysis = useCallback(
+    (id: string) => {
+      // The active tab's true state lives in the live refs until the next
+      // capture; a background tab's is exactly what `analyses` already holds.
+      const isActive = id === activeAnalysisId
+      const target = isActive ? null : analysesRef.current.find((a) => a.id === id)
+      const dataset = isActive ? hasDataRef.current : (target?.hasData ?? false)
+      const turnCount = isActive ? turnsRef.current.length : (target?.turns.length ?? 0)
+      const savedThisTab = savedAnalysisRef.current !== null && savedForAnalysisIdRef.current === id
+      if (!savedThisTab && (dataset || turnCount > 0)) {
+        setPendingClose({ kind: "analysis", id, hasDataset: dataset, turnCount })
+        return
+      }
+      closeAnalysis(id)
+    },
+    [activeAnalysisId, closeAnalysis]
+  )
+
   /* ── Import (local + from Notes9 library) · Save ──────────────────────────── */
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [librarySearch, setLibrarySearch] = useState("")
   const [loadingFileId, setLoadingFileId] = useState<string | null>(null)
-
-  const tabularFiles = useMemo(
-    () =>
-      files.filter(
-        (f) => /\.(xlsx|xls|csv|tsv)$/i.test(f.file_name) || (f.file_type != null && /(spreadsheet|csv|excel)/i.test(f.file_type)),
-      ),
-    [files],
-  )
+  /**
+   * ADR-017: the picker stops classifying. `tabularFiles` used to filter
+   * `files` down to a `.xlsx|.xls|.csv|.tsv` name match or a spreadsheet-ish
+   * `file_type` — a guess that filtered out 34 of 72 real rows (measured
+   * against the live database) because nothing had parsed them yet, not
+   * because they weren't spreadsheets. Every row is listed now; a failed
+   * parse is what says a file can't be opened, not its name.
+   */
+  const [fileErrors, setFileErrors] = useState<Record<string, WorkbookUnreadableReason>>({})
 
   // Refs, not values: `buildConfig` closes over ~30 pieces of rail state and is
   // rebuilt every render, so a tab handler capturing it directly would save a
@@ -2518,15 +2690,30 @@ export function DataAnalysisWorkspace({
   const loadLibraryFile = useCallback(
     async (file: DataFileRow) => {
       setLoadingFileId(file.id)
+      // A previous attempt's reason no longer applies to a fresh try.
+      setFileErrors((prev) => {
+        if (!(file.id in prev)) return prev
+        const next = { ...prev }
+        delete next[file.id]
+        return next
+      })
       try {
         const url = `/api/experiments/${file.experiment_id}/data-files/${file.id}/workbook`
         let res = await fetch(url)
         let data = await res.json()
         if (!data?.workbook_snapshot) {
-          // Backfill the snapshot from the stored file, then re-read.
-          await fetch(url, { method: "POST" })
-          res = await fetch(url)
+          // Backfill: parse from storage and cache it. The success body
+          // already carries the parsed bytes (ADR-017, "order matters"), so
+          // this is usually the last request, not a round trip to a second GET.
+          res = await fetch(url, { method: "POST" })
           data = await res.json()
+          if (data?.ok && !data.workbook_snapshot) {
+            // The idempotent `cached: true` short-circuit: another caller
+            // finished the backfill between our GET and this POST. Read what
+            // they wrote instead of treating an empty body as failure.
+            res = await fetch(url)
+            data = await res.json()
+          }
         }
         if (data?.workbook_snapshot) {
           loadSnapshot(data.workbook_snapshot as UniverWorkbookSnapshot, {
@@ -2535,11 +2722,17 @@ export function DataAnalysisWorkspace({
           })
           toast.success(`Loaded ${file.file_name}`)
           setLibraryOpen(false)
-        } else {
-          toast.error("This file has no spreadsheet content to analyze")
+          return
         }
+        // ADR-017's `{ error: "unreadable", reason }` (422). The row stays
+        // listed and wears its reason inline (AC-3) instead of a generic
+        // toast, so a researcher whose own upload just hasn't been parsed yet
+        // ("no-bytes") isn't told the same thing as one opening a PDF
+        // ("not-a-spreadsheet").
+        const reason: WorkbookUnreadableReason = isWorkbookUnreadableReason(data?.reason) ? data.reason : "parse-failed"
+        setFileErrors((prev) => ({ ...prev, [file.id]: reason }))
       } catch {
-        toast.error("Failed to load file")
+        setFileErrors((prev) => ({ ...prev, [file.id]: "no-bytes" }))
       } finally {
         setLoadingFileId(null)
       }
@@ -2573,6 +2766,13 @@ export function DataAnalysisWorkspace({
   // Declared after the AI block that reads it, so a ref rather than the value.
   const savedAnalysisRef = useRef<SavedAnalysis | null>(null)
   savedAnalysisRef.current = savedAnalysis
+  /**
+   * Which tab `savedAnalysis` belongs to. The workspace has one persisted
+   * draft slot, not one per tab (§3A), so this is what turns "is anything on
+   * the page saved" into "is THIS tab saved" for the close confirmation —
+   * set in `commitSave`, alongside `setSavedAnalysis`.
+   */
+  const savedForAnalysisIdRef = useRef<string | null>(null)
   const [openRevisionRow, setOpenRevisionRow] = useState<AnalysisRevision | null>(null)
   const [reopenVerdict, setReopenVerdict] = useState<ReopenVerdict | null>(null)
   const [revisions, setRevisions] = useState<AnalysisRevision[]>([])
@@ -2694,6 +2894,7 @@ export function DataAnalysisWorkspace({
         }
 
         setSavedAnalysis(analysis)
+        savedForAnalysisIdRef.current = activeAnalysisIdRef.current
         setOpenRevisionRow(verdict.revision)
         // The reasoning comes back with the figure. Its plans are historical —
         // they were computed in another session, so `canApprovePlan` will not
@@ -2727,6 +2928,7 @@ export function DataAnalysisWorkspace({
         const list = await listRevisions(analysis.id)
         setRevisions(list)
         setSavedAnalysis(analysis)
+        savedForAnalysisIdRef.current = activeAnalysisIdRef.current
         if (list[0]) {
           await openSavedRevision(analysis, list[0], false)
         } else {
@@ -2806,6 +3008,9 @@ export function DataAnalysisWorkspace({
         await autosaveDraft(analysis.id, derivedSpec, config)
 
         setSavedAnalysis({ ...analysis, currentRevisionNo: revision.revisionNo })
+        // AC-6: this save belongs to whichever tab was active when it ran, not
+        // to the page — see `savedForAnalysisIdRef`'s declaration.
+        savedForAnalysisIdRef.current = activeAnalysisIdRef.current
         setOpenRevisionRow(revision)
         setRevisions((rs) => [revision, ...rs.filter((r) => r.id !== revision.id)])
         setReopenVerdict(null)
@@ -3533,11 +3738,13 @@ export function DataAnalysisWorkspace({
 
   /**
    * The one AI surface on this page: the transcript for this analysis and the
-   * composer under it (ADR-014). It replaces the single-slot prompt card, whose
-   * reply each new question destroyed.
+   * composer under it (ADR-014). `variant="docked"` here is what makes it the
+   * bottom console (ADR-019) rather than a block in the document flow — the
+   * empty-analysis screen below passes `variant="empty"` for the centred,
+   * first-screen composer instead.
    */
   const specPrompt = (
-    <AnalysisComposer
+    <AnalysisConsole
       turns={turns}
       currentSpecHash={specToken}
       busy={aiBusy}
@@ -3552,6 +3759,7 @@ export function DataAnalysisWorkspace({
       onApprove={approvePlan}
       onDiscard={discardPlan}
       datasetName={hasData ? sheetFileName : null}
+      variant="docked"
     />
   )
 
@@ -3567,43 +3775,44 @@ export function DataAnalysisWorkspace({
    */
   const workspaceDialogs = (
     <>
-      <Dialog open={libraryOpen} onOpenChange={setLibraryOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Import from your data files</DialogTitle>
-            <DialogDescription>Load a spreadsheet or CSV you&rsquo;ve uploaded to an experiment straight into the analysis workspace.</DialogDescription>
-          </DialogHeader>
-          <div className="relative">
-            <MagnifyingGlass className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={librarySearch} onChange={(e) => setLibrarySearch(e.target.value)} placeholder="Search files…" className="pl-8" />
-          </div>
-          <div className="max-h-[50vh] space-y-1 overflow-y-auto">
-            {tabularFiles
-              .filter((f) => {
-                const q = librarySearch.toLowerCase()
-                return !q || f.file_name.toLowerCase().includes(q) || (f.experiment_name ?? "").toLowerCase().includes(q) || (f.project_name ?? "").toLowerCase().includes(q)
-              })
-              .map((f) => (
-                <button
-                  key={f.id}
-                  onClick={() => loadLibraryFile(f)}
-                  disabled={loadingFileId != null}
-                  className="flex w-full items-center gap-3 rounded-lg border border-border px-3 py-2 text-left transition-colors hover:bg-muted/50 disabled:opacity-50"
-                >
-                  <TableIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium">{f.file_name}</div>
-                    <div className="truncate text-xs text-muted-foreground">{f.experiment_name ?? "-"}{f.project_name ? ` · ${f.project_name}` : ""}</div>
-                  </div>
-                  <span className="shrink-0 text-xs font-medium text-[var(--n9-accent,#965034)]">{loadingFileId === f.id ? "Loading…" : "Load"}</span>
-                </button>
-              ))}
-            {tabularFiles.length === 0 && (
-              <p className="py-6 text-center text-sm text-muted-foreground">No spreadsheet or CSV files in your library yet.</p>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      <LibraryDialog
+        open={libraryOpen}
+        onOpenChange={setLibraryOpen}
+        files={files}
+        search={librarySearch}
+        onSearchChange={setLibrarySearch}
+        loadingFileId={loadingFileId}
+        fileErrors={fileErrors}
+        onSelect={loadLibraryFile}
+      />
+
+      {/* ADR-018, AC-6: the only confirmation in this feature, guarding the
+          only irreversible thing in it — a dataset or transcript that was
+          never saved and is about to be discarded, by either close path. */}
+      <AlertDialog open={pendingClose != null} onOpenChange={(open) => { if (!open) setPendingClose(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard unsaved work?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingClose && `This analysis has never been saved. Closing it discards ${unsavedSummary(pendingClose)}.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep working</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const p = pendingClose
+                setPendingClose(null)
+                if (!p) return
+                if (p.kind === "dataset") closeDataset()
+                else closeAnalysis(p.id)
+              }}
+            >
+              Discard and close
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Templates gallery (modern, server-backed) */}
       <TemplatesDialog
@@ -3708,14 +3917,14 @@ export function DataAnalysisWorkspace({
           activeId={activeAnalysisId}
           onActivate={switchAnalysis}
           onNew={newAnalysis}
-          onClose={closeAnalysis}
+          onClose={confirmCloseAnalysis}
           onDuplicate={duplicateAnalysis}
           onRename={(id, name) =>
             setAnalyses((list) => list.map((a) => (a.id === id ? { ...a, name } : a)))
           }
         />
 
-        <AnalysisComposer
+        <AnalysisConsole
           turns={turns}
           currentSpecHash={specToken}
           busy={aiBusy}
@@ -3820,7 +4029,7 @@ export function DataAnalysisWorkspace({
         activeId={activeAnalysisId}
         onActivate={switchAnalysis}
         onNew={newAnalysis}
-        onClose={closeAnalysis}
+        onClose={confirmCloseAnalysis}
         onDuplicate={duplicateAnalysis}
         onRename={(id, name) =>
           setAnalyses((list) => list.map((a) => (a.id === id ? { ...a, name } : a)))
@@ -3843,8 +4052,6 @@ export function DataAnalysisWorkspace({
 
       {/* Scoped to the analysis above it, and deliberately below the tabs: what
           it changes is this analysis, not the page. */}
-      {specPrompt}
-
       {/* Tabs + toolbar */}
       <div className="flex flex-wrap items-center gap-2">
         <Tabs value={phase} onValueChange={(v) => setPhase(v as Phase)} className="w-auto">
@@ -3897,9 +4104,9 @@ export function DataAnalysisWorkspace({
             <DropdownMenuItem onClick={() => fileRef.current?.click()}>
               <UploadSimple className="mr-2 h-4 w-4" /> Upload from computer
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setLibraryOpen(true)} disabled={tabularFiles.length === 0}>
+            <DropdownMenuItem onClick={() => setLibraryOpen(true)} disabled={files.length === 0}>
               <FolderOpen className="mr-2 h-4 w-4" /> From your data files
-              {tabularFiles.length > 0 && <span className="ml-auto text-xs text-muted-foreground">{tabularFiles.length}</span>}
+              {files.length > 0 && <span className="ml-auto text-xs text-muted-foreground">{files.length}</span>}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -3990,6 +4197,20 @@ export function DataAnalysisWorkspace({
             <ArrowUUpRight className="h-4 w-4" />
           </Button>
         </div>
+        {/* ADR-018: put the dataset down without closing the tab — the gap
+            this feature exists for. Unloaded, not exported: exporting already
+            has its own menu above. */}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 shrink-0 touch-manipulation text-muted-foreground hover:text-foreground"
+          onClick={confirmCloseDataset}
+          aria-label="Close dataset"
+          title="Close dataset — back to an empty analysis, conversation kept"
+        >
+          <X className="h-4 w-4" />
+        </Button>
         <span className="ml-auto text-xs text-muted-foreground">{table.rows.length} rows · {table.columns.length} cols</span>
         {/* Same control the lab-note and protocol editors carry: an icon-only
             ghost button at the far right of the toolbar, using the platform's
@@ -4139,6 +4360,11 @@ export function DataAnalysisWorkspace({
         )}
       </div>
       )}
+
+      {/* ADR-019: docked to the bottom of the pane, below the sheet/chart/stats
+          it acts on — not above the tabs, where three turns used to push the
+          whole workspace below the fold. */}
+      {specPrompt}
 
       {/* Import from the Notes9 library */}
       {workspaceDialogs}
