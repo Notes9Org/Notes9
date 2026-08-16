@@ -33,6 +33,33 @@ export interface AnalysisPlan {
   status: PlanStatus
 }
 
+const PLAN_STATUSES: readonly PlanStatus[] = ["proposed", "approved", "discarded", "stale"]
+
+/**
+ * The one place a plan is trusted coming out of storage. `fromStoredThread`
+ * below and `loadAnalysisThread` (analysis-thread-store.ts) both route jsonb
+ * through this rather than casting it — a plan is what decides whether Approve
+ * is offered, so a shape we did not check must never reach `canApprovePlan` /
+ * `approvalBlockedReason`. A plan that fails this is treated as no plan: the
+ * turn still renders (via its `content`), Approve is simply not offered.
+ */
+export function parseStoredPlan(value: unknown): AnalysisPlan | null {
+  if (!value || typeof value !== "object") return null
+  const p = value as Record<string, unknown>
+  if (!Array.isArray(p.mutations)) return null
+  if (!Array.isArray(p.steps)) return null
+  if (!Array.isArray(p.rejected)) return null
+  if (p.clarificationNeeded !== null && typeof p.clarificationNeeded !== "string") return null
+  if (typeof p.status !== "string" || !PLAN_STATUSES.includes(p.status as PlanStatus)) return null
+  return {
+    steps: p.steps as string[],
+    mutations: p.mutations as SpecMutation[],
+    rejected: p.rejected as { reason: string }[],
+    clarificationNeeded: p.clarificationNeeded as string | null,
+    status: p.status as PlanStatus,
+  }
+}
+
 export interface AnalysisUserTurn {
   v: number
   id: string
@@ -111,7 +138,10 @@ export function canApprovePlan(turn: AnalysisAssistantTurn, currentSpecHash: str
   if (!isReadableTurn(turn)) return false
   if (plan.status !== "proposed") return false
   if (plan.clarificationNeeded) return false
-  if (plan.mutations.length === 0) return false
+  // Defense in depth beyond the `parseStoredPlan` boundary: this is the gate
+  // that decides whether Approve is clickable, so it never trusts `mutations`
+  // to be an array just because the turn's version and status checked out.
+  if (!Array.isArray(plan.mutations) || plan.mutations.length === 0) return false
   return turn.specHashAtProposal === currentSpecHash
 }
 
@@ -133,7 +163,9 @@ export function approvalBlockedReason(
     return "The analysis changed after this was proposed, so it can no longer be applied. Ask again."
   }
   if (plan.clarificationNeeded) return "Answer the question above first."
-  if (plan.mutations.length === 0) return "Nothing to apply."
+  // Same defense in depth as `canApprovePlan`: never dereference `mutations`
+  // without proving it is an array first.
+  if (!Array.isArray(plan.mutations) || plan.mutations.length === 0) return "Nothing to apply."
   return null
 }
 
@@ -242,7 +274,7 @@ export function fromStoredThread(raw: unknown): AnalysisTurn[] {
         id: t.id,
         role: "assistant",
         content: t.content,
-        plan: (t.plan as AnalysisPlan | null) ?? null,
+        plan: parseStoredPlan(t.plan),
         specHashAtProposal:
           typeof t.specHashAtProposal === "string" ? t.specHashAtProposal : "",
         ...(typeof t.error === "string" ? { error: t.error } : {}),

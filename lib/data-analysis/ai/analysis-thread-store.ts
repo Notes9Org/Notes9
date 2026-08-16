@@ -15,6 +15,7 @@
 import { createClient } from "@/lib/supabase/client"
 import {
   ANALYSIS_TURN_VERSION,
+  parseStoredPlan,
   type AnalysisIntent,
   type AnalysisTurn,
 } from "@/lib/data-analysis/ai/analysis-thread"
@@ -217,7 +218,7 @@ export async function loadAnalysisThread(sessionId: string): Promise<AnalysisTur
           id: row.id as string,
           role: "assistant",
           content: (row.content as string) ?? "",
-          plan: (meta.plan as AnalysisTurn extends { plan: infer P } ? P : never) ?? null,
+          plan: parseStoredPlan(meta.plan),
           // Deliberately not the live token: a plan read back from storage was
           // computed in another session and can never be approvable now.
           specHashAtProposal: (meta.specHashAtProposal as string) ?? "",
@@ -243,23 +244,38 @@ export async function writeAnalysisIntent(
   sessionId: string,
   intent: AnalysisIntent,
 ): Promise<boolean> {
-  try {
-    const supabase = createClient()
-    const { data, error: readError } = await supabase
-      .from("chat_sessions")
-      .select("metadata")
-      .eq("id", sessionId)
-      .single()
-    if (readError) return false
-    const metadata = { ...((data?.metadata as Record<string, unknown> | null) ?? {}), intent }
-    const { error } = await supabase
-      .from("chat_sessions")
-      .update({ metadata })
-      .eq("id", sessionId)
-    return !error
-  } catch {
-    return false
+  const supabase = createClient()
+  // Optimistic concurrency: this is a read-modify-write on a shared column, and
+  // two callers can race it (two tabs, a retry, a double-click). The update is
+  // conditioned on the exact `metadata` value just read — `.eq`/`.is` on the
+  // pre-write value — so a caller that loses the race updates zero rows instead
+  // of silently clobbering the other write. A few attempts let a genuine race
+  // resolve itself; a caller that still can't land after that gets `false`
+  // rather than a write disappearing with no signal.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const { data, error: readError } = await supabase
+        .from("chat_sessions")
+        .select("metadata")
+        .eq("id", sessionId)
+        .single()
+      if (readError) return false
+      const before = (data?.metadata as Record<string, unknown> | null) ?? null
+      const metadata = { ...(before ?? {}), intent }
+      const conditioned =
+        before === null
+          ? supabase.from("chat_sessions").update({ metadata }).eq("id", sessionId).is("metadata", null)
+          : supabase.from("chat_sessions").update({ metadata }).eq("id", sessionId).eq("metadata", before)
+      const { data: written, error } = await conditioned.select("id")
+      if (error) return false
+      if (Array.isArray(written) && written.length > 0) return true
+      // Zero rows matched: someone else wrote `metadata` between our read and
+      // our write. Retry against the fresh value instead of giving up.
+    } catch {
+      return false
+    }
   }
+  return false
 }
 
 /**

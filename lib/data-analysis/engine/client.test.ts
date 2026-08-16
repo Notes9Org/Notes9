@@ -287,6 +287,13 @@ class SilentWorker {
 }
 
 describe("unresponsive worker", () => {
+  // Explicit timeout, well above the 5s default: this test winds a fake clock
+  // forward across a two-minute deadline, and `advanceTimersByTimeAsync` yields
+  // to the real event loop between fake-timer steps. Under full parallel test
+  // load those real yields can individually take longer, which is wall-clock
+  // contention, not a logic regression — it passes in isolation. Decoupling the
+  // timeout from load keeps the assertion itself (a named rejection, not a
+  // hang) unweakened.
   it("rejects with a named error instead of hanging forever", async () => {
     Reflect.set(globalThis, "Worker", SilentWorker)
     // The deadline is two minutes, so the clock has to be faked. Keep a handle
@@ -307,5 +314,5 @@ describe("unresponsive worker", () => {
       vi.useRealTimers()
       Reflect.set(globalThis, "Worker", FakeWorker)
     }
-  })
+  }, 30_000)
 })
