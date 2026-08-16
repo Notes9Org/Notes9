@@ -262,10 +262,12 @@ function DockTabStrip({
   panels,
   activeId,
   onChange,
+  label,
 }: {
   panels: DockPanel[]
   activeId: string
   onChange: (id: string) => void
+  label: string
 }) {
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({})
 
@@ -297,7 +299,7 @@ function DockTabStrip({
   }
 
   return (
-    <div role="tablist" className="flex min-w-0 items-center gap-1">
+    <div role="tablist" aria-label={label} className="flex min-w-0 items-center gap-1">
       {panels.map((panel, index) => {
         const selected = panel.id === activeId
         const badgeCount =
@@ -393,11 +395,43 @@ export function Dock({
 
   // Two or more panels get a tab strip; zero or one behaves like the classic API.
   const showTabs = !!panels && panels.length > 1
+  const isControlled = onActivePanelChange !== undefined
+  // Uncontrolled fallback: when the caller doesn't pass onActivePanelChange,
+  // the tab strip must still switch panels on its own rather than silently
+  // ignoring clicks (see the dev warning below for why this trap exists).
+  const [uncontrolledActivePanelId, setUncontrolledActivePanelId] = useState<
+    string | undefined
+  >(undefined)
+  const effectiveActivePanelId = isControlled
+    ? activePanelId
+    : (uncontrolledActivePanelId ?? activePanelId)
   const activePanel =
     panels && panels.length > 0
-      ? (panels.find((p) => p.id === activePanelId) ?? panels[0])
+      ? (panels.find((p) => p.id === effectiveActivePanelId) ?? panels[0])
       : null
-  const handleActivePanelChange = (id: string) => onActivePanelChange?.(id)
+  const handleActivePanelChange = (id: string) => {
+    if (isControlled) {
+      onActivePanelChange?.(id)
+    } else {
+      setUncontrolledActivePanelId(id)
+    }
+  }
+
+  // A dock with tabs but no change handler falls back to internal state above
+  // (uncontrolledActivePanelId) so tab switching still works. That fallback
+  // silently diverges from a stale `activePanelId` prop the caller may still
+  // be holding, which is easy to miss — warn loudly in dev so a consumer that
+  // meant to be controlled notices instead of wondering why their prop is
+  // being ignored.
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "production" && showTabs && !onActivePanelChange) {
+      console.error(
+        `Dock: "${title}" renders a tab strip (${panels?.length ?? 0} panels) but received no ` +
+          "onActivePanelChange. Selecting a tab will move focus without changing the active panel. " +
+          "Pass onActivePanelChange, or omit panels/activePanelId to use the single-panel API."
+      )
+    }
+  }, [showTabs, onActivePanelChange, title, panels?.length])
 
   return (
     <>
@@ -439,6 +473,7 @@ export function Dock({
                 panels={panels}
                 activeId={activePanel?.id ?? panels[0].id}
                 onChange={handleActivePanelChange}
+                label={title}
               />
             ) : (
               <h2 className="text-[13px] font-medium text-muted-foreground">{title}</h2>

@@ -138,6 +138,26 @@ describe("Dock — tabbed rendering with two or more panels", () => {
     expect(askTab).toHaveAttribute("tabindex", "0")
   })
 
+  it("gives the tablist an accessible name matching the dock title (no unlabeled tablist landmark)", () => {
+    render(
+      <Dock
+        side="right"
+        open
+        size={340}
+        onToggle={vi.fn()}
+        onResize={vi.fn()}
+        title="Chart settings"
+        panels={makePanels()}
+        activePanelId="settings"
+        onActivePanelChange={vi.fn()}
+      />
+    )
+    // The static <h2>{title}</h2> is gone once tabs render — the tablist
+    // itself must carry the dock's name, or two docks on screen (e.g. left
+    // and right) produce indistinguishable unlabeled tablist landmarks.
+    expect(screen.getByRole("tablist", { name: "Chart settings" })).toBeInTheDocument()
+  })
+
   it("moves focus and selection with ArrowRight / ArrowLeft (wrapping)", () => {
     const onActivePanelChange = vi.fn()
     render(
@@ -255,6 +275,101 @@ describe("Dock — edge case: unset or stale activePanelId falls back to the fir
       "aria-selected",
       "true"
     )
+  })
+})
+
+describe("Dock — tabs enabled without onActivePanelChange (controlled-without-onChange)", () => {
+  it("warns in development, and a click or an arrow key on an inactive tab still switches the active panel via internal fallback state", () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+    render(
+      <Dock
+        side="right"
+        open
+        size={340}
+        onToggle={vi.fn()}
+        onResize={vi.fn()}
+        title="Chart settings"
+        panels={makePanels()}
+        activePanelId="settings"
+      />
+    )
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("onActivePanelChange"))
+
+    const settingsTab = screen.getByRole("tab", { name: /chart settings/i })
+    const askTab = screen.getByRole("tab", { name: /ask notes9/i })
+    expect(settingsTab).toHaveAttribute("aria-selected", "true")
+    expect(askTab).toHaveAttribute("aria-selected", "false")
+
+    // Click the inactive "ask" tab. Before the fix this moved DOM focus
+    // (move() in DockTabStrip) without ever updating aria-selected or the
+    // rendered panel, because activePanel derived solely from the
+    // (never-updated) activePanelId prop.
+    fireEvent.click(askTab)
+    expect(askTab).toHaveAttribute("aria-selected", "true")
+    expect(settingsTab).toHaveAttribute("aria-selected", "false")
+    expect(screen.getByText("Ask body")).toBeInTheDocument()
+    expect(screen.queryByText("Settings body")).not.toBeInTheDocument()
+
+    // Arrow-key from the now-active "ask" tab back to the inactive
+    // "settings" tab — same fallback path, different input mechanism.
+    fireEvent.keyDown(askTab, { key: "ArrowLeft" })
+    expect(settingsTab).toHaveAttribute("aria-selected", "true")
+    expect(askTab).toHaveAttribute("aria-selected", "false")
+    expect(screen.getByText("Settings body")).toBeInTheDocument()
+    expect(screen.queryByText("Ask body")).not.toBeInTheDocument()
+
+    errorSpy.mockRestore()
+  })
+
+  it("switches panels when uncontrolled: a click with no onActivePanelChange moves aria-selected and swaps the rendered panel", () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+    render(
+      <Dock
+        side="right"
+        open
+        size={340}
+        onToggle={vi.fn()}
+        onResize={vi.fn()}
+        title="Chart settings"
+        panels={makePanels()}
+        activePanelId="settings"
+      />
+    )
+    const askTab = screen.getByRole("tab", { name: /ask notes9/i })
+
+    fireEvent.click(askTab)
+
+    expect(askTab).toHaveAttribute("aria-selected", "true")
+    expect(screen.getByText("Ask body")).toBeInTheDocument()
+    expect(screen.queryByText("Settings body")).not.toBeInTheDocument()
+
+    errorSpy.mockRestore()
+  })
+
+  it("does not warn once onActivePanelChange is supplied", () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+    render(
+      <Dock
+        side="right"
+        open
+        size={340}
+        onToggle={vi.fn()}
+        onResize={vi.fn()}
+        title="Chart settings"
+        panels={makePanels()}
+        activePanelId="settings"
+        onActivePanelChange={vi.fn()}
+      />
+    )
+    expect(errorSpy).not.toHaveBeenCalled()
+    errorSpy.mockRestore()
+  })
+
+  it("does not warn for the single-panel API, which never renders tabs", () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+    renderDock()
+    expect(errorSpy).not.toHaveBeenCalled()
+    errorSpy.mockRestore()
   })
 })
 
