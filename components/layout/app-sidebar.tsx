@@ -47,7 +47,7 @@ import { NewLabNoteDialog } from "@/app/(app)/lab-notes/new-lab-note-dialog"
 import { withFromDashboard } from "@/lib/from-dashboard"
 import { ShortcutHint } from '@/components/shortcuts/shortcut-hint'
 import { trackShortcutInvocation } from '@/lib/analytics/shortcut-usage'
-import { ariaKeyshortcutsFor } from '@/lib/shortcuts/keycaps'
+import { ariaKeyshortcutsFor, shortcutIdForHref } from '@/lib/shortcuts/keycaps'
 import { useIsMac } from '@/components/providers/platform-provider'
 
 /**
@@ -831,6 +831,10 @@ export function AppSidebar() {
                             ? scope.experimentName
                             : null
                         : null
+                    // Resolved from the registry, so a rebound or removed
+                    // `goto.*` binding simply stops advertising itself here
+                    // rather than advertising a key that no longer works.
+                    const navShortcutId = shortcutIdForHref(item.href)
 
                     return (
                       <SidebarMenuItem key={item.name} data-tour={navTourKey(item.href)}>
@@ -853,6 +857,11 @@ export function AppSidebar() {
                           <Link
                             href={carriesScope ? `${item.href}${scope.scopedQueryString}` : item.href}
                             aria-label={isIconMode ? item.name : undefined}
+                            aria-keyshortcuts={
+                              navShortcutId
+                                ? ariaKeyshortcutsFor(navShortcutId, isMac)
+                                : undefined
+                            }
                             // In the collapsed rail, navigating also expands the
                             // sidebar so the user lands on the page with the full
                             // nav open (per request: clicking an icon opens it).
@@ -882,6 +891,17 @@ export function AppSidebar() {
                               >
                                 {contextName ?? item.name}
                               </span>
+                              {/* Twelve `g`-then-letter bindings nobody knows —
+                                  but twelve chips stacked down the densest column
+                                  in the app is the "grey chips everyone stops
+                                  seeing" failure this feature has to avoid. So
+                                  the row stays quiet at rest and teaches on
+                                  approach: hover, or keyboard focus. */}
+                              {navShortcutId && !showSwitcher && (
+                                <span className="ml-auto hidden opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 sm:inline-flex">
+                                  <ShortcutHint id={navShortcutId} />
+                                </span>
+                              )}
                             </span>
                           </Link>
                         </SidebarMenuButton>

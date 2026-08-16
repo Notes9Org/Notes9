@@ -61,6 +61,22 @@ export function isSequenceFor(id: ShortcutId): boolean {
   return isSequence(def.keys)
 }
 
+const ID_BY_HREF: ReadonlyMap<string, ShortcutId> = new Map(
+  SHORTCUTS.filter((s) => s.href).map((s) => [s.href!, s.id as ShortcutId]),
+)
+
+/**
+ * The `goto.*` shortcut for a nav href, or `undefined` when that route has none.
+ *
+ * Nav rows are rendered from a list, so their ids can only be known at runtime —
+ * this is the one sanctioned way to reach a `ShortcutId` from a value rather
+ * than a literal, and it still cannot invent one: an unmapped href returns
+ * `undefined` and the caller renders no hint.
+ */
+export function shortcutIdForHref(href: string): ShortcutId | undefined {
+  return ID_BY_HREF.get(href)
+}
+
 /** `aria-keyshortcuts` token names. Not the display glyphs — see ADR-022. */
 const ARIA_MODIFIER: Record<string, string> = {
   mod: 'Meta', // overridden to Control off macOS
