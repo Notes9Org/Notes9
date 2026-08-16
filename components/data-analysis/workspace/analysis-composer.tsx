@@ -44,9 +44,58 @@ export interface AnalysisComposerProps {
   attachSlot?: React.ReactNode
   /**
    * `empty` is the first screen of a new analysis: centred, nothing above it,
-   * and it will not send until a dataset is attached (ADR-015).
+   * and it will not send until a dataset is attached (ADR-015). `docked` is
+   * the bare input row with no transcript and no centred card — `AnalysisConsole`
+   * (ADR-019) renders the transcript itself, positioned as an overlay above this
+   * row rather than stacked above it in document flow, and uses `docked` for the
+   * row it docks to the bottom of the pane. `inline` is the pre-console stacked
+   * layout ({@link AnalysisTranscript} above the form, both in normal flow); it
+   * stays only so a caller that has not moved to the console keeps working.
    */
-  variant?: "inline" | "empty"
+  variant?: "inline" | "empty" | "docked"
+}
+
+export interface AnalysisTranscriptProps {
+  turns: AnalysisTurn[]
+  currentSpecHash: string
+  onApprove: (turnId: string) => void
+  onDiscard: (turnId: string) => void
+  /** Overrides the scroll cap; `AnalysisConsole` passes 40vh instead of `max-h-72`. */
+  className?: string
+}
+
+/**
+ * The transcript, on its own: every turn, oldest first, scrolling internally
+ * once it outgrows its box. Extracted so `AnalysisConsole` can position it as
+ * an overlay above the docked composer row instead of stacking it in normal
+ * document flow, which is the bug ADR-019 exists to fix.
+ */
+export function AnalysisTranscript({
+  turns,
+  currentSpecHash,
+  onApprove,
+  onDiscard,
+  className,
+}: AnalysisTranscriptProps) {
+  if (turns.length === 0) return null
+  return (
+    <div
+      className={cn(
+        "flex max-h-72 flex-col gap-3 overflow-y-auto rounded-2xl border border-border/60 bg-card/40 px-3 py-2",
+        className,
+      )}
+    >
+      {turns.map((turn) => (
+        <Turn
+          key={turn.id}
+          turn={turn}
+          currentSpecHash={currentSpecHash}
+          onApprove={onApprove}
+          onDiscard={onDiscard}
+        />
+      ))}
+    </div>
+  )
 }
 
 /** Show the counter late. A counter on an empty box is noise, not help. */
@@ -285,21 +334,20 @@ export function AnalysisComposer({
     )
   }
 
+  // `docked`: the bare row `AnalysisConsole` docks to the bottom of the pane.
+  // No transcript, no centred card — the console owns both of those.
+  if (variant === "docked") {
+    return composer
+  }
+
   return (
     <div className="flex flex-col gap-2">
-      {turns.length > 0 && (
-        <div className="flex max-h-72 flex-col gap-3 overflow-y-auto rounded-2xl border border-border/60 bg-card/40 px-3 py-2">
-          {turns.map((turn) => (
-            <Turn
-              key={turn.id}
-              turn={turn}
-              currentSpecHash={currentSpecHash}
-              onApprove={onApprove}
-              onDiscard={onDiscard}
-            />
-          ))}
-        </div>
-      )}
+      <AnalysisTranscript
+        turns={turns}
+        currentSpecHash={currentSpecHash}
+        onApprove={onApprove}
+        onDiscard={onDiscard}
+      />
       {composer}
     </div>
   )
