@@ -6,6 +6,7 @@ import {
 import type { SpecPatchOutcome } from "@/lib/data-analysis/ai/spec-author-client"
 import { parseSpec, type AnalysisSpec } from "@/lib/data-analysis/spec/analysis-spec"
 import { applyMutation, type AppliedMutation, type SpecMutation } from "@/lib/data-analysis/spec/mutations"
+import { parseMutation } from "@/lib/data-analysis/spec/mutation-schema"
 import type { Table } from "@/lib/data-analysis/engine/resolver"
 
 /**
@@ -359,4 +360,117 @@ export function canExecuteProposal(
   if (!proposal) return false
   if (proposal.clarificationNeeded) return false
   return proposal.mutationCount > 0
+}
+
+/* ── Preview and post-commit verification (ADR-022) ──────────────────────── */
+
+export type ProposalPreview = {
+  /** The spec as it WOULD be if every resolvable mutation were accepted. */
+  overlaySpec: AnalysisSpec
+  /** What would change, field by field, before the researcher commits to it. */
+  settingsDiff: Array<{ field: string; from: string; to: string }>
+  /** Left out — malformed, or the spec itself rejected it. Never applied. */
+  unresolved: Array<{ mutation: SpecMutation; reason: string }>
+}
+
+/** Flattens a spec into `{ "figure.palette": "..." }`-style leaves for diffing. */
+function flattenForDiff(value: unknown, prefix: string, out: Record<string, string>): void {
+  if (Array.isArray(value) || value === null || typeof value !== "object") {
+    out[prefix] = Array.isArray(value) ? JSON.stringify(value) : String(value)
+    return
+  }
+  for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
+    flattenForDiff(v, prefix ? `${prefix}.${key}` : key, out)
+  }
+}
+
+function diffSpecs(before: AnalysisSpec, after: AnalysisSpec): Array<{ field: string; from: string; to: string }> {
+  const a: Record<string, string> = {}
+  const b: Record<string, string> = {}
+  flattenForDiff(before, "", a)
+  flattenForDiff(after, "", b)
+  const fields = new Set([...Object.keys(a), ...Object.keys(b)])
+  const diff: Array<{ field: string; from: string; to: string }> = []
+  for (const field of fields) {
+    if (a[field] !== b[field]) diff.push({ field, from: a[field] ?? "", to: b[field] ?? "" })
+  }
+  return diff
+}
+
+/**
+ * The preview path — the proposed chart plus a settings diff — made real.
+ *
+ * `mutations` is typed as already-parsed `SpecMutation[]`, but it originates
+ * from the model, which does not honour TypeScript at runtime: every entry is
+ * re-validated through `parseMutation` (P5 §Edge cases — "Shape: malformed
+ * mutation from the model"). A malformed entry, or one `applyMutation` itself
+ * rejects, lands in `unresolved` with a reason and contributes nothing to
+ * `overlaySpec`; it is never silently dropped.
+ */
+export function buildProposalPreview(
+  currentSpec: AnalysisSpec,
+  mutations: SpecMutation[],
+  table: Table
+): ProposalPreview {
+  let overlaySpec = currentSpec
+  const unresolved: ProposalPreview["unresolved"] = []
+  for (const raw of mutations) {
+    const parsed = parseMutation(raw)
+    if (!parsed.ok) {
+      unresolved.push({ mutation: raw, reason: parsed.reason })
+      continue
+    }
+    try {
+      overlaySpec = applyMutation(overlaySpec, parsed.mutation)
+    } catch (err) {
+      unresolved.push({ mutation: parsed.mutation, reason: err instanceof Error ? err.message : "Could not apply." })
+    }
+  }
+  void table // reserved for a future resolver-backed legality check; unused today
+  return { overlaySpec, settingsDiff: diffSpecs(currentSpec, overlaySpec), unresolved }
+}
+
+/**
+ * The entity a mutation targets, when accepting it can be reported "applied
+ * but not visible" (ADR-022) — everything else has no rendered target to lose,
+ * so it is trivially visible.
+ */
+function targetEntityKey(mutation: SpecMutation): string | null {
+  switch (mutation.kind) {
+    case "figure.setSeriesStyle":
+      return mutation.seriesKey
+    case "figure.addAnnotation":
+      return mutation.annotation.id
+    case "figure.updateAnnotation":
+    case "figure.removeAnnotation":
+    case "figure.moveBracket":
+      return mutation.id
+    default:
+      return null
+  }
+}
+
+/**
+ * ADR-022: "applied" is a claim about the FIGURE, not the spec object. Call
+ * after a commit (or on reopen, against a stored overlay) with the entity
+ * keys the render actually drew. A mutation whose target is not among them
+ * comes back `visible: false` with a reason — "applied to the spec, but not
+ * visible on this chart" — so the caller can report it and prune the stale
+ * overlay entry instead of replaying it silently next time.
+ */
+export function verifyApplied(
+  mutations: SpecMutation[],
+  renderedEntityKeys: Set<string>
+): Array<{ mutation: SpecMutation; visible: boolean; reason: string | null }> {
+  return mutations.map((mutation) => {
+    const key = targetEntityKey(mutation)
+    if (key === null || renderedEntityKeys.has(key)) {
+      return { mutation, visible: true, reason: null }
+    }
+    return {
+      mutation,
+      visible: false,
+      reason: `Applied to the spec, but not visible on this chart: "${key}" is not currently drawn.`,
+    }
+  })
 }

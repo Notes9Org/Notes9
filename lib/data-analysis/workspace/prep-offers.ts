@@ -113,12 +113,14 @@ export function profilePreparation(table: Table): PreparedColumn[] {
 export interface PrepOffer {
   /** Stable across recomputes: it is the spec position the offer would occupy. */
   id: string
+  /** What this offer is about; a producer's own vocabulary beyond the shared two. */
+  kind: "column-roles" | "statistical-test" | string
   /** The offer, naming the column and what is wrong with it. Shown on the chip. */
-  label: string
+  summary: string
   /** Why it is worth doing, for the chip's title/tooltip. */
-  detail: string
-  /** The ordinary mutation an acceptance dispatches. */
-  mutation: SpecMutation
+  evidence: string
+  /** What accepting dispatches — nothing here decides anything on its own. */
+  apply: SpecMutation[]
 }
 
 function hasTransformOn(spec: AnalysisSpec, kind: string, column: string): boolean {
@@ -151,12 +153,15 @@ export function prepOffers(spec: AnalysisSpec, prepared: PreparedColumn[]): Prep
     const names = wide.map((p) => p.column)
     offers.push({
       id: "pivotLonger",
-      label: `${names.length} columns named by number ("${names[0]}"…"${names[names.length - 1]}") — fold into one`,
-      detail: `A plate export writes one column per plate column. Nothing below the resolver can read that shape until it is folded into ${names.length * spec.dataset.rowCount} rows of "column" and "value".`,
-      mutation: {
-        kind: "data.addTransform",
-        transform: { kind: "pivotLonger", columns: names, namesTo: "column", valuesTo: "value" },
-      },
+      kind: "pivotLonger",
+      summary: `${names.length} columns named by number ("${names[0]}"…"${names[names.length - 1]}") — fold into one`,
+      evidence: `A plate export writes one column per plate column. Nothing below the resolver can read that shape until it is folded into ${names.length * spec.dataset.rowCount} rows of "column" and "value".`,
+      apply: [
+        {
+          kind: "data.addTransform",
+          transform: { kind: "pivotLonger", columns: names, namesTo: "column", valuesTo: "value" },
+        },
+      ],
     })
   }
 
@@ -174,19 +179,22 @@ export function prepOffers(spec: AnalysisSpec, prepared: PreparedColumn[]): Prep
       if (!control) continue
       offers.push({
         id: `normaliseToControl:${p.column}:${control}`,
-        label: `"${p.column}" has a "${control}" level in ${p.levelCounts.get(control)} rows — express "${response}" as % of it`,
-        detail: `Normalising to the control on the same plate is what removes plate-to-plate drift; a raw signal carries it.`,
-        mutation: {
-          kind: "data.addTransform",
-          transform: {
-            kind: "normaliseToControl",
-            column: response,
-            groupColumn: p.column,
-            controlLevel: control,
-            per: [],
-            as: "percent",
+        kind: "normaliseToControl",
+        summary: `"${p.column}" has a "${control}" level in ${p.levelCounts.get(control)} rows — express "${response}" as % of it`,
+        evidence: `Normalising to the control on the same plate is what removes plate-to-plate drift; a raw signal carries it.`,
+        apply: [
+          {
+            kind: "data.addTransform",
+            transform: {
+              kind: "normaliseToControl",
+              column: response,
+              groupColumn: p.column,
+              controlLevel: control,
+              per: [],
+              as: "percent",
+            },
           },
-        },
+        ],
       })
       break
     }
@@ -215,9 +223,10 @@ export function prepOffers(spec: AnalysisSpec, prepared: PreparedColumn[]): Prep
     const tail = p.skew! > 0 ? "right" : "left"
     offers.push({
       id: `log10:${p.column}`,
-      label: `"${p.column}" is strongly ${tail}-tailed — take log10`,
-      detail: `A pre-flight scan of the raw sheet puts "${p.column}" past the conventional |skew| ≥ ${SKEW_THRESHOLD} cut, where a test assuming a symmetric distribution stops being the right test. The skew itself is reported by the engine, in the descriptives, over the rows the analysis actually uses. Every value is positive, so log10 is defined across the column.`,
-      mutation: { kind: "data.addTransform", transform: { kind: "log10", column: p.column } },
+      kind: "log10",
+      summary: `"${p.column}" is strongly ${tail}-tailed — take log10`,
+      evidence: `A pre-flight scan of the raw sheet puts "${p.column}" past the conventional |skew| ≥ ${SKEW_THRESHOLD} cut, where a test assuming a symmetric distribution stops being the right test. The skew itself is reported by the engine, in the descriptives, over the rows the analysis actually uses. Every value is positive, so log10 is defined across the column.`,
+      apply: [{ kind: "data.addTransform", transform: { kind: "log10", column: p.column } }],
     })
   }
 
@@ -230,9 +239,10 @@ export function prepOffers(spec: AnalysisSpec, prepared: PreparedColumn[]): Prep
       const total = gappy.missing + gappy.count
       offers.push({
         id: "missingValues",
-        label: `"${gappy.column}" is missing ${gappy.missing} of ${total} values — impute the median instead of dropping the rows`,
-        detail: `Listwise deletion drops the whole row, so ${gappy.missing} gaps in one column cost every other measurement on those rows too.`,
-        mutation: { kind: "analysis.setMissingValues", value: "median-impute" },
+        kind: "missingValues",
+        summary: `"${gappy.column}" is missing ${gappy.missing} of ${total} values — impute the median instead of dropping the rows`,
+        evidence: `Listwise deletion drops the whole row, so ${gappy.missing} gaps in one column cost every other measurement on those rows too.`,
+        apply: [{ kind: "analysis.setMissingValues", value: "median-impute" }],
       })
     }
   }
@@ -255,9 +265,10 @@ export function prepOffers(spec: AnalysisSpec, prepared: PreparedColumn[]): Prep
     ]
     offers.push({
       id: `rareLevels:${p.column}`,
-      label: `"${p.column}" has ${p.cardinality} levels, ${dropped} with fewer than ${MIN_LEVEL_ROWS} rows — keep the ${kept.length} that are replicated`,
-      detail: `A level with one or two rows has no spread to compare, so it contributes a group the test cannot describe.`,
-      mutation: { kind: "data.setFilters", filters },
+      kind: "rareLevels",
+      summary: `"${p.column}" has ${p.cardinality} levels, ${dropped} with fewer than ${MIN_LEVEL_ROWS} rows — keep the ${kept.length} that are replicated`,
+      evidence: `A level with one or two rows has no spread to compare, so it contributes a group the test cannot describe.`,
+      apply: [{ kind: "data.setFilters", filters }],
     })
     break
   }
