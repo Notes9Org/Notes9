@@ -2,12 +2,14 @@ import { readFileSync } from "node:fs"
 import { describe, it, expect } from "vitest"
 import type { Table } from "@/lib/data-analysis/engine/resolver"
 import type { AnalysisSpec, FigureKind } from "@/lib/data-analysis/spec/analysis-spec"
+import type { TestCapability } from "@/lib/data-analysis/semantic/infer"
 import {
   CHART_TYPE_TO_FIGURE_KIND,
   PIPELINE_FOR_NEW_SHEET,
   FIGURE_KIND_TO_CHART_TYPE,
   chartStateFromSpec,
   specFromChartState,
+  recommendTestForChart,
   tableFromChartRows,
   recomputeSignature,
   type ChartState,
@@ -132,26 +134,53 @@ describe("deriving a spec from the rail", () => {
   })
 })
 
-describe("the test follows the chart's question", () => {
-  it("asks for a comparison when the chart compares groups", () => {
-    // Three groups, six replicates each: a one-way ANOVA is what the bar chart
-    // is posing.
-    expect(specFromChartState({ ...base, chartType: "bar" }, table).analysis.test).toBe("anova-one-way")
+// ADR-025: a chart type used to pick a statistical test outright, and the
+// artefact recorded that a test was run with no human having chosen it —
+// the most serious of the root causes for an electronic lab notebook.
+// `recommendTestForChart` now only offers a recommendation (surfaced as a
+// `PrepOffer`); `specFromChartState` must never call it or substitute its
+// answer for `analysis.test`.
+describe("recommendTestForChart offers a recommendation, evidence attached", () => {
+  it("recommends the design's own best answer, with a rationale, when the chart implies nothing specific", () => {
+    const capabilities: TestCapability[] = [
+      { test: "anova-one-way", legal: true, recommended: true },
+      { test: "t-unpaired", legal: true, recommended: false },
+    ]
+    const recommendation = recommendTestForChart("bar", capabilities)
+    expect(recommendation?.test).toBe("anova-one-way")
+    expect(recommendation?.rationale).toBeTruthy()
   })
 
-  it("pairs the correction with the test", () => {
-    expect(specFromChartState({ ...base, chartType: "bar" }, table).analysis.postHoc).toBe("tukey")
+  it("recommends the test a chart type asks for, when the data can support it", () => {
+    const capabilities: TestCapability[] = [{ test: "kaplan-meier", legal: true, recommended: true }]
+    expect(recommendTestForChart("km", capabilities)?.test).toBe("kaplan-meier")
   })
 
-  it("never requests a test this data cannot support", () => {
+  it("never recommends a test this data cannot support", () => {
     // A survival chart over data with no duration or event column must not
-    // request a log-rank the resolver would refuse.
-    expect(specFromChartState({ ...base, chartType: "km" }, table).analysis.test).not.toBe("kaplan-meier")
+    // recommend a log-rank the resolver would refuse.
+    const capabilities: TestCapability[] = [{ test: "kaplan-meier", legal: false, recommended: false }]
+    expect(recommendTestForChart("km", capabilities)).toBeNull()
   })
 
-  it("asks for nothing when nothing is supportable", () => {
+  it("returns null, not a written choice, when there is nothing to recommend", () => {
+    const capabilities: TestCapability[] = [{ test: "t-unpaired", legal: false, recommended: false }]
+    expect(recommendTestForChart("line", capabilities)).toBeNull()
+  })
+})
+
+describe("specFromChartState never substitutes a recommendation for the researcher's choice", () => {
+  it("leaves analysis.test as \"none\" when nothing was chosen, whatever the chart type implies", () => {
+    // The bug this closes: a bar chart over three replicated groups used to
+    // write "anova-one-way" into the artefact with no human having chosen it.
+    expect(specFromChartState({ ...base, chartType: "bar" }, table).analysis.test).toBe("none")
+    expect(specFromChartState({ ...base, chartType: "km" }, table).analysis.test).toBe("none")
     const thin = tableFromChartRows(["Note"], [{ Note: "hello" }])
     expect(specFromChartState({ ...base, chartType: "line" }, thin).analysis.test).toBe("none")
+  })
+
+  it("does not pair a post-hoc correction to a test nobody chose", () => {
+    expect(specFromChartState({ ...base, chartType: "bar" }, table).analysis.postHoc).toBe("none")
   })
 })
 
@@ -309,16 +338,19 @@ describe("the statistics slice survives a round trip", () => {
     expect(specFromChartState({ ...base, ...state }, table).analysis.test).toBe("kruskal-wallis")
   })
 
-  it("still derives the test from the chart type when none is chosen", () => {
-    expect(specFromChartState(base, table).analysis.test).toBe("anova-one-way")
-    expect(specFromChartState({ ...base, test: undefined }, table).analysis.test).toBe("anova-one-way")
+  it("never derives the test from the chart type, chosen or not (ADR-025)", () => {
+    // This is the artefact-records-a-test-no-human-chose failure ADR-025
+    // exists to close: analysis.test stays "none", never a chart-type guess.
+    expect(specFromChartState(base, table).analysis.test).toBe("none")
+    expect(specFromChartState({ ...base, test: undefined }, table).analysis.test).toBe("none")
   })
 
-  it("falls back to the derived test when the chosen one is illegal here", () => {
+  it("falls back to \"none\", not a recommendation, when the chosen test is illegal here", () => {
     // t-unpaired compares two groups; this table has three. Carrying the
-    // choice through would hand the resolver a spec it can only reject, so an
-    // impossible test must not survive the way a legal one does.
-    expect(specFromChartState({ ...base, test: "t-unpaired" }, table).analysis.test).toBe("anova-one-way")
+    // choice through would hand the resolver a spec it can only reject, and
+    // substituting a recommendation instead would be the same
+    // artefact-records-a-choice-nobody-made failure, one step removed.
+    expect(specFromChartState({ ...base, test: "t-unpaired" }, table).analysis.test).toBe("none")
   })
 
   it("keeps the correction, alpha, tails and reference level", () => {
@@ -332,8 +364,10 @@ describe("the statistics slice survives a round trip", () => {
   })
 
   it("leaves the derived defaults alone when the rail chose nothing", () => {
+    // postHoc is "none" because it is derived from analysis.test, which is
+    // itself "none" now that nothing substitutes a chart-type guess for it.
     const analysis = specFromChartState(base, table).analysis
-    expect(analysis.postHoc).toBe("tukey")
+    expect(analysis.postHoc).toBe("none")
     expect(analysis.alpha).toBe(0.05)
     expect(analysis.tails).toBe("two")
     expect(analysis.referenceLevel).toBeNull()

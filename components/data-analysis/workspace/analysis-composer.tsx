@@ -1,10 +1,10 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useRef, useState, type RefObject } from "react"
 import { Sparkle } from "@phosphor-icons/react"
 
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import {
   approvalBlockedReason,
@@ -14,6 +14,7 @@ import {
   type AnalysisTurn,
 } from "@/lib/data-analysis/ai/analysis-thread"
 import { SPEC_AUTHOR_PROMPT_MAX_CHARS } from "@/lib/data-analysis/ai/spec-author"
+import type { AiGate } from "@/lib/data-analysis/workspace/ai-gate"
 
 /**
  * The one input on the Data Analysis page, and the conversation above it.
@@ -26,15 +27,19 @@ import { SPEC_AUTHOR_PROMPT_MAX_CHARS } from "@/lib/data-analysis/ai/spec-author
  * The component holds no analysis state. It renders turns and reports intent;
  * the workspace owns the spec, applies approved plans through the same
  * `commitEdits` path a hand edit takes, and decides what the transcript says.
+ *
+ * Send eligibility and the reason for refusal both come from `gate` (ADR-023):
+ * `gate.canCapture` alone decides whether Send is enabled — a pre-data intent
+ * turn is a legitimate send — and `gate.reason`, never a literal chosen here,
+ * is the only text ever shown for why sending (or proposing) is unavailable.
  */
 
 export interface AnalysisComposerProps {
   turns: AnalysisTurn[]
   /** Hash of the spec as it is right now — decides whether a plan is still live. */
   currentSpecHash: string
+  gate: AiGate
   busy: boolean
-  /** null means "send is available". A string is the reason it is not, shown as-is. */
-  blockedReason: string | null
   onSend: (prompt: string) => void
   onApprove: (turnId: string) => void
   onDiscard: (turnId: string) => void
@@ -43,16 +48,12 @@ export interface AnalysisComposerProps {
   /** The attach control — a file picker in the empty state, a chip once loaded. */
   attachSlot?: React.ReactNode
   /**
-   * `empty` is the first screen of a new analysis: centred, nothing above it,
-   * and it will not send until a dataset is attached (ADR-015). `docked` is
-   * the bare input row with no transcript and no centred card — `AnalysisConsole`
-   * (ADR-019) renders the transcript itself, positioned as an overlay above this
-   * row rather than stacked above it in document flow, and uses `docked` for the
-   * row it docks to the bottom of the pane. `inline` is the pre-console stacked
-   * layout ({@link AnalysisTranscript} above the form, both in normal flow); it
-   * stays only so a caller that has not moved to the console keeps working.
+   * `empty` is the first screen of a new analysis: centred, nothing above it
+   * (ADR-015). `rail` is the bare input row that `AnalysisConsole` docks below
+   * the transcript in the right rail (ADR-024); `docked`/`inline` are retired
+   * with ADR-019 — the console, not the composer, now owns the transcript.
    */
-  variant?: "inline" | "empty" | "docked"
+  variant: "empty" | "rail"
 }
 
 export interface AnalysisTranscriptProps {
@@ -60,15 +61,19 @@ export interface AnalysisTranscriptProps {
   currentSpecHash: string
   onApprove: (turnId: string) => void
   onDiscard: (turnId: string) => void
-  /** Overrides the scroll cap; `AnalysisConsole` passes 40vh instead of `max-h-72`. */
+  /** Overrides the scroll cap; `AnalysisConsole` clears it for full-height rail flow. */
   className?: string
+  /** Attaches the scroll container so `AnalysisConsole` can drive pinned auto-scroll. */
+  scrollRef?: RefObject<HTMLDivElement | null>
+  onScroll?: () => void
 }
 
 /**
  * The transcript, on its own: every turn, oldest first, scrolling internally
- * once it outgrows its box. Extracted so `AnalysisConsole` can position it as
- * an overlay above the docked composer row instead of stacking it in normal
- * document flow, which is the bug ADR-019 exists to fix.
+ * once it outgrows its box. Extracted so `AnalysisConsole` can own the scroll
+ * container — attaching `scrollRef`/`onScroll` for pinned auto-scroll — instead
+ * of this component managing its own overlay geometry, which is the bug
+ * ADR-024 exists to fix.
  */
 export function AnalysisTranscript({
   turns,
@@ -76,10 +81,27 @@ export function AnalysisTranscript({
   onApprove,
   onDiscard,
   className,
+  scrollRef,
+  onScroll,
 }: AnalysisTranscriptProps) {
   if (turns.length === 0) return null
+
+  // Only the most recent proposed plan is ever approvable, even if more than
+  // one turn is (incorrectly, or transiently) still `proposed` — approving a
+  // superseded plan against a conversation that has moved on is the hazard
+  // this guards against. Upstream is expected to mark superseded plans
+  // `stale`, but this must not depend on that alone.
+  const latestProposedId =
+    turns
+      .slice()
+      .reverse()
+      .find((t): t is AnalysisAssistantTurn => t.role === "assistant" && t.plan?.status === "proposed")?.id ?? null
+
   return (
     <div
+      ref={scrollRef}
+      onScroll={onScroll}
+      data-testid="analysis-transcript-scroll"
       className={cn(
         "flex max-h-72 flex-col gap-3 overflow-y-auto rounded-2xl border border-border/60 bg-card/40 px-3 py-2",
         className,
@@ -92,6 +114,7 @@ export function AnalysisTranscript({
           currentSpecHash={currentSpecHash}
           onApprove={onApprove}
           onDiscard={onDiscard}
+          latestProposedId={latestProposedId}
         />
       ))}
     </div>
@@ -106,16 +129,18 @@ function PlanCard({
   currentSpecHash,
   onApprove,
   onDiscard,
+  latestProposedId,
 }: {
   turn: AnalysisAssistantTurn
   currentSpecHash: string
   onApprove: (turnId: string) => void
   onDiscard: (turnId: string) => void
+  latestProposedId: string | null
 }) {
   const plan = turn.plan
   if (!plan) return null
 
-  const approvable = canApprovePlan(turn, currentSpecHash)
+  const approvable = canApprovePlan(turn, currentSpecHash) && turn.id === latestProposedId
   const blocked = approvalBlockedReason(turn, currentSpecHash)
   const settled = plan.status === "approved" || plan.status === "discarded"
 
@@ -189,11 +214,13 @@ function Turn({
   currentSpecHash,
   onApprove,
   onDiscard,
+  latestProposedId,
 }: {
   turn: AnalysisTurn
   currentSpecHash: string
   onApprove: (turnId: string) => void
   onDiscard: (turnId: string) => void
+  latestProposedId: string | null
 }) {
   if (turn.role === "user") {
     return (
@@ -227,6 +254,7 @@ function Turn({
         currentSpecHash={currentSpecHash}
         onApprove={onApprove}
         onDiscard={onDiscard}
+        latestProposedId={latestProposedId}
       />
       {turn.historyDropped ? (
         <p className="mt-1 text-[11.5px] text-muted-foreground">
@@ -239,73 +267,89 @@ function Turn({
 }
 
 export function AnalysisComposer({
-  turns,
-  currentSpecHash,
+  gate,
   busy,
-  blockedReason,
   onSend,
-  onApprove,
-  onDiscard,
   datasetName,
   attachSlot,
-  variant = "inline",
+  variant,
 }: AnalysisComposerProps) {
   const [prompt, setPrompt] = useState("")
-  const inputRef = useRef<HTMLInputElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  const blocked = blockedReason !== null
-  const canSend = !blocked && !busy && prompt.trim().length > 0
+  // ADR-023: capturing intent needs nothing, proposing needs a dataset. Send
+  // is gated on `canCapture` alone — a pre-data intent turn is legitimate even
+  // while `canPropose` is false — and `canPropose` never enters this check.
+  const canSend = gate.canCapture && !busy && prompt.trim().length > 0
 
-  function submit(e: React.FormEvent) {
-    e.preventDefault()
+  function submit() {
     if (!canSend) return
     onSend(prompt.trim())
     setPrompt("")
-    inputRef.current?.focus()
+    textareaRef.current?.focus()
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    submit()
+  }
+
+  // Enter sends, Shift+Enter inserts a newline — the standard chat-composer
+  // convention, and the reason this is a <textarea> rather than <Input>.
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault()
+      submit()
+    }
   }
 
   const composer = (
     <form
-      onSubmit={submit}
+      onSubmit={handleSubmit}
       aria-label="Ask about this data"
       className={cn(
         "rounded-2xl border border-border bg-card/80 shadow-sm backdrop-blur-sm",
         variant === "empty" && "shadow-md",
       )}
     >
-      <div className="flex items-center gap-2 px-3 py-2">
+      <div className="flex items-end gap-2 px-3 py-2">
         <Sparkle
-          className="h-4 w-4 shrink-0 text-[var(--n9-accent,#965034)]"
+          className="mb-1.5 h-4 w-4 shrink-0 text-[var(--n9-accent,#965034)]"
           weight="fill"
           aria-hidden
         />
-        <Input
-          ref={inputRef}
+        <Textarea
+          ref={textareaRef}
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
+          onKeyDown={handleKeyDown}
+          rows={1}
           // The cap is the backend's, imported rather than retyped: a local copy
           // passes every test here and drifts the moment the route changes.
           maxLength={SPEC_AUTHOR_PROMPT_MAX_CHARS}
           aria-label="Ask about this data"
+          // The placeholder never authors its own copy for why sending is
+          // unavailable — `gate.reason` is rendered verbatim, or, when nothing
+          // blocks capture, the ordinary prompt.
           placeholder={
-            blocked
-              ? "Attach a data file to start"
+            !gate.canCapture && gate.reason
+              ? gate.reason
               : "Ask a question, or describe a change — “log the Y axis”, “compare the groups”"
           }
-          className="h-8 min-w-0 flex-1 border-0 bg-transparent px-0 text-[13px] shadow-none focus-visible:ring-0"
+          className="min-h-8 max-h-32 min-w-0 flex-1 resize-none border-0 bg-transparent px-0 py-1 text-[13px] shadow-none focus-visible:ring-0"
         />
         {prompt.length >= COUNTER_VISIBLE_FROM && (
-          <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+          <span className="mb-1.5 shrink-0 text-[11px] tabular-nums text-muted-foreground">
             {SPEC_AUTHOR_PROMPT_MAX_CHARS - prompt.length}
           </span>
         )}
         {/* "Ask", not "Apply": this asks. Applying happens on Approve. */}
-        <Button type="submit" variant="outline" size="sm" disabled={!canSend}>
+        <Button type="submit" variant="outline" size="sm" disabled={!canSend} className="shrink-0">
           {busy ? "Thinking…" : "Ask"}
         </Button>
       </div>
 
-      {(attachSlot || datasetName || blockedReason) && (
+      {(attachSlot || datasetName || gate.reason) && (
         <div className="flex flex-wrap items-center gap-2 border-t border-border/60 px-3 py-1.5 text-[11.5px] text-muted-foreground">
           {attachSlot}
           {datasetName && (
@@ -313,7 +357,9 @@ export function AnalysisComposer({
               {datasetName}
             </span>
           )}
-          {blockedReason && <span>{blockedReason}</span>}
+          {/* Verbatim, always — the reason is derived by the gate, never a
+              literal chosen here (ADR-015's lying-gate failure). */}
+          {gate.reason && <span>{gate.reason}</span>}
         </div>
       )}
     </form>
@@ -334,21 +380,7 @@ export function AnalysisComposer({
     )
   }
 
-  // `docked`: the bare row `AnalysisConsole` docks to the bottom of the pane.
-  // No transcript, no centred card — the console owns both of those.
-  if (variant === "docked") {
-    return composer
-  }
-
-  return (
-    <div className="flex flex-col gap-2">
-      <AnalysisTranscript
-        turns={turns}
-        currentSpecHash={currentSpecHash}
-        onApprove={onApprove}
-        onDiscard={onDiscard}
-      />
-      {composer}
-    </div>
-  )
+  // `rail`: the bare input row. `AnalysisConsole` owns the transcript above it
+  // and the scroll container it lives in.
+  return composer
 }

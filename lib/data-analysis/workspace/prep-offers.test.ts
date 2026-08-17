@@ -51,24 +51,26 @@ describe("prepOffers", () => {
   it("offers a log10 and a missing-value strategy, each quoting its own measurement", () => {
     const offers = prepOffers(skewGapSpec, profilePreparation(skewGapTable))
 
-    const log = offers.find((o) => o.mutation.kind === "data.addTransform")
+    const log = offers.find((o) => o.apply[0]?.kind === "data.addTransform")
     expect(log).toBeDefined()
-    expect(log!.mutation).toEqual({
-      kind: "data.addTransform",
-      transform: { kind: "log10", column: "signal" },
-    })
+    expect(log!.apply).toEqual([
+      {
+        kind: "data.addTransform",
+        transform: { kind: "log10", column: "signal" },
+      },
+    ])
     // The label names the column and what is wrong with it. It does NOT carry
     // the pre-flight skew, which the engine never produced — see the
     // "no statistic the engine did not produce" case below.
-    expect(log!.label).toContain("signal")
-    expect(log!.label).toContain("right-tailed")
+    expect(log!.summary).toContain("signal")
+    expect(log!.summary).toContain("right-tailed")
 
-    const gaps = offers.find((o) => o.mutation.kind === "analysis.setMissingValues")
+    const gaps = offers.find((o) => o.apply[0]?.kind === "analysis.setMissingValues")
     expect(gaps).toBeDefined()
-    expect(gaps!.mutation).toEqual({ kind: "analysis.setMissingValues", value: "median-impute" })
+    expect(gaps!.apply).toEqual([{ kind: "analysis.setMissingValues", value: "median-impute" }])
     // 2 of 6, both numbers the profile measured.
-    expect(gaps!.label).toContain("2 of 6")
-    expect(gaps!.label).toContain("viability")
+    expect(gaps!.summary).toContain("2 of 6")
+    expect(gaps!.summary).toContain("viability")
   })
 
   /**
@@ -99,7 +101,7 @@ describe("prepOffers", () => {
     ]
     // Guard the guard: an empty sweep would pass vacuously.
     expect(offers.length).toBeGreaterThan(2)
-    const shown = offers.flatMap((o) => [o.label, o.detail]).join("\n")
+    const shown = offers.flatMap((o) => [o.summary, o.evidence]).join("\n")
 
     // The skew the pre-flight scan measured, at the precision the chip used to
     // print it, must appear nowhere the researcher can read it.
@@ -111,9 +113,9 @@ describe("prepOffers", () => {
 
   it("records an accepted offer as an ordinary mutation with origin user", () => {
     const offers = prepOffers(skewGapSpec, profilePreparation(skewGapTable))
-    const offer = offers.find((o) => o.mutation.kind === "data.addTransform")!
+    const offer = offers.find((o) => o.apply[0]?.kind === "data.addTransform")!
 
-    const history = dispatchMutation(initHistory(skewGapSpec), offer.mutation, "user")
+    const history = dispatchMutation(initHistory(skewGapSpec), offer.apply[0], "user")
     const applied = history.past[history.past.length - 1].applied
     expect(applied.origin).toBe("user")
     expect(applied.description).toBe("Transform added: log10")
@@ -131,7 +133,7 @@ describe("prepOffers", () => {
     const offer = offers.find((o) => o.id === id)!
     expect(offer).toBeDefined()
     const after = prepOffers(
-      applyMutation(skewGapSpec, offer.mutation),
+      offer.apply.reduce((spec, m) => applyMutation(spec, m), skewGapSpec),
       profilePreparation(skewGapTable)
     )
     expect(after.some((o) => o.id === id)).toBe(false)
@@ -167,11 +169,13 @@ describe("prepOffers", () => {
       profilePreparation(table)
     ).find((o) => o.id === "pivotLonger")
     expect(offer).toBeDefined()
-    expect(offer!.label).toContain("3 columns")
-    expect(offer!.mutation).toEqual({
-      kind: "data.addTransform",
-      transform: { kind: "pivotLonger", columns: ["1", "2", "3"], namesTo: "column", valuesTo: "value" },
-    })
+    expect(offer!.summary).toContain("3 columns")
+    expect(offer!.apply).toEqual([
+      {
+        kind: "data.addTransform",
+        transform: { kind: "pivotLonger", columns: ["1", "2", "3"], namesTo: "column", valuesTo: "value" },
+      },
+    ])
   })
 
   it("offers normaliseToControl when a grouping column holds a vehicle level", () => {
@@ -187,20 +191,22 @@ describe("prepOffers", () => {
     const offer = prepOffers(
       specFromChartState({ ...state, xKey: "treatment" }, table),
       profilePreparation(table)
-    ).find((o) => o.mutation.kind === "data.addTransform" && o.id.startsWith("normaliseToControl"))
+    ).find((o) => o.apply[0]?.kind === "data.addTransform" && o.id.startsWith("normaliseToControl"))
     expect(offer).toBeDefined()
-    expect(offer!.label).toContain("2 rows")
-    expect(offer!.mutation).toEqual({
-      kind: "data.addTransform",
-      transform: {
-        kind: "normaliseToControl",
-        column: "signal",
-        groupColumn: "treatment",
-        controlLevel: "Vehicle",
-        per: [],
-        as: "percent",
+    expect(offer!.summary).toContain("2 rows")
+    expect(offer!.apply).toEqual([
+      {
+        kind: "data.addTransform",
+        transform: {
+          kind: "normaliseToControl",
+          column: "signal",
+          groupColumn: "treatment",
+          controlLevel: "Vehicle",
+          per: [],
+          as: "percent",
+        },
       },
-    })
+    ])
   })
 
   it("offers keeping the replicated levels of a high-cardinality column", () => {
@@ -217,12 +223,14 @@ describe("prepOffers", () => {
       profilePreparation(table)
     ).find((o) => o.id === "rareLevels:clone")
     expect(offer).toBeDefined()
-    expect(offer!.label).toContain("13 levels")
-    expect(offer!.label).toContain("10 with fewer than 3 rows")
-    expect(offer!.mutation).toEqual({
-      kind: "data.setFilters",
-      filters: [{ column: "clone", op: "in", value: ["c1", "c2", "c3"] }],
-    })
+    expect(offer!.summary).toContain("13 levels")
+    expect(offer!.summary).toContain("10 with fewer than 3 rows")
+    expect(offer!.apply).toEqual([
+      {
+        kind: "data.setFilters",
+        filters: [{ column: "clone", op: "in", value: ["c1", "c2", "c3"] }],
+      },
+    ])
   })
 
   it("offers nothing on a clean, small, symmetric table", () => {

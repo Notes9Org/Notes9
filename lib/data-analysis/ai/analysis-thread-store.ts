@@ -15,6 +15,8 @@
 import { createClient } from "@/lib/supabase/client"
 import {
   ANALYSIS_TURN_VERSION,
+  parseStoredPlan,
+  type AnalysisIntent,
   type AnalysisTurn,
 } from "@/lib/data-analysis/ai/analysis-thread"
 
@@ -83,11 +85,16 @@ export async function createAnalysisThread(input: {
  *
  * `metadata` carries the plan, which is what lets a reopened conversation still
  * show what was proposed and whether it was applied.
+ *
+ * Returns whether the write actually landed. `appendAnalysisTurn` below throws
+ * this away to stay fire-and-forget for existing callers; `appendAnalysisTurnReporting`
+ * is the same write for a caller that needs to show a "not saved" marker
+ * instead of losing the failure silently.
  */
-export async function appendAnalysisTurn(
+async function appendAnalysisTurnInner(
   sessionId: string,
   turn: AnalysisTurn,
-): Promise<void> {
+): Promise<boolean> {
   try {
     const supabase = createClient()
     const id = await messageId(sessionId, turn)
@@ -102,20 +109,49 @@ export async function appendAnalysisTurn(
             ...(turn.historyDropped ? { historyDropped: turn.historyDropped } : {}),
           }
 
-    await supabase
+    const { error: msgError } = await supabase
       .from("chat_messages")
       .upsert(
         { id, session_id: sessionId, role: turn.role, content: turn.content, metadata },
         { onConflict: "id", ignoreDuplicates: true },
       )
-    await supabase
+    if (msgError) return false
+    const { error: sessionError } = await supabase
       .from("chat_sessions")
       .update({ updated_at: new Date().toISOString() })
       .eq("id", sessionId)
+    // The turn itself landed even if the session's updated_at touch failed —
+    // that failure is not provenance loss, so it does not flip the result.
+    void sessionError
+    return true
   } catch {
-    // Swallowed on purpose: see the module header. A failed transcript write
-    // must not cost the researcher the answer they already have on screen.
+    return false
   }
+}
+
+/**
+ * Fire-and-forget append. See the module header: a failed transcript write
+ * must not cost the researcher the answer they already have on screen, so
+ * this never rejects and never reports back.
+ */
+export async function appendAnalysisTurn(
+  sessionId: string,
+  turn: AnalysisTurn,
+): Promise<void> {
+  await appendAnalysisTurnInner(sessionId, turn)
+}
+
+/**
+ * Same write as `appendAnalysisTurn`, but tells its caller whether it landed.
+ * The visible turn is never lost either way — this exists so a caller that
+ * wants to surface "not saved" on the turn can, without changing the
+ * fire-and-forget default every existing caller relies on.
+ */
+export async function appendAnalysisTurnReporting(
+  sessionId: string,
+  turn: AnalysisTurn,
+): Promise<boolean> {
+  return appendAnalysisTurnInner(sessionId, turn)
 }
 
 /**
@@ -182,7 +218,7 @@ export async function loadAnalysisThread(sessionId: string): Promise<AnalysisTur
           id: row.id as string,
           role: "assistant",
           content: (row.content as string) ?? "",
-          plan: (meta.plan as AnalysisTurn extends { plan: infer P } ? P : never) ?? null,
+          plan: parseStoredPlan(meta.plan),
           // Deliberately not the live token: a plan read back from storage was
           // computed in another session and can never be approvable now.
           specHashAtProposal: (meta.specHashAtProposal as string) ?? "",
@@ -194,5 +230,117 @@ export async function loadAnalysisThread(sessionId: string): Promise<AnalysisTur
     return turns
   } catch {
     return []
+  }
+}
+
+/**
+ * Intent (ADR-023), stored on the thread itself — `chat_sessions.metadata`,
+ * beside `analysisId`/`sourceDataFileId`, which already ride there (ADR-013:
+ * no new table). One current intent per thread, keyed to the thread rather
+ * than to a turn, since "what the researcher wants" is a property of the
+ * conversation, not of the message that most recently stated it.
+ *
+ * CONCURRENCY: `@supabase/postgrest-js` builds every filter by coercing the
+ * value to a string (`eq.${value}`), so conditioning on the *object* just read
+ * (`.eq("metadata", before)`) serialises to the literal string
+ * `"eq.[object Object]"` and can never match a jsonb column — that filter is
+ * silently a no-op, not a comparison. `chat_sessions.metadata` is also
+ * `NOT NULL DEFAULT '{}'::jsonb` (`scripts/000_full_script.sql`), so the
+ * `.is("metadata", null)` branch this used to fall back to is unreachable in
+ * production. The result was that every call retried three times, matched
+ * nothing, and returned `false`.
+ *
+ * Fixed by keying the compare-and-swap on `updated_at` instead: it is a
+ * scalar, and postgrest-js's string-coerced filter is exact for scalars. Each
+ * attempt reads `metadata` and `updated_at` together, merges `intent` into
+ * the metadata just read, and writes both `metadata` and a fresh `updated_at`
+ * back conditioned on `updated_at` still equalling the value just read. Zero
+ * rows matched means someone else wrote to this row in between, so the loop
+ * re-reads and retries rather than reporting success for a write that did not
+ * land or silently clobbering the concurrent write.
+ *
+ * EXACT GUARANTEE (no schema change — this rides in existing columns, so a
+ * `git revert` of this feature is still a complete undo):
+ *  - No lost update between concurrent callers of THIS function (two tabs, a
+ *    retry, a double-click): each keys off the `updated_at` it just read, so
+ *    a loser matches zero rows and retries instead of clobbering the winner.
+ *  - No lost update against `appendAnalysisTurnInner`'s `updated_at` touch on
+ *    the same session: that touch changes `updated_at`, so a concurrent
+ *    intent write correctly retries and re-merges onto the fresh `metadata`.
+ *  - NOT a guarantee against every writer of `chat_sessions.metadata` in the
+ *    app: `hooks/use-chat-sessions.ts`'s `updateSessionMetadata` (used by the
+ *    sidebar's pin/literature-context feature, and reachable on any session
+ *    row including a `data_analysis` one) updates `metadata` without
+ *    touching `updated_at`. If that write lands inside this function's
+ *    read-then-write window, this function's `updated_at` condition is still
+ *    satisfied and it will overwrite that write with a merge based on the
+ *    stale `metadata` it read — a real, narrow race, not covered here because
+ *    fixing it means touching a writer this change does not own. This is
+ *    still strictly stronger than the CAS this replaces, which matched
+ *    nothing and protected against nothing.
+ *  - Never reports `true` for a write that did not land (a `0`-row match is
+ *    always a retry, then `false`), and never throws into the analysis path.
+ */
+export async function writeAnalysisIntent(
+  sessionId: string,
+  intent: AnalysisIntent,
+): Promise<boolean> {
+  const supabase = createClient()
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const { data, error: readError } = await supabase
+        .from("chat_sessions")
+        .select("metadata, updated_at")
+        .eq("id", sessionId)
+        .single()
+      if (readError || !data) return false
+      const before = (data.metadata as Record<string, unknown> | null) ?? {}
+      const metadata = { ...before, intent }
+      const { data: written, error } = await supabase
+        .from("chat_sessions")
+        .update({ metadata, updated_at: new Date().toISOString() })
+        .eq("id", sessionId)
+        .eq("updated_at", data.updated_at as string)
+        .select("id")
+      if (error) return false
+      if (Array.isArray(written) && written.length > 0) return true
+      // Zero rows matched: someone else wrote to this row between our read and
+      // our write. Retry against the fresh value instead of giving up.
+    } catch {
+      return false
+    }
+  }
+  return false
+}
+
+/**
+ * Read the thread's current intent back. `undefined` means none was ever
+ * recorded — including every thread written before intent existed, since
+ * `metadata.intent` simply is not a key on those rows. Never coerced to an
+ * empty string: an absent intent and a stated-but-empty one must not read
+ * the same to a caller deciding whether to show "not recorded".
+ */
+export async function readAnalysisIntent(sessionId: string): Promise<AnalysisIntent | undefined> {
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from("chat_sessions")
+      .select("metadata")
+      .eq("id", sessionId)
+      .single()
+    if (error || !data) return undefined
+    const meta = (data.metadata as Record<string, unknown> | null) ?? {}
+    const raw = meta.intent
+    if (!raw || typeof raw !== "object") return undefined
+    const candidate = raw as Record<string, unknown>
+    if (typeof candidate.text !== "string" || typeof candidate.statedAt !== "string") return undefined
+    return {
+      text: candidate.text,
+      statedAt: candidate.statedAt,
+      appliedToDatasetId:
+        typeof candidate.appliedToDatasetId === "string" ? candidate.appliedToDatasetId : null,
+    }
+  } catch {
+    return undefined
   }
 }

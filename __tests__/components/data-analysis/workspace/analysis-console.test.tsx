@@ -1,21 +1,27 @@
 /**
- * `<AnalysisConsole>` — ADR-019.
+ * `<AnalysisConsole>` — ADR-024.
  *
- * The claim under test: the conversation stops permanently occupying the top
- * third of the analysis pane. `variant="empty"` is untouched (ADR-015 already
- * got that right); `variant="docked"` rests as a single ~44px bar and only
- * grows upward, as an overlay, while someone is actually reading it — and a
- * pending plan is the one thing that is never allowed to disappear when it
- * collapses, because Approve is the whole feature.
+ * The claim under test: the conversation is no longer a collapsible overlay
+ * that can hide a pending plan (ADR-019's `docked` variant — collapsed bar,
+ * `max-h-[40vh]` overlay, expand/collapse animation — is retired). `rail` is
+ * the working state: full-height transcript + composer, always rendered, so
+ * a pending plan can never be hidden behind a collapsed bar because there is
+ * no collapsed bar to hide it behind. `variant="empty"` is untouched
+ * (ADR-015 already got that right).
  *
- * This does not re-test `motion.tsx`'s `Collapse` (not this slice's file) or
- * `canApprovePlan` / `approvalBlockedReason` (owned by `analysis-thread.ts`,
- * imported here, not redefined). It tests that `AnalysisConsole` wires them
- * correctly and honours the three layout rules from the architecture doc.
+ * ADR-023's three-state gate — `canSend` decided by `gate.canCapture` alone
+ * (a pre-data intent turn is legitimate even while `gate.canPropose` is
+ * false), and `gate.reason` rendered verbatim, never replaced by a hardcoded
+ * literal — is exercised end-to-end in `analysis-console-ux.test.tsx`; not
+ * re-asserted here to avoid duplicating that coverage.
+ *
+ * This does not re-test `canApprovePlan` / `approvalBlockedReason` (owned by
+ * `analysis-thread.ts`, imported here, not redefined). It tests that
+ * `AnalysisConsole` wires them correctly in the rail layout.
  */
 
-import { describe, it, expect, vi, beforeAll } from "vitest"
-import { render, screen, within, fireEvent, cleanup, waitFor } from "@testing-library/react"
+import { describe, it, expect, vi } from "vitest"
+import { render, screen, fireEvent, cleanup } from "@testing-library/react"
 import { afterEach } from "vitest"
 
 import { AnalysisConsole, type AnalysisConsoleProps } from "@/components/data-analysis/workspace/analysis-console"
@@ -25,36 +31,13 @@ import {
   type AnalysisAssistantTurn,
   type AnalysisUserTurn,
 } from "@/lib/data-analysis/ai/analysis-thread"
-
-// `useReducedMotion` (framer-motion) memoises its `matchMedia` read in a
-// module-level ref the first time any `motion` component mounts, and jsdom
-// does not implement `matchMedia` at all. Stubbing it here, before the first
-// render in this file, makes every test in this file exercise the
-// reduced-motion path. That memoisation also means this file cannot cheaply
-// contrast against `prefers-reduced-motion: false` in the same process — the
-// "reduced motion" describe block below is the one that asserts the actual
-// claim ("no height animation, just a state change") directly, rather than
-// leaving it implicit.
-beforeAll(() => {
-  Object.defineProperty(window, "matchMedia", {
-    writable: true,
-    configurable: true,
-    value: vi.fn((query: string) => ({
-      matches: true,
-      media: query,
-      onchange: null,
-      addListener: () => {},
-      removeListener: () => {},
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      dispatchEvent: () => false,
-    })),
-  })
-})
+import type { AiGate } from "@/lib/data-analysis/workspace/ai-gate"
 
 afterEach(() => cleanup())
 
 const SPEC_HASH = "sha256:current"
+
+const OPEN_GATE: AiGate = { canCapture: true, canPropose: true, reason: null }
 
 function userTurn(overrides: Partial<AnalysisUserTurn> = {}): AnalysisUserTurn {
   return {
@@ -93,113 +76,53 @@ function baseProps(overrides: Partial<AnalysisConsoleProps> = {}): AnalysisConso
     turns: [],
     currentSpecHash: SPEC_HASH,
     busy: false,
-    blockedReason: null,
+    gate: OPEN_GATE,
     onSend: vi.fn(),
     onApprove: vi.fn(),
     onDiscard: vi.fn(),
     datasetName: "plate.xlsx",
-    variant: "docked",
+    variant: "rail",
     ...overrides,
   }
 }
 
-/** The bar's `max-h-[40vh]` overlay wrapper, rendered whenever there are turns. */
-function transcriptWrapper(container: HTMLElement) {
-  return container.querySelector('[class*="max-h-[40vh]"]')
-}
-
 describe("AnalysisConsole — variant=empty", () => {
   it("is unchanged from AnalysisComposer's existing empty state", () => {
+    const blockedGate: AiGate = { canCapture: false, canPropose: false, reason: "Attach a data file to start" }
     const props = {
       turns: [],
       currentSpecHash: SPEC_HASH,
       busy: false,
-      blockedReason: "Attach a data file to start",
+      gate: blockedGate,
       onSend: vi.fn(),
       onApprove: vi.fn(),
       onDiscard: vi.fn(),
       datasetName: null,
+      // A real element, not undefined — otherwise the DOM-equality assertion
+      // below is vacuous: two renders that both omit attachSlot are equal
+      // whether or not the passthrough actually works.
       attachSlot: <button type="button">Attach file</button>,
     }
 
-    const { container: consoleContainer } = render(
-      <AnalysisConsole {...props} variant="empty" />,
-    )
-    const { container: composerContainer } = render(
-      <AnalysisComposer {...props} variant="empty" />,
-    )
+    const { container: consoleContainer } = render(<AnalysisConsole {...props} variant="empty" />)
+    const { container: composerContainer } = render(<AnalysisComposer {...props} variant="empty" />)
 
     expect(consoleContainer.innerHTML).toBe(composerContainer.innerHTML)
     expect(screen.getAllByText("Start an analysis")).toHaveLength(2)
+    expect(screen.getAllByRole("button", { name: "Attach file" })).toHaveLength(2)
   })
 })
 
-describe("AnalysisConsole — variant=docked, collapsed is the resting state", () => {
-  it("mounts collapsed even with existing history — a panel that stays open is the bug", () => {
-    const { container } = render(
-      <AnalysisConsole {...baseProps({ turns: [userTurn(), proposedTurn()] })} />,
-    )
-
-    // The transcript's OVERLAY wrapper exists (there are turns to show), but
-    // its content is not mounted while collapsed — Collapse renders
-    // `{open && children}`, so nothing inside it is in the DOM at rest.
-    expect(transcriptWrapper(container)).not.toBeNull()
-    expect(screen.queryByText("log the y axis")).not.toBeInTheDocument()
-  })
-
-  it("expands on send", () => {
-    const onSend = vi.fn()
-    render(<AnalysisConsole {...baseProps({ turns: [userTurn()], onSend })} />)
-
-    expect(screen.queryByText("log the y axis")).not.toBeInTheDocument()
-
-    fireEvent.change(screen.getByRole("textbox", { name: "Ask about this data" }), {
-      target: { value: "compare the groups" },
-    })
-    fireEvent.click(screen.getByRole("button", { name: "Ask" }))
-
-    expect(onSend).toHaveBeenCalledWith("compare the groups")
-    expect(screen.getByText("log the y axis")).toBeInTheDocument()
-  })
-
-  it("expands when a reply lands, keyed off turn identity so the same array never re-expands", () => {
-    const { rerender } = render(<AnalysisConsole {...baseProps({ turns: [userTurn()] })} />)
-    expect(screen.queryByText("log the y axis")).not.toBeInTheDocument()
-
-    // Same array reference/content — must NOT force it open behind the
-    // researcher's back if they already collapsed it.
-    rerender(<AnalysisConsole {...baseProps({ turns: [userTurn()] })} />)
-    expect(screen.queryByText("log the y axis")).not.toBeInTheDocument()
-
-    // A genuinely new turn (new id) — this is "a reply lands".
-    rerender(<AnalysisConsole {...baseProps({ turns: [userTurn(), proposedTurn()] })} />)
-    expect(screen.getByText("Here is what I would change:")).toBeInTheDocument()
-  })
-
-  it("never reflows the content above it — the overlay wrapper is absolutely positioned, not in flow", () => {
-    const { container } = render(
-      <AnalysisConsole {...baseProps({ turns: [userTurn(), proposedTurn()] })} />,
-    )
-    const wrapper = transcriptWrapper(container)
-    expect(wrapper).not.toBeNull()
-    expect(wrapper?.className).toContain("absolute")
-    expect(wrapper?.className).toContain("bottom-full")
-  })
-})
-
-describe("AnalysisConsole — a pending plan must never be hidden (the most important test in this slice)", () => {
-  it("collapsed with a plan pending: the count is visible and Approve stays reachable", () => {
+describe("AnalysisConsole — variant=rail: a pending plan can never be hidden (there is no collapsed state to hide it behind)", () => {
+  it("renders the transcript and the pending plan directly — nothing to expand, nothing to miss", () => {
     render(<AnalysisConsole {...baseProps({ turns: [userTurn(), proposedTurn()] })} />)
 
-    // Collapsed — the transcript's own Approve button is not mounted.
-    expect(screen.queryByText("log the y axis")).not.toBeInTheDocument()
-
-    // But the collapsed bar itself carries the count and an Approve affordance.
-    expect(screen.getByLabelText("1 pending plan")).toHaveTextContent("1")
+    expect(screen.getByText("log the y axis")).toBeInTheDocument()
+    expect(screen.getByText("Here is what I would change:")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Approve" })).toBeInTheDocument()
   })
 
-  it("clicking Approve from the collapsed bar approves the right turn", () => {
+  it("clicking Approve approves the right turn", () => {
     const onApprove = vi.fn()
     render(<AnalysisConsole {...baseProps({ turns: [userTurn(), proposedTurn({ id: "a-latest" })], onApprove })} />)
 
@@ -207,7 +130,18 @@ describe("AnalysisConsole — a pending plan must never be hidden (the most impo
     expect(onApprove).toHaveBeenCalledWith("a-latest")
   })
 
-  it("counts every proposed plan but only offers Approve for the most recent one", () => {
+  it("only the most recent proposed plan offers Approve", () => {
+    // Both turns are (unrealistically) `proposed` at once — upstream is expected
+    // to mark a superseded plan `stale` before this ever renders, but the
+    // component must not depend on that alone: approving a stale plan against a
+    // spec that has moved is the hazard this guards.
+    //
+    // Renamed from "counts every proposed plan but only offers Approve for the
+    // most recent one": the "counts" half named a pending-plan-count UI (e.g.
+    // "2 pending plans") that lived in ADR-019's collapsed `docked` bar. ADR-024
+    // retired that bar entirely and no count display replaced it anywhere in
+    // AnalysisConsole/AnalysisComposer — there is nothing left to assert. This
+    // test now claims only the behaviour it actually checks.
     render(
       <AnalysisConsole
         {...baseProps({
@@ -220,11 +154,33 @@ describe("AnalysisConsole — a pending plan must never be hidden (the most impo
         })}
       />,
     )
-    expect(screen.getByLabelText("2 pending plans")).toHaveTextContent("2")
+
     expect(screen.getAllByRole("button", { name: "Approve" })).toHaveLength(1)
   })
 
-  it("stale plan (spec moved on): the collapsed bar names why Approve is withheld, never a silently disabled button", () => {
+  it("clicking Approve with two proposed turns resolves to the latest turn id", () => {
+    const onApprove = vi.fn()
+    render(
+      <AnalysisConsole
+        {...baseProps({
+          turns: [
+            userTurn({ id: "u1" }),
+            proposedTurn({ id: "a1" }),
+            userTurn({ id: "u2" }),
+            proposedTurn({ id: "a2" }),
+          ],
+          onApprove,
+        })}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }))
+
+    expect(onApprove).toHaveBeenCalledTimes(1)
+    expect(onApprove).toHaveBeenCalledWith("a2")
+  })
+
+  it("stale plan (spec moved on): names why Approve is withheld, never a silently disabled button", () => {
     render(
       <AnalysisConsole
         {...baseProps({
@@ -234,39 +190,14 @@ describe("AnalysisConsole — a pending plan must never be hidden (the most impo
       />,
     )
 
-    // Still counted — a plan that becomes invisible is a plan that never gets applied.
-    expect(screen.getByLabelText("1 pending plan")).toBeInTheDocument()
+    // Never a silently disabled button — no Approve at all, and the reason why is on screen.
     expect(screen.queryByRole("button", { name: "Approve" })).not.toBeInTheDocument()
     expect(screen.getByText(/analysis changed after this was proposed/i)).toBeInTheDocument()
-  })
-
-  it("Escape collapses without discarding — the pending plan survives and stays reachable", async () => {
-    const onDiscard = vi.fn()
-    const { container } = render(
-      <AnalysisConsole {...baseProps({ turns: [userTurn(), proposedTurn()], onDiscard })} />,
-    )
-
-    // Open it (send re-expands; here we use the explicit toggle instead).
-    fireEvent.click(screen.getByRole("button", { name: "Expand the conversation" }))
-    expect(screen.getByText("log the y axis")).toBeInTheDocument()
-
-    fireEvent.keyDown(container.firstChild as HTMLElement, { key: "Escape" })
-
-    // Collapsed again immediately (the toggle button reflects it without waiting
-    // on Collapse's exit animation).
-    expect(screen.getByRole("button", { name: "Expand the conversation" })).toBeInTheDocument()
-    expect(onDiscard).not.toHaveBeenCalled()
-
-    // The transcript's own copy of the plan leaves the DOM once Collapse's exit
-    // animation runs — once it does, the plan is still reachable: the collapsed
-    // bar's Approve affordance took over.
-    await waitFor(() => expect(screen.queryByText("log the y axis")).not.toBeInTheDocument())
-    expect(screen.getByRole("button", { name: "Approve" })).toBeInTheDocument()
   })
 })
 
 describe("AnalysisConsole — a reply arriving must not steal focus mid-edit", () => {
-  it("expands but leaves focus exactly where it was", () => {
+  it("renders the reply but leaves focus exactly where it was", () => {
     const { rerender } = render(
       <div>
         <input aria-label="a sheet cell" />
@@ -277,11 +208,7 @@ describe("AnalysisConsole — a reply arriving must not steal focus mid-edit", (
     const sheetCell = screen.getByLabelText("a sheet cell")
     sheetCell.focus()
     expect(document.activeElement).toBe(sheetCell)
-    expect(screen.queryByText("Here is what I would change:")).not.toBeInTheDocument()
 
-    // A reply actually lands — a new turn identity, the same mechanism that
-    // drives "expands when a reply lands" above — while focus stays on the
-    // sheet the whole time.
     rerender(
       <div>
         <input aria-label="a sheet cell" />
@@ -289,76 +216,103 @@ describe("AnalysisConsole — a reply arriving must not steal focus mid-edit", (
       </div>,
     )
 
-    // The console did expand...
+    // The reply landed...
     expect(screen.getByText("Here is what I would change:")).toBeInTheDocument()
     // ...but focus never moved off the sheet cell.
     expect(document.activeElement).toBe(sheetCell)
   })
 })
 
-describe("AnalysisConsole — very long transcript scrolls internally, never grows the page", () => {
-  it("bounds the overlay at 40vh with internal scrolling rather than pushing content", () => {
-    const manyTurns = Array.from({ length: 40 }, (_, i) => userTurn({ id: `u${i}`, content: `turn ${i}` }))
-    const { container } = render(<AnalysisConsole {...baseProps({ turns: manyTurns })} />)
+/**
+ * jsdom does not move focus on its own when a Tab keydown is fired — that is
+ * what @testing-library/user-event's `tab()` does internally, and it is not a
+ * dependency of this repo. So this computes the DOM's real tabbable order
+ * (same exclusion rules a browser applies: disabled, tabIndex -1, aria-hidden
+ * or an aria-hidden ancestor) and steps through it with a real Tab keydown
+ * fired on the currently-focused element before each `.focus()` call. A focus
+ * trap or an aria-hidden ancestor wrapping Approve/Discard would make this
+ * land on the wrong element (or throw), which a static `.tabIndex` read
+ * cannot detect.
+ */
+function getTabbables(container: HTMLElement): HTMLElement[] {
+  return Array.from(
+    container.querySelectorAll<HTMLElement>('button, input, textarea, select, a[href], [tabindex]'),
+  ).filter(
+    (el) =>
+      !el.hasAttribute("disabled") &&
+      el.tabIndex !== -1 &&
+      el.getAttribute("aria-hidden") !== "true" &&
+      !el.closest('[aria-hidden="true"]'),
+  )
+}
 
-    const wrapper = transcriptWrapper(container)
-    expect(wrapper).not.toBeNull()
-    expect(wrapper?.className).toContain("max-h-[40vh]")
-    expect(wrapper?.className).toContain("overflow-y-auto")
-  })
-})
-
-describe("AnalysisConsole — reduced motion (this whole file runs under it, see beforeAll above)", () => {
-  it("flips its own expanded/collapsed state — aria-expanded and content reachability — the instant it is toggled, never waiting on an animation frame", async () => {
-    render(<AnalysisConsole {...baseProps({ turns: [userTurn(), proposedTurn()] })} />)
-
-    fireEvent.click(screen.getByRole("button", { name: "Expand the conversation" }))
-    // No `waitFor` here: AnalysisConsole's own state — aria-expanded and the
-    // transcript becoming reachable — is not gated on any animation
-    // completing. That is "just a state change".
-    const collapseToggle = screen.getByRole("button", { name: "Collapse the conversation" })
-    expect(collapseToggle).toHaveAttribute("aria-expanded", "true")
-    expect(screen.getByText("log the y axis")).toBeInTheDocument()
-
-    fireEvent.click(collapseToggle)
-    // The toggle itself flips immediately too, in the same synchronous tick —
-    // collapsing is a state change, not something that waits on an exit
-    // animation to finish.
-    expect(screen.getByRole("button", { name: "Expand the conversation" })).toHaveAttribute(
-      "aria-expanded",
-      "false",
-    )
-    // The one thing still awaited is the DOM removal of the now-exiting
-    // transcript, which is gated on `AnimatePresence`'s exit animation —
-    // `motion.tsx`'s contract (not owned by this slice, not re-tested here),
-    // not this component's. `AnalysisConsole`'s own state already changed
-    // above, before this resolves.
-    await waitFor(() => expect(screen.queryByText("log the y axis")).not.toBeInTheDocument())
-  })
-})
+function pressTab(container: HTMLElement): HTMLElement {
+  const from = document.activeElement as HTMLElement | null
+  fireEvent.keyDown(from ?? document.body, { key: "Tab", code: "Tab" })
+  const tabbables = getTabbables(container)
+  const fromIndex = from ? tabbables.indexOf(from) : -1
+  const next = tabbables[fromIndex + 1]
+  if (!next) throw new Error("Tab ran off the end of the tabbable order")
+  next.focus()
+  return next
+}
 
 describe("AnalysisConsole — keyboard only", () => {
-  it("the expand/collapse toggle is reachable and announces its state via aria-expanded", () => {
-    render(<AnalysisConsole {...baseProps({ turns: [userTurn()] })} />)
-    const toggle = screen.getByRole("button", { name: "Expand the conversation" })
-    expect(toggle).toHaveAttribute("aria-expanded", "false")
+  it("real Tab navigation reaches Approve then Discard, and focus actually lands on each", () => {
+    const { container } = render(<AnalysisConsole {...baseProps({ turns: [userTurn(), proposedTurn()] })} />)
 
-    fireEvent.click(toggle)
-    expect(screen.getByRole("button", { name: "Collapse the conversation" })).toHaveAttribute(
-      "aria-expanded",
-      "true",
-    )
+    const approve = screen.getByRole("button", { name: "Approve" })
+    const discard = screen.getByRole("button", { name: "Discard" })
+
+    // Nothing is focused yet, and the transcript renders before the composer,
+    // so the first two Tab presses must land on Approve then Discard — before
+    // ever reaching the message textarea below them.
+    const first = pressTab(container)
+    expect(first).toBe(approve)
+    expect(document.activeElement).toBe(approve)
+
+    const second = pressTab(container)
+    expect(second).toBe(discard)
+    expect(document.activeElement).toBe(discard)
   })
+})
 
-  it("Approve and Discard are real, focusable buttons — in tab order — once the transcript is expanded", () => {
-    render(<AnalysisConsole {...baseProps({ turns: [userTurn(), proposedTurn()] })} />)
-    fireEvent.click(screen.getByRole("button", { name: "Expand the conversation" }))
+describe("AnalysisConsole — variant=rail: a long transcript scrolls in its own box, never the page", () => {
+  // ADR-024 removes the old `max-h-[40vh]` bounded overlay entirely — the rail
+  // that docks this component now owns the outer height (that dock is slice 05,
+  // components/data-analysis/data-analysis-workspace.tsx, not yet built, so it
+  // cannot be asserted from here). What this component still owns, and what
+  // this test pins: the transcript's own scroll container never grows past
+  // its box (`overflow-y-auto`), and the flex chain around it can shrink
+  // (`min-h-0`) instead of forcing the box to grow with content — the two
+  // properties that make "scrolls internally" possible once a real height is
+  // imposed from outside.
+  it("the transcript scroll container is internally scrollable and can shrink to fit, regardless of turn count", () => {
+    const manyTurns = Array.from({ length: 40 }, (_, i) => userTurn({ id: `u${i}`, content: `message ${i}` }))
+    const { container } = render(<AnalysisConsole {...baseProps({ turns: manyTurns })} />)
 
-    const transcript = screen.getByText("Here is what I would change:").closest("div")
-    expect(transcript).not.toBeNull()
-    const approve = within(transcript as HTMLElement).getByRole("button", { name: "Approve" })
-    const discard = within(transcript as HTMLElement).getByRole("button", { name: "Discard" })
-    expect(approve.tabIndex).not.toBe(-1)
-    expect(discard.tabIndex).not.toBe(-1)
+    const scroller = container.querySelector('[data-testid="analysis-transcript-scroll"]')
+    expect(scroller).not.toBeNull()
+    expect(scroller?.className).toContain("overflow-y-auto")
+    // The old bounded overlay is gone by design — never reintroduce it here.
+    expect(scroller?.className).not.toContain("max-h-[40vh]")
+
+    // The container the scroller lives in must be a shrinkable flex item, not
+    // one that grows to fit its content and pushes the page.
+    const scrollBox = scroller?.parentElement
+    expect(scrollBox?.className).toContain("min-h-0")
+    expect(scrollBox?.className).toContain("flex-1")
+  })
+})
+
+describe("AnalysisConsole — variant=rail: busy", () => {
+  it("shows a thinking state and withholds Send while a request is in flight, even with text typed", () => {
+    render(<AnalysisConsole {...baseProps({ busy: true })} />)
+
+    const textarea = screen.getByRole("textbox", { name: "Ask about this data" })
+    fireEvent.change(textarea, { target: { value: "log the y axis" } })
+
+    const send = screen.getByRole("button", { name: "Thinking…" })
+    expect(send).toBeDisabled()
   })
 })

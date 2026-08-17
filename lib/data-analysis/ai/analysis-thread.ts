@@ -14,6 +14,7 @@
 
 import type { SpecMutation } from "@/lib/data-analysis/spec/mutations"
 import type { SpecAuthorTurn } from "@/lib/data-analysis/ai/spec-author"
+import { parseMutation } from "@/lib/data-analysis/spec/mutation-schema"
 
 /**
  * Wire version. Stored turns outlive the code that wrote them, and a turn whose
@@ -31,6 +32,53 @@ export interface AnalysisPlan {
   rejected: { reason: string }[]
   clarificationNeeded: string | null
   status: PlanStatus
+}
+
+const PLAN_STATUSES: readonly PlanStatus[] = ["proposed", "approved", "discarded", "stale"]
+
+/**
+ * The one place a plan is trusted coming out of storage. `fromStoredThread`
+ * below and `loadAnalysisThread` (analysis-thread-store.ts) both route jsonb
+ * through this rather than casting it — a plan is what decides whether Approve
+ * is offered, so a shape we did not check must never reach `canApprovePlan` /
+ * `approvalBlockedReason`. A plan that fails this is treated as no plan: the
+ * turn still renders (via its `content`), Approve is simply not offered.
+ *
+ * Element-level validation, not just array-ness: a `steps`/`rejected` entry
+ * that is not the shape the renderer expects would otherwise reach
+ * `analysis-composer.tsx` (a non-string step, a null `rejected` entry) and
+ * throw during render, and a malformed `mutations` entry would reach
+ * `applyAiPatch` and throw during apply. Each bad element is dropped rather
+ * than failing the whole plan — `mutations` reuses the same `parseMutation`
+ * the apply path trusts, so an element good enough to survive here is good
+ * enough to apply. A `mutations` array left empty by dropped elements is
+ * still a "no plan" as far as Approve is concerned: `canApprovePlan` already
+ * refuses an empty `mutations` array.
+ */
+export function parseStoredPlan(value: unknown): AnalysisPlan | null {
+  if (!value || typeof value !== "object") return null
+  const p = value as Record<string, unknown>
+  if (!Array.isArray(p.mutations)) return null
+  if (!Array.isArray(p.steps)) return null
+  if (!Array.isArray(p.rejected)) return null
+  if (p.clarificationNeeded !== null && typeof p.clarificationNeeded !== "string") return null
+  if (typeof p.status !== "string" || !PLAN_STATUSES.includes(p.status as PlanStatus)) return null
+  const steps = p.steps.filter((s): s is string => typeof s === "string")
+  const rejected = p.rejected.filter(
+    (r): r is { reason: string } =>
+      !!r && typeof r === "object" && typeof (r as Record<string, unknown>).reason === "string",
+  )
+  const mutations = p.mutations.flatMap((m): SpecMutation[] => {
+    const parsed = parseMutation(m)
+    return parsed.ok ? [parsed.mutation] : []
+  })
+  return {
+    steps,
+    mutations,
+    rejected,
+    clarificationNeeded: p.clarificationNeeded as string | null,
+    status: p.status as PlanStatus,
+  }
 }
 
 export interface AnalysisUserTurn {
@@ -63,6 +111,32 @@ export interface AnalysisAssistantTurn {
 export type AnalysisTurn = AnalysisUserTurn | AnalysisAssistantTurn
 
 /**
+ * What the researcher wants, stated in their own words. ADR-023: this may be
+ * captured before a dataset exists — `appliedToDatasetId` is null until the
+ * intent has actually been acted on against a chosen dataset, and stays null
+ * for as long as it was only ever stated pre-data.
+ */
+export interface AnalysisIntent {
+  text: string
+  /** ISO timestamp. */
+  statedAt: string
+  appliedToDatasetId: string | null
+}
+
+/**
+ * Who a reply belongs to (ADR-026, hardens ADR-012/013): captured at the
+ * moment a request is issued and carried through to resolution, so delivery
+ * routes by what asked, never by what happens to be mounted when the answer
+ * comes back. This slice owns the type only — slice 05 owns the wiring that
+ * checks it before delivering a reply.
+ */
+export interface RequestIdentity {
+  analysisId: string
+  threadId: string | null
+  requestId: string
+}
+
+/**
  * Whether this turn came out of a version of the format we still understand.
  * The renderer degrades an unknown turn to plain text rather than hiding it —
  * a transcript with a hole in it is worse than one with an opaque entry.
@@ -85,7 +159,10 @@ export function canApprovePlan(turn: AnalysisAssistantTurn, currentSpecHash: str
   if (!isReadableTurn(turn)) return false
   if (plan.status !== "proposed") return false
   if (plan.clarificationNeeded) return false
-  if (plan.mutations.length === 0) return false
+  // Defense in depth beyond the `parseStoredPlan` boundary: this is the gate
+  // that decides whether Approve is clickable, so it never trusts `mutations`
+  // to be an array just because the turn's version and status checked out.
+  if (!Array.isArray(plan.mutations) || plan.mutations.length === 0) return false
   return turn.specHashAtProposal === currentSpecHash
 }
 
@@ -107,7 +184,9 @@ export function approvalBlockedReason(
     return "The analysis changed after this was proposed, so it can no longer be applied. Ask again."
   }
   if (plan.clarificationNeeded) return "Answer the question above first."
-  if (plan.mutations.length === 0) return "Nothing to apply."
+  // Same defense in depth as `canApprovePlan`: never dereference `mutations`
+  // without proving it is an array first.
+  if (!Array.isArray(plan.mutations) || plan.mutations.length === 0) return "Nothing to apply."
   return null
 }
 
@@ -216,7 +295,7 @@ export function fromStoredThread(raw: unknown): AnalysisTurn[] {
         id: t.id,
         role: "assistant",
         content: t.content,
-        plan: (t.plan as AnalysisPlan | null) ?? null,
+        plan: parseStoredPlan(t.plan),
         specHashAtProposal:
           typeof t.specHashAtProposal === "string" ? t.specHashAtProposal : "",
         ...(typeof t.error === "string" ? { error: t.error } : {}),
