@@ -239,37 +239,72 @@ export async function loadAnalysisThread(sessionId: string): Promise<AnalysisTur
  * no new table). One current intent per thread, keyed to the thread rather
  * than to a turn, since "what the researcher wants" is a property of the
  * conversation, not of the message that most recently stated it.
+ *
+ * CONCURRENCY: `@supabase/postgrest-js` builds every filter by coercing the
+ * value to a string (`eq.${value}`), so conditioning on the *object* just read
+ * (`.eq("metadata", before)`) serialises to the literal string
+ * `"eq.[object Object]"` and can never match a jsonb column — that filter is
+ * silently a no-op, not a comparison. `chat_sessions.metadata` is also
+ * `NOT NULL DEFAULT '{}'::jsonb` (`scripts/000_full_script.sql`), so the
+ * `.is("metadata", null)` branch this used to fall back to is unreachable in
+ * production. The result was that every call retried three times, matched
+ * nothing, and returned `false`.
+ *
+ * Fixed by keying the compare-and-swap on `updated_at` instead: it is a
+ * scalar, and postgrest-js's string-coerced filter is exact for scalars. Each
+ * attempt reads `metadata` and `updated_at` together, merges `intent` into
+ * the metadata just read, and writes both `metadata` and a fresh `updated_at`
+ * back conditioned on `updated_at` still equalling the value just read. Zero
+ * rows matched means someone else wrote to this row in between, so the loop
+ * re-reads and retries rather than reporting success for a write that did not
+ * land or silently clobbering the concurrent write.
+ *
+ * EXACT GUARANTEE (no schema change — this rides in existing columns, so a
+ * `git revert` of this feature is still a complete undo):
+ *  - No lost update between concurrent callers of THIS function (two tabs, a
+ *    retry, a double-click): each keys off the `updated_at` it just read, so
+ *    a loser matches zero rows and retries instead of clobbering the winner.
+ *  - No lost update against `appendAnalysisTurnInner`'s `updated_at` touch on
+ *    the same session: that touch changes `updated_at`, so a concurrent
+ *    intent write correctly retries and re-merges onto the fresh `metadata`.
+ *  - NOT a guarantee against every writer of `chat_sessions.metadata` in the
+ *    app: `hooks/use-chat-sessions.ts`'s `updateSessionMetadata` (used by the
+ *    sidebar's pin/literature-context feature, and reachable on any session
+ *    row including a `data_analysis` one) updates `metadata` without
+ *    touching `updated_at`. If that write lands inside this function's
+ *    read-then-write window, this function's `updated_at` condition is still
+ *    satisfied and it will overwrite that write with a merge based on the
+ *    stale `metadata` it read — a real, narrow race, not covered here because
+ *    fixing it means touching a writer this change does not own. This is
+ *    still strictly stronger than the CAS this replaces, which matched
+ *    nothing and protected against nothing.
+ *  - Never reports `true` for a write that did not land (a `0`-row match is
+ *    always a retry, then `false`), and never throws into the analysis path.
  */
 export async function writeAnalysisIntent(
   sessionId: string,
   intent: AnalysisIntent,
 ): Promise<boolean> {
   const supabase = createClient()
-  // Optimistic concurrency: this is a read-modify-write on a shared column, and
-  // two callers can race it (two tabs, a retry, a double-click). The update is
-  // conditioned on the exact `metadata` value just read — `.eq`/`.is` on the
-  // pre-write value — so a caller that loses the race updates zero rows instead
-  // of silently clobbering the other write. A few attempts let a genuine race
-  // resolve itself; a caller that still can't land after that gets `false`
-  // rather than a write disappearing with no signal.
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const { data, error: readError } = await supabase
         .from("chat_sessions")
-        .select("metadata")
+        .select("metadata, updated_at")
         .eq("id", sessionId)
         .single()
-      if (readError) return false
-      const before = (data?.metadata as Record<string, unknown> | null) ?? null
-      const metadata = { ...(before ?? {}), intent }
-      const conditioned =
-        before === null
-          ? supabase.from("chat_sessions").update({ metadata }).eq("id", sessionId).is("metadata", null)
-          : supabase.from("chat_sessions").update({ metadata }).eq("id", sessionId).eq("metadata", before)
-      const { data: written, error } = await conditioned.select("id")
+      if (readError || !data) return false
+      const before = (data.metadata as Record<string, unknown> | null) ?? {}
+      const metadata = { ...before, intent }
+      const { data: written, error } = await supabase
+        .from("chat_sessions")
+        .update({ metadata, updated_at: new Date().toISOString() })
+        .eq("id", sessionId)
+        .eq("updated_at", data.updated_at as string)
+        .select("id")
       if (error) return false
       if (Array.isArray(written) && written.length > 0) return true
-      // Zero rows matched: someone else wrote `metadata` between our read and
+      // Zero rows matched: someone else wrote to this row between our read and
       // our write. Retry against the fresh value instead of giving up.
     } catch {
       return false

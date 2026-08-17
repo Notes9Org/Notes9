@@ -14,6 +14,7 @@
 
 import type { SpecMutation } from "@/lib/data-analysis/spec/mutations"
 import type { SpecAuthorTurn } from "@/lib/data-analysis/ai/spec-author"
+import { parseMutation } from "@/lib/data-analysis/spec/mutation-schema"
 
 /**
  * Wire version. Stored turns outlive the code that wrote them, and a turn whose
@@ -42,6 +43,17 @@ const PLAN_STATUSES: readonly PlanStatus[] = ["proposed", "approved", "discarded
  * is offered, so a shape we did not check must never reach `canApprovePlan` /
  * `approvalBlockedReason`. A plan that fails this is treated as no plan: the
  * turn still renders (via its `content`), Approve is simply not offered.
+ *
+ * Element-level validation, not just array-ness: a `steps`/`rejected` entry
+ * that is not the shape the renderer expects would otherwise reach
+ * `analysis-composer.tsx` (a non-string step, a null `rejected` entry) and
+ * throw during render, and a malformed `mutations` entry would reach
+ * `applyAiPatch` and throw during apply. Each bad element is dropped rather
+ * than failing the whole plan — `mutations` reuses the same `parseMutation`
+ * the apply path trusts, so an element good enough to survive here is good
+ * enough to apply. A `mutations` array left empty by dropped elements is
+ * still a "no plan" as far as Approve is concerned: `canApprovePlan` already
+ * refuses an empty `mutations` array.
  */
 export function parseStoredPlan(value: unknown): AnalysisPlan | null {
   if (!value || typeof value !== "object") return null
@@ -51,10 +63,19 @@ export function parseStoredPlan(value: unknown): AnalysisPlan | null {
   if (!Array.isArray(p.rejected)) return null
   if (p.clarificationNeeded !== null && typeof p.clarificationNeeded !== "string") return null
   if (typeof p.status !== "string" || !PLAN_STATUSES.includes(p.status as PlanStatus)) return null
+  const steps = p.steps.filter((s): s is string => typeof s === "string")
+  const rejected = p.rejected.filter(
+    (r): r is { reason: string } =>
+      !!r && typeof r === "object" && typeof (r as Record<string, unknown>).reason === "string",
+  )
+  const mutations = p.mutations.flatMap((m): SpecMutation[] => {
+    const parsed = parseMutation(m)
+    return parsed.ok ? [parsed.mutation] : []
+  })
   return {
-    steps: p.steps as string[],
-    mutations: p.mutations as SpecMutation[],
-    rejected: p.rejected as { reason: string }[],
+    steps,
+    mutations,
+    rejected,
     clarificationNeeded: p.clarificationNeeded as string | null,
     status: p.status as PlanStatus,
   }

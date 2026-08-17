@@ -2577,9 +2577,15 @@ export function DataAnalysisWorkspace({
         }
       }
       if (id) await appendAnalysisTurn(id, userTurn)
-      // ADR-023: persisted once the thread exists to persist it against —
-      // a fire-and-forget write, same discipline as the turn above it.
-      if (id && statedIntent) void writeAnalysisIntent(id, statedIntent)
+      // ADR-023: persisted once the thread exists to persist it against. Not
+      // fire-and-forget like the turn above it — the researcher stated this
+      // intent on purpose, so a failed save is surfaced rather than assumed.
+      if (id && statedIntent) {
+        const saved = await writeAnalysisIntent(id, statedIntent)
+        if (!saved) {
+          toast.error("Couldn't save your stated intent to the thread. It's still applied to this session, but won't be there if you reload.")
+        }
+      }
     })()
 
     // Intent captured, nothing to propose against: stop here. No statistics,
@@ -2684,7 +2690,13 @@ export function DataAnalysisWorkspace({
     const datasetId = sourceFileRef.current?.id ?? "local"
     const applied: AnalysisIntent = { ...intent, appliedToDatasetId: datasetId }
     setPendingIntent(applied)
-    if (threadIdRef.current) void writeAnalysisIntent(threadIdRef.current, applied)
+    if (threadIdRef.current) {
+      void writeAnalysisIntent(threadIdRef.current, applied).then((saved) => {
+        if (!saved) {
+          toast.error("Couldn't save your stated intent to the thread. It's still applied to this session, but won't be there if you reload.")
+        }
+      })
+    }
     void askForChange(intent.text)
   }, [aiGate.canPropose, askForChange])
 

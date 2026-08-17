@@ -12,7 +12,7 @@ import { approvalBlockedReason, canApprovePlan, fromStoredThread } from "@/lib/d
  * chain. State lives in the two in-memory maps below, reset per test.
  */
 
-type SessionRow = { id: string; metadata: Record<string, unknown> }
+type SessionRow = { id: string; metadata: Record<string, unknown>; updatedAt: string }
 type MessageRow = {
   id: string
   session_id: string
@@ -26,10 +26,33 @@ let sessions: Map<string, SessionRow>
 let messages: Map<string, MessageRow>
 let failUpsert: boolean
 let nextId: number
+let clock: number
 
 function freshId(prefix: string): string {
   nextId += 1
   return `${prefix}-${nextId}`
+}
+
+/** Deterministic, strictly increasing `updated_at` stand-in. */
+function tick(): string {
+  clock += 1
+  return new Date(2024, 0, 1, 0, 0, clock).toISOString()
+}
+
+/**
+ * Faithful to `@supabase/postgrest-js`: every filter value is coerced through
+ * a template literal (`` `eq.${value}` ``) before it becomes a query param.
+ * For a scalar that is an exact, lossless round trip. For a plain object
+ * `${value}` is always the literal string "[object Object]" -- content-blind,
+ * so an object-valued filter can never distinguish one object from another
+ * and must never be treated as matching here, no matter what the row holds.
+ * This is what made the pre-fix `writeAnalysisIntent`'s `.eq("metadata", …)`
+ * a silent no-op in production while an earlier, kinder version of this fake
+ * (a `JSON.stringify` deep-equality check) reported it working.
+ */
+function matchesFilter(filterVal: unknown, rowVal: unknown): boolean {
+  if (filterVal !== null && typeof filterVal === "object") return false
+  return `${filterVal}` === `${rowVal}`
 }
 
 class FakeChain implements PromiseLike<{ data: unknown; error: unknown }> {
@@ -76,23 +99,32 @@ class FakeChain implements PromiseLike<{ data: unknown; error: unknown }> {
   private runSessions(): { data: unknown; error: unknown } {
     if (this.op === "insert-select" || this.op === "insert") {
       const id = freshId("session")
-      sessions.set(id, { id, metadata: (this.payload?.metadata as Record<string, unknown>) ?? {} })
+      sessions.set(id, {
+        id,
+        metadata: (this.payload?.metadata as Record<string, unknown>) ?? {},
+        updatedAt: tick(),
+      })
       return { data: { id }, error: null }
     }
     if (this.op === "update" || this.op === "update-select") {
       const empty = this.op === "update-select" ? [] : null
       const row = this.findSession()
       if (!row) return { data: empty, error: null }
-      // Compare-and-set: an `.eq("metadata", …)` / `.is("metadata", null)`
-      // filter on this chain means the caller is conditioning the write on the
-      // value it read. If the row has moved since, this update matches zero
-      // rows — same as Postgrest — instead of overwriting it.
-      const metaFilter = this.filters.find((f) => f.col === "metadata")
-      if (metaFilter && JSON.stringify(metaFilter.val ?? null) !== JSON.stringify(row.metadata ?? null)) {
+      // Compare-and-set: every filter other than `id` on this chain is a WHERE
+      // condition the caller built from a value it just read, checked the same
+      // way Postgrest checks it -- see `matchesFilter`. If the row has moved
+      // since, this matches zero rows instead of overwriting it.
+      const conditionFilters = this.filters.filter((f) => f.col !== "id")
+      const rowValue = (col: string): unknown =>
+        col === "updated_at" ? row.updatedAt : (row as unknown as Record<string, unknown>)[col]
+      if (!conditionFilters.every((f) => matchesFilter(f.val, rowValue(f.col)))) {
         return { data: empty, error: null }
       }
       if (this.payload && "metadata" in this.payload) {
         row.metadata = this.payload.metadata as Record<string, unknown>
+      }
+      if (this.payload && "updated_at" in this.payload) {
+        row.updatedAt = this.payload.updated_at as string
       }
       return { data: this.op === "update-select" ? [{ id: row.id }] : null, error: null }
     }
@@ -101,10 +133,10 @@ class FakeChain implements PromiseLike<{ data: unknown; error: unknown }> {
       if (!row) return { data: null, error: { message: "no rows" } }
       // Snapshot before any hook runs — the hook simulates a concurrent
       // writer landing right after this caller's read, so the caller must
-      // keep the value it actually read, not whatever the row holds now.
-      const snapshot = row.metadata
+      // keep the values it actually read, not whatever the row holds now.
+      const snapshot = { metadata: row.metadata, updatedAt: row.updatedAt }
       onSessionSelect?.(row)
-      return { data: { metadata: snapshot }, error: null }
+      return { data: { metadata: snapshot.metadata, updated_at: snapshot.updatedAt }, error: null }
     }
     return { data: null, error: { message: "unsupported op" } }
   }
@@ -148,7 +180,7 @@ class FakeChain implements PromiseLike<{ data: unknown; error: unknown }> {
       if (
         this.table === "chat_sessions" &&
         (this.op === "update" || this.op === "update-select") &&
-        this.filters.some((f) => f.col === "metadata") &&
+        this.filters.some((f) => f.col === "updated_at") &&
         nextSessionWriteGate
       ) {
         const gate = nextSessionWriteGate
@@ -237,6 +269,7 @@ beforeEach(() => {
   messages = new Map()
   failUpsert = false
   nextId = 0
+  clock = 0
   onSessionSelect = null
   nextSessionWriteGate = null
   onGatedWrite = null
@@ -335,7 +368,7 @@ describe("version skew: threads written before per-analysis ownership / before i
 
   it("a session whose metadata predates the intent key reads back as undefined, not throwing", async () => {
     const id = freshId("session")
-    sessions.set(id, { id, metadata: { analysisId: "a1", sourceDataFileId: null } })
+    sessions.set(id, { id, metadata: { analysisId: "a1", sourceDataFileId: null }, updatedAt: tick() })
     const intent = await readAnalysisIntent(id)
     expect(intent).toBeUndefined()
   })
@@ -399,10 +432,13 @@ describe("writeAnalysisIntent concurrency (optimistic concurrency, HIGH finding 
     let reads = 0
     onSessionSelect = (row) => {
       reads += 1
-      // Someone else changes the row on every single read this caller makes,
-      // so the conditional write can never match — this must give up and
-      // report false, not retry forever or report success on a lost write.
+      // Someone else writes to the row on every single read this caller
+      // makes -- and, like every real writer of this row, bumps `updated_at`
+      // when it does -- so the conditional write can never match. This must
+      // give up and report false, not retry forever or report success on a
+      // lost write.
       row.metadata = { ...row.metadata, churn: reads }
+      row.updatedAt = tick()
     }
     const ok = await writeAnalysisIntent(threadId!, {
       text: "never lands",
@@ -498,5 +534,68 @@ describe("malformed persisted plan (HIGH findings 2-5): validated at the storage
     expect(canApprovePlan(turn, "spec-1")).toBe(false)
     expect(() => approvalBlockedReason(turn, "spec-1")).not.toThrow()
     expect(approvalBlockedReason(turn, "spec-1")).toBe("Nothing to apply.")
+  })
+
+  it("a non-string step is dropped, not left to reach the renderer", () => {
+    const turns = fromStoredThread([
+      assistantRow({
+        mutations: [{ kind: "figure.setGridlines", value: true }],
+        steps: ["a real step", { not: "a string" }, "another real step"],
+        rejected: [],
+        clarificationNeeded: null,
+        status: "proposed",
+      }),
+    ])
+    const plan = (turns[0] as AnalysisAssistantTurn).plan
+    expect(plan).not.toBeNull()
+    expect(plan?.steps).toEqual(["a real step", "another real step"])
+  })
+
+  it("a null rejected entry is dropped, not left to reach .reason", () => {
+    const turns = fromStoredThread([
+      assistantRow({
+        mutations: [{ kind: "figure.setGridlines", value: true }],
+        steps: [],
+        rejected: [{ reason: "kept" }, null, { notReason: "dropped" }],
+        clarificationNeeded: null,
+        status: "proposed",
+      }),
+    ])
+    const plan = (turns[0] as AnalysisAssistantTurn).plan
+    expect(plan).not.toBeNull()
+    expect(plan?.rejected).toEqual([{ reason: "kept" }])
+  })
+
+  it("a mutation missing a required field is dropped, withholding Approve when it was the only one", () => {
+    const turns = fromStoredThread([
+      assistantRow({
+        // Finding 2's exact example: `data.excludeRow` with no `exclusion`.
+        mutations: [{ kind: "data.excludeRow" }],
+        steps: [],
+        rejected: [],
+        clarificationNeeded: null,
+        status: "proposed",
+      }),
+    ])
+    const turn = turns[0] as AnalysisAssistantTurn
+    expect(turn.plan).not.toBeNull()
+    expect(turn.plan?.mutations).toEqual([])
+    expect(() => canApprovePlan(turn, "spec-1")).not.toThrow()
+    expect(canApprovePlan(turn, "spec-1")).toBe(false)
+    expect(approvalBlockedReason(turn, "spec-1")).toBe("Nothing to apply.")
+  })
+
+  it("a valid mutation survives alongside a dropped invalid one", () => {
+    const turns = fromStoredThread([
+      assistantRow({
+        mutations: [{ kind: "data.excludeRow" }, { kind: "figure.setGridlines", value: true }],
+        steps: [],
+        rejected: [],
+        clarificationNeeded: null,
+        status: "proposed",
+      }),
+    ])
+    const plan = (turns[0] as AnalysisAssistantTurn).plan
+    expect(plan?.mutations).toEqual([{ kind: "figure.setGridlines", value: true }])
   })
 })

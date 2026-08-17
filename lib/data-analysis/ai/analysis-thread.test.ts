@@ -14,7 +14,11 @@ import {
 } from "@/lib/data-analysis/ai/analysis-thread"
 import type { SpecMutation } from "@/lib/data-analysis/spec/mutations"
 
-const MUTATION = { kind: "chart.setYLog", value: true } as unknown as SpecMutation
+// A real `SpecMutation` shape (`axis.set` with a log-scale patch), not a
+// fictional kind — `parseStoredPlan` now validates each mutation against the
+// real schema (finding 2), and a kind the schema doesn't recognise is
+// correctly dropped rather than round-tripping opaquely.
+const MUTATION: SpecMutation = { kind: "axis.set", axis: "y", patch: { scale: "log10" } }
 
 function assistant(over: Partial<AnalysisAssistantTurn> = {}): AnalysisAssistantTurn {
   return {
