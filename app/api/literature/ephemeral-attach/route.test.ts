@@ -81,16 +81,42 @@ describe("POST /api/literature/ephemeral-attach — blind-SSRF via paper.pdfUrl 
     expect(safeFetchMock).not.toHaveBeenCalled()
   })
 
-  it("rejects a non-allowlisted public host pdfUrl too (allowlist, not just IP-shape)", async () => {
-    // Not private/loopback — just not one of the known publisher/PMC hosts.
-    // Proves the mandatory allowlist layer, not only the IP blocklist.
+  it("ATTEMPTS a non-allowlisted public host by default, leaving the decision to safeFetch", async () => {
+    // Behaviour change, deliberate. This previously asserted the publisher
+    // allowlist blocked unlisted *public* hosts before safeFetch. Enforcing that
+    // unconditionally is what stopped open-access downloads: the list omits
+    // doi.org, BMC, Semantic Scholar and CORE, so legitimate papers were dropped
+    // silently. The allowlist is now opt-in via NOTES9_ENFORCE_PDF_HOST_ALLOWLIST.
+    //
+    // The SSRF guarantee is unchanged and is covered by the two tests above: a
+    // private/loopback/metadata host is still refused before safeFetch is reached.
+    // For a genuinely public host, safeFetch resolves and validates the address,
+    // which is the control that actually closes N9-2.
     const res = await POST(
       req({ paper: { title: "Random Paper", pdfUrl: "https://not-a-known-publisher.example.net/x.pdf", abstract: "x" } }),
     )
     expect(res.status).toBe(200)
     const json = await res.json()
-    expect(json.fallback).toBe(true)
-    expect(safeFetchMock).not.toHaveBeenCalled()
+    expect(json.fallback).toBe(true) // safeFetch rejects in this suite, so we still fall back
+    expect(safeFetchMock).toHaveBeenCalled()
+  })
+
+  it("still blocks a non-allowlisted public host when the allowlist IS enforced", async () => {
+    const KEY = "NOTES9_ENFORCE_PDF_HOST_ALLOWLIST"
+    const original = process.env[KEY]
+    process.env[KEY] = "1"
+    try {
+      const res = await POST(
+        req({ paper: { title: "Random Paper", pdfUrl: "https://not-a-known-publisher.example.net/x.pdf", abstract: "x" } }),
+      )
+      expect(res.status).toBe(200)
+      const json = await res.json()
+      expect(json.fallback).toBe(true)
+      expect(safeFetchMock).not.toHaveBeenCalled()
+    } finally {
+      if (original === undefined) delete process.env[KEY]
+      else process.env[KEY] = original
+    }
   })
 
   it("returns 400 on an invalid JSON body", async () => {

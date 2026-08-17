@@ -76,6 +76,28 @@ export function hostnameIsAllowed(hostname: string): boolean {
   return PDF_HOSTNAME_ALLOWLIST.some((allowed) => h.endsWith("." + allowed))
 }
 
+/**
+ * Whether the hostname allowlist is *enforced* on PDF downloads.
+ *
+ * Off by default. The allowlist is 40 exact hostnames and it does not survive
+ * contact with real open-access hosting: `doi.org` — which OpenAlex, Unpaywall
+ * and Crossref hand back constantly — was absent, as were BMC, BMJ, Springer's
+ * apex domain, figshare and every CDN. Enforcing it silently dropped those
+ * downloads (`tryDownloadOnePdf` returns null, no error surfaced).
+ *
+ * The actual SSRF control is `safeFetch`, which resolves and rejects private,
+ * loopback, link-local, ULA and IPv4-mapped addresses on every request and is
+ * unconditional. This flag governs defence-in-depth only, never that guard.
+ *
+ * Read lazily rather than at module load so tests and server routes see the
+ * current value; `process.env` is inlined to undefined in client bundles, which
+ * lands on the safe default of "not enforced".
+ */
+export function pdfHostAllowlistEnforced(): boolean {
+  const raw = (typeof process !== "undefined" ? process.env?.NOTES9_ENFORCE_PDF_HOST_ALLOWLIST : "") ?? ""
+  return ["1", "true", "yes", "on"].includes(raw.trim().toLowerCase())
+}
+
 export function shouldTrySearchCardPdfUrl(url: string): boolean {
   const u = url.trim()
   if (!/^https?:\/\//i.test(u)) return false
@@ -85,6 +107,33 @@ export function shouldTrySearchCardPdfUrl(url: string): boolean {
     const parsed = new URL(u)
     if (hostnameIsBlocked(parsed.hostname)) return false
     if (!hostnameIsAllowed(parsed.hostname)) return false
+  } catch {
+    return false
+  }
+  return true
+}
+
+/**
+ * The gate PDF download paths actually use.
+ *
+ * Splits the two controls that `shouldTrySearchCardPdfUrl` conflates:
+ *
+ *  - scheme check and `hostnameIsBlocked` are **always** applied. These are the
+ *    SSRF pre-checks (N9-2) that keep a metadata-IP or loopback `pdfUrl` from
+ *    ever reaching the network layer, and nothing here may switch them off.
+ *  - `hostnameIsAllowed` is the *publisher* allowlist, applied only when
+ *    `pdfHostAllowlistEnforced()` is on. Applying it unconditionally is what
+ *    stopped open-access downloads: `doi.org` is not on the list.
+ */
+export function pdfUrlIsFetchable(url: string): boolean {
+  const u = url.trim()
+  if (!/^https?:\/\//i.test(u)) return false
+  const lower = u.toLowerCase()
+  if (lower.includes("sciencedirect.com") && lower.includes("pdfft")) return false
+  try {
+    const parsed = new URL(u)
+    if (hostnameIsBlocked(parsed.hostname)) return false
+    if (pdfHostAllowlistEnforced() && !hostnameIsAllowed(parsed.hostname)) return false
   } catch {
     return false
   }

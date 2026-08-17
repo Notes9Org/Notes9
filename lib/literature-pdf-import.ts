@@ -37,6 +37,7 @@ import {
   CatalystUnavailableError,
 } from "@/lib/catalyst-client"
 import {
+  pdfUrlIsFetchable,
   shouldTrySearchCardPdfUrl,
   upgradeInsecurePdfUrlIfKnownHost,
 } from "@/lib/literature-pdf-urls"
@@ -761,10 +762,18 @@ async function tryDownloadOnePdf(
   // SEC-001 (N9-2/N9-14): this is the SINGLE choke point every PDF download
   // URL passes through — `downloadFirstPdf` (called by the remote-import path,
   // `fetchOpenAccessPdfBufferByIds`, AND `ephemeral-attach/route.ts` with the
-  // paper's raw, unvalidated `pdfUrl`) always funnels here. The allowlist check
-  // used to be an opt-in the caller had to remember; enforcing it here makes it
-  // impossible to bypass regardless of which caller supplied the URL.
-  if (!shouldTrySearchCardPdfUrl(url)) return null
+  // paper's raw, unvalidated `pdfUrl`) always funnels here.
+  //
+  // Making that check mandatory here (26ecadcff) is what stopped open-access
+  // downloads: the allowlist is 40 exact hostnames and omitted `doi.org`, which
+  // OpenAlex and Unpaywall return constantly, so those downloads became a silent
+  // `null`. It is now enforced only when explicitly switched on.
+  //
+  // SEC-001 is NOT reopened by this. Every fetch below goes through `safeFetch`,
+  // which resolves and rejects private/loopback/link-local/ULA/IPv4-mapped
+  // addresses unconditionally — that, not the hostname list, is what stops the
+  // server being pointed at internal infrastructure.
+  if (!pdfUrlIsFetchable(url)) return null
   const { signal, dispose } = pdfDownloadSignal(parentSignal, perFetchTimeoutMs)
   try {
     let host = ""
@@ -1093,7 +1102,10 @@ function buildOaSubsetServerFetchablePdfUrls(
   const out: string[] = []
   for (const u of raw) {
     const t = upgradeInsecurePdfUrlIfKnownHost(u.trim())
-    if (shouldTrySearchCardPdfUrl(t) && !out.includes(t)) out.push(t)
+    // Same gate as the downloader: SSRF pre-checks always apply, the publisher
+    // allowlist only when enforced. Filtering an unlisted OA host out here would
+    // drop it before the race even starts and leave the fix half-applied.
+    if (pdfUrlIsFetchable(t) && !out.includes(t)) out.push(t)
   }
   return out
 }
