@@ -131,8 +131,10 @@ import {
   specFromChartState,
   tableFromChartRows,
   recomputeSignature,
+  recommendTestForChart,
   type ChartState,
 } from "@/lib/data-analysis/workspace/chart-state-spec"
+import { legalTests } from "@/lib/data-analysis/semantic/infer"
 import { ReopenBanner } from "@/components/data-analysis/workspace/reopen-banner"
 import {
   LibraryDialog,
@@ -201,7 +203,7 @@ import {
   type AnalysisUserTurn,
   type RequestIdentity,
 } from "@/lib/data-analysis/ai/analysis-thread"
-import { prepOffers, profilePreparation } from "@/lib/data-analysis/workspace/prep-offers"
+import { prepOffers, profilePreparation, type PrepOffer } from "@/lib/data-analysis/workspace/prep-offers"
 import { computeAnalysis } from "@/lib/data-analysis/engine/client"
 import type { EngineResult } from "@/lib/data-analysis/engine/contract"
 import type { Table as SpecTable } from "@/lib/data-analysis/engine/resolver"
@@ -905,6 +907,15 @@ export function DataAnalysisWorkspace({
    * edit.
    */
   const [aiOverlay, setAiOverlay] = useState<AppliedMutation[]>([])
+  /**
+   * ADR-025: a loaded sheet is PROFILED, not analysed. Nothing may compute
+   * until this is explicitly true — flipped by `commitEdits` (a hand edit or
+   * an approved AI plan) and by reopening a revision that already carries a
+   * stored, previously-approved result. Every load path (`loadSnapshot`,
+   * `swapConfig` — import, library, template, session restore, tab switch)
+   * resets it to false, so a fresh table never inherits a stale approval.
+   */
+  const [analysisApproved, setAnalysisApproved] = useState(false)
   const setStyle = useCallback((series: string, patch: Partial<SeriesStyle>) => {
     setSeriesStyles((prev) => ({ ...prev, [series]: { ...prev[series], ...patch } }))
   }, [])
@@ -922,13 +933,6 @@ export function DataAnalysisWorkspace({
     return el ? { width: el.clientWidth, height: el.clientHeight } : null
   }, [])
   const getChartPng = useCallback(() => (chartImageRef.current ? chartImageRef.current() : Promise.resolve(null)), [])
-
-  const seededRef = useRef(false)
-  if (!seededRef.current && table.columns.length) {
-    seededRef.current = true
-    setXKey(table.columns[0])
-    setYKeys(numericCols.filter((c) => c !== table.columns[0]).slice(0, 2))
-  }
 
   // `getPalette` also accepts the display names saved by earlier versions, so a
   // chart saved before the catalogue existed still opens with its own colours.
@@ -988,6 +992,53 @@ export function DataAnalysisWorkspace({
   const preparationOffers = useMemo(
     () => (derivedSpec ? prepOffers(derivedSpec, tableProfiles) : []),
     [derivedSpec, tableProfiles]
+  )
+
+  /**
+   * ADR-025: the column-role guess this workspace used to seed straight into
+   * state (X = leftmost column, Y = first two numeric columns), during
+   * render, is a SUGGESTION now — surfaced here as a `PrepOffer` a researcher
+   * takes or ignores, same as any other pipeline offer. Nothing below applies
+   * it. Silent once either axis is already chosen, by hand or by a prior
+   * accept.
+   */
+  const columnRoleOffer = useMemo<PrepOffer | null>(() => {
+    if (xKey || yKeys.length > 0) return null
+    if (table.columns.length === 0) return null
+    const x = table.columns[0]
+    const y = numericCols.filter((c) => c !== x).slice(0, 2)
+    if (y.length === 0) return null
+    return {
+      id: "column-roles",
+      kind: "column-roles",
+      summary: `Plot "${x}" against ${y.map((c) => `"${c}"`).join(" and ")}`,
+      evidence: `"${x}" is the sheet's leftmost column and ${y.length === 1 ? "is" : "are"} the first ${y.length} numeric column${y.length === 1 ? "" : "s"} after it — the conventional axis guess, not yet chosen.`,
+      apply: [{ kind: "analysis.setColumns", group: x, response: y }],
+    }
+  }, [table, numericCols, xKey, yKeys])
+
+  /**
+   * ADR-025: `recommendTestForChart` used to decide `analysis.test` outright
+   * on every chart-type change. It only offers now, once axes are chosen —
+   * before that there is no design to recommend a test against.
+   */
+  const statTestOffer = useMemo<PrepOffer | null>(() => {
+    if (!derivedSpec || !xKey || statTest) return null
+    const capabilities = legalTests(derivedSpec, specTable)
+    const recommendation = recommendTestForChart(chartType, capabilities)
+    if (!recommendation) return null
+    return {
+      id: `statistical-test:${recommendation.test}`,
+      kind: "statistical-test",
+      summary: `Run ${recommendation.test} on this chart`,
+      evidence: recommendation.rationale,
+      apply: [{ kind: "analysis.setTest", value: recommendation.test }],
+    }
+  }, [derivedSpec, specTable, chartType, xKey, statTest])
+
+  const pipelineOffers = useMemo<PrepOffer[]>(
+    () => [...(columnRoleOffer ? [columnRoleOffer] : []), ...(statTestOffer ? [statTestOffer] : []), ...preparationOffers],
+    [columnRoleOffer, statTestOffer, preparationOffers]
   )
 
   const visiblePhases = useMemo(
@@ -1057,7 +1108,12 @@ export function DataAnalysisWorkspace({
   /** The library file behind the sheet, when it came from one. Drift is measured against it. */
   const [sourceFile, setSourceFile] = useState<{ id: string; experimentId: string } | null>(null)
   useEffect(() => {
-    if (!derivedSpec || specTable.rows.length === 0) return
+    // ADR-025: "the spec changed" is not the gate — "the researcher approved
+    // an analysis" is. `analysisApproved` is false for every load path
+    // (`loadSnapshot`, `swapConfig`) and only becomes true through
+    // `commitEdits`, so a freshly loaded, unapproved table never reaches the
+    // signature check below, however many times its derived spec re-renders.
+    if (!analysisApproved || !derivedSpec || specTable.rows.length === 0) return
     const signature = recomputeSignature(derivedSpec)
     const step = gateStep(gateRef.current, signature)
     gateRef.current = step.gate
@@ -1087,7 +1143,7 @@ export function DataAnalysisWorkspace({
       }
     }, 700)
     return () => clearTimeout(timer)
-  }, [derivedSpec, specTable])
+  }, [analysisApproved, derivedSpec, specTable])
 
   const [figureLayout, setFigureLayout] = useState<FigureLayout>(() => {
     const preset = LAYOUT_PRESETS.find((p) => p.id === "single")!
@@ -1698,6 +1754,11 @@ export function DataAnalysisWorkspace({
       const after = { ...before, ...patch }
       applyConfigRef.current(after)
       setEditHistory((h) => commitEdit(h, { before, after, applied }))
+      // ADR-025: the only two writers into this function are an approved AI
+      // plan and a hand edit (`applySpecMutation`) — both are the researcher
+      // explicitly choosing to analyse, so this is where "loaded" becomes
+      // "approved," unblocking the compute effect below.
+      setAnalysisApproved(true)
     },
     []
   )
@@ -1723,6 +1784,12 @@ export function DataAnalysisWorkspace({
    *  an edit. Undo must not reach back across one into another analysis. */
   const swapConfig = useCallback((c: unknown) => {
     setEditHistory(emptyHistory)
+    // ADR-025: a config swap is a LOAD, not an edit — a different tab, a
+    // template, a duplicate, a fresh blank tab, a reopened save. None of them
+    // is the researcher choosing to analyse *this* table, so the compute gate
+    // resets. The one exception, reopening a specific past revision, restores
+    // its own stored (never recomputed) result and re-approves right there.
+    setAnalysisApproved(false)
     applyConfigRef.current(c)
   }, [])
 
@@ -2145,7 +2212,11 @@ export function DataAnalysisWorkspace({
   }, [])
 
   const loadSnapshot = useCallback((snap: UniverWorkbookSnapshot, source: { id: string; experimentId: string } | null = null, internal = false) => {
-    seededRef.current = false
+    // ADR-025: a loaded sheet ends PROFILED and UNCHARTED — table, schema and
+    // row count visible, no axes, no test, no compute — until the researcher
+    // (or a caller restoring an already-approved revision, right after this
+    // returns) says otherwise.
+    setAnalysisApproved(false)
     setLiveSnapshot(snap)
     setMountSnapshot(snap)
     setMountKey((k) => k + 1)
@@ -2234,13 +2305,6 @@ export function DataAnalysisWorkspace({
      * beside a spec that did not produce it, and they stay below.
      */
     const { rail, overlay, dropped } = railFromConfig(c)
-    // A configuration that names its own X/Y has already answered the question
-    // the first-run seeding above exists to answer. Without this the seeding
-    // fires on the render after `loadSnapshot` and overwrites the restored
-    // binding with "column 1 vs the first two numeric columns" — which is why a
-    // reopened analysis, a restored session and an imported .n9a could all come
-    // back plotting the wrong series.
-    if (rail.xKey !== undefined || rail.yKeys !== undefined) seededRef.current = true
     // Cast, as the `c: any` version implicitly did: `ChartState.chartType` and
     // `legendPos` are plain strings in the shared rail type, and narrowing them
     // here would mean a second copy of the chart-type list. An unrecognised
@@ -2316,7 +2380,6 @@ export function DataAnalysisWorkspace({
       if (c.plate.roleOverrides || c.plate.annOverrides) plateModel.applyOverrides(c.plate.roleOverrides ?? {}, c.plate.annOverrides ?? {})
     }
     if (c.phase) setPhase(c.phase)
-    seededRef.current = true // config supplies the mappings; don't auto-seed over them
   }, [plateModel])
 
   /* ── Ask for a change, in words ────────────────────────────────────────────
@@ -2609,6 +2672,20 @@ export function DataAnalysisWorkspace({
       }
     },
     [derivedSpec, specTable, commitEdits, aiOverlay]
+  )
+
+  /**
+   * P5's accept path: a `PrepOffer` — the column-role guess, the recommended
+   * test, or a data-prep offer — dispatches through the exact same
+   * `applySpecMutation` a hand edit or a chip's × uses. There is no second,
+   * offer-shaped way for a mutation to land in the spec (AC-4): accepting is
+   * the only door, and it is the researcher's own click that opens it.
+   */
+  const onAcceptOffer = useCallback(
+    (offer: PrepOffer) => {
+      for (const mutation of offer.apply) applySpecMutation(mutation)
+    },
+    [applySpecMutation]
   )
 
 
@@ -2984,6 +3061,11 @@ export function DataAnalysisWorkspace({
           sheetFileName
         )
         swapConfig(reopen.config)
+        // This revision's result is restored from storage, not recomputed —
+        // `gateForReopen` below is what keeps it that way — but it is still a
+        // human-approved analysis, so an edit made from here must go on
+        // recomputing without asking for a second approval.
+        setAnalysisApproved(true)
 
         setEngineResult(verdict.results)
         setEngineNote(null)
@@ -3373,6 +3455,16 @@ export function DataAnalysisWorkspace({
           )}
         </div>
       </div>
+      <PipelineBar
+        filters={derivedSpec?.filters ?? []}
+        transforms={derivedSpec?.transforms ?? []}
+        exclusions={derivedSpec?.exclusions ?? []}
+        offers={pipelineOffers}
+        onSetFilters={(next) => applySpecMutation({ kind: "data.setFilters", filters: next })}
+        onRemoveTransform={(index) => applySpecMutation({ kind: "data.removeTransform", index })}
+        onRestoreRow={(rowId) => applySpecMutation({ kind: "data.restoreRow", rowId })}
+        onAcceptOffer={onAcceptOffer}
+      />
     </div>
   )
 

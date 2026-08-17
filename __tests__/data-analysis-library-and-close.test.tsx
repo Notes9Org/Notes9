@@ -612,3 +612,30 @@ describe("data-analysis library and close (AC-1, AC-3, AC-4, AC-5, AC-6, AC-7)",
     expect(canApprovePlan(keptTurn as never, lastConsoleProps!.currentSpecHash)).toBe(false)
   })
 })
+
+describe("data-analysis intent-first (ADR-025)", () => {
+  // ── AC-1: loading data is not analysing it — the library-open load path ────
+  it("loading a file from the library profiles it without seeding a chart, a statistical test, or a compute call", async () => {
+    const engineClient = await import("@/lib/data-analysis/engine/client")
+    const computeSpy = vi.spyOn(engineClient, "computeAnalysis")
+    const loaded = file({ id: "f1", file_name: "growth-curve.csv" })
+    mockWorkbookFetch({ f1: { snapshot: snapshot("growth-curve.csv") } })
+    render(<DataAnalysisWorkspace files={[loaded]} />)
+
+    expect(lastConsoleProps?.variant).toBe("empty")
+
+    await openLibrary()
+    fireEvent.click(screen.getByText("growth-curve.csv"))
+    await waitFor(() => expect(lastConsoleProps?.variant).toBe("docked"))
+
+    // Profiled: the column-role guess is visible as a PipelineBar offer — a
+    // suggestion with evidence, not applied state — and there is no
+    // statistical-test offer yet, because no axes are chosen to test.
+    expect(await screen.findByRole("button", { name: 'Apply: Plot "x" against "y"' })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /^Apply: Run /i })).not.toBeInTheDocument()
+
+    // Give the compute effect's own 700ms debounce a full chance to fire.
+    await new Promise((resolve) => setTimeout(resolve, 900))
+    expect(computeSpy).not.toHaveBeenCalled()
+  }, 10000)
+})

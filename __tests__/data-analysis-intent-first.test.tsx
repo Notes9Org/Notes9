@@ -283,3 +283,67 @@ describe("data-analysis intent-first (ADR-026)", () => {
     )
   })
 })
+
+describe("data-analysis intent-first (ADR-025)", () => {
+  // ── AC-1: loading data is not analysing it — the sharpest criterion ────────
+  it("attaching a file (import path) profiles the table without seeding a chart, a statistical test, or a compute call", async () => {
+    const engineClient = await import("@/lib/data-analysis/engine/client")
+    const computeSpy = vi.spyOn(engineClient, "computeAnalysis")
+    const { container } = render(<DataAnalysisWorkspace files={[]} />)
+
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement
+    fireEvent.change(fileInput, { target: { files: [xlsxFile("colleague-upload.xlsx")] } })
+    await waitFor(() => expect(lastConsoleProps?.variant).toBe("docked"))
+
+    // Profiled: the column-role guess is visible as a PipelineBar offer — a
+    // suggestion with evidence, not applied state — and there is no
+    // statistical-test offer yet, because no axes are chosen to test.
+    expect(await screen.findByRole("button", { name: 'Apply: Plot "x" against "y"' })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /^Apply: Run /i })).not.toBeInTheDocument()
+
+    // Give the compute effect's own 700ms debounce a full chance to fire.
+    await new Promise((resolve) => setTimeout(resolve, 900))
+    expect(computeSpy).not.toHaveBeenCalled()
+  }, 10000)
+
+  it("restoring a session from localStorage profiles the table without resuming compute", async () => {
+    const engineClient = await import("@/lib/data-analysis/engine/client")
+    const computeSpy = vi.spyOn(engineClient, "computeAnalysis")
+    // Mirrors the shape `data-analysis-workspace.tsx`'s own session-restore
+    // effect writes under `SESSION_KEY` ("n9-data-analysis-session"): only
+    // the workbook, no `config` — so restoring it exercises `loadSnapshot`
+    // exactly as a fresh import does, without depending on that key's exact
+    // string living in two places.
+    localStorage.setItem(
+      "n9-data-analysis-session",
+      JSON.stringify({ workbook: snapshot("restored.csv"), savedAt: new Date().toISOString() }),
+    )
+    render(<DataAnalysisWorkspace files={[]} />)
+
+    expect(await screen.findByRole("button", { name: 'Apply: Plot "x" against "y"' })).toBeInTheDocument()
+
+    await new Promise((resolve) => setTimeout(resolve, 900))
+    expect(computeSpy).not.toHaveBeenCalled()
+  }, 10000)
+
+  // ── AC-4: no spec mutation is applied without an explicit approval ─────────
+  it("the column-role suggestion sits unapplied until the researcher clicks it, and only then", async () => {
+    const { container } = render(<DataAnalysisWorkspace files={[]} />)
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement
+    fireEvent.change(fileInput, { target: { files: [xlsxFile("colleague-upload.xlsx")] } })
+
+    const offer = await screen.findByRole("button", { name: 'Apply: Plot "x" against "y"' })
+
+    // Sitting on a loaded, unapproved table does not self-apply the guess.
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    expect(screen.getByRole("button", { name: 'Apply: Plot "x" against "y"' })).toBeInTheDocument()
+
+    fireEvent.click(offer)
+
+    // The offer is moot now — axes are set, exactly as it promised — and
+    // only because a click, not a render, did it.
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: 'Apply: Plot "x" against "y"' })).not.toBeInTheDocument(),
+    )
+  })
+})
