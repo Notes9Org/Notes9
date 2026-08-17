@@ -186,6 +186,8 @@ import {
   createAnalysisThread,
   loadAnalysisThread,
   updateAnalysisTurnPlan,
+  writeAnalysisIntent,
+  readAnalysisIntent,
 } from "@/lib/data-analysis/ai/analysis-thread-store"
 import {
   ANALYSIS_TURN_VERSION,
@@ -198,6 +200,7 @@ import {
   type AnalysisAssistantTurn,
   type AnalysisTurn,
   type AnalysisUserTurn,
+  type AnalysisIntent,
   type RequestIdentity,
 } from "@/lib/data-analysis/ai/analysis-thread"
 import { prepOffers, profilePreparation, type PrepOffer } from "@/lib/data-analysis/workspace/prep-offers"
@@ -2244,7 +2247,32 @@ export function DataAnalysisWorkspace({
     // transcript were computed against data that is no longer loaded, and an
     // approvable plan pointing at a previous dataset is the exact wrong answer
     // this feature exists to prevent.
-    setTurns([])
+    //
+    // ADR-023: real data landing on a genuinely new load (never a tab-switch
+    // repaint) either opens the conversation with the one question that
+    // matters — what is the researcher trying to find out — or, if that was
+    // already answered before the data existed, says nothing here at all:
+    // the effect keyed on `aiGate.canPropose` sends the stated intent for
+    // them as soon as there is something to propose against.
+    const isNewDataset = !internal && snap.name !== EMPTY_SHEET_NAME
+    const hasUnappliedIntent = pendingIntentRef.current !== null && pendingIntentRef.current.appliedToDatasetId === null
+    if (isNewDataset && !hasUnappliedIntent) {
+      setTurns([
+        {
+          v: ANALYSIS_TURN_VERSION,
+          id: `a${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          role: "assistant",
+          content: "What are you trying to find out from this data?",
+          plan: null,
+          specHashAtProposal: "",
+          createdAt: new Date().toISOString(),
+        },
+      ])
+      docks.setActivePanelId("ask")
+    } else {
+      setTurns([])
+      if (isNewDataset) docks.setActivePanelId("ask")
+    }
     // ADR-026: the thread handle never outlives its turns. A new sheet's
     // first question is a new conversation, not a continuation appended to
     // the file that was just replaced — and any request still in flight for
@@ -2279,7 +2307,7 @@ export function DataAnalysisWorkspace({
     setDataFilters(PIPELINE_FOR_NEW_SHEET.filters)
     setDataTransforms(PIPELINE_FOR_NEW_SHEET.transforms)
     setDataExclusions(PIPELINE_FOR_NEW_SHEET.exclusions)
-  }, [])
+  }, [docks.setActivePanelId])
 
   // Serialize / restore the full analysis config (chart + plate) for .n9a save
   // and session persistence.
@@ -2447,6 +2475,17 @@ export function DataAnalysisWorkspace({
     [hasData, derivedSpec, specTable.rows.length, table.parseError],
   )
 
+  /**
+   * ADR-023: what the researcher said they want before a dataset resolved
+   * enough rows to propose against. `null` once it has been acted on (or
+   * never existed) — the effect below auto-sends it the first time
+   * `canPropose` goes true and clears the pointer so a later dataset swap
+   * does not replay a request the researcher never repeated.
+   */
+  const [pendingIntent, setPendingIntent] = useState<AnalysisIntent | null>(null)
+  const pendingIntentRef = useRef(pendingIntent)
+  pendingIntentRef.current = pendingIntent
+
   /* P3, propose then execute. The model's reply is a PLAN, not an action: the
      spec it would produce, computed and held here, is not handed to
      `applyConfig` until the researcher reads the rationale and presses
@@ -2468,7 +2507,11 @@ export function DataAnalysisWorkspace({
 
   const askForChange = useCallback(async (rawPrompt: string) => {
     const prompt = rawPrompt.trim()
-    if (!prompt || !derivedSpec || specTable.rows.length === 0) return
+    // ADR-023: send is gated on `canCapture` alone — a mounted analysis with
+    // no data yet may still have its intent recorded. `canPropose` decides
+    // only whether this turn goes on to the model, below.
+    if (!prompt || !aiGate.canCapture) return
+    const captureOnly = !aiGate.canPropose
 
     // The question joins the transcript before the answer exists, so the
     // researcher can see what they asked while it is being answered.
@@ -2489,6 +2532,14 @@ export function DataAnalysisWorkspace({
       .slice(-10)
       .map((entry) => ({ description: entry.description, origin: entry.origin }))
     setTurns((current) => [...current, userTurn])
+
+    // ADR-023: no dataset to propose against yet — this turn IS the intent,
+    // nothing else. No statistics, no plan, no approval; just the record,
+    // held here and, once the turn's thread mints below, persisted.
+    const statedIntent: AnalysisIntent | null = captureOnly
+      ? { text: prompt, statedAt: askedAt, appliedToDatasetId: null }
+      : null
+    if (statedIntent) setPendingIntent(statedIntent)
 
     // ADR-026: which analysis this reply belongs to is decided HERE, once,
     // by what was mounted when the question was asked — never by whatever
@@ -2526,7 +2577,15 @@ export function DataAnalysisWorkspace({
         }
       }
       if (id) await appendAnalysisTurn(id, userTurn)
+      // ADR-023: persisted once the thread exists to persist it against —
+      // a fire-and-forget write, same discipline as the turn above it.
+      if (id && statedIntent) void writeAnalysisIntent(id, statedIntent)
     })()
+
+    // Intent captured, nothing to propose against: stop here. No statistics,
+    // no plan, no approval — the model is never asked.
+    if (captureOnly) return
+    if (!derivedSpec) return
 
     // A new request supersedes the one in flight. The old one resolves as
     // "aborted", which is deliberately silent: it was replaced, not failed.
@@ -2606,11 +2665,28 @@ export function DataAnalysisWorkspace({
         )
       }
     }
-  }, [derivedSpec, specTable, specToken, editHistory])
+  }, [aiGate, derivedSpec, specTable, specToken, editHistory])
 
   useEffect(() => {
     askForChangeRef.current = (prompt) => void askForChange(prompt)
   }, [askForChange])
+
+  /**
+   * ADR-023: a dataset arrived after the researcher already said what they
+   * wanted. Fires once — the moment `canPropose` goes true for a dataset
+   * this intent has not yet seen — and marks itself applied so a later spec
+   * edit that flips `canPropose` off and back on does not resend it.
+   */
+  useEffect(() => {
+    if (!aiGate.canPropose) return
+    const intent = pendingIntentRef.current
+    if (!intent || intent.appliedToDatasetId !== null) return
+    const datasetId = sourceFileRef.current?.id ?? "local"
+    const applied: AnalysisIntent = { ...intent, appliedToDatasetId: datasetId }
+    setPendingIntent(applied)
+    if (threadIdRef.current) void writeAnalysisIntent(threadIdRef.current, applied)
+    void askForChange(intent.text)
+  }, [aiGate.canPropose, askForChange])
 
   /** Run an approved plan, all of it.
    *
@@ -3399,6 +3475,14 @@ export function DataAnalysisWorkspace({
           setThreadId(saved.threadId)
           void loadAnalysisThread(saved.threadId).then((restored) => {
             if (restored.length > 0) setTurns(restored)
+          })
+          // ADR-023, AC-9: an intent stated before data exists lives only in
+          // the database (`chat_sessions.metadata`), never in localStorage —
+          // read it back here so a reload does not lose the researcher's
+          // stated intent, or the auto-propose still owed against a dataset
+          // it has not seen yet.
+          void readAnalysisIntent(saved.threadId).then((intent) => {
+            if (intent && intent.appliedToDatasetId === null) setPendingIntent(intent)
           })
         }
       }
