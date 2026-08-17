@@ -199,6 +199,7 @@ import {
   type AnalysisAssistantTurn,
   type AnalysisTurn,
   type AnalysisUserTurn,
+  type RequestIdentity,
 } from "@/lib/data-analysis/ai/analysis-thread"
 import { prepOffers, profilePreparation } from "@/lib/data-analysis/workspace/prep-offers"
 import { computeAnalysis } from "@/lib/data-analysis/engine/client"
@@ -1643,6 +1644,11 @@ export function DataAnalysisWorkspace({
       turns: AnalysisTurn[]
       /** chat_sessions.id, minted on this analysis's first send. */
       threadId: string | null
+      /** ADR-026: busy and the abort controller move with turns/threadId as one
+          unit, so a background tab can have a request in flight without it
+          reading as "Thinking…" on whichever tab is mounted. */
+      aiBusy: boolean
+      abortController: AbortController | null
     }[]
   >([])
   const [activeAnalysisId, setActiveAnalysisId] = useState<string>("a1")
@@ -1660,7 +1666,11 @@ export function DataAnalysisWorkspace({
    * strip. Refs, not deps.
    */
   const loadSnapshotRef = useRef<
-    (snap: UniverWorkbookSnapshot, source?: { id: string; experimentId: string } | null) => void
+    (
+      snap: UniverWorkbookSnapshot,
+      source?: { id: string; experimentId: string } | null,
+      internal?: boolean
+    ) => void
   >(() => {})
   const sourceFileRef = useRef<{ id: string; experimentId: string } | null>(null)
   /**
@@ -1746,6 +1756,8 @@ export function DataAnalysisWorkspace({
               hasData: hasDataRef.current,
               turns: turnsRef.current,
               threadId: threadIdRef.current,
+              aiBusy: aiBusyRef.current,
+              abortController: aiAbortRef.current,
             }
           : a
       ),
@@ -1772,11 +1784,19 @@ export function DataAnalysisWorkspace({
       setAnalyses(saved)
       setActiveAnalysisId(id)
       if (target.snapshot !== liveRef.current) {
-        loadSnapshotRef.current(target.snapshot, target.source ?? undefined)
+        loadSnapshotRef.current(target.snapshot, target.source ?? undefined, true)
       }
       setHasData(target.hasData)
       setTurns(target.turns)
       setThreadId(target.threadId)
+      // ADR-026: busy and the abort controller move with turns/threadId. A
+      // request in flight for the tab being left keeps running in the
+      // background rather than aborting on tab change, and it does not
+      // borrow this tab's "Thinking…" indicator either — `askForChange`
+      // routes its reply by the analysis id captured when it was asked, not
+      // by whichever tab is mounted when it resolves.
+      setAiBusy(target.aiBusy)
+      aiAbortRef.current = target.abortController
       swapConfig(target.config)
     },
     [activeAnalysisId, captureActive, swapConfig]
@@ -1809,13 +1829,17 @@ export function DataAnalysisWorkspace({
         hasData: false,
         turns: [],
         threadId: null,
+        aiBusy: false,
+        abortController: null,
       },
     ])
     setActiveAnalysisId(id)
-    loadSnapshotRef.current(emptySnapshot())
+    loadSnapshotRef.current(emptySnapshot(), null, true)
     setHasData(false)
     setTurns([])
     setThreadId(null)
+    setAiBusy(false)
+    aiAbortRef.current = null
     swapConfig(blankConfigRef.current)
   }, [captureActive, swapConfig])
 
@@ -1848,17 +1872,23 @@ export function DataAnalysisWorkspace({
         // A duplicate gets its own thread. Two analyses writing into one
         // transcript would interleave two different lines of reasoning.
         threadId: null,
+        // ...and its own busy/abort state — never a live request the
+        // original tab happened to have in flight.
+        aiBusy: false,
+        abortController: null,
       }
       const next = [...saved]
       next.splice(index + 1, 0, copy)
       setAnalyses(next)
       setActiveAnalysisId(newId)
       if (copy.snapshot !== liveRef.current) {
-        loadSnapshotRef.current(copy.snapshot, copy.source ?? undefined)
+        loadSnapshotRef.current(copy.snapshot, copy.source ?? undefined, true)
       }
       setHasData(copy.hasData)
       setTurns(copy.turns)
       setThreadId(null)
+      setAiBusy(false)
+      aiAbortRef.current = null
       swapConfig(copy.config)
     },
     [captureActive, swapConfig]
@@ -1882,16 +1912,18 @@ export function DataAnalysisWorkspace({
       const index = list.findIndex((a) => a.id === id)
       if (index === -1) return
 
-      // Only the active tab can have a spec-author request in flight — a
-      // background tab's turns are already a settled snapshot. Abort it
-      // before swapping state below, the same way `closeDataset` does,
-      // otherwise a reply that resolves after the swap is appended via
-      // `setTurns`/`appendAnalysisTurn` against whatever tab is current by
-      // then: the neighbour here, or the fresh tab below.
+      // ADR-026: a background tab can have its own request in flight now
+      // (switching away no longer aborts one). Abort THIS tab's own
+      // controller — the live one if it is active, its stored one if it is
+      // not — before swapping state below, otherwise a reply that resolves
+      // after close is discarded only by luck rather than by this closing
+      // its owner.
       if (id === activeAnalysisId) {
         aiAbortRef.current?.abort()
         aiAbortRef.current = null
         setAiBusy(false)
+      } else {
+        list[index].abortController?.abort()
       }
 
       if (list.length === 1) {
@@ -1905,12 +1937,16 @@ export function DataAnalysisWorkspace({
           hasData: false,
           turns: [],
           threadId: null,
+          aiBusy: false,
+          abortController: null,
         }
         setAnalyses([fresh])
         setActiveAnalysisId(newId)
-        loadSnapshotRef.current(emptySnapshot())
+        loadSnapshotRef.current(emptySnapshot(), null, true)
         setTurns([])
         setThreadId(null)
+        setAiBusy(false)
+        aiAbortRef.current = null
         setEngineResult(null)
         setEngineNote(null)
         swapConfig(blankConfigRef.current)
@@ -1924,10 +1960,12 @@ export function DataAnalysisWorkspace({
         if (neighbour) {
           setActiveAnalysisId(neighbour.id)
           if (neighbour.snapshot !== liveRef.current) {
-            loadSnapshotRef.current(neighbour.snapshot, neighbour.source ?? undefined)
+            loadSnapshotRef.current(neighbour.snapshot, neighbour.source ?? undefined, true)
           }
           setTurns(neighbour.turns)
           setThreadId(neighbour.threadId)
+          setAiBusy(neighbour.aiBusy)
+          aiAbortRef.current = neighbour.abortController
           setEngineResult(null)
           setEngineNote(null)
           swapConfig(neighbour.config)
@@ -1968,7 +2006,7 @@ export function DataAnalysisWorkspace({
     aiAbortRef.current = null
     setAiBusy(false)
     const keptTurns = turnsRef.current
-    loadSnapshotRef.current(emptySnapshot())
+    loadSnapshotRef.current(emptySnapshot(), null, true)
     setTurns(keptTurns)
     setEngineResult(null)
     setEngineNote(null)
@@ -2053,6 +2091,8 @@ export function DataAnalysisWorkspace({
           hasData: hasDataRef.current,
           turns: turnsRef.current,
           threadId: threadIdRef.current,
+          aiBusy: aiBusyRef.current,
+          abortController: aiAbortRef.current,
         },
       ])
     }
@@ -2104,7 +2144,7 @@ export function DataAnalysisWorkspace({
     )
   }, [])
 
-  const loadSnapshot = useCallback((snap: UniverWorkbookSnapshot, source: { id: string; experimentId: string } | null = null) => {
+  const loadSnapshot = useCallback((snap: UniverWorkbookSnapshot, source: { id: string; experimentId: string } | null = null, internal = false) => {
     seededRef.current = false
     setLiveSnapshot(snap)
     setMountSnapshot(snap)
@@ -2129,6 +2169,24 @@ export function DataAnalysisWorkspace({
     // approvable plan pointing at a previous dataset is the exact wrong answer
     // this feature exists to prevent.
     setTurns([])
+    // ADR-026: the thread handle never outlives its turns. A new sheet's
+    // first question is a new conversation, not a continuation appended to
+    // the file that was just replaced — and any request still in flight for
+    // the transcript just cleared is answering a question that no longer
+    // has a home.
+    //
+    // `internal` skips this: the tab-management callers (switchAnalysis,
+    // duplicateAnalysis, closeAnalysis's neighbour, closeDataset) call this
+    // to repaint an ALREADY-KNOWN tab's own snapshot, not to load new data —
+    // they set turns/threadId/aiBusy/the controller to that tab's own values
+    // themselves, right after this returns, and aborting here would land on
+    // a DIFFERENT (departing) analysis's still-legitimate in-flight request.
+    if (!internal) {
+      setThreadId(null)
+      aiAbortRef.current?.abort()
+      aiAbortRef.current = null
+      setAiBusy(false)
+    }
     // Approved edits go with it for the same reason: an annotation or an
     // exclusion authored against the sheet that was just replaced is pointing
     // at rows that no longer exist. The undo stack goes for the third time for
@@ -2272,6 +2330,8 @@ export function DataAnalysisWorkspace({
      Nothing below is load-bearing for the deterministic path. If the assistant
      is off, every control, the engine and the statistics still work. */
   const [aiBusy, setAiBusy] = useState(false)
+  const aiBusyRef = useRef(aiBusy)
+  aiBusyRef.current = aiBusy
   /**
    * The conversation for THIS analysis. Replaces the single `aiReply` /
    * `aiProposal` slot, which each new prompt destroyed — so a researcher could
@@ -2348,6 +2408,17 @@ export function DataAnalysisWorkspace({
       .map((entry) => ({ description: entry.description, origin: entry.origin }))
     setTurns((current) => [...current, userTurn])
 
+    // ADR-026: which analysis this reply belongs to is decided HERE, once,
+    // by what was mounted when the question was asked — never by whatever
+    // tab happens to be mounted when the network call below returns.
+    // `threadId` is filled in as soon as the mint (also fire-and-forget,
+    // just below) resolves, which is usually before the reply is.
+    const identity: RequestIdentity = {
+      analysisId: activeAnalysisIdRef.current,
+      threadId: threadIdRef.current,
+      requestId: `r${askedAt}-${Math.random().toString(36).slice(2, 8)}`,
+    }
+
     // The thread is created on the first send, and persistence is deliberately
     // fire-and-forget: `analysis-thread-store` never throws, and a transcript
     // that failed to save must not cost the researcher the answer.
@@ -2360,8 +2431,16 @@ export function DataAnalysisWorkspace({
           sourceDataFileId: sourceFileRef.current?.id ?? null,
         })
         if (id) {
-          setThreadId(id)
-          threadIdRef.current = id
+          identity.threadId = id
+          // Only the live state if this analysis is still the one mounted —
+          // a switch that landed in between must not stamp this id onto
+          // whichever tab is active now.
+          if (identity.analysisId === activeAnalysisIdRef.current) {
+            setThreadId(id)
+            threadIdRef.current = id
+          } else {
+            setAnalyses((current) => current.map((a) => (a.id === identity.analysisId ? { ...a, threadId: id } : a)))
+          }
         }
       }
       if (id) await appendAnalysisTurn(id, userTurn)
@@ -2404,14 +2483,45 @@ export function DataAnalysisWorkspace({
         applied = patched.applied.map(describeMutation)
       }
       const assistantTurn = assistantTurnFor(outcome, applied, specToken)
-      setTurns((current) => [...current, assistantTurn])
-      if (threadIdRef.current) void appendAnalysisTurn(threadIdRef.current, assistantTurn)
+
+      // Route by the identity captured when this was asked, never by
+      // whatever tab is mounted now (ADR-026). A newer ask on the same
+      // analysis, or that analysis having been closed, means this
+      // controller is no longer the one on record for it — discard rather
+      // than re-home into whatever is current.
+      const owner =
+        identity.analysisId === activeAnalysisIdRef.current
+          ? aiAbortRef.current
+          : analysesRef.current.find((a) => a.id === identity.analysisId)?.abortController
+      if (owner !== controller) return
+
+      if (identity.analysisId === activeAnalysisIdRef.current) {
+        setTurns((current) => [...current, assistantTurn])
+      } else {
+        setAnalyses((current) =>
+          current.map((a) => (a.id === identity.analysisId ? { ...a, turns: [...a.turns, assistantTurn] } : a))
+        )
+      }
+      if (identity.threadId) void appendAnalysisTurn(identity.threadId, assistantTurn)
     } finally {
       // A superseded request no longer owns the busy flag, the one that
-      // replaced it does.
-      if (aiAbortRef.current === controller) {
-        aiAbortRef.current = null
-        setAiBusy(false)
+      // replaced it does — and a closed analysis is gone from `analyses`
+      // (or never became mounted again), so neither branch below finds it
+      // and this quietly does nothing rather than touching whatever is
+      // current.
+      if (identity.analysisId === activeAnalysisIdRef.current) {
+        if (aiAbortRef.current === controller) {
+          aiAbortRef.current = null
+          setAiBusy(false)
+        }
+      } else {
+        setAnalyses((current) =>
+          current.map((a) =>
+            a.id === identity.analysisId && a.abortController === controller
+              ? { ...a, aiBusy: false, abortController: null }
+              : a
+          )
+        )
       }
     }
   }, [derivedSpec, specTable, specToken, editHistory])
@@ -2902,6 +3012,16 @@ export function DataAnalysisWorkspace({
         // answerable eighteen months later, which is the whole point of storing
         // it (§3A.2).
         setTurns(fromStoredThread(verdict.revision.conversationThread))
+        // ADR-026: a revision carries no live thread handle of its own — only
+        // its turns are stored — so restoring its transcript restores that
+        // (null) handle rather than leaving the PREVIOUS thread id attached
+        // to a now-different conversation. Redundant with `loadSnapshot`'s
+        // own reset when that ran above; not redundant when `snapshot?.workbook`
+        // was null and it did not.
+        setThreadId(null)
+        aiAbortRef.current?.abort()
+        aiAbortRef.current = null
+        setAiBusy(false)
         // A clean reopen says nothing; every other verdict is a screen, not a toast.
         setReopenVerdict(verdict.state === "clean" ? null : verdict)
         setHistoryOpen(false)
