@@ -86,6 +86,26 @@ All variables are configured in `.env.local` (never committed). This file lists 
 | `UNPAYWALL_EMAIL` | Optional | Server | Email for Unpaywall open-access lookups |
 | `CORE_API_KEY` | **Recommended** | Server | CORE (core.ac.uk) key — Tier-2 green-OA locator. See note below. |
 | `SEMANTIC_SCHOLAR_API_KEY` | Optional | Server | Semantic Scholar key — only raises rate limit; the locator works keyless. |
+| `NOTES9_ENFORCE_PDF_HOST_ALLOWLIST` | Optional | Server | Enforce the publisher hostname allowlist on PDF downloads. **Off by default.** See note below. |
+
+### NOTES9_ENFORCE_PDF_HOST_ALLOWLIST — leave it off unless you mean it
+
+`PDF_HOSTNAME_ALLOWLIST` in `lib/literature-pdf-urls.ts` is 40 **exact** hostnames.
+Between `26ecadcff` (2026-08-16) and this change it was enforced on every download,
+and that silently broke open-access acquisition: the list omits `doi.org` — which
+OpenAlex, Unpaywall and Crossref return constantly — along with BMC, BMJ, figshare,
+Springer's apex domain and every CDN. It also omits `semanticscholar.org` and
+`core.ac.uk`, so the Tier-2 green-OA locators documented directly above were
+discarded before they could be tried. A blocked URL returns `null` with no error
+surfaced, so the failure looks like "no PDF available".
+
+Set to `1`/`true`/`yes`/`on` only for a deployment that deliberately wants egress
+restricted to known publishers, and expect to add hosts as you hit them.
+
+**This flag does not govern SSRF.** Two controls remain unconditional regardless of
+it: `hostnameIsBlocked` rejects private/loopback/metadata hostnames in
+`pdfUrlIsFetchable` before any request is made, and `safeFetch` resolves and
+validates the target address on every fetch. There is no switch to disable either.
 
 ### CORE_API_KEY — open-access PDF download (add this later)
 
