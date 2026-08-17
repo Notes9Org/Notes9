@@ -75,10 +75,7 @@ import type { DataFileRow } from "@/components/data-analysis/data-files-list"
 import { UniverWorkbookView, type SheetSelection } from "@/components/spreadsheet/univer-workbook-view"
 import { PlotlyChart, type PlotlyEdits, type ChartExportFn, type ChartElement, type ChartMenuGroup } from "@/components/data-analysis/plotly-chart"
 import { ExportMenu } from "@/components/data-analysis/export-menu"
-import { openCatalystPanel } from "@/lib/catalyst-launch"
-import { useCatalystPanelState } from "@/contexts/catalyst-panel-state"
 import { useSidebar } from "@/components/ui/sidebar"
-import { FlareIcon } from "@/components/ui/flare-icon"
 import type { ExportFormat } from "@/lib/data-analysis/chart-export"
 import { useStatsPanel, type Table } from "@/components/data-analysis/stats-panel"
 import { describe as describeStats } from "@/lib/data-analysis/statistics"
@@ -97,7 +94,7 @@ import {
   type PaletteKind,
 } from "@/lib/data-analysis/render/palettes"
 import { ERROR_BAR_LABEL, ERROR_BAR_OPTIONS } from "@/lib/data-analysis/render/plotly-adapter"
-import { Dock, DockTab, useDockLayout } from "@/components/data-analysis/workspace/docks"
+import { Dock, DockTab, useDockLayout, type DockPanel } from "@/components/data-analysis/workspace/docks"
 import { LayoutCanvas } from "@/components/data-analysis/workspace/layout-canvas"
 import { PipelineTabs } from "@/components/data-analysis/workspace/pipeline-tabs"
 import { ResultsCard } from "@/components/data-analysis/workspace/results-card"
@@ -218,6 +215,7 @@ import {
 } from "@/lib/spreadsheet-workbook"
 import { hashTable } from "@/lib/data-analysis/workspace/bootstrap"
 import { snapshotToTable } from "@/lib/data-analysis/workspace/snapshot-table"
+import { deriveAiGate } from "@/lib/data-analysis/workspace/ai-gate"
 import { ATTACHMENT_MAX_FILE_SIZE } from "@/lib/attachment-types"
 
 function buildSnapshotFromAoa(aoa: (string | number)[][], sheetName: string, fileName: string): UniverWorkbookSnapshot {
@@ -1461,7 +1459,6 @@ export function DataAnalysisWorkspace({
   const shellRef = useRef<HTMLDivElement>(null)
   const [fullscreenStyle, setFullscreenStyle] = useState<CSSProperties | undefined>(undefined)
   const sidebar = useSidebar()
-  const catalystState = useCatalystPanelState()
 
   const syncFullscreenBounds = useCallback(() => {
     const inset = shellRef.current?.closest('[data-slot="sidebar-inset"]') as HTMLElement | null
@@ -1561,7 +1558,15 @@ export function DataAnalysisWorkspace({
     [setDockOpen],
   )
 
-  // Fire an AI request straight from the chart's right-click menu.
+  // ADR-024: filled in below, once `askForChange` exists — the chart's
+  // right-click menu is defined before it, so it reaches the sender the same
+  // way the statistics actions below reach theirs.
+  const askForChangeRef = useRef<(prompt: string) => void>(() => undefined)
+
+  // Fire an AI request straight from the chart's right-click menu. ADR-024:
+  // this now posts into the rail conversation for the mounted analysis
+  // (`askForChange`) instead of opening the separate, disconnected Catalyst
+  // sidebar — one AI surface per analysis, not two with different histories.
   const askCatalyst = useCallback(
     (kind: "explain" | "improve" | "summary" | "stats") => {
       const cols = table.columns.join(", ")
@@ -1575,7 +1580,7 @@ export function DataAnalysisWorkspace({
         : kind === "improve" ? "Suggest the most appropriate chart type and any transformations for this data, and why."
         : kind === "summary" ? "Summarise the key findings from this data in a few bullet points."
         : "Recommend which statistical test(s) are appropriate for this data and what to compare."
-      openCatalystPanel({ query: `${ask}\n\n${context}`, scope: "lab", autoSend: true })
+      askForChangeRef.current(`${ask}\n\n${context}`)
     },
     [table.columns, table.rows, chartType, activeY, xKey, title],
   )
@@ -2425,8 +2430,22 @@ export function DataAnalysisWorkspace({
   const [specToken, setSpecToken] = useState(() => `${specTokenSeedRef.current}:0`)
   const aiAbortRef = useRef<AbortController | null>(null)
 
-  /** The hard precondition, mirrored from the route: no resolved rows, no ask. */
-  const aiReady = derivedSpec !== null && specTable.rows.length > 0
+  /**
+   * ADR-023/024: the tri-state gate replaces the single `aiReady` boolean —
+   * intent capture needs only a mounted analysis, proposing needs resolved
+   * rows too, and `reason` is derived rather than a literal so it never lies
+   * about which condition is actually blocking.
+   */
+  const aiGate = useMemo(
+    () =>
+      deriveAiGate({
+        datasetPresent: hasData,
+        derivedSpecPresent: derivedSpec !== null,
+        rowCount: specTable.rows.length,
+        parseError: table.parseError,
+      }),
+    [hasData, derivedSpec, specTable.rows.length, table.parseError],
+  )
 
   /* P3, propose then execute. The model's reply is a PLAN, not an action: the
      spec it would produce, computed and held here, is not handed to
@@ -2588,6 +2607,10 @@ export function DataAnalysisWorkspace({
       }
     }
   }, [derivedSpec, specTable, specToken, editHistory])
+
+  useEffect(() => {
+    askForChangeRef.current = (prompt) => void askForChange(prompt)
+  }, [askForChange])
 
   /** Run an approved plan, all of it.
    *
@@ -3950,35 +3973,54 @@ export function DataAnalysisWorkspace({
 
   /**
    * The one AI surface on this page: the transcript for this analysis and the
-   * composer under it (ADR-014). `variant="docked"` here is what makes it the
-   * bottom console (ADR-019) rather than a block in the document flow — the
-   * empty-analysis screen below passes `variant="empty"` for the centred,
-   * first-screen composer instead.
+   * composer under it (ADR-014). ADR-024 moved it off the bottom of the page
+   * (ADR-019) and into the right rail's "Ask Notes9" tab, alongside chart
+   * settings, instead of always below the fold under three fixed-height
+   * panes — the empty-analysis screen below still passes `variant="empty"`
+   * for the centred, first-screen composer.
    */
-  const specPrompt = (
-    <AnalysisConsole
-      turns={turns}
-      currentSpecHash={specToken}
-      busy={aiBusy}
-      blockedReason={
-        !hasData
-          ? "Attach a data file to start."
-          : !aiReady
-            ? "Import or type some data, then ask."
-            : null
-      }
-      onSend={(prompt) => void askForChange(prompt)}
-      onApprove={approvePlan}
-      onDiscard={discardPlan}
-      datasetName={hasData ? sheetFileName : null}
-      variant="docked"
-    />
+  const askConsole = (
+    <div className="flex h-full min-h-0 flex-col p-2">
+      <AnalysisConsole
+        turns={turns}
+        currentSpecHash={specToken}
+        busy={aiBusy}
+        gate={aiGate}
+        onSend={(prompt) => void askForChange(prompt)}
+        onApprove={approvePlan}
+        onDiscard={discardPlan}
+        datasetName={hasData ? sheetFileName : null}
+        variant="rail"
+      />
+    </div>
   )
+
+  // A pending, still-actionable plan raises a badge on the Ask tab so it is
+  // never hidden by which tab happens to be open (ADR-024).
+  const pendingPlanCount = turns.filter(
+    (t): t is AnalysisAssistantTurn => t.role === "assistant" && canApprovePlan(t, specToken),
+  ).length
 
   const canvasForPhase = phase === "chart" ? chartCanvas : phase === "stats" ? statsCanvas : phase === "curve" ? curve.canvas : plate.canvas
   const settingsForPhase = phase === "chart" ? chartSettings : phase === "stats" ? stats.settings : phase === "curve" ? curveSettings : plate.settings
   const activePhase = PHASES.find((p) => p.id === phase)!
   const ActiveIcon = activePhase.Icon
+
+  // ADR-024: the right dock's two tabs. "Ask Notes9" is first/default — it is
+  // the one AI surface for this analysis and used to be visible unconditionally,
+  // so tabbing it behind "Chart settings" by default would be a regression.
+  // A pending plan raises a badge here only while the *other* tab is active
+  // (docks.tsx's rule): it must never be hidden by which tab happens to be open.
+  const rightActivePanelId = docks.activePanelId ?? "ask"
+  const rightPanels: DockPanel[] = [
+    {
+      id: "ask",
+      label: "Ask Notes9",
+      badge: rightActivePanelId === "settings" && pendingPlanCount > 0 ? pendingPlanCount : null,
+      content: askConsole,
+    },
+    { id: "settings", label: "Chart settings", content: <div className="p-4">{settingsForPhase}</div> },
+  ]
 
   /**
    * Every dialog the workspace can open. Extracted so the empty-analysis
@@ -4140,7 +4182,7 @@ export function DataAnalysisWorkspace({
           turns={turns}
           currentSpecHash={specToken}
           busy={aiBusy}
-          blockedReason="Attach a data file to start."
+          gate={aiGate}
           onSend={(prompt) => void askForChange(prompt)}
           onApprove={approvePlan}
           onDiscard={discardPlan}
@@ -4194,37 +4236,19 @@ export function DataAnalysisWorkspace({
           "overflow-auto bg-[color:var(--background)] p-4 md:p-6",
       )}
     >
-      {/* Full screen covers the app header, which is where Catalyst is opened
-          from, so that one control has to exist here too — top-right, the
-          corner it lives in normally, and the same flare glyph and ring the
-          header uses so it reads as the same button. The left sidebar needs no
-          equivalent: collapsed to its rail it still shows its own open control,
-          and the shell is bounded to stop clear of it. */}
-      {fullscreen && (
-        <div className="flex shrink-0 items-center justify-end">
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "n9-neon-ring size-8 shrink-0 text-primary ring-1 ring-inset ring-[color:var(--primary)]/25 transition-colors hover:text-primary sm:size-9",
-              catalystState?.isOpen
-                ? "bg-[color:var(--primary)]/20 hover:bg-[color:var(--primary)]/24"
-                : "bg-[color:var(--primary)]/[0.08] hover:bg-[color:var(--primary)]/15",
-            )}
-            onClick={() => openCatalystPanel()}
-            aria-label="Ask Catalyst"
-            title="Ask Catalyst"
-          >
-            <FlareIcon className="size-4" />
-          </Button>
-        </div>
-      )}
+      {/* ADR-024: full screen used to need its own "Ask Catalyst" control here,
+          because full screen covers the app header where Catalyst normally
+          opens from. That control opened a separate, disconnected sidebar
+          history; now the one AI surface is the rail's Ask tab, which is
+          already part of this tree and needs no full-screen-only stand-in. */}
 
-      {/* One AI input on this page, and it is the spec prompt below (I2.1). The
+      {/* One AI input on this page, and it lives in the rail's Ask tab. The
           Catalyst hero used to sit here, but it changes nothing on the page — it
           only opens the sidebar composer, so the researcher had two boxes and no
-          way to tell which one moved their chart. Catalyst is still one click
-          away in the app header (and top-right when full screen). */}
+          way to tell which one moved their chart, and it kept its own,
+          disconnected history. The rail's Ask tab is scoped to this analysis
+          and stays reachable in full screen too, so nothing full-screen-only
+          is needed for it. */}
 
       {/* Analyses. Several views of one sheet: the dose-response beside the
           timecourse beside the plate, each keeping its own chart, statistics and
@@ -4547,36 +4571,53 @@ export function DataAnalysisWorkspace({
             size={docks.layout.right.size}
             onToggle={() => docks.toggle("right")}
             onResize={(s) => docks.resize("right", s)}
-            title={`${activePhase.label} settings`}
+            title="Chart settings and Ask Notes9"
             icon={<ActiveIcon className="h-3.5 w-3.5 text-muted-foreground" weight="fill" />}
             className="h-[620px] xl:sticky xl:top-4"
-          >
-            <div className="p-4">{settingsForPhase}</div>
-          </Dock>
+            panels={rightPanels}
+            activePanelId={rightActivePanelId}
+            onActivePanelChange={docks.setActivePanelId}
+          />
         ) : (
           <div className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card/80 shadow-sm backdrop-blur-sm">
-            <div className="flex items-center gap-2 border-b border-border px-4 py-3">
-              <ActiveIcon className="h-4 w-4 text-muted-foreground" weight="fill" />
-              <span className="text-sm font-semibold">{activePhase.label} settings</span>
+            <div role="tablist" aria-label="Chart settings and Ask Notes9" className="flex items-center gap-1 border-b border-border px-2 py-1.5">
+              {rightPanels.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  aria-pressed={rightActivePanelId === p.id}
+                  onClick={() => docks.setActivePanelId(p.id)}
+                  className={cn(
+                    "relative rounded-md px-2.5 py-1.5 text-[12.5px] font-medium transition-colors",
+                    rightActivePanelId === p.id
+                      ? "bg-muted text-foreground"
+                      : "text-muted-foreground hover:bg-muted/60",
+                  )}
+                >
+                  {p.label}
+                  {p.badge ? (
+                    <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--n9-accent,#965034)] px-1 text-[10px] font-semibold text-white">
+                      {p.badge}
+                    </span>
+                  ) : null}
+                </button>
+              ))}
             </div>
-            <div className="p-4">{settingsForPhase}</div>
+            <div className="min-h-0 flex-1 overflow-auto">
+              {rightPanels.find((p) => p.id === rightActivePanelId)?.content}
+            </div>
           </div>
         )}
         {wide && !docks.layout.right.open && (
           <DockTab
             side="right"
-            label="Settings"
+            label="Chart & Ask"
             icon={<ActiveIcon className="h-3.5 w-3.5" weight="fill" />}
             onOpen={() => docks.setOpen("right", true)}
           />
         )}
       </div>
       )}
-
-      {/* ADR-019: docked to the bottom of the pane, below the sheet/chart/stats
-          it acts on — not above the tabs, where three turns used to push the
-          whole workspace below the fold. */}
-      {specPrompt}
 
       {/* Import from the Notes9 library */}
       {workspaceDialogs}

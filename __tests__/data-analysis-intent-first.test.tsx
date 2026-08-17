@@ -198,7 +198,7 @@ describe("data-analysis intent-first (ADR-026)", () => {
     render(<DataAnalysisWorkspace files={[loaded]} />)
     await openLibrary()
     fireEvent.click(screen.getByText("growth-curve.csv"))
-    await waitFor(() => expect(lastConsoleProps?.variant).toBe("docked"))
+    await waitFor(() => expect(lastConsoleProps?.variant).toBe("rail"))
 
     // Ask on analysis A.
     fireEvent.click(screen.getByRole("button", { name: "mock-send" }))
@@ -230,7 +230,7 @@ describe("data-analysis intent-first (ADR-026)", () => {
 
     // Switch back to A: the reply is there, appended to A's own transcript.
     fireEvent.click(screen.getAllByRole("tab")[0])
-    await waitFor(() => expect(lastConsoleProps?.variant).toBe("docked"))
+    await waitFor(() => expect(lastConsoleProps?.variant).toBe("rail"))
     expect(lastConsoleProps?.turns.length).toBeGreaterThan(turnsOnAWhenAsked)
     expect(lastConsoleProps?.turns.find((t) => t.role === "assistant")).toBeDefined()
     // And it was persisted under A's own thread id, not left unpersisted or
@@ -252,7 +252,7 @@ describe("data-analysis intent-first (ADR-026)", () => {
     const { container } = render(<DataAnalysisWorkspace files={[fileA]} />)
     await openLibrary()
     fireEvent.click(screen.getByText("tab-a.csv"))
-    await waitFor(() => expect(lastConsoleProps?.variant).toBe("docked"))
+    await waitFor(() => expect(lastConsoleProps?.variant).toBe("rail"))
 
     // First question mints and persists under "thread-1".
     fireEvent.click(screen.getByRole("button", { name: "mock-send" }))
@@ -293,7 +293,7 @@ describe("data-analysis intent-first (ADR-025)", () => {
 
     const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement
     fireEvent.change(fileInput, { target: { files: [xlsxFile("colleague-upload.xlsx")] } })
-    await waitFor(() => expect(lastConsoleProps?.variant).toBe("docked"))
+    await waitFor(() => expect(lastConsoleProps?.variant).toBe("rail"))
 
     // Profiled: the column-role guess is visible as a PipelineBar offer — a
     // suggestion with evidence, not applied state — and there is no
@@ -345,5 +345,60 @@ describe("data-analysis intent-first (ADR-025)", () => {
     await waitFor(() =>
       expect(screen.queryByRole("button", { name: 'Apply: Plot "x" against "y"' })).not.toBeInTheDocument(),
     )
+  })
+})
+
+describe("data-analysis intent-first (ADR-024)", () => {
+  // ── AC-2: the rail exposes both tabs and the console lives in Ask ─────────
+  it("the right rail offers Chart settings and Ask Notes9 tabs, and the console only renders under Ask", async () => {
+    const fileA = file({ id: "fA", file_name: "rail-a.csv" })
+    mockWorkbookFetch({ fA: { snapshot: snapshot("rail-a.csv") } })
+
+    render(<DataAnalysisWorkspace files={[fileA]} />)
+    await openLibrary()
+    fireEvent.click(screen.getByText("rail-a.csv"))
+    await waitFor(() => expect(lastConsoleProps?.variant).toBe("rail"))
+
+    expect(screen.getByRole("button", { name: "Ask Notes9" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Chart settings" })).toBeInTheDocument()
+    // Ask is the default tab, so the console is already mounted.
+    expect(screen.getByTestId("mock-console")).toBeInTheDocument()
+
+    // Chart settings replaces the panel content — the console is not a
+    // permanently-mounted sibling, it lives only under the Ask tab.
+    fireEvent.click(screen.getByRole("button", { name: "Chart settings" }))
+    expect(screen.queryByTestId("mock-console")).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole("button", { name: "Ask Notes9" }))
+    expect(screen.getByTestId("mock-console")).toBeInTheDocument()
+  })
+
+  // ── AC-7: the conversation survives a tab switch ───────────────────────────
+  it("switching to Chart settings and back does not drop the in-flight conversation", async () => {
+    const fileA = file({ id: "fA", file_name: "rail-b.csv" })
+    mockWorkbookFetch({ fA: { snapshot: snapshot("rail-b.csv") } })
+
+    // Never resolves: the request stays in flight across the tab switch, so
+    // a reset-on-switch bug would be caught even before any reply lands.
+    const specAuthor = await import("@/lib/data-analysis/ai/spec-author-client")
+    vi.spyOn(specAuthor, "requestSpecPatch").mockReturnValue(new Promise(() => {}))
+
+    render(<DataAnalysisWorkspace files={[fileA]} />)
+    await openLibrary()
+    fireEvent.click(screen.getByText("rail-b.csv"))
+    await waitFor(() => expect(lastConsoleProps?.variant).toBe("rail"))
+
+    fireEvent.click(screen.getByRole("button", { name: "mock-send" }))
+    await waitFor(() => expect(lastConsoleProps?.busy).toBe(true))
+    const turnsBeforeSwitch = lastConsoleProps!.turns.length
+    expect(turnsBeforeSwitch).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole("button", { name: "Chart settings" }))
+    expect(screen.queryByTestId("mock-console")).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole("button", { name: "Ask Notes9" }))
+    expect(lastConsoleProps?.turns.length).toBe(turnsBeforeSwitch)
+    expect(lastConsoleProps?.busy).toBe(true)
+    expect(lastConsoleProps?.turns.some((t) => t.role === "user")).toBe(true)
   })
 })
