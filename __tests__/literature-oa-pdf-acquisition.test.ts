@@ -1,4 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
+import { pdfHostAllowlistEnforced, shouldTrySearchCardPdfUrl } from "@/lib/literature-pdf-urls"
+
+// 26ecadcff swapped every PDF fetch from `fetch` to `safeFetch`. Mocking
+// globalThis.fetch stopped reaching the code under test at that point -- safeFetch
+// does its own DNS resolution, so the race test below was failing on an unmocked
+// lookup rather than on the behaviour it names. Mock the layer the code calls.
+vi.mock("@/lib/net/safe-fetch", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/net/safe-fetch")>()
+  return {
+    ...actual,
+    safeFetch: (input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init),
+  }
+})
 
 import {
   buildPmcPdfCandidateUrls,
@@ -243,5 +256,48 @@ describe("resolveFromCore, no-op without a key", () => {
 
   it("returns null for a missing DOI", async () => {
     await expect(resolveFromCore(null)).resolves.toBeNull()
+  })
+})
+
+describe("PDF hostname allowlist enforcement (regression: 26ecadcff)", () => {
+  const KEY = "NOTES9_ENFORCE_PDF_HOST_ALLOWLIST"
+  const original = process.env[KEY]
+  afterEach(() => {
+    if (original === undefined) delete process.env[KEY]
+    else process.env[KEY] = original
+  })
+
+  it("is OFF by default, so an unlisted open-access host is not discarded", () => {
+    delete process.env[KEY]
+    expect(pdfHostAllowlistEnforced()).toBe(false)
+  })
+
+  it("turns on only for explicit truthy values", () => {
+    for (const v of ["1", "true", "YES", "on"]) {
+      process.env[KEY] = v
+      expect(pdfHostAllowlistEnforced(), v).toBe(true)
+    }
+    for (const v of ["", "0", "false", "off", "maybe"]) {
+      process.env[KEY] = v
+      expect(pdfHostAllowlistEnforced(), v).toBe(false)
+    }
+  })
+
+  it("still classifies hosts correctly when asked -- the predicate is unchanged", () => {
+    expect(shouldTrySearchCardPdfUrl("https://europepmc.org/x.pdf")).toBe(true)
+    expect(shouldTrySearchCardPdfUrl("https://totally-unknown.example.net/x.pdf")).toBe(false)
+  })
+
+  it("documents the hosts whose absence broke downloads", () => {
+    // These are the ones OpenAlex/Unpaywall return constantly. They are NOT on
+    // the list, which is precisely why enforcing it unconditionally was wrong.
+    for (const u of [
+      "https://doi.org/10.1371/journal.pone.0000000",
+      "https://bmcbioinformatics.biomedcentral.com/counter/pdf/x.pdf",
+      "https://www.semanticscholar.org/paper/x.pdf",
+      "https://core.ac.uk/download/pdf/123.pdf",
+    ]) {
+      expect(shouldTrySearchCardPdfUrl(u), u).toBe(false)
+    }
   })
 })
