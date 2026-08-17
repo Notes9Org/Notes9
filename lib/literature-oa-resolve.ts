@@ -6,14 +6,19 @@
  * (card href, preprint DOI construction, OpenAlex, Europe PMC, PMC OA subset) and a
  * best-effort abstract, so staging can still download the PDF and backfill the abstract.
  *
- * Server-only. Every candidate URL is passed through `shouldTrySearchCardPdfUrl`
- * (SSRF allowlist/blocklist) before it is returned. Each network call is wrapped in
+ * Server-only. Every candidate URL is passed through `pdfUrlIsFetchable`, which
+ * always applies the SSRF pre-checks (scheme + blocked-hostname) and applies the
+ * *publisher* allowlist only when `pdfHostAllowlistEnforced()` is on. That
+ * allowlist is defence-in-depth, not the SSRF control — enforcing it
+ * unconditionally discarded legitimate open-access URLs, `doi.org` among them.
+ * Each network call is wrapped in
  * try/catch and returns empty on failure, these run in the background and must stay fast.
  */
 import type { SearchPaper } from "@/types/paper-search"
 import { normalizeDoi } from "@/lib/literature-pdf-storage"
 import {
   expandSearchCardPdfUrls,
+  pdfUrlIsFetchable,
   shouldTrySearchCardPdfUrl,
   upgradeInsecurePdfUrlIfKnownHost,
 } from "@/lib/literature-pdf-urls"
@@ -40,7 +45,13 @@ function cleanAbstract(value: string | null | undefined): string | null {
 function addCandidate(out: string[], raw: string | null | undefined) {
   if (!raw) return
   const t = upgradeInsecurePdfUrlIfKnownHost(raw.trim())
-  if (shouldTrySearchCardPdfUrl(t) && !out.includes(t)) out.push(t)
+  // The allowlist filters candidates only when it is actually enforced. Applied
+  // unconditionally it gutted this resolver: the Tier-2 sources described below
+  // exist to rescue papers whose publisher copy is bot-walled, yet neither
+  // semanticscholar.org nor core.ac.uk is on the list — so the entire fallback
+  // tier was discarded here before it could be tried, along with every doi.org
+  // link Tier-1 returns.
+  if (pdfUrlIsFetchable(t) && !out.includes(t)) out.push(t)
 }
 
 // ── Tier-2 repository-copy locators ────────────────────────────────────────────
