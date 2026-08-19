@@ -1,0 +1,613 @@
+/**
+ * ADR-026: a reply belongs to the analysis that asked, not whatever tab
+ * happens to be mounted when it resolves.
+ *
+ * Mirrors `__tests__/data-analysis-library-and-close.test.tsx`'s harness
+ * (same heavy-dependency stubs, same `AnalysisConsole` capturing double) but
+ * owns its own module mocks so it can control exactly when a spec-author
+ * request resolves and what thread id it mints — the two knobs these tests
+ * need that the sibling file's fixed mocks don't expose.
+ */
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import * as XLSX from "xlsx"
+
+import type { DataFileRow } from "@/components/data-analysis/data-files-list"
+import { buildSpreadsheetWorkbookSnapshot } from "@/lib/spreadsheet-workbook"
+import type { AnalysisConsoleProps } from "@/components/data-analysis/workspace/analysis-console"
+import type { AnalysisAssistantTurn } from "@/lib/data-analysis/ai/analysis-thread"
+
+// ── Heavy / out-of-scope dependencies, stubbed (same as the sibling file) ──
+vi.mock("@/components/spreadsheet/univer-workbook-view", () => ({
+  UniverWorkbookView: () => <div data-testid="mock-sheet" />,
+}))
+vi.mock("@/components/data-analysis/plotly-chart", () => ({
+  PlotlyChart: () => <div data-testid="mock-chart" />,
+}))
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn(), back: vi.fn() }),
+  useSearchParams: () => ({ get: () => null }),
+}))
+vi.mock("@/components/ui/sidebar", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/components/ui/sidebar")>()
+  return { ...actual, useSidebar: () => ({ state: "collapsed", setOpen: vi.fn() }) }
+})
+vi.mock("@/components/auth/auth-provider", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/components/auth/auth-provider")>()
+  return { ...actual, useAuthUser: () => null }
+})
+
+// Only what this slice's tests need to control: which thread id a send
+// mints, and asserting which thread id a turn was persisted under.
+vi.mock("@/lib/data-analysis/ai/analysis-thread-store", () => ({
+  createAnalysisThread: vi.fn(async () => null),
+  appendAnalysisTurn: vi.fn(async () => {}),
+  loadAnalysisThread: vi.fn(async () => []),
+  updateAnalysisTurnPlan: vi.fn(async () => {}),
+  writeAnalysisIntent: vi.fn(async () => true),
+  readAnalysisIntent: vi.fn(async () => undefined),
+}))
+
+let lastConsoleProps: AnalysisConsoleProps | null = null
+// A module-level (not React) value so `mock-send-custom` can send whatever
+// text a test typed into the mock's own input, the way the composer's real
+// textarea does — the fixed "mock-send" string can't exercise ADR-023's
+// pre-data intent or a specific colour-change prompt.
+let customPromptText = ""
+vi.mock("@/components/data-analysis/workspace/analysis-console", () => ({
+  AnalysisConsole: (props: AnalysisConsoleProps) => {
+    lastConsoleProps = props
+    return (
+      <div data-testid="mock-console" data-variant={props.variant}>
+        {props.attachSlot}
+        <button type="button" onClick={() => props.onSend("log the y axis")}>
+          mock-send
+        </button>
+        <input
+          aria-label="mock prompt"
+          onChange={(e) => {
+            customPromptText = e.target.value
+          }}
+        />
+        <button type="button" onClick={() => props.onSend(customPromptText)}>
+          mock-send-custom
+        </button>
+      </div>
+    )
+  },
+}))
+
+import { DataAnalysisWorkspace } from "@/components/data-analysis/data-analysis-workspace"
+
+beforeAll(() => {
+  // jsdom implements neither; several children (framer-motion's
+  // `useReducedMotion`, the responsive dock layout) read them on mount.
+  Object.defineProperty(window, "matchMedia", {
+    writable: true,
+    configurable: true,
+    value: vi.fn((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    })),
+  })
+  class MockResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  window.ResizeObserver = MockResizeObserver
+  Element.prototype.scrollIntoView = vi.fn()
+})
+
+afterEach(() => {
+  cleanup()
+  lastConsoleProps = null
+  customPromptText = ""
+  vi.restoreAllMocks()
+  // Shared jsdom localStorage: clear the persisted session so the next test
+  // starts from a real empty analysis (see the sibling file's own note).
+  localStorage.clear()
+})
+
+function file(overrides: Partial<DataFileRow> = {}): DataFileRow {
+  return {
+    id: "f1",
+    file_name: "colleague-upload",
+    file_type: null,
+    file_size: 1024,
+    data_type: null,
+    created_at: "2024-01-01T00:00:00.000Z",
+    experiment_id: "e1",
+    project_id: "p1",
+    file_url: "https://example.test/f1",
+    tabular_format: null,
+    experiment_name: "Experiment 1",
+    project_name: "Project 1",
+    ...overrides,
+  }
+}
+
+/** A real, parseable workbook snapshot so `specTable.rows.length > 0`
+ * downstream and `askForChange`'s guard doesn't block sending. */
+function snapshot(fileName: string) {
+  const ws = XLSX.utils.aoa_to_sheet([
+    ["x", "y"],
+    [1, 2],
+    [3, 4],
+    [5, 6],
+  ])
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, "Sheet1")
+  return buildSpreadsheetWorkbookSnapshot(fileName, wb)
+}
+
+function mockWorkbookFetch(byFileId: Record<string, { snapshot?: unknown; reason?: string }>) {
+  global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input)
+    const match = /\/data-files\/([^/]+)\/workbook/.exec(url)
+    const fileId = match?.[1] ?? ""
+    const entry = byFileId[fileId]
+    const method = init?.method ?? "GET"
+    if (method === "GET") {
+      return { json: async () => ({ workbook_snapshot: null }) } as Response
+    }
+    if (entry?.snapshot) {
+      return { json: async () => ({ workbook_snapshot: entry.snapshot }) } as Response
+    }
+    return {
+      json: async () => ({ error: "unreadable", reason: entry?.reason ?? "parse-failed" }),
+    } as Response
+  }) as typeof fetch
+}
+
+async function openLibrary() {
+  fireEvent.click(screen.getByRole("button", { name: /from your data files/i }))
+  await screen.findByRole("dialog")
+}
+
+/** Send an arbitrary prompt through the mock console's `mock-send-custom`,
+ *  the way a researcher's own words reach `onSend` — `mock-send` above is
+ *  fixed to one string and can't carry an intent or a specific request. */
+function sendPrompt(text: string) {
+  fireEvent.change(screen.getByRole("textbox", { name: "mock prompt" }), { target: { value: text } })
+  fireEvent.click(screen.getByRole("button", { name: "mock-send-custom" }))
+}
+
+/** A real, parseable `.xlsx` `File` — for exercising `onImport`, which reads
+ * `file.arrayBuffer()` itself rather than going through `mockWorkbookFetch`. */
+function xlsxFile(fileName: string): File {
+  const ws = XLSX.utils.aoa_to_sheet([
+    ["x", "y"],
+    [7, 8],
+    [9, 10],
+  ])
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, "Sheet1")
+  const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" }) as ArrayBuffer
+  return new File([buf], fileName, {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  })
+}
+
+const validPatchOutcome = {
+  outcome: "patch" as const,
+  rationale: "Logging the Y axis.",
+  mutations: [{ kind: "figure.setTitle", value: "Test" } as never],
+  clarificationNeeded: null,
+  rejected: [],
+}
+
+describe("data-analysis intent-first (ADR-026)", () => {
+  // ── AC-6: a reply belongs to the analysis that asked ──────────────────────
+  it("routes a reply to the analysis that asked it, not whatever tab is mounted when it resolves", async () => {
+    const loaded = file({ id: "f1", file_name: "growth-curve.csv" })
+    mockWorkbookFetch({ f1: { snapshot: snapshot("growth-curve.csv") } })
+
+    const store = await import("@/lib/data-analysis/ai/analysis-thread-store")
+    vi.mocked(store.createAnalysisThread).mockResolvedValue("thread-A")
+
+    const specAuthor = await import("@/lib/data-analysis/ai/spec-author-client")
+    let resolveSpecPatch: ((v: Awaited<ReturnType<typeof specAuthor.requestSpecPatch>>) => void) | null = null
+    vi.spyOn(specAuthor, "requestSpecPatch").mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSpecPatch = resolve
+        }),
+    )
+
+    render(<DataAnalysisWorkspace files={[loaded]} />)
+    await openLibrary()
+    fireEvent.click(screen.getByText("growth-curve.csv"))
+    await waitFor(() => expect(lastConsoleProps?.variant).toBe("rail"))
+
+    // Ask on analysis A.
+    fireEvent.click(screen.getByRole("button", { name: "mock-send" }))
+    await waitFor(() => expect(lastConsoleProps?.busy).toBe(true))
+    const turnsOnAWhenAsked = lastConsoleProps!.turns.length
+
+    // Switch to a second, unrelated analysis (B) before A's request resolves.
+    fireEvent.click(screen.getByRole("button", { name: "New analysis" }))
+    await waitFor(() => expect(lastConsoleProps?.variant).toBe("empty"))
+
+    // B never asked anything — it must not show A's "Thinking…", nor start
+    // with any of A's turns.
+    expect(lastConsoleProps?.busy).toBe(false)
+    expect(lastConsoleProps?.turns.length).toBe(0)
+
+    // A's request resolves now, with B still the mounted tab.
+    resolveSpecPatch!(validPatchOutcome)
+    await waitFor(() =>
+      expect(store.appendAnalysisTurn).toHaveBeenCalledWith(
+        "thread-A",
+        expect.objectContaining({ role: "assistant" }),
+      ),
+    )
+
+    // Still on B: the reply did not land, and land, here.
+    expect(lastConsoleProps?.variant).toBe("empty")
+    expect(lastConsoleProps?.busy).toBe(false)
+    expect(lastConsoleProps?.turns.length).toBe(0)
+
+    // Switch back to A: the reply is there, appended to A's own transcript.
+    fireEvent.click(screen.getAllByRole("tab")[0])
+    await waitFor(() => expect(lastConsoleProps?.variant).toBe("rail"))
+    expect(lastConsoleProps?.turns.length).toBeGreaterThan(turnsOnAWhenAsked)
+    expect(lastConsoleProps?.turns.find((t) => t.role === "assistant")).toBeDefined()
+    // And it was persisted under A's own thread id, not left unpersisted or
+    // written under whatever thread B might one day have.
+    expect(store.appendAnalysisTurn).toHaveBeenCalledWith("thread-A", expect.objectContaining({ role: "assistant" }))
+  })
+
+  // ── AC-7 (partial): threadId never outlives its turns ─────────────────────
+  it("a load path that clears the transcript also clears the thread handle", async () => {
+    const fileA = file({ id: "fA", file_name: "tab-a.csv" })
+    mockWorkbookFetch({ fA: { snapshot: snapshot("tab-a.csv") } })
+
+    const store = await import("@/lib/data-analysis/ai/analysis-thread-store")
+    vi.mocked(store.createAnalysisThread).mockResolvedValueOnce("thread-1").mockResolvedValueOnce("thread-2")
+
+    const specAuthor = await import("@/lib/data-analysis/ai/spec-author-client")
+    vi.spyOn(specAuthor, "requestSpecPatch").mockResolvedValue(validPatchOutcome)
+
+    const { container } = render(<DataAnalysisWorkspace files={[fileA]} />)
+    await openLibrary()
+    fireEvent.click(screen.getByText("tab-a.csv"))
+    await waitFor(() => expect(lastConsoleProps?.variant).toBe("rail"))
+
+    // First question mints and persists under "thread-1".
+    fireEvent.click(screen.getByRole("button", { name: "mock-send" }))
+    await waitFor(() =>
+      expect(store.appendAnalysisTurn).toHaveBeenCalledWith(
+        "thread-1",
+        expect.objectContaining({ role: "assistant" }),
+      ),
+    )
+
+    // Importing a new file into this same tab (the always-present hidden
+    // file input, not the "From your data files" dialog, so this exercises
+    // `onImport`'s own call into `loadSnapshot`) clears the transcript...
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement
+    fireEvent.change(fileInput, { target: { files: [xlsxFile("tab-a-replacement.xlsx")] } })
+    // ADR-023: the transcript is cleared, then reopened with the one
+    // question that matters rather than left empty — no intent was stated
+    // for this dataset, so nothing auto-proposes.
+    await waitFor(() => expect(lastConsoleProps?.turns.length).toBe(1))
+    expect(lastConsoleProps?.turns[0]).toMatchObject({ role: "assistant", plan: null })
+
+    // ...and must also clear the thread handle: the next question mints a
+    // NEW thread ("thread-2") rather than silently appending into the file
+    // that was just replaced. If the handle survived, `createAnalysisThread`
+    // would never be called again and this would persist under "thread-1".
+    fireEvent.click(screen.getByRole("button", { name: "mock-send" }))
+    await waitFor(() =>
+      expect(store.appendAnalysisTurn).toHaveBeenCalledWith(
+        "thread-2",
+        expect.objectContaining({ role: "assistant" }),
+      ),
+    )
+  })
+})
+
+describe("data-analysis intent-first (ADR-025)", () => {
+  // ── AC-1: loading data is not analysing it — the sharpest criterion ────────
+  it("attaching a file (import path) profiles the table without seeding a chart, a statistical test, or a compute call", async () => {
+    const engineClient = await import("@/lib/data-analysis/engine/client")
+    const computeSpy = vi.spyOn(engineClient, "computeAnalysis")
+    const { container } = render(<DataAnalysisWorkspace files={[]} />)
+
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement
+    fireEvent.change(fileInput, { target: { files: [xlsxFile("colleague-upload.xlsx")] } })
+    await waitFor(() => expect(lastConsoleProps?.variant).toBe("rail"))
+
+    // Profiled: the column-role guess is visible as a PipelineBar offer — a
+    // suggestion with evidence, not applied state — and there is no
+    // statistical-test offer yet, because no axes are chosen to test.
+    expect(await screen.findByRole("button", { name: 'Apply: Plot "x" against "y"' })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /^Apply: Run /i })).not.toBeInTheDocument()
+
+    // Give the compute effect's own 700ms debounce a full chance to fire.
+    await new Promise((resolve) => setTimeout(resolve, 900))
+    expect(computeSpy).not.toHaveBeenCalled()
+  }, 10000)
+
+  it("restoring a session from localStorage profiles the table without resuming compute", async () => {
+    const engineClient = await import("@/lib/data-analysis/engine/client")
+    const computeSpy = vi.spyOn(engineClient, "computeAnalysis")
+    // Mirrors the shape `data-analysis-workspace.tsx`'s own session-restore
+    // effect writes under `SESSION_KEY` ("n9-data-analysis-session"): only
+    // the workbook, no `config` — so restoring it exercises `loadSnapshot`
+    // exactly as a fresh import does, without depending on that key's exact
+    // string living in two places.
+    localStorage.setItem(
+      "n9-data-analysis-session",
+      JSON.stringify({ workbook: snapshot("restored.csv"), savedAt: new Date().toISOString() }),
+    )
+    render(<DataAnalysisWorkspace files={[]} />)
+
+    expect(await screen.findByRole("button", { name: 'Apply: Plot "x" against "y"' })).toBeInTheDocument()
+
+    await new Promise((resolve) => setTimeout(resolve, 900))
+    expect(computeSpy).not.toHaveBeenCalled()
+  }, 10000)
+
+  // ── AC-4: no spec mutation is applied without an explicit approval ─────────
+  it("the column-role suggestion sits unapplied until the researcher clicks it, and only then", async () => {
+    const { container } = render(<DataAnalysisWorkspace files={[]} />)
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement
+    fireEvent.change(fileInput, { target: { files: [xlsxFile("colleague-upload.xlsx")] } })
+
+    const offer = await screen.findByRole("button", { name: 'Apply: Plot "x" against "y"' })
+
+    // Sitting on a loaded, unapproved table does not self-apply the guess.
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    expect(screen.getByRole("button", { name: 'Apply: Plot "x" against "y"' })).toBeInTheDocument()
+
+    fireEvent.click(offer)
+
+    // The offer is moot now — axes are set, exactly as it promised — and
+    // only because a click, not a render, did it.
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: 'Apply: Plot "x" against "y"' })).not.toBeInTheDocument(),
+    )
+  })
+})
+
+describe("data-analysis intent-first (ADR-024)", () => {
+  // ── AC-2: the rail exposes both tabs and the console lives in Ask ─────────
+  it("the right rail offers Chart settings and Ask Notes9 tabs, and the console only renders under Ask", async () => {
+    const fileA = file({ id: "fA", file_name: "rail-a.csv" })
+    mockWorkbookFetch({ fA: { snapshot: snapshot("rail-a.csv") } })
+
+    render(<DataAnalysisWorkspace files={[fileA]} />)
+    await openLibrary()
+    fireEvent.click(screen.getByText("rail-a.csv"))
+    await waitFor(() => expect(lastConsoleProps?.variant).toBe("rail"))
+
+    expect(screen.getByRole("button", { name: "Ask Notes9" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Chart settings" })).toBeInTheDocument()
+    // Ask is the default tab, so the console is already mounted.
+    expect(screen.getByTestId("mock-console")).toBeInTheDocument()
+
+    // Chart settings replaces the panel content — the console is not a
+    // permanently-mounted sibling, it lives only under the Ask tab.
+    fireEvent.click(screen.getByRole("button", { name: "Chart settings" }))
+    expect(screen.queryByTestId("mock-console")).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole("button", { name: "Ask Notes9" }))
+    expect(screen.getByTestId("mock-console")).toBeInTheDocument()
+  })
+
+  // ── AC-7: the conversation survives a tab switch ───────────────────────────
+  it("switching to Chart settings and back does not drop the in-flight conversation", async () => {
+    const fileA = file({ id: "fA", file_name: "rail-b.csv" })
+    mockWorkbookFetch({ fA: { snapshot: snapshot("rail-b.csv") } })
+
+    // Never resolves: the request stays in flight across the tab switch, so
+    // a reset-on-switch bug would be caught even before any reply lands.
+    const specAuthor = await import("@/lib/data-analysis/ai/spec-author-client")
+    vi.spyOn(specAuthor, "requestSpecPatch").mockReturnValue(new Promise(() => {}))
+
+    render(<DataAnalysisWorkspace files={[fileA]} />)
+    await openLibrary()
+    fireEvent.click(screen.getByText("rail-b.csv"))
+    await waitFor(() => expect(lastConsoleProps?.variant).toBe("rail"))
+
+    fireEvent.click(screen.getByRole("button", { name: "mock-send" }))
+    await waitFor(() => expect(lastConsoleProps?.busy).toBe(true))
+    const turnsBeforeSwitch = lastConsoleProps!.turns.length
+    expect(turnsBeforeSwitch).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole("button", { name: "Chart settings" }))
+    expect(screen.queryByTestId("mock-console")).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole("button", { name: "Ask Notes9" }))
+    expect(lastConsoleProps?.turns.length).toBe(turnsBeforeSwitch)
+    expect(lastConsoleProps?.busy).toBe(true)
+    expect(lastConsoleProps?.turns.some((t) => t.role === "user")).toBe(true)
+  })
+})
+
+describe("data-analysis intent-first (ADR-023)", () => {
+  // ── AC-3: intent may precede data, and is auto-proposed once data arrives ──
+  it("captures a stated intent before any dataset is attached, then auto-proposes it against the first dataset that arrives", async () => {
+    const store = await import("@/lib/data-analysis/ai/analysis-thread-store")
+    vi.mocked(store.createAnalysisThread).mockResolvedValue("thread-intent")
+
+    const specAuthor = await import("@/lib/data-analysis/ai/spec-author-client")
+    const requestSpy = vi.spyOn(specAuthor, "requestSpecPatch").mockResolvedValue(validPatchOutcome)
+
+    const fileA = file({ id: "fA", file_name: "growth.csv" })
+    mockWorkbookFetch({ fA: { snapshot: snapshot("growth.csv") } })
+
+    render(<DataAnalysisWorkspace files={[fileA]} />)
+    await waitFor(() => expect(lastConsoleProps).not.toBeNull())
+
+    // No dataset yet: the gate captures without proposing.
+    expect(lastConsoleProps?.gate.canCapture).toBe(true)
+    expect(lastConsoleProps?.gate.canPropose).toBe(false)
+
+    sendPrompt("Does the growth rate differ between the two groups?")
+
+    // Captured as a turn, but never sent to the model — no statistics, no
+    // plan, nothing in flight — while there is still no dataset.
+    await waitFor(() => expect(lastConsoleProps?.turns.some((t) => t.role === "user")).toBe(true))
+    expect(requestSpy).not.toHaveBeenCalled()
+    expect(lastConsoleProps?.busy).toBe(false)
+    await waitFor(() =>
+      expect(store.writeAnalysisIntent).toHaveBeenCalledWith(
+        "thread-intent",
+        expect.objectContaining({
+          text: "Does the growth rate differ between the two groups?",
+          appliedToDatasetId: null,
+        }),
+      ),
+    )
+
+    // The dataset arrives.
+    await openLibrary()
+    fireEvent.click(screen.getByText("growth.csv"))
+
+    // Auto-proposed with the intent already on file — never re-typed.
+    await waitFor(() =>
+      expect(requestSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ prompt: "Does the growth rate differ between the two groups?" }),
+      ),
+    )
+    await waitFor(() => expect(lastConsoleProps?.turns.some((t) => t.role === "assistant" && t.plan)).toBe(true))
+  }, 10000)
+
+  // ── AC-8: a colour request either changes the colour or explains why it can't ──
+  it("a request naming a series that doesn't exist is rejected with a reason, not silently dropped", async () => {
+    const fileA = file({ id: "fA", file_name: "colour.csv" })
+    mockWorkbookFetch({ fA: { snapshot: snapshot("colour.csv") } })
+
+    const specAuthor = await import("@/lib/data-analysis/ai/spec-author-client")
+    vi.spyOn(specAuthor, "requestSpecPatch").mockResolvedValue({
+      outcome: "patch" as const,
+      rationale: "",
+      mutations: [],
+      clarificationNeeded: null,
+      rejected: [{ mutation: null, reason: 'No series named "control" exists in this chart — the only series is "y".' }],
+    })
+
+    render(<DataAnalysisWorkspace files={[fileA]} />)
+    await openLibrary()
+    fireEvent.click(screen.getByText("colour.csv"))
+    await waitFor(() => expect(lastConsoleProps?.gate.canPropose).toBe(true))
+
+    sendPrompt("make the control series blue")
+
+    // (data present but no intent was stated first, so a "what are you
+    // trying to find out" greeting turn precedes the real reply — find the
+    // reply by its plan, not just by role.)
+    const reply = await waitFor(() => {
+      const t = lastConsoleProps?.turns.find(
+        (t): t is AnalysisAssistantTurn => t.role === "assistant" && !!t.plan,
+      )
+      expect(t).toBeDefined()
+      return t!
+    })
+    expect(reply.plan?.rejected).toEqual([
+      { reason: 'No series named "control" exists in this chart — the only series is "y".' },
+    ])
+    expect(reply.plan?.mutations).toHaveLength(0)
+  }, 10000)
+
+  // ── AC-9: the stated intent, and every approve/discard, survive a reload ──
+  it("a stated intent and each plan's approve/discard survive a reload", async () => {
+    const store = await import("@/lib/data-analysis/ai/analysis-thread-store")
+    vi.mocked(store.createAnalysisThread).mockResolvedValue("thread-9")
+
+    const specAuthor = await import("@/lib/data-analysis/ai/spec-author-client")
+    const requestSpy = vi.spyOn(specAuthor, "requestSpecPatch").mockResolvedValue(validPatchOutcome)
+
+    const fileA = file({ id: "fA", file_name: "reload.csv" })
+    mockWorkbookFetch({ fA: { snapshot: snapshot("reload.csv") } })
+
+    const first = render(<DataAnalysisWorkspace files={[fileA]} />)
+    await waitFor(() => expect(lastConsoleProps).not.toBeNull())
+
+    sendPrompt("What predicts the outcome here?")
+    await waitFor(() =>
+      expect(store.writeAnalysisIntent).toHaveBeenCalledWith(
+        "thread-9",
+        expect.objectContaining({ text: "What predicts the outcome here?", appliedToDatasetId: null }),
+      ),
+    )
+    // Built rather than read off `mock.calls` — a stale, still-in-flight
+    // promise from an *earlier* test's own auto-propose can still resolve and
+    // call this same shared mock while this test is running, so trusting
+    // "the first call" here is not safe.
+    const writtenIntent = {
+      text: "What predicts the outcome here?",
+      statedAt: new Date().toISOString(),
+      appliedToDatasetId: null as string | null,
+    }
+
+    // The reload: a fresh mount with nothing carried over but what the
+    // session pointer and the store itself actually persisted.
+    first.unmount()
+    localStorage.setItem(
+      "n9-data-analysis-session",
+      JSON.stringify({ threadId: "thread-9", savedAt: new Date().toISOString() }),
+    )
+    vi.mocked(store.readAnalysisIntent).mockResolvedValue(writtenIntent)
+
+    render(<DataAnalysisWorkspace files={[fileA]} />)
+    await waitFor(() => expect(store.readAnalysisIntent).toHaveBeenCalledWith("thread-9"))
+
+    // Attaching the dataset now auto-proposes the intent the reload brought
+    // back — never asked again, because it was never forgotten.
+    await openLibrary()
+    fireEvent.click(screen.getByText("reload.csv"))
+    await waitFor(() =>
+      expect(requestSpy).toHaveBeenCalledWith(expect.objectContaining({ prompt: "What predicts the outcome here?" })),
+    )
+    await waitFor(() => expect(lastConsoleProps?.turns.some((t) => t.role === "assistant" && t.plan)).toBe(true))
+
+    // A fresh question once the spec has settled from attaching the dataset
+    // (role/kind inference can still be running right after) — approved.
+    sendPrompt("Which column predicts it best?")
+    const planTurn = await waitFor(() => {
+      const t = lastConsoleProps?.turns.find(
+        (t) => t.role === "assistant" && t.plan && t.specHashAtProposal === lastConsoleProps?.currentSpecHash,
+      )
+      expect(t).toBeDefined()
+      return t!
+    })
+    act(() => lastConsoleProps!.onApprove(planTurn.id))
+    await waitFor(() =>
+      expect(store.updateAnalysisTurnPlan).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ id: planTurn.id, plan: expect.objectContaining({ status: "approved" }) }),
+      ),
+    )
+
+    // A second question, discarded this time — the other half of "every
+    // approve/discard persists."
+    sendPrompt("Anything else?")
+    // `status === "proposed"` — not just "has a plan" — because approving the
+    // first turn moved the spec, which stales the earlier auto-proposed turn
+    // in place; it still has a plan, just not this one.
+    const secondPlanTurn = await waitFor(() => {
+      const t = lastConsoleProps?.turns.find(
+        (t) => t.role === "assistant" && t.plan?.status === "proposed" && t.id !== planTurn.id,
+      )
+      expect(t).toBeDefined()
+      return t!
+    })
+    act(() => lastConsoleProps!.onDiscard(secondPlanTurn.id))
+    await waitFor(() =>
+      expect(store.updateAnalysisTurnPlan).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ id: secondPlanTurn.id, plan: expect.objectContaining({ status: "discarded" }) }),
+      ),
+    )
+  }, 10000)
+})

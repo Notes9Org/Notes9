@@ -177,7 +177,7 @@ afterEach(() => {
   // mount (see `data-analysis-workspace.tsx`'s `SESSION_KEY`). jsdom's
   // localStorage is shared across every test in this file, so a test that
   // loads a dataset leaves the next one restoring it straight into the
-  // "docked" state instead of the empty one it rendered for — clear it here
+  // "rail" state instead of the empty one it rendered for — clear it here
   // so each test starts from a real empty analysis.
   localStorage.clear()
 })
@@ -339,7 +339,7 @@ describe("data-analysis library and close (AC-1, AC-3, AC-4, AC-5, AC-6, AC-7)",
     await openLibrary()
     fireEvent.click(screen.getByText("growth-curve.csv"))
 
-    await waitFor(() => expect(lastConsoleProps?.variant).toBe("docked"))
+    await waitFor(() => expect(lastConsoleProps?.variant).toBe("rail"))
     // `buildSpreadsheetWorkbookSnapshot` (pre-existing, out of this slice's
     // scope) strips the extension when it sets the snapshot's `name` — the
     // workspace's `sheetFileName` reads that field verbatim.
@@ -353,7 +353,7 @@ describe("data-analysis library and close (AC-1, AC-3, AC-4, AC-5, AC-6, AC-7)",
     render(<DataAnalysisWorkspace files={[loaded]} />)
     await openLibrary()
     fireEvent.click(screen.getByText("growth-curve.csv"))
-    await waitFor(() => expect(lastConsoleProps?.variant).toBe("docked"))
+    await waitFor(() => expect(lastConsoleProps?.variant).toBe("rail"))
 
     fireEvent.click(screen.getByRole("button", { name: "Close dataset" }))
     expect(await screen.findByText("Discard unsaved work?")).toBeInTheDocument()
@@ -362,7 +362,7 @@ describe("data-analysis library and close (AC-1, AC-3, AC-4, AC-5, AC-6, AC-7)",
     // "Keep working" cancels — the dataset is untouched.
     fireEvent.click(screen.getByRole("button", { name: "Keep working" }))
     await waitFor(() => expect(screen.queryByText("Discard unsaved work?")).not.toBeInTheDocument())
-    expect(lastConsoleProps?.variant).toBe("docked")
+    expect(lastConsoleProps?.variant).toBe("rail")
 
     // Closing again and confirming actually discards it.
     fireEvent.click(screen.getByRole("button", { name: "Close dataset" }))
@@ -395,7 +395,7 @@ describe("data-analysis library and close (AC-1, AC-3, AC-4, AC-5, AC-6, AC-7)",
     render(<DataAnalysisWorkspace files={[loaded]} />)
     await openLibrary()
     fireEvent.click(screen.getByText("growth-curve.csv"))
-    await waitFor(() => expect(lastConsoleProps?.variant).toBe("docked"))
+    await waitFor(() => expect(lastConsoleProps?.variant).toBe("rail"))
 
     fireEvent.click(screen.getByRole("button", { name: "mock-send" }))
     await waitFor(() => expect(lastConsoleProps?.turns.length).toBeGreaterThan(0))
@@ -430,14 +430,14 @@ describe("data-analysis library and close (AC-1, AC-3, AC-4, AC-5, AC-6, AC-7)",
     render(<DataAnalysisWorkspace files={[fileA, fileB]} />)
     await openLibrary()
     fireEvent.click(screen.getByText("tab-a.csv"))
-    await waitFor(() => expect(lastConsoleProps?.variant).toBe("docked"))
+    await waitFor(() => expect(lastConsoleProps?.variant).toBe("rail"))
 
     // A second tab, loaded with a different file, then saved.
     fireEvent.click(screen.getByRole("button", { name: "New analysis" }))
     await waitFor(() => expect(lastConsoleProps?.variant).toBe("empty"))
     await openLibrary()
     fireEvent.click(screen.getByText("tab-b.csv"))
-    await waitFor(() => expect(lastConsoleProps?.variant).toBe("docked"))
+    await waitFor(() => expect(lastConsoleProps?.variant).toBe("rail"))
 
     // Exact match: a second, unrelated icon button ("Save to data files
     // library") also starts with "Save" and would otherwise collide.
@@ -447,7 +447,7 @@ describe("data-analysis library and close (AC-1, AC-3, AC-4, AC-5, AC-6, AC-7)",
 
     // Back to the first tab — its own dataset, never saved itself.
     fireEvent.click(screen.getAllByRole("tab")[0])
-    await waitFor(() => expect(lastConsoleProps?.variant).toBe("docked"))
+    await waitFor(() => expect(lastConsoleProps?.variant).toBe("rail"))
     expect(lastConsoleProps?.datasetName).toBe("tab-a")
 
     // The page has saved something (tab b), but not THIS tab — closing it
@@ -478,7 +478,7 @@ describe("data-analysis library and close (AC-1, AC-3, AC-4, AC-5, AC-6, AC-7)",
     render(<DataAnalysisWorkspace files={[loaded]} />)
     await openLibrary()
     fireEvent.click(screen.getByText("growth-curve.csv"))
-    await waitFor(() => expect(lastConsoleProps?.variant).toBe("docked"))
+    await waitFor(() => expect(lastConsoleProps?.variant).toBe("rail"))
 
     fireEvent.click(screen.getByRole("button", { name: "mock-send" }))
     await waitFor(() => expect(lastConsoleProps?.busy).toBe(true))
@@ -511,7 +511,7 @@ describe("data-analysis library and close (AC-1, AC-3, AC-4, AC-5, AC-6, AC-7)",
     render(<DataAnalysisWorkspace files={[loaded]} />)
     await openLibrary()
     fireEvent.click(screen.getByText("growth-curve.csv"))
-    await waitFor(() => expect(lastConsoleProps?.variant).toBe("docked"))
+    await waitFor(() => expect(lastConsoleProps?.variant).toBe("rail"))
 
     // A second, empty tab to act as the neighbour `closeAnalysis` switches to.
     fireEvent.click(screen.getByRole("button", { name: "New analysis" }))
@@ -519,7 +519,7 @@ describe("data-analysis library and close (AC-1, AC-3, AC-4, AC-5, AC-6, AC-7)",
 
     // Back to the first (loaded) tab and start a request there.
     fireEvent.click(screen.getAllByRole("tab")[0])
-    await waitFor(() => expect(lastConsoleProps?.variant).toBe("docked"))
+    await waitFor(() => expect(lastConsoleProps?.variant).toBe("rail"))
     fireEvent.click(screen.getByRole("button", { name: "mock-send" }))
     await waitFor(() => expect(lastConsoleProps?.busy).toBe(true))
 
@@ -586,7 +586,7 @@ describe("data-analysis library and close (AC-1, AC-3, AC-4, AC-5, AC-6, AC-7)",
     render(<DataAnalysisWorkspace files={[loaded]} />)
     await openLibrary()
     fireEvent.click(screen.getByText("growth-curve.csv"))
-    await waitFor(() => expect(lastConsoleProps?.variant).toBe("docked"))
+    await waitFor(() => expect(lastConsoleProps?.variant).toBe("rail"))
 
     fireEvent.click(screen.getByRole("button", { name: "mock-send" }))
 
@@ -611,4 +611,31 @@ describe("data-analysis library and close (AC-1, AC-3, AC-4, AC-5, AC-6, AC-7)",
     // was cleared, so `specHashAtProposal` no longer matches `currentSpecHash`.
     expect(canApprovePlan(keptTurn as never, lastConsoleProps!.currentSpecHash)).toBe(false)
   })
+})
+
+describe("data-analysis intent-first (ADR-025)", () => {
+  // ── AC-1: loading data is not analysing it — the library-open load path ────
+  it("loading a file from the library profiles it without seeding a chart, a statistical test, or a compute call", async () => {
+    const engineClient = await import("@/lib/data-analysis/engine/client")
+    const computeSpy = vi.spyOn(engineClient, "computeAnalysis")
+    const loaded = file({ id: "f1", file_name: "growth-curve.csv" })
+    mockWorkbookFetch({ f1: { snapshot: snapshot("growth-curve.csv") } })
+    render(<DataAnalysisWorkspace files={[loaded]} />)
+
+    expect(lastConsoleProps?.variant).toBe("empty")
+
+    await openLibrary()
+    fireEvent.click(screen.getByText("growth-curve.csv"))
+    await waitFor(() => expect(lastConsoleProps?.variant).toBe("rail"))
+
+    // Profiled: the column-role guess is visible as a PipelineBar offer — a
+    // suggestion with evidence, not applied state — and there is no
+    // statistical-test offer yet, because no axes are chosen to test.
+    expect(await screen.findByRole("button", { name: 'Apply: Plot "x" against "y"' })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /^Apply: Run /i })).not.toBeInTheDocument()
+
+    // Give the compute effect's own 700ms debounce a full chance to fire.
+    await new Promise((resolve) => setTimeout(resolve, 900))
+    expect(computeSpy).not.toHaveBeenCalled()
+  }, 10000)
 })
