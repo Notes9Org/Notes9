@@ -891,17 +891,10 @@ export function AppSidebar() {
                               >
                                 {contextName ?? item.name}
                               </span>
-                              {/* Twelve `g`-then-letter bindings nobody knows —
-                                  but twelve chips stacked down the densest column
-                                  in the app is the "grey chips everyone stops
-                                  seeing" failure this feature has to avoid. So
-                                  the row stays quiet at rest and teaches on
-                                  approach: hover, or keyboard focus. */}
-                              {navShortcutId && !showSwitcher && (
-                                <span className="ml-auto hidden opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 sm:inline-flex">
-                                  <ShortcutHint id={navShortcutId} />
-                                </span>
-                              )}
+                              {/* Per-row shortcut chips removed for now; the
+                                  bindings still work and stay announced via
+                                  `aria-keyshortcuts` on the Link above. The
+                                  shortcuts dialog remains the discovery path. */}
                             </span>
                           </Link>
                         </SidebarMenuButton>
