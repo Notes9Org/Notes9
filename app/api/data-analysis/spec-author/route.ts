@@ -376,33 +376,6 @@ export async function POST(req: NextRequest) {
         timeoutMs: Math.max(0, deadline - Date.now()),
       })
 
-    let reply: CatalystReply
-    try {
-      reply = await ask(prompt)
-    } catch (err) {
-      // A 4xx means OUR request was malformed (the bundle, the system prompt,
-      // a field Catalyst validates that this route does not) — that is a bad
-      // request, not an outage, and the fix is to change the request, not to
-      // retry it verbatim (ADR-004). `RETRY_STATUS` (catalyst-client.ts) never
-      // includes a 4xx, so this never races the client's own retry.
-      if (err instanceof CatalystHttpError && err.status >= 400 && err.status < 500) {
-        console.error("[spec-author] catalyst rejected the request:", err)
-        return NextResponse.json(
-          { outcome: "bad-request", reason: describeCatalystRejection(err) },
-          { status: 400 }
-        )
-      }
-      // (f) Fail CLOSED and legibly. Unset env, timeout, 5xx and transport
-      // errors all land here; the workspace keeps computing without the
-      // assistant. Wording unchanged: for these, retrying is the right advice.
-      const reason =
-        err instanceof CatalystUnavailableError
-          ? "The analysis assistant is not configured on this deployment. Everything else still works, the spec you edit by hand is computed the same way."
-          : "The analysis assistant is unreachable right now. Your analysis is unaffected; try the request again shortly."
-      console.error("[spec-author] catalyst call failed:", err)
-      return NextResponse.json({ outcome: "unavailable", reason }, { status: 503 })
-    }
-
     // A test the data cannot support is not a suggestion, it is a wrong answer
     // with a confident tone. Same `legalTests` the bundle told the model about.
     const allowedTests = new Set(legalTests.map((c) => c.test))
@@ -473,73 +446,140 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    let patch = review(reply?.proposal ?? reply)
-
     /**
-     * A question the researcher can actually answer. The stand-in for a withheld
-     * one is not: it blocks Execute, which is its job, but it carries none of
-     * what the model wanted to ask, so a round that recovers only that has
-     * recovered nothing and a round that could recover the real question is
-     * still worth spending.
+     * PROGRESS STREAMS; THE PATCH DOES NOT.
+     *
+     * Everything above this line still answers with plain JSON and a status
+     * code — auth, parse, length, and the screen all resolve before a byte is
+     * committed, so those outcomes are unchanged for every caller.
+     *
+     * From here the route can take 45 seconds across two model calls, and the
+     * researcher was previously shown one static word for all of it. What is
+     * streamed is PHASES. The patch itself arrives whole, in a single terminal
+     * event, because it is a validated spec mutation set and not prose:
+     * mutations that fail validation are rejected and repaired (§3.2 Law 2,
+     * §3.3 L7), so streaming them token by token would render a plan the repair
+     * round is about to discard.
+     *
+     * Five of the seven phases are this route's own work, so nothing here
+     * depends on Catalyst learning to stream.
      */
-    const asksAQuestion = (p: { clarificationNeeded: string | null }) =>
-      p.clarificationNeeded !== null && p.clarificationNeeded !== CLARIFICATION_WITHHELD
+    const encoder = new TextEncoder()
+    const t0 = Date.now()
 
-    // (g) ONE repair round, before the response is returned, so the researcher
-    // still sees a single plan and still has to approve it. Nothing is applied
-    // here either way.
-    //
-    // The trigger is "more of the plan was dropped than survived": a rejection
-    // list is the model's patch coming back unusable, and rendering it as "left
-    // out of the change" hands the researcher something they cannot act on. A
-    // model that asked a question instead of acting is not failing, so it is
-    // left alone.
-    //
-    // A second failure is an answer, not another retry.
-    if (
-      !asksAQuestion(patch) &&
-      patch.rejected.length > patch.mutations.length &&
-      deadline - Date.now() > REPAIR_MIN_MS
-    ) {
-      // Bounded to Catalyst's own prompt limit (ADR-004): `repairPrompt` may
-      // have to elide the oldest rejections to fit, and returns `null` when
-      // not even one fits. `null` means skip, not "call anyway and let it
-      // 422" — that would spend the repair round on a request already known
-      // to fail, and turn a bounded, legible skip into an unbounded one.
-      const retryPrompt = repairPrompt(prompt, patch.rejected, SPEC_AUTHOR_PROMPT_MAX_CHARS)
-      if (retryPrompt === null) {
-        console.error("[spec-author] repair round skipped: no rejection fit the prompt budget")
-      } else {
-        try {
-          const retry = await ask(retryPrompt)
-          const repaired = review(retry?.proposal ?? retry)
-          // Only adopt a repair that actually recovered something. A worse
-          // second reply must not throw away a partially good first one.
-          //
-          // A question counts as recovery when nothing at all survived the
-          // first round: the repair prompt asks for one in exactly that case,
-          // and a specific question the researcher can answer beats a list of
-          // refusals they cannot act on. Without this the model doing what it
-          // was told is the one reply the route throws away.
-          const recovered =
-            repaired.mutations.length > patch.mutations.length ||
-            (patch.mutations.length === 0 && asksAQuestion(repaired))
-          if (recovered) patch = repaired
-        } catch (err) {
-          // The first answer still stands; a failed repair is not a failed request.
-          console.error("[spec-author] repair round failed:", err)
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        let closed = false
+        const send = (event: Record<string, unknown>) => {
+          if (closed) return
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
         }
-      }
-    }
+        const phase = (
+          name: string,
+          status: "start" | "done" | "warn",
+          detail?: string,
+        ) => send({ type: "phase", phase: name, status, detail: detail ?? null, ms: Date.now() - t0 })
+        const finish = (payload: Record<string, unknown>) => {
+          send({ type: "result", ...payload })
+          closed = true
+          controller.close()
+        }
 
-    // Say when the conversation was shortened. A silent trim is how an assistant
-    // ends up confidently answering a question whose context it never saw, and
-    // the researcher is the only one who can tell whether the dropped turns
-    // mattered. Omitted entirely when nothing was dropped, so the common reply
-    // is byte-identical to what this route returned before history existed.
-    return NextResponse.json(
-      trimmed.dropped > 0 ? { ...patch, historyDropped: trimmed.dropped } : patch,
-    )
+        try {
+          phase("screen", "done")
+          phase(
+            "context",
+            "done",
+            `${table.rows.length} rows, ${table.columns.length} columns`,
+          )
+
+          phase("model", "start")
+          let reply: CatalystReply
+          try {
+            reply = await ask(prompt)
+          } catch (err) {
+            // Same discrimination as before: a 4xx is our malformed request,
+            // anything else is an outage. Both were status codes; once the
+            // stream is open they can only be terminal events, so the client
+            // reads `outcome` from the payload rather than from `res.status`.
+            if (err instanceof CatalystHttpError && err.status >= 400 && err.status < 500) {
+              console.error("[spec-author] catalyst rejected the request:", err)
+              phase("model", "warn", "rejected the request")
+              finish({ outcome: "bad-request", reason: describeCatalystRejection(err) })
+              return
+            }
+            const reason =
+              err instanceof CatalystUnavailableError
+                ? "The analysis assistant is not configured on this deployment. Everything else still works, the spec you edit by hand is computed the same way."
+                : "The analysis assistant is unreachable right now. Your analysis is unaffected; try the request again shortly."
+            console.error("[spec-author] catalyst call failed:", err)
+            phase("model", "warn", "unreachable")
+            finish({ outcome: "unavailable", reason })
+            return
+          }
+          phase("model", "done")
+
+          let patch = review(reply?.proposal ?? reply)
+          phase(
+            "validate",
+            patch.rejected.length > 0 ? "warn" : "done",
+            patch.rejected.length > 0
+              ? `${patch.rejected.length} of ${patch.rejected.length + patch.mutations.length} rejected`
+              : `${patch.mutations.length} accepted`,
+          )
+
+          const asksAQuestion = (p: { clarificationNeeded: string | null }) =>
+            p.clarificationNeeded !== null && p.clarificationNeeded !== CLARIFICATION_WITHHELD
+
+          if (
+            !asksAQuestion(patch) &&
+            patch.rejected.length > patch.mutations.length &&
+            deadline - Date.now() > REPAIR_MIN_MS
+          ) {
+            const retryPrompt = repairPrompt(prompt, patch.rejected, SPEC_AUTHOR_PROMPT_MAX_CHARS)
+            if (retryPrompt === null) {
+              console.error("[spec-author] repair round skipped: no rejection fit the prompt budget")
+            } else {
+              // Shown, not hidden. "2 mutations rejected, repairing" looks like
+              // a defect and is the opposite: it is the guarantee working, out
+              // loud, at the moment it matters.
+              phase("repair", "start")
+              try {
+                const retry = await ask(retryPrompt)
+                const repaired = review(retry?.proposal ?? retry)
+                const recovered =
+                  repaired.mutations.length > patch.mutations.length ||
+                  (patch.mutations.length === 0 && asksAQuestion(repaired))
+                if (recovered) patch = repaired
+                phase("repair", "done", recovered ? "recovered" : "no improvement")
+              } catch (err) {
+                console.error("[spec-author] repair round failed:", err)
+                phase("repair", "warn", "failed; keeping the first answer")
+              }
+            }
+          }
+
+          phase("apply", "done")
+          finish(trimmed.dropped > 0 ? { ...patch, historyDropped: trimmed.dropped } : patch)
+        } catch (err) {
+          console.error("[spec-author] stream failed:", err)
+          finish({
+            outcome: "unavailable",
+            reason: "The analysis assistant failed unexpectedly. Your analysis is unaffected.",
+          })
+        }
+      },
+    })
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+        // Proxies that buffer defeat the entire point of streaming phases.
+        "X-Accel-Buffering": "no",
+      },
+    })
   } catch (error) {
     console.error("[spec-author] unexpected failure:", error)
     return NextResponse.json(

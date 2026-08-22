@@ -178,6 +178,27 @@ export const Transform = z.discriminatedUnion("kind", [
     /** New column carrying its value. */
     valuesTo: z.string().max(256),
   }),
+  /**
+   * Repair a numeric column that arrived carrying text: `"<LOD"`, `"N/A"`,
+   * `"ND"`, or a unit written into every cell (`"12.3 ng/mL"`).
+   *
+   * This is a transform rather than parse-time cleanup on purpose. Coercing
+   * inside the workbook reader would be invisible to the spec, absent from the
+   * provenance card, and would break Law 4 — same spec + same data version ⇒
+   * same result, forever. As a transform the resolver already applies it, the
+   * provenance card already reports it, and undo already works.
+   *
+   * Coerced tokens become nulls, so they flow into the analysis's declared
+   * missing-value strategy rather than a second, silent disposal path.
+   */
+  z.object({
+    kind: z.literal("coerceNumeric"),
+    column: z.string().max(256),
+    /** Exact cell values to read as missing, e.g. ["<LOD", "N/A"]. */
+    tokensToMissing: z.array(z.string().max(256)).default([]),
+    /** Trailing unit to remove before parsing, e.g. " ng/mL". */
+    stripSuffix: z.string().max(64).nullable().default(null),
+  }),
 ])
 export type Transform = z.infer<typeof Transform>
 
@@ -233,6 +254,13 @@ export const Exclusion = z
      */
     method: z
       .object({
+        /**
+         * `Grubbs` is the only method implemented (`statistics.ts`). `ROUT`
+         * (Motulsky & Brown 2006) is deferred pending the statistical lead and
+         * nothing produces it — the value is kept rather than removed because
+         * narrowing an enum is a breaking migration, and §3A.6 says a stored
+         * revision must never fail to open.
+         */
         name: z.enum(["ROUT", "Grubbs"]),
         params: z.record(z.string(), z.number()),
       })

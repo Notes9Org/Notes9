@@ -7,6 +7,8 @@ import { usePinnedAutoScroll } from "@/hooks/use-pinned-auto-scroll"
 import type { AnalysisTurn } from "@/lib/data-analysis/ai/analysis-thread"
 import type { AiGate } from "@/lib/data-analysis/workspace/ai-gate"
 import { AnalysisComposer, AnalysisTranscript } from "@/components/data-analysis/workspace/analysis-composer"
+import type { SpecAuthorPhase } from "@/lib/data-analysis/ai/spec-author-client"
+import { PhaseList } from "@/components/data-analysis/workspace/phase-list"
 
 /**
  * The conversation, in the right rail (ADR-024).
@@ -46,6 +48,12 @@ export interface AnalysisConsoleProps {
   variant: "empty" | "rail"
   /** Empty-state only: the attach control (file picker / import buttons). */
   attachSlot?: React.ReactNode
+  /**
+   * Live progress for the turn in flight. Progress only — a phase never
+   * carries content, because the patch is delivered whole after validation
+   * (§3.2 Law 2).
+   */
+  phases?: SpecAuthorPhase[]
 }
 
 export function AnalysisConsole({ variant, attachSlot, ...rest }: AnalysisConsoleProps) {
@@ -66,6 +74,7 @@ function RailConsole({
   onApprove,
   onDiscard,
   datasetName,
+  phases,
 }: RailConsoleProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const { onScroll, scrollToBottom, showJumpBottom } = usePinnedAutoScroll(scrollRef, [turns])
@@ -94,6 +103,14 @@ function RailConsole({
           </Button>
         )}
       </div>
+
+      {/* Only while the turn is in flight. Once it lands, the record of what
+          happened lives in the turn itself and on the provenance card; leaving
+          a spent checklist above the composer would just be clutter that grows
+          with every question asked. */}
+      {busy && phases && phases.length > 0 && (
+        <PhaseList phases={phases} className="px-1 pb-0.5" />
+      )}
 
       <AnalysisComposer
         turns={turns}
