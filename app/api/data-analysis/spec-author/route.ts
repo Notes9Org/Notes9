@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth/current-user"
 import { callCatalyst, CatalystHttpError, CatalystUnavailableError } from "@/lib/catalyst-client"
 import { parseSpec, type AnalysisSpec } from "@/lib/data-analysis/spec/analysis-spec"
 import type { Table } from "@/lib/data-analysis/engine/resolver"
+import { createSseChannel, type SseChannel } from "@/lib/data-analysis/sse-channel"
 import { profileTable, offerableTests } from "@/lib/data-analysis/semantic/infer"
 import {
   buildContextBundle,
@@ -467,39 +468,22 @@ export async function POST(req: NextRequest) {
     const encoder = new TextEncoder()
     const t0 = Date.now()
 
-    // Hoisted out of `start` so `cancel()` can reach it. The workspace aborts
-    // this stream on every superseding request, and an enqueue onto a cancelled
+    // Held outside `start` so `cancel()` can reach it. The workspace aborts this
+    // stream on every superseding request, and an enqueue onto a cancelled
     // controller throws — which used to land in the outer catch, call `finish`
     // again, throw a second time and escape `start()` as an unhandled rejection.
-    let closed = false
+    // createSseChannel owns those rules and is covered by sse-channel.test.ts.
+    let channel: SseChannel | null = null
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
-        const send = (event: Record<string, unknown>) => {
-          if (closed) return
-          try {
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
-          } catch {
-            // The consumer is gone. Stop producing instead of throwing upward.
-            closed = true
-          }
-        }
+        channel = createSseChannel(controller, encoder)
+        const send = (event: Record<string, unknown>) => channel?.send(event)
         const phase = (
           name: string,
           status: "start" | "done" | "warn",
           detail?: string,
         ) => send({ type: "phase", phase: name, status, detail: detail ?? null, ms: Date.now() - t0 })
-        // Idempotent: the outer catch calls this too, and a second close on an
-        // already-closed controller throws.
-        const finish = (payload: Record<string, unknown>) => {
-          if (closed) return
-          send({ type: "result", ...payload })
-          closed = true
-          try {
-            controller.close()
-          } catch {
-            /* already closed or cancelled */
-          }
-        }
+        const finish = (payload: Record<string, unknown>) => channel?.finish(payload)
 
         try {
           phase("screen", "done")
@@ -589,7 +573,7 @@ export async function POST(req: NextRequest) {
           the in-flight Catalyst calls still settle against their own deadline,
           but nothing further is written to a controller that is gone. */
       cancel() {
-        closed = true
+        channel?.close()
       },
     })
 
