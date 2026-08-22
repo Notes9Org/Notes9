@@ -32,6 +32,9 @@ import {
   molecularFileFormatLabel,
   parseSequenceText,
   shouldParseSequenceTextOnUpload,
+  SAMPLE_FILE_DETAIL_COLUMNS,
+  SAMPLE_FILE_LIST_COLUMNS,
+  withCappedSequence,
   type SampleFileKind,
 } from "@/lib/sample-molecular"
 import { SamplePlasmidViewer, type PlasmidAlignmentSource } from "./sample-plasmid-viewer"
@@ -46,9 +49,17 @@ export type SampleMolecularFile = {
   file_type: string | null
   file_size: number | null
   storage_path: string
+  // Optional: list queries omit these jsonb columns (they can hold megabytes of
+  // sequence per file). They are fetched for the selected file only — read them
+  // through `selectedDetail`, not off a list row.
+  parsed_metadata?: Record<string, any>
+  viewer_state?: Record<string, any>
+  created_at: string
+}
+
+type SampleFileDetail = {
   parsed_metadata: Record<string, any>
   viewer_state: Record<string, any>
-  created_at: string
 }
 
 type SampleMolecularFilesTabProps = {
@@ -100,11 +111,20 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
   const [pendingDelete, setPendingDelete] = useState<SampleMolecularFile | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [listOpen, setListOpen] = useState(true)
+  // Per-file jsonb, fetched on selection and cached so re-selecting a file we
+  // already opened costs nothing. Starts empty: list queries never carry it.
+  const [detailById, setDetailById] = useState<Record<string, SampleFileDetail>>({})
+  // Mirror of detailById for the loader effect's "already cached?" check, so
+  // that check does not make the effect re-run on every cache write.
+  const detailByIdRef = useRef(detailById)
+  detailByIdRef.current = detailById
 
   const selectedFile = useMemo(
     () => files.find((file) => file.id === selectedId) ?? files[0] ?? null,
     [files, selectedId]
   )
+
+  const selectedDetail = selectedFile ? detailById[selectedFile.id] : undefined
 
   // When the server passed no initial files (e.g. fallback query ran), fetch
   // directly on mount so the tab is never silently empty.
@@ -150,13 +170,59 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
     }
   }, [signSelectedFile])
 
+  // Load the heavy jsonb for the active file only. The plasmid viewer does not
+  // mount until this lands, because it seeds mount-only state from it.
+  //
+  // The cache is read through a ref so it is NOT a dependency: with `detailById`
+  // in the deps, seeding the cache anywhere else (an upload completing) tore
+  // down the in-flight fetch for the selected file and re-issued it.
+  useEffect(() => {
+    const fileId = selectedFile?.id
+    if (!fileId || detailByIdRef.current[fileId]) return
+
+    let cancelled = false
+    void (async () => {
+      try {
+        const supabase = createClient()
+        const { data, error: detailError } = await supabase
+          .from("sample_files")
+          .select(SAMPLE_FILE_DETAIL_COLUMNS)
+          .eq("id", fileId)
+          .single()
+        if (cancelled) return
+        if (detailError) throw detailError
+        const row = data as unknown as SampleFileDetail | null
+        setDetailById((current) => ({
+          ...current,
+          [fileId]: {
+            parsed_metadata: row?.parsed_metadata ?? {},
+            viewer_state: row?.viewer_state ?? {},
+          },
+        }))
+      } catch (err) {
+        if (cancelled) return
+        console.error("Could not load file details", err)
+        // Cache an empty detail so we do not refetch in a loop; the viewer
+        // still parses the file itself from Storage.
+        setDetailById((current) => ({
+          ...current,
+          [fileId]: { parsed_metadata: {}, viewer_state: {} },
+        }))
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedFile?.id])
+
   const refreshFiles = useCallback(async () => {
     setRefreshing(true)
     try {
       const supabase = createClient()
       const { data, error: fetchError } = await supabase
         .from("sample_files")
-        .select("*")
+        .select(SAMPLE_FILE_LIST_COLUMNS)
         .eq("sample_id", sampleId)
         .order("created_at", { ascending: false })
 
@@ -229,7 +295,11 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
         if (shouldParseSequenceTextOnUpload(file.name)) {
           try {
             const text = await file.text()
-            parsedMetadata.sequenceData = parseSequenceText(file.name, text)
+            // Capped here, at the write, not inside parseSequenceText — the
+            // viewers use that same parser at runtime and must not be capped.
+            parsedMetadata.sequenceData = withCappedSequence(
+              parseSequenceText(file.name, text)
+            )
           } catch {
             parsedMetadata.parse_warning = "Could not parse text on upload."
           }
@@ -251,6 +321,13 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
         created_by: user.id,
       })
       if (dbError) throw dbError
+
+      // We just wrote this row's jsonb, so seed the cache instead of making the
+      // selection effect fetch back what we already have.
+      setDetailById((current) => ({
+        ...current,
+        [sampleFileId]: { parsed_metadata: parsedMetadata, viewer_state: {} },
+      }))
 
       // Select the new file BEFORE refresh so refreshFiles' fallback selector
       // doesn't briefly pick a different row and trigger a wasted signed-URL fetch.
@@ -280,13 +357,13 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
         })
         .eq("id", fileId)
       if (updateError) throw updateError
-      setFiles((current) =>
-        current.map((file) =>
-          file.id === fileId
-            ? { ...file, parsed_metadata: payload.parsedMetadata, viewer_state: payload.viewerState }
-            : file
-        )
-      )
+      setDetailById((current) => ({
+        ...current,
+        [fileId]: {
+          parsed_metadata: payload.parsedMetadata,
+          viewer_state: payload.viewerState,
+        },
+      }))
       toast({ title: "Sequence saved", description: "The construct viewer state was updated." })
     },
     [toast]
@@ -354,15 +431,20 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
       .map((file) => ({
         id: file.id,
         fileName: file.file_name,
-        sequence: file.parsed_metadata?.sequenceData?.sequence,
+        // undefined until that file has been opened; resolveSourceSequence
+        // fetches and parses it from Storage on demand.
+        sequence: detailById[file.id]?.parsed_metadata?.sequenceData?.sequence,
       }))
-  }, [files, selectedFile])
+  }, [files, selectedFile, detailById])
 
   const resolveSourceSequence = useCallback(
     async (sourceId: string): Promise<string> => {
       const file = files.find((f) => f.id === sourceId)
       if (!file) return ""
-      const cached = file.parsed_metadata?.sequenceData?.sequence
+      // Only files already opened this session have their jsonb cached; for the
+      // rest we parse from Storage below, which is why the list query can skip
+      // shipping every file's sequence.
+      const cached = detailById[sourceId]?.parsed_metadata?.sequenceData?.sequence
       if (typeof cached === "string" && cached.length > 0) return cached
       const supabase = createClient()
       const url = await createSampleFileSignedUrl(supabase, file.storage_path, 600)
@@ -417,7 +499,10 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
         return ""
       }
     },
-    [files]
+    // detailById belongs here: without it the closure keeps whatever the cache
+    // held when `files` last changed (in practice {}), so an already-opened
+    // file was re-signed, re-downloaded and re-parsed on every alignment run.
+    [files, detailById]
   )
 
   const copyShareLink = useCallback(async () => {
@@ -659,15 +744,27 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
                   onResolveSourceUrl={resolveProteinSourceUrl}
                 />
               ) : selectedFile.file_kind === "plasmid" || selectedFile.file_kind === "sequence" ? (
-                <SamplePlasmidViewer
-                  fileName={selectedFile.file_name}
-                  fileUrl={signedUrl}
-                  parsedMetadata={selectedFile.parsed_metadata ?? {}}
-                  viewerState={selectedFile.viewer_state ?? {}}
-                  onSave={(payload) => saveViewerState(selectedFile.id, payload)}
-                  alignmentSources={alignmentSources}
-                  onResolveSourceSequence={resolveSourceSequence}
-                />
+                // MUST NOT mount until the detail has loaded. SamplePlasmidViewer
+                // seeds customAnnotations / colorScheme / viewerMode in mount-only
+                // useState initialisers, and its save path writes those back — so
+                // mounting with an empty parsedMetadata both hides the saved
+                // annotations and then persists [] over them on the next save.
+                selectedDetail ? (
+                  <SamplePlasmidViewer
+                    fileName={selectedFile.file_name}
+                    fileUrl={signedUrl}
+                    parsedMetadata={selectedDetail.parsed_metadata}
+                    viewerState={selectedDetail.viewer_state}
+                    onSave={(payload) => saveViewerState(selectedFile.id, payload)}
+                    alignmentSources={alignmentSources}
+                    onResolveSourceSequence={resolveSourceSequence}
+                  />
+                ) : (
+                  <div className="flex flex-col items-center gap-2 rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    <p>Loading saved annotations…</p>
+                  </div>
+                )
               ) : (
                 <div className="flex flex-col items-center gap-2 rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
                   <FileCode2 className="h-6 w-6" />

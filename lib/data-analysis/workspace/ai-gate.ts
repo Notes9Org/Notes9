@@ -37,9 +37,23 @@ export function deriveAiGate(input: {
    *  failed, not because the data genuinely has no rows — the two must read
    *  differently or a parse failure is indistinguishable from an empty file. */
   parseError: string | null
+  /**
+   * False while the data-quality review for THIS dataset is still outstanding
+   * (Tier 0, "Data preparation"). Gating `canPropose` rather than adding a
+   * parallel blocking mechanism keeps one answer to "may a plan be proposed",
+   * and leaves `canCapture` untouched so intent-before-data (ADR-023) still
+   * holds: a researcher may say what they are after before they have looked
+   * at a single column.
+   *
+   * Callers that have no gate to satisfy — a reopened saved analysis, whose
+   * stored spec is authoritative — pass true.
+   */
+  dataQualityAcknowledged: boolean
 }): AiGate {
-  const { datasetPresent, derivedSpecPresent, rowCount, parseError } = input
-  const canPropose = datasetPresent && derivedSpecPresent && rowCount > 0
+  const { datasetPresent, derivedSpecPresent, rowCount, parseError, dataQualityAcknowledged } =
+    input
+  const canPropose =
+    datasetPresent && derivedSpecPresent && rowCount > 0 && dataQualityAcknowledged
 
   let reason: string | null = null
   if (!canPropose) {
@@ -49,8 +63,10 @@ export function deriveAiGate(input: {
       reason = `The data could not be read, so nothing can be proposed: ${parseError}`
     } else if (!derivedSpecPresent) {
       reason = "No analysis could be derived from this data yet."
-    } else {
+    } else if (rowCount === 0) {
       reason = "This table has 0 rows, so there is nothing to propose against."
+    } else {
+      reason = "Review the data quality findings before proposing an analysis."
     }
   }
 

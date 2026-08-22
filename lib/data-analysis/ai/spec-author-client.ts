@@ -2,6 +2,7 @@ import type { AnalysisSpec } from "@/lib/data-analysis/spec/analysis-spec"
 import type { SpecMutation } from "@/lib/data-analysis/spec/mutations"
 import type { Table } from "@/lib/data-analysis/engine/resolver"
 import type { SpecAuthorTurn } from "@/lib/data-analysis/ai/spec-author"
+import { splitSseBuffer, parseSseDataJson } from "@/lib/sse-event-blocks"
 
 /**
  * The client half of the AI seam: one POST to `/api/data-analysis/spec-author`.
@@ -79,7 +80,12 @@ function isAbort(err: unknown, signal?: AbortSignal): boolean {
 
 const asString = (v: unknown): string => (typeof v === "string" ? v : "")
 
-export async function requestSpecPatch(input: SpecPatchRequest): Promise<SpecPatchOutcome> {
+export async function requestSpecPatch(
+  input: SpecPatchRequest & {
+    /** Called as each phase lands. Progress only; never a source of content. */
+    onPhase?: (phase: SpecAuthorPhase) => void
+  },
+): Promise<SpecPatchOutcome> {
   const { prompt, spec, table, history, recentEdits, signal } = input
 
   let res: Response
@@ -108,9 +114,18 @@ export async function requestSpecPatch(input: SpecPatchRequest): Promise<SpecPat
 
   // A gateway or crash can answer with HTML the route never wrote. Parsing has
   // to be allowed to fail without taking the caller down with it.
+  //
+  // Two shapes arrive here. Pre-model failures — auth, parse, length, the
+  // screen — are still plain JSON with their original status codes. From the
+  // model call onward the route streams phase events and ends with one
+  // `result` event carrying the patch, because a spec patch is validated and
+  // repaired before it may be rendered (§3.2 Law 2) and so cannot be streamed
+  // token by token. Either way `body` is the same object the switch below has
+  // always read, which is what keeps the outcome contract intact.
   let body: unknown
+  const isStream = res.headers.get("content-type")?.includes("text/event-stream") ?? false
   try {
-    body = await res.json()
+    body = isStream ? await readResultEvent(res, input.onPhase, signal) : await res.json()
   } catch (err) {
     if (isAbort(err, signal)) return { outcome: "aborted" }
     return {
@@ -163,4 +178,63 @@ export async function requestSpecPatch(input: SpecPatchRequest): Promise<SpecPat
       ? { historyDropped: reply.historyDropped }
       : {}),
   }
+}
+
+/** One step of a spec-author turn, as the route reports it. */
+export interface SpecAuthorPhase {
+  phase: "screen" | "context" | "model" | "validate" | "repair" | "apply"
+  status: "start" | "done" | "warn"
+  detail: string | null
+  /** Milliseconds since the turn began, measured on the server. */
+  ms: number
+}
+
+/**
+ * Drain the stream, handing each phase to `onPhase` as it lands and returning
+ * the terminal `result` payload.
+ *
+ * Nothing is rendered from a phase except progress: the patch is whole or it is
+ * not there. A stream that ends without a result is a crash mid-turn and is
+ * reported as one, rather than resolving to an empty patch the workspace would
+ * apply as "the assistant changed nothing".
+ */
+async function readResultEvent(
+  res: Response,
+  onPhase: ((phase: SpecAuthorPhase) => void) | undefined,
+  signal: AbortSignal | undefined,
+): Promise<unknown> {
+  const reader = res.body?.getReader()
+  if (!reader) throw new Error("the analysis assistant returned an empty stream")
+
+  const decoder = new TextDecoder()
+  let buffer = ""
+  let result: unknown
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const { blocks, rest } = splitSseBuffer(buffer)
+      buffer = rest
+      for (const block of blocks) {
+        const parsed = parseSseDataJson(block.data)
+        if (!parsed) continue
+        if (parsed.type === "phase") {
+          onPhase?.(parsed as unknown as SpecAuthorPhase)
+        } else if (parsed.type === "result") {
+          const { type: _type, ...payload } = parsed
+          result = payload
+        }
+      }
+    }
+  } finally {
+    // Aborting mid-turn must not leave the connection draining in the
+    // background; the AbortSignal cancels the fetch, this releases the reader.
+    if (signal?.aborted) await reader.cancel().catch(() => {})
+    else reader.releaseLock()
+  }
+
+  if (result === undefined) throw new Error("the analysis assistant ended without a result")
+  return result
 }

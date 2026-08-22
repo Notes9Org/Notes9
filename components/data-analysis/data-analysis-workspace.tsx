@@ -161,7 +161,7 @@ import {
   rerunRevision,
   saveRevision,
 } from "@/lib/data-analysis/workspace/saved-analysis-session"
-import { requestSpecPatch, type SpecPatchOutcome } from "@/lib/data-analysis/ai/spec-author-client"
+import { requestSpecPatch, type SpecAuthorPhase, type SpecPatchOutcome } from "@/lib/data-analysis/ai/spec-author-client"
 import { applyAiPatch, applyMutation, describeMutation, dispatchMutation, initHistory, type AppliedMutation, type SpecMutation } from "@/lib/data-analysis/spec/mutations"
 import { aiNotice, applyOverlay, canExecuteProposal, splitApprovedMutations } from "@/lib/data-analysis/workspace/spec-prompt"
 import {
@@ -204,6 +204,16 @@ import {
   type RequestIdentity,
 } from "@/lib/data-analysis/ai/analysis-thread"
 import { prepOffers, profilePreparation, type PrepOffer } from "@/lib/data-analysis/workspace/prep-offers"
+import {
+  decisionFindings,
+  findFindings,
+  prepReceipt,
+  revertActionMutations,
+  structuralFindings,
+  type Finding,
+} from "@/lib/data-analysis/workspace/data-quality"
+import { DataQualityGate } from "@/components/data-analysis/workspace/data-quality-gate"
+import { ProvenancePanel } from "@/components/data-analysis/workspace/provenance-panel"
 import { computeAnalysis } from "@/lib/data-analysis/engine/client"
 import type { EngineResult } from "@/lib/data-analysis/engine/contract"
 import type { Table as SpecTable } from "@/lib/data-analysis/engine/resolver"
@@ -1733,7 +1743,8 @@ export function DataAnalysisWorkspace({
     (
       snap: UniverWorkbookSnapshot,
       source?: { id: string; experimentId: string } | null,
-      internal?: boolean
+      internal?: boolean,
+      fromStoredSpec?: boolean
     ) => void
   >(() => {})
   const sourceFileRef = useRef<{ id: string; experimentId: string } | null>(null)
@@ -2219,7 +2230,7 @@ export function DataAnalysisWorkspace({
     )
   }, [])
 
-  const loadSnapshot = useCallback((snap: UniverWorkbookSnapshot, source: { id: string; experimentId: string } | null = null, internal = false) => {
+  const loadSnapshot = useCallback((snap: UniverWorkbookSnapshot, source: { id: string; experimentId: string } | null = null, internal = false, fromStoredSpec = false) => {
     // ADR-025: a loaded sheet ends PROFILED and UNCHARTED — table, schema and
     // row count visible, no axes, no test, no compute — until the researcher
     // (or a caller restoring an already-approved revision, right after this
@@ -2255,6 +2266,12 @@ export function DataAnalysisWorkspace({
     // the effect keyed on `aiGate.canPropose` sends the stated intent for
     // them as soon as there is something to propose against.
     const isNewDataset = !internal && snap.name !== EMPTY_SHEET_NAME
+    // The data-quality review (Tier 0) arms on a genuinely new attach only.
+    // Reopening a saved analysis must NOT re-derive repairs: the stored spec is
+    // authoritative, and re-running detection against a source file that has
+    // since moved would silently change a published number — the
+    // retraction-class failure §3A.3 rule 3 exists to prevent.
+    setDataQualityReviewed(!isNewDataset || fromStoredSpec)
     const hasUnappliedIntent = pendingIntentRef.current !== null && pendingIntentRef.current.appliedToDatasetId === null
     if (isNewDataset && !hasUnappliedIntent) {
       setTurns([
@@ -2457,13 +2474,67 @@ export function DataAnalysisWorkspace({
   const specRevRef = useRef(0)
   const [specToken, setSpecToken] = useState(() => `${specTokenSeedRef.current}:0`)
   const aiAbortRef = useRef<AbortController | null>(null)
+  /**
+   * One timestamp per mount, not `Date.now()` inside the memo: exclusions carry
+   * `excludedAt`, and a clock read on every render would make the findings a
+   * new object forever and the memo pointless.
+   */
+  const dataQualityStampRef = useRef(new Date().toISOString())
+  /**
+   * Reviewed means "the researcher has been shown this dataset's findings",
+   * not "the findings were all acted on". Declining is a review outcome.
+   */
+  const [dataQualityReviewed, setDataQualityReviewed] = useState(true)
+
+  const currentUser = useAuthUser()
+  const excludedBy = currentUser?.email ?? currentUser?.id ?? "unknown"
 
   /**
-   * ADR-023/024: the tri-state gate replaces the single `aiReady` boolean —
-   * intent capture needs only a mounted analysis, proposing needs resolved
-   * rows too, and `reason` is derived rather than a literal so it never lies
-   * about which condition is actually blocking.
+   * DATA QUALITY (Tier 0, "Data preparation").
+   *
+   * No model call anywhere in here — every finding is arithmetic over column
+   * statistics and every fix is a typed spec mutation, so the receipt the
+   * researcher reads is something they could redo by hand.
    */
+  const dataQualityFindings = useMemo(() => {
+    if (!derivedSpec || specTable.rows.length === 0) return []
+    return findFindings(derivedSpec, specTable, tableProfiles, dataQualityStampRef.current, excludedBy)
+  }, [derivedSpec, specTable, tableProfiles, excludedBy])
+
+  const structuralPending = useMemo(
+    () => structuralFindings(dataQualityFindings),
+    [dataQualityFindings]
+  )
+  const decisionPending = useMemo(
+    () => decisionFindings(dataQualityFindings),
+    [dataQualityFindings]
+  )
+
+
+  const preparationReceipt = useMemo(
+    () => (derivedSpec ? prepReceipt(derivedSpec, specTable, null) : null),
+    [derivedSpec, specTable]
+  )
+
+  const autoApplied = useMemo(
+    () => preparationReceipt?.lines.filter((l) => l.origin === "auto") ?? [],
+    [preparationReceipt]
+  )
+
+  /**
+   * DERIVED, not cleared in an effect.
+   *
+   * The first cut armed this on load and un-armed it a render later once the
+   * findings came back empty. In the gap `canPropose` was false, so a question
+   * asked immediately after attaching a clean file was silently dropped — a
+   * race that passed or failed on machine timing. A file with nothing to review
+   * must never have been blocked in the first place, and the only way to
+   * guarantee that is to read the condition rather than sequence it.
+   */
+  const dataQualityBlocking =
+    !dataQualityReviewed &&
+    (structuralPending.length > 0 || decisionPending.length > 0 || autoApplied.length > 0)
+
   const aiGate = useMemo(
     () =>
       deriveAiGate({
@@ -2471,9 +2542,25 @@ export function DataAnalysisWorkspace({
         derivedSpecPresent: derivedSpec !== null,
         rowCount: specTable.rows.length,
         parseError: table.parseError,
+        dataQualityAcknowledged: !dataQualityBlocking,
       }),
-    [hasData, derivedSpec, specTable.rows.length, table.parseError],
+    [hasData, derivedSpec, specTable.rows.length, table.parseError, dataQualityBlocking],
   )
+  const [aiPhases, setAiPhases] = useState<SpecAuthorPhase[]>([])
+  /**
+   * §6.7 / §10.5: the provenance card is always one click from the figure.
+   * Built and tested since the spec layer landed, but until now reachable only
+   * from the orphaned preview subtree — so nothing that auto-repairs the data
+   * could be inspected. Auto-repair without this panel is not shippable.
+   */
+  const [provenanceOpen, setProvenanceOpen] = useState(false)
+
+  /**
+   * ADR-023/024: the tri-state gate replaces the single `aiReady` boolean —
+   * intent capture needs only a mounted analysis, proposing needs resolved
+   * rows too, and `reason` is derived rather than a literal so it never lies
+   * about which condition is actually blocking.
+   */
 
   /**
    * ADR-023: what the researcher said they want before a dataset resolved
@@ -2599,6 +2686,10 @@ export function DataAnalysisWorkspace({
     const controller = new AbortController()
     aiAbortRef.current = controller
     setAiBusy(true)
+    // A turn can run 45 seconds across two model calls. Phases are the only
+    // thing streamed; the patch arrives whole, because a spec patch is
+    // validated and repaired before it may be rendered (§3.2 Law 2).
+    setAiPhases([])
     try {
       const outcome = await requestSpecPatch({
         prompt,
@@ -2607,6 +2698,12 @@ export function DataAnalysisWorkspace({
         history,
         recentEdits: edits,
         signal: controller.signal,
+        onPhase: (phase) =>
+          setAiPhases((prev) =>
+            // A `done`/`warn` replaces its own `start` rather than stacking, so
+            // the list reads as a checklist and not a log.
+            [...prev.filter((p) => p.phase !== phase.phase), phase],
+          ),
       })
       if (outcome.outcome === "aborted") return
 
@@ -2762,14 +2859,25 @@ export function DataAnalysisWorkspace({
       pure function AI patches use (`applyMutation`), turned into rail edits
       the same way `executeProposal` does. One code path for "this pipeline
       step is gone," whether a patch, a control or a chip's × removed it. */
-  const applySpecMutation = useCallback(
-    (mutation: SpecMutation) => {
-      if (!derivedSpec) return
+  const applySpecMutations = useCallback(
+    (mutations: SpecMutation[]) => {
+      if (!derivedSpec || mutations.length === 0) return
+      // Fold the WHOLE batch before committing. Committing one mutation at a
+      // time in a caller's loop re-read the same pre-flush `derivedSpec` on
+      // every pass, so each patch overwrote the last and only the final
+      // mutation survived — "exclude 5 duplicate rows" excluded one and
+      // reported success. `splitApprovedMutations` already folds a list
+      // sequentially, so one dispatch chain + one commit is both correct and
+      // a single undo-stack entry.
+      //
       // Through `dispatchMutation` rather than bare `applyMutation` so a hand
       // edit arrives as the same described, origin-tagged `AppliedMutation` an
       // assistant patch does. That is the whole reason one undo stack and one
       // provenance list can cover both without knowing which is which.
-      const dispatched = dispatchMutation(initHistory(derivedSpec), mutation, "user")
+      const dispatched = mutations.reduce(
+        (history, mutation) => dispatchMutation(history, mutation, "user"),
+        initHistory(derivedSpec)
+      )
       const applied = dispatched.past.map((entry) => entry.applied)
       // Through `splitApprovedMutations` rather than `railEditsFromSpec` alone,
       // because the rail cannot hold every field: a dragged significance
@@ -2785,6 +2893,30 @@ export function DataAnalysisWorkspace({
     [derivedSpec, specTable, commitEdits, aiOverlay]
   )
 
+  /** Single-mutation door (a chip's ×, one control). Delegates so there is
+      still exactly one path into the spec. Never call this in a loop — batch
+      through `applySpecMutations`, or only the last mutation survives. */
+  const applySpecMutation = useCallback(
+    (mutation: SpecMutation) => applySpecMutations([mutation]),
+    [applySpecMutations]
+  )
+
+  /**
+   * Repair what the file got wrong as written, before the researcher is asked
+   * anything. Each repair lands as a spec transform rather than a parse-time
+   * edit, so it is undoable, appears on the provenance card, and reproduces
+   * from the spec alone (Law 4).
+   */
+  useEffect(() => {
+    if (dataQualityReviewed || structuralPending.length === 0) return
+    // One batch across ALL structural findings: repairing two contaminated
+    // columns is one repair the researcher can undo with one press, not N.
+    applySpecMutations(
+      structuralPending.flatMap((finding) => finding.actions[finding.recommended ?? 0].mutations)
+    )
+  }, [dataQualityReviewed, structuralPending, applySpecMutations])
+
+
   /**
    * P5's accept path: a `PrepOffer` — the column-role guess, the recommended
    * test, or a data-prep offer — dispatches through the exact same
@@ -2794,9 +2926,9 @@ export function DataAnalysisWorkspace({
    */
   const onAcceptOffer = useCallback(
     (offer: PrepOffer) => {
-      for (const mutation of offer.apply) applySpecMutation(mutation)
+      applySpecMutations(offer.apply)
     },
-    [applySpecMutation]
+    [applySpecMutations]
   )
 
 
@@ -2811,8 +2943,9 @@ export function DataAnalysisWorkspace({
      dialog will not submit without a reason. The schema agrees independently
      (§8.1: a statistical exclusion must name its method), so an ad-hoc
      "outlier" is refused by the type as well as by the screen. */
-  const currentUser = useAuthUser()
-  const excludedBy = currentUser?.email ?? currentUser?.id ?? "unknown"
+
+
+
   const [exclusionRowId, setExclusionRowId] = useState<string | null>(null)
   const [exclusionPreview, setExclusionPreview] = useState<ExclusionPreview | null>(null)
   const [exclusionPreviewLoading, setExclusionPreviewLoading] = useState(false)
@@ -3154,7 +3287,9 @@ export function DataAnalysisWorkspace({
             snapshot.workbook,
             analysis.sourceDataFileId && analysis.experimentId
               ? { id: analysis.sourceDataFileId, experimentId: analysis.experimentId }
-              : null
+              : null,
+            false,
+            true
           )
         }
 
@@ -3404,7 +3539,9 @@ export function DataAnalysisWorkspace({
           live,
           savedAnalysis.sourceDataFileId && savedAnalysis.experimentId
             ? { id: savedAnalysis.sourceDataFileId, experimentId: savedAnalysis.experimentId }
-            : null
+            : null,
+          false,
+          true
         )
       }
       setEngineResult(outcome.result)
@@ -4078,6 +4215,7 @@ export function DataAnalysisWorkspace({
   const askConsole = (
     <div className="flex h-full min-h-0 flex-col p-2">
       <AnalysisConsole
+        phases={aiPhases}
         turns={turns}
         currentSpecHash={specToken}
         busy={aiBusy}
@@ -4237,6 +4375,40 @@ export function DataAnalysisWorkspace({
           onConfirm={confirmExclusion}
         />
       )}
+
+      {/* Tier 0, "Data preparation". Blocks proposing an analysis, never
+          capturing intent — a researcher may say what they are after before
+          they have looked at a column (ADR-023). */}
+      <DataQualityGate
+        open={dataQualityBlocking && (decisionPending.length > 0 || autoApplied.length > 0)}
+        fileName={typeof liveSnapshot?.name === "string" ? liveSnapshot.name : null}
+        applied={autoApplied}
+        decisions={decisionPending}
+        onChoose={(_finding: Finding, _index: number, mutations, previousAction) => {
+          // Revert the previously chosen action before applying the new one, in
+          // ONE batch — otherwise changing your mind from "Exclude it" to
+          // "Keep it" left the exclusion in the spec while the UI showed
+          // "Keep it" selected.
+          const revert =
+            previousAction && derivedSpec
+              ? revertActionMutations(derivedSpec, previousAction)
+              : []
+          applySpecMutations([...revert, ...mutations])
+        }}
+        onUndo={(mutation) => applySpecMutation(mutation)}
+        onContinue={() => setDataQualityReviewed(true)}
+        onOpenProvenance={() => setProvenanceOpen(true)}
+      />
+
+      {derivedSpec && (
+        <ProvenancePanel
+          open={provenanceOpen}
+          onClose={() => setProvenanceOpen(false)}
+          spec={derivedSpec}
+          result={engineResult}
+          history={historyMutations(editHistory)}
+        />
+      )}
     </>
   )
 
@@ -4275,6 +4447,7 @@ export function DataAnalysisWorkspace({
         />
 
         <AnalysisConsole
+        phases={aiPhases}
           turns={turns}
           currentSpecHash={specToken}
           busy={aiBusy}
