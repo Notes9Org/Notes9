@@ -1,7 +1,7 @@
 import type { ColumnProfile } from "@/lib/data-analysis/semantic/infer"
 import { COERCIBLE_SHARE_THRESHOLD } from "@/lib/data-analysis/semantic/infer"
 import { grubbs } from "@/lib/data-analysis/statistics"
-import type { AnalysisSpec } from "@/lib/data-analysis/spec/analysis-spec"
+import type { AnalysisSpec, Transform } from "@/lib/data-analysis/spec/analysis-spec"
 import type { SpecMutation } from "@/lib/data-analysis/spec/mutations"
 import type { Table } from "@/lib/data-analysis/engine/resolver"
 import { describeTransform } from "@/lib/data-analysis/provenance"
@@ -54,6 +54,33 @@ export interface FindingAction {
 }
 
 /**
+ * Do these two transforms denote the same pipeline step? Compares the fields
+ * that give a transform its identity, so a spec round-tripped through
+ * `parseSpec` (defaults filled, keys re-ordered) still matches the transform a
+ * finding authored.
+ */
+function sameTransform(a: Transform, b: Transform): boolean {
+  if (a.kind !== b.kind) return false
+  switch (a.kind) {
+    case "collapseReplicates": {
+      const other = b as Extract<Transform, { kind: "collapseReplicates" }>
+      return (
+        a.statistic === other.statistic &&
+        a.by.length === other.by.length &&
+        a.by.every((c, i) => c === other.by[i])
+      )
+    }
+    case "coerceNumeric": {
+      const other = b as Extract<Transform, { kind: "coerceNumeric" }>
+      return a.column === other.column
+    }
+    default:
+      // Anything a finding does not author falls back to structural equality.
+      return JSON.stringify(a) === JSON.stringify(b)
+  }
+}
+
+/**
  * The mutations that undo `action`, for when the researcher picks a different
  * action on a finding they have already answered. Without this, switching from
  * "Exclude it" to "Keep it" left the exclusion in the spec while the UI showed
@@ -63,6 +90,18 @@ export interface FindingAction {
  * is structural: drop the transform we added, restore the row we excluded.
  * Transform indices are resolved against the LIVE spec and removed
  * highest-first, so removing one does not shift the next.
+ *
+ * REACHABILITY, as of this change: none of it fires yet. Every decision
+ * detector filters itself out once answered — `constantColumns` skips roles
+ * already "ignore", `duplicateRows` drops rows already in spec.exclusions, and
+ * `technicalReplicates` bails when a collapseReplicates transform exists — and
+ * `decisionPending` is recomputed live, so an answered finding leaves the list
+ * and the gate can never offer a second choice on it. That the gate tracks
+ * `chosen` per finding and renders a selected state says the intent was for
+ * answered findings to stay revisable; making them stay is a gate-level change
+ * (hold the list stable while open) that is deliberately NOT made here, because
+ * the live derivation was itself added to fix an arrival/input race. This stays
+ * correct and ready for that fix rather than being written twice.
  */
 export function revertActionMutations(
   spec: AnalysisSpec,
@@ -76,9 +115,12 @@ export function revertActionMutations(
     if (m.kind === "data.excludeRow") {
       restores.push({ kind: "data.restoreRow", rowId: m.exclusion.rowId })
     } else if (m.kind === "data.addTransform") {
-      const index = spec.transforms.findIndex(
-        (t) => JSON.stringify(t) === JSON.stringify(m.transform),
-      )
+      // Matched on a stable identity, NOT JSON.stringify equality. derivedSpec
+      // is rebuilt through parseSpec whenever aiOverlay is non-empty, which
+      // fills schema defaults and re-orders keys — so a serialization compare
+      // silently fails to match, findIndex returns -1, and the removal is
+      // dropped, leaving the old transform applied under the new label.
+      const index = spec.transforms.findIndex((t) => sameTransform(t, m.transform))
       if (index >= 0) removeIndices.push(index)
     }
   }

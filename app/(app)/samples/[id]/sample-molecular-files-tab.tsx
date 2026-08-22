@@ -34,6 +34,7 @@ import {
   shouldParseSequenceTextOnUpload,
   SAMPLE_FILE_DETAIL_COLUMNS,
   SAMPLE_FILE_LIST_COLUMNS,
+  withCappedSequence,
   type SampleFileKind,
 } from "@/lib/sample-molecular"
 import { SamplePlasmidViewer, type PlasmidAlignmentSource } from "./sample-plasmid-viewer"
@@ -113,6 +114,10 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
   // Per-file jsonb, fetched on selection and cached so re-selecting a file we
   // already opened costs nothing. Starts empty: list queries never carry it.
   const [detailById, setDetailById] = useState<Record<string, SampleFileDetail>>({})
+  // Mirror of detailById for the loader effect's "already cached?" check, so
+  // that check does not make the effect re-run on every cache write.
+  const detailByIdRef = useRef(detailById)
+  detailByIdRef.current = detailById
 
   const selectedFile = useMemo(
     () => files.find((file) => file.id === selectedId) ?? files[0] ?? null,
@@ -165,11 +170,15 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
     }
   }, [signSelectedFile])
 
-  // Load the heavy jsonb for the active file only. Viewers render from the
-  // Storage object, so a pending detail delays saved annotations, not the file.
+  // Load the heavy jsonb for the active file only. The plasmid viewer does not
+  // mount until this lands, because it seeds mount-only state from it.
+  //
+  // The cache is read through a ref so it is NOT a dependency: with `detailById`
+  // in the deps, seeding the cache anywhere else (an upload completing) tore
+  // down the in-flight fetch for the selected file and re-issued it.
   useEffect(() => {
     const fileId = selectedFile?.id
-    if (!fileId || detailById[fileId]) return
+    if (!fileId || detailByIdRef.current[fileId]) return
 
     let cancelled = false
     void (async () => {
@@ -205,7 +214,7 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
     return () => {
       cancelled = true
     }
-  }, [selectedFile?.id, detailById])
+  }, [selectedFile?.id])
 
   const refreshFiles = useCallback(async () => {
     setRefreshing(true)
@@ -286,7 +295,11 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
         if (shouldParseSequenceTextOnUpload(file.name)) {
           try {
             const text = await file.text()
-            parsedMetadata.sequenceData = parseSequenceText(file.name, text)
+            // Capped here, at the write, not inside parseSequenceText — the
+            // viewers use that same parser at runtime and must not be capped.
+            parsedMetadata.sequenceData = withCappedSequence(
+              parseSequenceText(file.name, text)
+            )
           } catch {
             parsedMetadata.parse_warning = "Could not parse text on upload."
           }
@@ -486,7 +499,10 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
         return ""
       }
     },
-    [files]
+    // detailById belongs here: without it the closure keeps whatever the cache
+    // held when `files` last changed (in practice {}), so an already-opened
+    // file was re-signed, re-downloaded and re-parsed on every alignment run.
+    [files, detailById]
   )
 
   const copyShareLink = useCallback(async () => {
@@ -728,15 +744,27 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
                   onResolveSourceUrl={resolveProteinSourceUrl}
                 />
               ) : selectedFile.file_kind === "plasmid" || selectedFile.file_kind === "sequence" ? (
-                <SamplePlasmidViewer
-                  fileName={selectedFile.file_name}
-                  fileUrl={signedUrl}
-                  parsedMetadata={selectedDetail?.parsed_metadata ?? {}}
-                  viewerState={selectedDetail?.viewer_state ?? {}}
-                  onSave={(payload) => saveViewerState(selectedFile.id, payload)}
-                  alignmentSources={alignmentSources}
-                  onResolveSourceSequence={resolveSourceSequence}
-                />
+                // MUST NOT mount until the detail has loaded. SamplePlasmidViewer
+                // seeds customAnnotations / colorScheme / viewerMode in mount-only
+                // useState initialisers, and its save path writes those back — so
+                // mounting with an empty parsedMetadata both hides the saved
+                // annotations and then persists [] over them on the next save.
+                selectedDetail ? (
+                  <SamplePlasmidViewer
+                    fileName={selectedFile.file_name}
+                    fileUrl={signedUrl}
+                    parsedMetadata={selectedDetail.parsed_metadata}
+                    viewerState={selectedDetail.viewer_state}
+                    onSave={(payload) => saveViewerState(selectedFile.id, payload)}
+                    alignmentSources={alignmentSources}
+                    onResolveSourceSequence={resolveSourceSequence}
+                  />
+                ) : (
+                  <div className="flex flex-col items-center gap-2 rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    <p>Loading saved annotations…</p>
+                  </div>
+                )
               ) : (
                 <div className="flex flex-col items-center gap-2 rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
                   <FileCode2 className="h-6 w-6" />
