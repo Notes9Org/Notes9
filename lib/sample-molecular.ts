@@ -22,6 +22,24 @@ export type CrisprGuide = {
   selfSeedMatches: number
 }
 
+// Columns needed to LIST molecular files. Deliberately excludes the
+// parsed_metadata / viewer_state jsonb: a parsed sequence can be megabytes per
+// file, and selecting it here shipped that whole payload through PostgREST and
+// into the RSC flight payload on every page load. It is loaded on demand for
+// the selected file only (see SAMPLE_FILE_DETAIL_COLUMNS).
+export const SAMPLE_FILE_LIST_COLUMNS =
+  "id, sample_id, file_kind, file_name, file_type, file_size, storage_path, created_at"
+
+// The heavy jsonb, fetched for one file at a time when it is selected.
+export const SAMPLE_FILE_DETAIL_COLUMNS = "id, parsed_metadata, viewer_state"
+
+// Ceiling on the sequence we will persist into parsed_metadata jsonb. Uploads
+// are capped at 50 MB, and without this a 50 MB FASTA becomes a ~50 MB jsonb
+// value in a single row — which bloats the WAL, every subsequent read, and the
+// page payload. Past the cap we defer to the viewer, which parses from Storage.
+// ponytail: flat char cap, revisit if real constructs legitimately exceed it.
+export const MAX_PARSED_SEQUENCE_CHARS = 1_000_000
+
 export const SAMPLE_MOLECULAR_EXTENSIONS = [
   ".gb",
   ".gbk",
@@ -432,6 +450,19 @@ export function parseSequenceText(fileName: string, text: string): Record<string
   const trimmed = text.trim()
   if (!trimmed) {
     return { name: fileName, circular: true, sequence: "", features: [] }
+  }
+
+  // Never persist an unbounded sequence into jsonb. The plasmid/protein viewers
+  // re-parse from Storage on demand, so deferring costs one fetch when the file
+  // is opened instead of a multi-MB row on every read.
+  if (trimmed.length > MAX_PARSED_SEQUENCE_CHARS) {
+    return {
+      name: fileName,
+      circular: true,
+      sequence: "",
+      features: [],
+      parse_deferred: "File is too large to parse inline; it is parsed in the viewer.",
+    }
   }
 
   if (getFileExtension(fileName) === "json") {

@@ -7,6 +7,8 @@ import {
   inferSampleFileKind,
   isAllowedSampleMolecularFile,
   looksLikeBinarySnapGeneBlob,
+  MAX_PARSED_SEQUENCE_CHARS,
+  parseSequenceText,
   parseTagInput,
   shouldParseSequenceTextOnUpload,
 } from "./sample-molecular"
@@ -58,5 +60,20 @@ describe("sample molecular helpers", () => {
     expect(guides.length).toBeGreaterThan(0)
     expect(guides[0].guide).toHaveLength(20)
     expect(guides[0].pam.endsWith("GG")).toBe(true)
+  })
+})
+
+describe("parseSequenceText size cap", () => {
+  it("parses a normal sequence inline", () => {
+    const result = parseSequenceText("small.fasta", ">seq\nACGTACGT")
+    expect(result.sequence).toBe("ACGTACGT")
+    expect(result.parse_deferred).toBeUndefined()
+  })
+
+  it("defers instead of persisting an oversized sequence", () => {
+    const huge = "A".repeat(MAX_PARSED_SEQUENCE_CHARS + 1)
+    const result = parseSequenceText("huge.fasta", `>seq\n${huge}`)
+    expect(result.sequence).toBe("")
+    expect(result.parse_deferred).toBeTruthy()
   })
 })
