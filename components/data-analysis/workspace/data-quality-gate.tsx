@@ -1,11 +1,11 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { ArrowCounterClockwise, CheckCircle, Warning } from "@phosphor-icons/react/ssr"
 
 import { cn } from "@/lib/utils"
-import type { Finding, ReceiptLine } from "@/lib/data-analysis/workspace/data-quality"
+import type { Finding, FindingAction, ReceiptLine } from "@/lib/data-analysis/workspace/data-quality"
 import type { SpecMutation } from "@/lib/data-analysis/spec/mutations"
 import { EASE_OUT } from "./motion"
 
@@ -43,13 +43,22 @@ export function DataQualityGate({
   onChoose,
   onUndo,
   onContinue,
+  onOpenProvenance,
 }: {
   open: boolean
   fileName: string | null
   /** Receipt lines for repairs already made, newest last. */
   applied: ReceiptLine[]
   decisions: Finding[]
-  onChoose: (finding: Finding, actionIndex: number, mutations: SpecMutation[]) => void
+  onChoose: (
+    finding: Finding,
+    actionIndex: number,
+    mutations: SpecMutation[],
+    /** The action being replaced, so the caller can undo it. Null on first answer. */
+    previousAction: FindingAction | null,
+  ) => void
+  /** Opens the provenance panel. Shown only alongside automatic repairs. */
+  onOpenProvenance?: () => void
   onUndo: (mutation: SpecMutation) => void
   onContinue: (declined: number) => void
 }) {
@@ -61,9 +70,53 @@ export function DataQualityGate({
     [decisions, chosen],
   )
 
+  // This gate blocks the whole AI surface, so it has to behave like a modal for
+  // the keyboard too: focus moves in when it opens, Tab cycles inside it, and
+  // focus returns to whatever was focused before on close. There is
+  // deliberately no Escape-to-dismiss — answering the findings IS the exit, and
+  // the Continue button lives inside the trap, so this is not a keyboard trap.
+  const dialogRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const previouslyFocused = document.activeElement as HTMLElement | null
+    // Focus the dialog itself rather than the first action: the findings text
+    // above it is the point, and jumping to a button skips it for SR users.
+    dialogRef.current?.focus()
+    return () => previouslyFocused?.focus?.()
+  }, [open])
+
+  const onDialogKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Tab" || !dialogRef.current) return
+    const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    )
+    if (focusable.length === 0) return
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    const active = document.activeElement
+    if (event.shiftKey && (active === first || active === dialogRef.current)) {
+      event.preventDefault()
+      last.focus()
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault()
+      first.focus()
+    }
+  }
+
   const choose = (finding: Finding, index: number) => {
+    // Changing your mind has to undo the previous answer. Reporting the
+    // previously chosen action lets the workspace invert it against the live
+    // spec and commit the revert and the new choice as one batch — otherwise
+    // "Exclude it" → "Keep it" left the row excluded under a "Keep it" label.
+    const previous = chosen[finding.id]
     setChosen((prev) => ({ ...prev, [finding.id]: index }))
-    onChoose(finding, index, finding.actions[index].mutations)
+    onChoose(
+      finding,
+      index,
+      finding.actions[index].mutations,
+      previous === undefined || previous === index ? null : finding.actions[previous],
+    )
   }
 
   return (
@@ -79,9 +132,12 @@ export function DataQualityGate({
             aria-hidden
           />
           <motion.div
+            ref={dialogRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby="data-quality-title"
+            tabIndex={-1}
+            onKeyDown={onDialogKeyDown}
             className="fixed left-1/2 top-1/2 z-50 flex max-h-[min(44rem,calc(100vh-3rem))] w-[min(38rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-2xl"
             initial={reduce ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.985 }}
             animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
@@ -137,6 +193,19 @@ export function DataQualityGate({
                       </li>
                     ))}
                   </ul>
+                  {onOpenProvenance && (
+                    // The panel that justifies these automatic edits was
+                    // previously unreachable — nothing ever opened it. This is
+                    // the one place the researcher is told their data changed,
+                    // so it is where "show me exactly what changed" belongs.
+                    <button
+                      type="button"
+                      onClick={onOpenProvenance}
+                      className="mt-2 rounded-md px-1.5 py-0.5 text-[12px] text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline"
+                    >
+                      See how this was derived
+                    </button>
+                  )}
                 </section>
               )}
 

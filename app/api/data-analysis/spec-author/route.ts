@@ -467,22 +467,38 @@ export async function POST(req: NextRequest) {
     const encoder = new TextEncoder()
     const t0 = Date.now()
 
+    // Hoisted out of `start` so `cancel()` can reach it. The workspace aborts
+    // this stream on every superseding request, and an enqueue onto a cancelled
+    // controller throws — which used to land in the outer catch, call `finish`
+    // again, throw a second time and escape `start()` as an unhandled rejection.
+    let closed = false
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
-        let closed = false
         const send = (event: Record<string, unknown>) => {
           if (closed) return
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
+          try {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
+          } catch {
+            // The consumer is gone. Stop producing instead of throwing upward.
+            closed = true
+          }
         }
         const phase = (
           name: string,
           status: "start" | "done" | "warn",
           detail?: string,
         ) => send({ type: "phase", phase: name, status, detail: detail ?? null, ms: Date.now() - t0 })
+        // Idempotent: the outer catch calls this too, and a second close on an
+        // already-closed controller throws.
         const finish = (payload: Record<string, unknown>) => {
+          if (closed) return
           send({ type: "result", ...payload })
           closed = true
-          controller.close()
+          try {
+            controller.close()
+          } catch {
+            /* already closed or cancelled */
+          }
         }
 
         try {
@@ -568,6 +584,12 @@ export async function POST(req: NextRequest) {
             reason: "The analysis assistant failed unexpectedly. Your analysis is unaffected.",
           })
         }
+      },
+      /** The client disconnected (or superseded this request). Stop producing;
+          the in-flight Catalyst calls still settle against their own deadline,
+          but nothing further is written to a controller that is gone. */
+      cancel() {
+        closed = true
       },
     })
 

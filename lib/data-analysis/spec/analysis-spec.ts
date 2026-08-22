@@ -197,7 +197,16 @@ export const Transform = z.discriminatedUnion("kind", [
     /** Exact cell values to read as missing, e.g. ["<LOD", "N/A"]. */
     tokensToMissing: z.array(z.string().max(256)).default([]),
     /** Trailing unit to remove before parsing, e.g. " ng/mL". */
-    stripSuffix: z.string().max(64).nullable().default(null),
+    // "" normalises to null rather than being rejected: `"x".endsWith("")` is
+    // true and `slice(0, -0)` is `slice(0, 0)`, so an empty suffix silently
+    // blanked every value in the column. Normalising (not rejecting) keeps any
+    // spec already persisted with "" loadable instead of failing to open.
+    stripSuffix: z
+      .string()
+      .max(64)
+      .nullable()
+      .default(null)
+      .transform((s) => (s === "" ? null : s)),
   }),
 ])
 export type Transform = z.infer<typeof Transform>

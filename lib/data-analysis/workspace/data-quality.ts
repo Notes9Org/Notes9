@@ -42,6 +42,52 @@ export interface FindingAction {
   label: string
   /** Empty means "leave as is" — always offered, always explicit. */
   mutations: SpecMutation[]
+  /**
+   * How to undo `mutations` when the researcher changes their mind and picks a
+   * different action on the same finding. Only needed where the inverse cannot
+   * be derived from the mutation itself: `data.addTransform` and
+   * `data.excludeRow` invert structurally (drop the transform, restore the
+   * row), but `roles.set` overwrites the whole role list, so the prior list has
+   * to be captured here, at detection time, while it is still known.
+   */
+  revert?: SpecMutation[]
+}
+
+/**
+ * The mutations that undo `action`, for when the researcher picks a different
+ * action on a finding they have already answered. Without this, switching from
+ * "Exclude it" to "Keep it" left the exclusion in the spec while the UI showed
+ * "Keep it" selected — the figure and the label disagreed.
+ *
+ * `action.revert` wins when present (see FindingAction). Otherwise the inverse
+ * is structural: drop the transform we added, restore the row we excluded.
+ * Transform indices are resolved against the LIVE spec and removed
+ * highest-first, so removing one does not shift the next.
+ */
+export function revertActionMutations(
+  spec: AnalysisSpec,
+  action: FindingAction,
+): SpecMutation[] {
+  if (action.revert) return action.revert
+
+  const restores: SpecMutation[] = []
+  const removeIndices: number[] = []
+  for (const m of action.mutations) {
+    if (m.kind === "data.excludeRow") {
+      restores.push({ kind: "data.restoreRow", rowId: m.exclusion.rowId })
+    } else if (m.kind === "data.addTransform") {
+      const index = spec.transforms.findIndex(
+        (t) => JSON.stringify(t) === JSON.stringify(m.transform),
+      )
+      if (index >= 0) removeIndices.push(index)
+    }
+  }
+  return [
+    ...restores,
+    ...removeIndices
+      .sort((a, b) => b - a)
+      .map((index) => ({ kind: "data.removeTransform" as const, index })),
+  ]
 }
 
 export interface Finding {
@@ -307,12 +353,19 @@ function technicalReplicates(spec: AnalysisSpec, table: Table): Finding[] {
   // have not identified; only offer when most rows participate.
   if (replicated / table.rows.length < MIN_REPLICATED_SHARE) return []
 
+  // ONE transform, not one per response column. `CollapseReplicates` is
+  // {kind, by, statistic} — it has no `column` field, and the resolver collapses
+  // every numeric column in a single pass. Emitting one per response therefore
+  // produced N byte-identical transforms: the provenance card and the prep
+  // receipt each printed the same line N times, and Undo removed them one by one.
   const collapse = (statistic: "mean" | "median"): FindingAction => ({
     label: `Collapse to the ${statistic}`,
-    mutations: responses.map((column) => ({
-      kind: "data.addTransform",
-      transform: { kind: "collapseReplicates", by: design, column, statistic },
-    })),
+    mutations: [
+      {
+        kind: "data.addTransform",
+        transform: { kind: "collapseReplicates", by: design, statistic },
+      },
+    ],
   })
 
   return [
@@ -353,6 +406,9 @@ function constantColumns(spec: AnalysisSpec, prepared: PreparedColumn[]): Findin
             ),
           },
         ],
+        // roles.set overwrites the whole list, so its inverse cannot be derived
+        // from the mutation — capture the prior roles here, while we hold them.
+        revert: [{ kind: "roles.set", roles: spec.roles }],
       },
       LEAVE_AS_IS,
     ]

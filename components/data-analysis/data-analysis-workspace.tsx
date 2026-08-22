@@ -208,6 +208,7 @@ import {
   decisionFindings,
   findFindings,
   prepReceipt,
+  revertActionMutations,
   structuralFindings,
   type Finding,
 } from "@/lib/data-analysis/workspace/data-quality"
@@ -2858,14 +2859,25 @@ export function DataAnalysisWorkspace({
       pure function AI patches use (`applyMutation`), turned into rail edits
       the same way `executeProposal` does. One code path for "this pipeline
       step is gone," whether a patch, a control or a chip's × removed it. */
-  const applySpecMutation = useCallback(
-    (mutation: SpecMutation) => {
-      if (!derivedSpec) return
+  const applySpecMutations = useCallback(
+    (mutations: SpecMutation[]) => {
+      if (!derivedSpec || mutations.length === 0) return
+      // Fold the WHOLE batch before committing. Committing one mutation at a
+      // time in a caller's loop re-read the same pre-flush `derivedSpec` on
+      // every pass, so each patch overwrote the last and only the final
+      // mutation survived — "exclude 5 duplicate rows" excluded one and
+      // reported success. `splitApprovedMutations` already folds a list
+      // sequentially, so one dispatch chain + one commit is both correct and
+      // a single undo-stack entry.
+      //
       // Through `dispatchMutation` rather than bare `applyMutation` so a hand
       // edit arrives as the same described, origin-tagged `AppliedMutation` an
       // assistant patch does. That is the whole reason one undo stack and one
       // provenance list can cover both without knowing which is which.
-      const dispatched = dispatchMutation(initHistory(derivedSpec), mutation, "user")
+      const dispatched = mutations.reduce(
+        (history, mutation) => dispatchMutation(history, mutation, "user"),
+        initHistory(derivedSpec)
+      )
       const applied = dispatched.past.map((entry) => entry.applied)
       // Through `splitApprovedMutations` rather than `railEditsFromSpec` alone,
       // because the rail cannot hold every field: a dragged significance
@@ -2880,6 +2892,15 @@ export function DataAnalysisWorkspace({
     },
     [derivedSpec, specTable, commitEdits, aiOverlay]
   )
+
+  /** Single-mutation door (a chip's ×, one control). Delegates so there is
+      still exactly one path into the spec. Never call this in a loop — batch
+      through `applySpecMutations`, or only the last mutation survives. */
+  const applySpecMutation = useCallback(
+    (mutation: SpecMutation) => applySpecMutations([mutation]),
+    [applySpecMutations]
+  )
+
   /**
    * Repair what the file got wrong as written, before the researcher is asked
    * anything. Each repair lands as a spec transform rather than a parse-time
@@ -2888,11 +2909,12 @@ export function DataAnalysisWorkspace({
    */
   useEffect(() => {
     if (dataQualityReviewed || structuralPending.length === 0) return
-    for (const finding of structuralPending) {
-      const action = finding.actions[finding.recommended ?? 0]
-      for (const mutation of action.mutations) applySpecMutation(mutation)
-    }
-  }, [dataQualityReviewed, structuralPending, applySpecMutation])
+    // One batch across ALL structural findings: repairing two contaminated
+    // columns is one repair the researcher can undo with one press, not N.
+    applySpecMutations(
+      structuralPending.flatMap((finding) => finding.actions[finding.recommended ?? 0].mutations)
+    )
+  }, [dataQualityReviewed, structuralPending, applySpecMutations])
 
 
   /**
@@ -2904,9 +2926,9 @@ export function DataAnalysisWorkspace({
    */
   const onAcceptOffer = useCallback(
     (offer: PrepOffer) => {
-      for (const mutation of offer.apply) applySpecMutation(mutation)
+      applySpecMutations(offer.apply)
     },
-    [applySpecMutation]
+    [applySpecMutations]
   )
 
 
@@ -4362,11 +4384,20 @@ export function DataAnalysisWorkspace({
         fileName={typeof liveSnapshot?.name === "string" ? liveSnapshot.name : null}
         applied={autoApplied}
         decisions={decisionPending}
-        onChoose={(_finding: Finding, _index: number, mutations) => {
-          for (const mutation of mutations) applySpecMutation(mutation)
+        onChoose={(_finding: Finding, _index: number, mutations, previousAction) => {
+          // Revert the previously chosen action before applying the new one, in
+          // ONE batch — otherwise changing your mind from "Exclude it" to
+          // "Keep it" left the exclusion in the spec while the UI showed
+          // "Keep it" selected.
+          const revert =
+            previousAction && derivedSpec
+              ? revertActionMutations(derivedSpec, previousAction)
+              : []
+          applySpecMutations([...revert, ...mutations])
         }}
         onUndo={(mutation) => applySpecMutation(mutation)}
         onContinue={() => setDataQualityReviewed(true)}
+        onOpenProvenance={() => setProvenanceOpen(true)}
       />
 
       {derivedSpec && (
