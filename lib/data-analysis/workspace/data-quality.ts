@@ -1,7 +1,7 @@
 import type { ColumnProfile } from "@/lib/data-analysis/semantic/infer"
 import { COERCIBLE_SHARE_THRESHOLD } from "@/lib/data-analysis/semantic/infer"
 import { grubbs } from "@/lib/data-analysis/statistics"
-import type { AnalysisSpec } from "@/lib/data-analysis/spec/analysis-spec"
+import type { AnalysisSpec, Transform } from "@/lib/data-analysis/spec/analysis-spec"
 import type { SpecMutation } from "@/lib/data-analysis/spec/mutations"
 import type { Table } from "@/lib/data-analysis/engine/resolver"
 import { describeTransform } from "@/lib/data-analysis/provenance"
@@ -42,6 +42,94 @@ export interface FindingAction {
   label: string
   /** Empty means "leave as is" — always offered, always explicit. */
   mutations: SpecMutation[]
+  /**
+   * How to undo `mutations` when the researcher changes their mind and picks a
+   * different action on the same finding. Only needed where the inverse cannot
+   * be derived from the mutation itself: `data.addTransform` and
+   * `data.excludeRow` invert structurally (drop the transform, restore the
+   * row), but `roles.set` overwrites the whole role list, so the prior list has
+   * to be captured here, at detection time, while it is still known.
+   */
+  revert?: SpecMutation[]
+}
+
+/**
+ * Do these two transforms denote the same pipeline step? Compares the fields
+ * that give a transform its identity, so a spec round-tripped through
+ * `parseSpec` (defaults filled, keys re-ordered) still matches the transform a
+ * finding authored.
+ */
+function sameTransform(a: Transform, b: Transform): boolean {
+  if (a.kind !== b.kind) return false
+  switch (a.kind) {
+    case "collapseReplicates": {
+      const other = b as Extract<Transform, { kind: "collapseReplicates" }>
+      return (
+        a.statistic === other.statistic &&
+        a.by.length === other.by.length &&
+        a.by.every((c, i) => c === other.by[i])
+      )
+    }
+    case "coerceNumeric": {
+      const other = b as Extract<Transform, { kind: "coerceNumeric" }>
+      return a.column === other.column
+    }
+    default:
+      // Anything a finding does not author falls back to structural equality.
+      return JSON.stringify(a) === JSON.stringify(b)
+  }
+}
+
+/**
+ * The mutations that undo `action`, for when the researcher picks a different
+ * action on a finding they have already answered. Without this, switching from
+ * "Exclude it" to "Keep it" left the exclusion in the spec while the UI showed
+ * "Keep it" selected — the figure and the label disagreed.
+ *
+ * `action.revert` wins when present (see FindingAction). Otherwise the inverse
+ * is structural: drop the transform we added, restore the row we excluded.
+ * Transform indices are resolved against the LIVE spec and removed
+ * highest-first, so removing one does not shift the next.
+ *
+ * REACHABILITY, as of this change: none of it fires yet. Every decision
+ * detector filters itself out once answered — `constantColumns` skips roles
+ * already "ignore", `duplicateRows` drops rows already in spec.exclusions, and
+ * `technicalReplicates` bails when a collapseReplicates transform exists — and
+ * `decisionPending` is recomputed live, so an answered finding leaves the list
+ * and the gate can never offer a second choice on it. That the gate tracks
+ * `chosen` per finding and renders a selected state says the intent was for
+ * answered findings to stay revisable; making them stay is a gate-level change
+ * (hold the list stable while open) that is deliberately NOT made here, because
+ * the live derivation was itself added to fix an arrival/input race. This stays
+ * correct and ready for that fix rather than being written twice.
+ */
+export function revertActionMutations(
+  spec: AnalysisSpec,
+  action: FindingAction,
+): SpecMutation[] {
+  if (action.revert) return action.revert
+
+  const restores: SpecMutation[] = []
+  const removeIndices: number[] = []
+  for (const m of action.mutations) {
+    if (m.kind === "data.excludeRow") {
+      restores.push({ kind: "data.restoreRow", rowId: m.exclusion.rowId })
+    } else if (m.kind === "data.addTransform") {
+      // Matched on a stable identity, NOT JSON.stringify equality. derivedSpec
+      // is rebuilt through parseSpec whenever aiOverlay is non-empty, which
+      // fills schema defaults and re-orders keys — so a serialization compare
+      // silently fails to match, findIndex returns -1, and the removal is
+      // dropped, leaving the old transform applied under the new label.
+      const index = spec.transforms.findIndex((t) => sameTransform(t, m.transform))
+      if (index >= 0) removeIndices.push(index)
+    }
+  }
+  return [
+    ...restores,
+    ...removeIndices
+      .sort((a, b) => b - a)
+      .map((index) => ({ kind: "data.removeTransform" as const, index })),
+  ]
 }
 
 export interface Finding {
@@ -307,12 +395,19 @@ function technicalReplicates(spec: AnalysisSpec, table: Table): Finding[] {
   // have not identified; only offer when most rows participate.
   if (replicated / table.rows.length < MIN_REPLICATED_SHARE) return []
 
+  // ONE transform, not one per response column. `CollapseReplicates` is
+  // {kind, by, statistic} — it has no `column` field, and the resolver collapses
+  // every numeric column in a single pass. Emitting one per response therefore
+  // produced N byte-identical transforms: the provenance card and the prep
+  // receipt each printed the same line N times, and Undo removed them one by one.
   const collapse = (statistic: "mean" | "median"): FindingAction => ({
     label: `Collapse to the ${statistic}`,
-    mutations: responses.map((column) => ({
-      kind: "data.addTransform",
-      transform: { kind: "collapseReplicates", by: design, column, statistic },
-    })),
+    mutations: [
+      {
+        kind: "data.addTransform",
+        transform: { kind: "collapseReplicates", by: design, statistic },
+      },
+    ],
   })
 
   return [
@@ -353,6 +448,9 @@ function constantColumns(spec: AnalysisSpec, prepared: PreparedColumn[]): Findin
             ),
           },
         ],
+        // roles.set overwrites the whole list, so its inverse cannot be derived
+        // from the mutation — capture the prior roles here, while we hold them.
+        revert: [{ kind: "roles.set", roles: spec.roles }],
       },
       LEAVE_AS_IS,
     ]

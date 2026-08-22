@@ -15,6 +15,7 @@ import { SampleMolecularFilesTab, type SampleMolecularFile } from './sample-mole
 import { SampleTabs } from './sample-tabs'
 import { SampleHistoryTab, type SampleTransfer } from './sample-history-tab'
 import { SampleQcTab, type SampleQcRecord } from './sample-qc-tab'
+import { SAMPLE_FILE_LIST_COLUMNS } from "@/lib/sample-molecular"
 
 function Info({ label, value, icon }: { label: string; value: string; icon?: ReactNode }) {
   return (
@@ -87,7 +88,7 @@ export default async function SampleDetailPage({
     .from("samples")
     .select(`
       *,
-      sample_files(*),
+      sample_files(${SAMPLE_FILE_LIST_COLUMNS}),
       sample_projects(
         project:projects(id, name)
       ),
@@ -124,7 +125,7 @@ export default async function SampleDetailPage({
       .from("samples")
       .select(`
         *,
-        sample_files(*),
+        sample_files(${SAMPLE_FILE_LIST_COLUMNS}),
         experiment:experiments(
           id,
           name,
@@ -161,35 +162,36 @@ export default async function SampleDetailPage({
     notFound()
   }
 
-  // Fetch transfers + QC records (tables may not exist yet on older databases).
-  let transfers: SampleTransfer[] = []
-  let qcRecords: SampleQcRecord[] = []
-  try {
-    const { data: transferRows } = await supabase
+  // Transfers + QC records are independent of each other, so they run
+  // concurrently — awaiting them in sequence cost two full round-trips on every
+  // detail-page render. Both are auxiliary tabs: neither may take the page down,
+  // so allSettled keeps a rejection from escaping the RSC as a 500. (postgrest-js
+  // converts fetch failures to `{data: null, error}` today, but that is its
+  // internal behaviour, not a contract this page should depend on.)
+  const [transfersRes, qcRes] = await Promise.allSettled([
+    supabase
       .from("sample_transfers")
       .select(`
         *,
         performer:profiles!sample_transfers_performed_by_fkey(id, first_name, last_name)
       `)
       .eq("sample_id", id)
-      .order("transferred_at", { ascending: false })
-    transfers = (transferRows ?? []) as SampleTransfer[]
-  } catch {
-    transfers = []
-  }
-  try {
-    const { data: qcRows } = await supabase
+      .order("transferred_at", { ascending: false }),
+    supabase
       .from("sample_qc_records")
       .select(`
         *,
         performer:profiles!sample_qc_records_performed_by_fkey(id, first_name, last_name)
       `)
       .eq("sample_id", id)
-      .order("performed_at", { ascending: false })
-    qcRecords = (qcRows ?? []) as SampleQcRecord[]
-  } catch {
-    qcRecords = []
-  }
+      .order("performed_at", { ascending: false }),
+  ])
+  const transfers = (transfersRes.status === "fulfilled"
+    ? transfersRes.value.data ?? []
+    : []) as SampleTransfer[]
+  const qcRecords = (qcRes.status === "fulfilled"
+    ? qcRes.value.data ?? []
+    : []) as SampleQcRecord[]
 
   // Edit-dialog context-picker options (all projects/experiments/lab notes) are
   // now loaded lazily inside EditSampleDialog when the dialog opens, instead of

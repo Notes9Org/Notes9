@@ -7,8 +7,11 @@ import {
   inferSampleFileKind,
   isAllowedSampleMolecularFile,
   looksLikeBinarySnapGeneBlob,
+  MAX_PARSED_SEQUENCE_CHARS,
+  parseSequenceText,
   parseTagInput,
   shouldParseSequenceTextOnUpload,
+  withCappedSequence,
 } from "./sample-molecular"
 
 describe("sample molecular helpers", () => {
@@ -58,5 +61,36 @@ describe("sample molecular helpers", () => {
     expect(guides.length).toBeGreaterThan(0)
     expect(guides[0].guide).toHaveLength(20)
     expect(guides[0].pam.endsWith("GG")).toBe(true)
+  })
+})
+
+describe("persisted sequence size cap", () => {
+  it("keeps a normal sequence", () => {
+    const parsed = parseSequenceText("small.fasta", ">seq\nACGTACGT")
+    const result = withCappedSequence(parsed)
+    expect(result.sequence).toBe("ACGTACGT")
+    expect(result.parse_deferred).toBeUndefined()
+  })
+
+  it("defers instead of persisting an oversized sequence", () => {
+    const huge = "A".repeat(MAX_PARSED_SEQUENCE_CHARS + 1)
+    const result = withCappedSequence(parseSequenceText("huge.fasta", `>seq\n${huge}`))
+    expect(result.sequence).toBe("")
+    expect(result.parse_deferred).toBeTruthy()
+  })
+
+  // The viewers call parseSequenceText as their runtime fallback. Capping in
+  // there made a large file that failed its primary parse render empty.
+  it("leaves parseSequenceText itself uncapped, so viewers still render", () => {
+    const huge = "A".repeat(MAX_PARSED_SEQUENCE_CHARS + 1)
+    const parsed = parseSequenceText("huge.fasta", `>seq\n${huge}`)
+    expect((parsed.sequence as string).length).toBe(huge.length)
+  })
+
+  // Measured against the sequence, not the file text: a big feature table with
+  // a modest sequence must still be stored.
+  it("measures the sequence, not the file text", () => {
+    const parsed = { name: "p", circular: true, sequence: "ACGT", features: [] }
+    expect(withCappedSequence(parsed).sequence).toBe("ACGT")
   })
 })

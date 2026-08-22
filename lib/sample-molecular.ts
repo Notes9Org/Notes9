@@ -22,6 +22,52 @@ export type CrisprGuide = {
   selfSeedMatches: number
 }
 
+// Columns needed to LIST molecular files. Deliberately excludes the
+// parsed_metadata / viewer_state jsonb: a parsed sequence can be megabytes per
+// file, and selecting it here shipped that whole payload through PostgREST and
+// into the RSC flight payload on every page load. It is loaded on demand for
+// the selected file only (see SAMPLE_FILE_DETAIL_COLUMNS).
+export const SAMPLE_FILE_LIST_COLUMNS =
+  "id, sample_id, file_kind, file_name, file_type, file_size, storage_path, created_at"
+
+// The heavy jsonb, fetched for one file at a time when it is selected.
+export const SAMPLE_FILE_DETAIL_COLUMNS = "id, parsed_metadata, viewer_state"
+
+// Ceiling on the sequence we will PERSIST into parsed_metadata jsonb. Uploads
+// are capped at 50 MB, and without this a 50 MB FASTA becomes a ~50 MB jsonb
+// value in a single row — which bloats the WAL, every subsequent read, and the
+// page payload.
+// ponytail: flat char cap, revisit if real constructs legitimately exceed it.
+export const MAX_PARSED_SEQUENCE_CHARS = 1_000_000
+
+/**
+ * Apply the persistence cap to a parsed sequence, at the point of writing it to
+ * the database and nowhere else.
+ *
+ * This deliberately does NOT live inside `parseSequenceText`: the viewers call
+ * that same function as their runtime fallback when the primary parser throws
+ * (sample-plasmid-viewer.tsx, and the alignment-source resolver). Capping in
+ * there made a large file that failed its primary parse render as an empty
+ * sequence — the file stopped displaying rather than merely not being cached.
+ * Nothing is persisted on that path, so nothing needs capping on it.
+ *
+ * Measured against the resulting sequence, not the file text: a GenBank file
+ * with a modest sequence and a large feature table should still be stored.
+ */
+export function withCappedSequence(
+  parsed: Record<string, unknown>
+): Record<string, unknown> {
+  const sequence = parsed.sequence
+  if (typeof sequence === "string" && sequence.length > MAX_PARSED_SEQUENCE_CHARS) {
+    return {
+      ...parsed,
+      sequence: "",
+      parse_deferred: "Sequence too large to store inline; it is parsed in the viewer.",
+    }
+  }
+  return parsed
+}
+
 export const SAMPLE_MOLECULAR_EXTENSIONS = [
   ".gb",
   ".gbk",
@@ -433,6 +479,7 @@ export function parseSequenceText(fileName: string, text: string): Record<string
   if (!trimmed) {
     return { name: fileName, circular: true, sequence: "", features: [] }
   }
+
 
   if (getFileExtension(fileName) === "json") {
     try {
