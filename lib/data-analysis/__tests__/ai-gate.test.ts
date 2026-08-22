@@ -15,6 +15,7 @@ describe("deriveAiGate", () => {
       derivedSpecPresent: false,
       rowCount: 0,
       parseError: null,
+      dataQualityAcknowledged: true,
     })
     expect(gate.canCapture).toBe(true)
     expect(gate.canPropose).toBe(false)
@@ -27,6 +28,7 @@ describe("deriveAiGate", () => {
       derivedSpecPresent: false,
       rowCount: 0,
       parseError: "No header row was found on this sheet.",
+      dataQualityAcknowledged: true,
     })
     expect(gate.canCapture).toBe(true)
     expect(gate.canPropose).toBe(false)
@@ -40,6 +42,7 @@ describe("deriveAiGate", () => {
       derivedSpecPresent: true,
       rowCount: 5,
       parseError: null,
+      dataQualityAcknowledged: true,
     })
     expect(gate.canCapture).toBe(true)
   })
@@ -50,6 +53,7 @@ describe("deriveAiGate", () => {
       derivedSpecPresent: true,
       rowCount: 0,
       parseError: null,
+      dataQualityAcknowledged: true,
     })
     expect(gate.canCapture).toBe(true)
     expect(gate.canPropose).toBe(false)
@@ -63,12 +67,14 @@ describe("deriveAiGate", () => {
       derivedSpecPresent: false,
       rowCount: 0,
       parseError: null,
+      dataQualityAcknowledged: true,
     })
     const parseFailed = deriveAiGate({
       datasetPresent: true,
       derivedSpecPresent: false,
       rowCount: 0,
       parseError: "boom",
+      dataQualityAcknowledged: true,
     })
     expect(noDataset.reason).not.toEqual(parseFailed.reason)
   })
@@ -79,6 +85,7 @@ describe("deriveAiGate", () => {
       derivedSpecPresent: false,
       rowCount: 3,
       parseError: null,
+      dataQualityAcknowledged: true,
     })
     expect(gate.canPropose).toBe(false)
     expect(gate.reason).toBeTruthy()
@@ -90,6 +97,7 @@ describe("deriveAiGate", () => {
       derivedSpecPresent: true,
       rowCount: 10,
       parseError: null,
+      dataQualityAcknowledged: true,
     })
     expect(gate.canPropose).toBe(true)
     expect(gate.reason).toBeNull()
@@ -98,10 +106,47 @@ describe("deriveAiGate", () => {
 
   it("reason is derived, not a fixed literal: two different blockers produce two different strings", () => {
     const reasons = new Set<string | null>()
-    reasons.add(deriveAiGate({ datasetPresent: false, derivedSpecPresent: false, rowCount: 0, parseError: null }).reason)
-    reasons.add(deriveAiGate({ datasetPresent: true, derivedSpecPresent: false, rowCount: 0, parseError: null }).reason)
-    reasons.add(deriveAiGate({ datasetPresent: true, derivedSpecPresent: true, rowCount: 0, parseError: null }).reason)
-    reasons.add(deriveAiGate({ datasetPresent: true, derivedSpecPresent: false, rowCount: 0, parseError: "x" }).reason)
+    reasons.add(deriveAiGate({ datasetPresent: false, derivedSpecPresent: false, rowCount: 0, parseError: null, dataQualityAcknowledged: true }).reason)
+    reasons.add(deriveAiGate({ datasetPresent: true, derivedSpecPresent: false, rowCount: 0, parseError: null, dataQualityAcknowledged: true }).reason)
+    reasons.add(deriveAiGate({ datasetPresent: true, derivedSpecPresent: true, rowCount: 0, parseError: null, dataQualityAcknowledged: true }).reason)
+    reasons.add(deriveAiGate({ datasetPresent: true, derivedSpecPresent: false, rowCount: 0, parseError: "x", dataQualityAcknowledged: true }).reason)
     expect(reasons.size).toBe(4)
+  })
+})
+
+describe("the data-quality review gates proposing, not capturing", () => {
+  const ready = {
+    datasetPresent: true,
+    derivedSpecPresent: true,
+    rowCount: 12,
+    parseError: null,
+  }
+
+  it("blocks a proposal while the review is outstanding", () => {
+    const gate = deriveAiGate({ ...ready, dataQualityAcknowledged: false })
+    expect(gate.canPropose).toBe(false)
+    expect(gate.reason).toMatch(/data quality/i)
+  })
+
+  it("still lets the researcher state intent (ADR-023)", () => {
+    expect(deriveAiGate({ ...ready, dataQualityAcknowledged: false }).canCapture).toBe(true)
+  })
+
+  it("opens once the review is acknowledged", () => {
+    const gate = deriveAiGate({ ...ready, dataQualityAcknowledged: true })
+    expect(gate.canPropose).toBe(true)
+    expect(gate.reason).toBeNull()
+  })
+
+  it("keeps naming the more fundamental blocker when both apply", () => {
+    // An empty table with an unacknowledged review must not say "review the
+    // findings" — there is nothing to review, and the reason must stay derived
+    // from the inputs rather than picked by declaration order.
+    const gate = deriveAiGate({
+      ...ready,
+      rowCount: 0,
+      dataQualityAcknowledged: false,
+    })
+    expect(gate.reason).toMatch(/0 rows/)
   })
 })

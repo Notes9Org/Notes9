@@ -45,9 +45,71 @@ export interface ColumnProfile {
   /** True when every non-null value is distinct: a key, not a variable. */
   unique: boolean
   numeric: { min: number; max: number; allIntegers: boolean; allPositive: boolean } | null
+  /**
+   * Share of present values that parse as numbers exactly as written.
+   *
+   * Carried on the profile rather than discarded after the `>= 0.8` type test,
+   * because the gap between it and 1 is the whole story: a column that is 19%
+   * `<LOD` is typed "numeric" and, without this, nobody is ever told.
+   */
+  numericShare: number
+  /** A non-numeric suffix shared by most present values, e.g. `" ng/mL"`. */
+  unitSuffix: string | null
+  /**
+   * Share that would parse if `unitSuffix` were stripped. Equal to
+   * `numericShare` when there is no suffix.
+   */
+  numericShareAfterCoercion: number
+  /**
+   * Distinct tokens blocking a numeric read once `unitSuffix` is stripped, most
+   * frequent first. Populated only when the column plausibly wants to be
+   * numeric — on genuinely categorical columns every level would qualify, which
+   * is noise rather than a finding.
+   */
+  contaminants: { token: string; count: number }[]
 }
 
 const MAX_LEVELS = 64
+const MAX_CONTAMINANTS = 10
+
+/**
+ * A column is treated as "wanting to be numeric" at half its values. Below that
+ * the numeric readings are the anomaly, not the text.
+ */
+export const COERCIBLE_SHARE_THRESHOLD = 0.5
+
+/** A suffix must be this consistent before it is a unit rather than a typo. */
+const UNIT_SUFFIX_SHARE = 0.8
+
+/**
+ * `"12.3 ng/mL"` → `" ng/mL"`. Returns null unless one suffix covers
+ * `UNIT_SUFFIX_SHARE` of the present values, so a single stray `"5 mg"` in a
+ * column of bare numbers is a contaminant, not a unit.
+ */
+function detectUnitSuffix(present: (number | string)[]): string | null {
+  const counts = new Map<string, number>()
+  for (const value of present) {
+    if (typeof value === "number") continue
+    // Anchored at the start so `"<LOD"` never reads as a suffixed number.
+    const match = String(value).match(/^\s*[-+]?[\d.,]+(?:[eE][-+]?\d+)?(\s*\D.*)$/)
+    if (!match) continue
+    counts.set(match[1], (counts.get(match[1]) ?? 0) + 1)
+  }
+  let best: string | null = null
+  let bestCount = 0
+  for (const [suffix, count] of counts) {
+    if (count > bestCount) {
+      best = suffix
+      bestCount = count
+    }
+  }
+  return best !== null && bestCount / present.length >= UNIT_SUFFIX_SHARE ? best : null
+}
+
+function stripSuffix(value: string, suffix: string | null): string {
+  if (suffix === null || !value.endsWith(suffix)) return value
+  return value.slice(0, -suffix.length)
+}
 
 /**
  * Units live in the header far more reliably than in the cells.
@@ -83,11 +145,38 @@ function toNumber(value: unknown): number | null {
 }
 
 export function profileColumn(column: string, values: (number | string | null)[]): ColumnProfile {
-  const present = values.filter((v) => v !== null && v !== undefined && v !== "")
+  const present = values.filter(
+    (v): v is number | string => v !== null && v !== undefined && v !== "",
+  )
   const distinct = new Set(present.map((v) => String(v)))
   const levels = [...distinct].slice(0, MAX_LEVELS)
   const numbers = present.map(toNumber).filter((n): n is number => n !== null)
   const numericShare = present.length === 0 ? 0 : numbers.length / present.length
+
+  // What the column would read as once a shared unit suffix is removed. This is
+  // computed for every column but only acted on by the data-quality detectors,
+  // so classification below is unchanged: a suffixed column stays categorical
+  // until the researcher accepts a `coerceNumeric` transform, and the transform
+  // — not the profiler — is what rewrites the values.
+  const unitSuffix = detectUnitSuffix(present)
+  const contaminantCounts = new Map<string, number>()
+  let coercible = 0
+  for (const value of present) {
+    const raw = String(value)
+    if (toNumber(stripSuffix(raw, unitSuffix)) !== null) {
+      coercible++
+      continue
+    }
+    contaminantCounts.set(raw, (contaminantCounts.get(raw) ?? 0) + 1)
+  }
+  const numericShareAfterCoercion = present.length === 0 ? 0 : coercible / present.length
+  const contaminants =
+    numericShareAfterCoercion >= COERCIBLE_SHARE_THRESHOLD
+      ? [...contaminantCounts.entries()]
+          .map(([token, count]) => ({ token, count }))
+          .sort((a, b) => b.count - a.count || a.token.localeCompare(b.token))
+          .slice(0, MAX_CONTAMINANTS)
+      : []
 
   const base = {
     column,
@@ -97,6 +186,10 @@ export function profileColumn(column: string, values: (number | string | null)[]
     missing: values.length - present.length,
     unit: parseUnit(column),
     unique: present.length > 1 && distinct.size === present.length,
+    numericShare,
+    unitSuffix,
+    numericShareAfterCoercion,
+    contaminants,
   }
 
   if (present.length === 0) {

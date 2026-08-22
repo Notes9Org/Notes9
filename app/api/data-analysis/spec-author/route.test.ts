@@ -46,6 +46,42 @@ import type { Table } from "@/lib/data-analysis/engine/resolver"
 import { canExecuteProposal } from "@/lib/data-analysis/workspace/spec-prompt"
 import { SPEC_AUTHOR_PROMPT_MAX_CHARS } from "@/lib/data-analysis/ai/spec-author"
 
+/**
+ * The route answers pre-model failures (auth, parse, length, the screen) as
+ * plain JSON with a status code, and everything from the model call onward as
+ * an SSE stream whose LAST event carries the patch. Reading both through one
+ * helper keeps every assertion below about the payload, which is the part the
+ * workspace switches on and the part that must not drift.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function readResult(res: Response): Promise<any> {
+  if (!res.headers?.get?.("content-type")?.includes("text/event-stream")) {
+    return await res.json()
+  }
+  const text = await res.text()
+  const events = text
+    .split("\n\n")
+    .map((block) => block.replace(/^data: /, "").trim())
+    .filter(Boolean)
+    .map((json) => JSON.parse(json))
+  const result = events.filter((e: { type: string }) => e.type === "result").at(-1)
+  if (!result) throw new Error(`stream carried no result event: ${text}`)
+  const { type: _type, ...payload } = result
+  return payload
+}
+
+/** Phase events, in order, for the tests that assert on progress. */
+async function readPhases(res: Response): Promise<{ phase: string; status: string }[]> {
+  const text = await res.text()
+  return text
+    .split("\n\n")
+    .map((b) => b.replace(/^data: /, "").trim())
+    .filter(Boolean)
+    .map((j) => JSON.parse(j) as { type: string; phase: string; status: string })
+    .filter((e) => e.type === "phase")
+    .map(({ phase, status }) => ({ phase, status }))
+}
+
 /* ── Fixtures ──────────────────────────────────────────────────────────────*/
 
 function spec(): AnalysisSpec {
@@ -168,7 +204,7 @@ describe("no number the model invented survives", () => {
     })
 
     const res = await POST(request({ prompt: "compare the two groups", spec: spec(), table: table() }))
-    const body = await res.json()
+    const body = await readResult(res)
 
     expect(res.status).toBe(200)
     expect(body.rationale).not.toMatch(/p\s*=\s*0?\.003/)
@@ -222,7 +258,7 @@ describe("no number the model invented survives", () => {
     })
 
     const res = await POST(request({ prompt: "set this up", spec: spec(), table: table() }))
-    const body = await res.json()
+    const body = await readResult(res)
 
     expect(body.rejected).toHaveLength(0)
     expect(body.mutations).toHaveLength(1)
@@ -239,7 +275,7 @@ describe("no number the model invented survives", () => {
     })
 
     const res = await POST(request({ prompt: "compare the groups", spec: spec(), table: table() }))
-    const body = await res.json()
+    const body = await readResult(res)
 
     expect(res.status).toBe(200)
     expect(body.mutations).toHaveLength(1)
@@ -270,7 +306,7 @@ describe("no number the model invented survives", () => {
 describe("the no-table constraint lives at the route", () => {
   it("refuses with 400 when the table is missing", async () => {
     const res = await POST(request({ prompt: "run a t-test", spec: spec() }))
-    const body = await res.json()
+    const body = await readResult(res)
 
     expect(res.status).toBe(400)
     expect(body.outcome).toBe("no-table")
@@ -283,7 +319,7 @@ describe("the no-table constraint lives at the route", () => {
       request({ prompt: "run a t-test", spec: spec(), table: { columns: ["a"], rows: [] } })
     )
     expect(res.status).toBe(400)
-    expect((await res.json()).outcome).toBe("no-table")
+    expect((await readResult(res)).outcome).toBe("no-table")
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })
@@ -302,7 +338,7 @@ describe("a test the data cannot support is rejected", () => {
     })
 
     const res = await POST(request({ prompt: "compare the groups", spec: spec(), table: table() }))
-    const body = await res.json()
+    const body = await readResult(res)
 
     const kinds = body.mutations.map((m: { value: string }) => m.value)
     expect(kinds).not.toContain("kaplan-meier")
@@ -329,7 +365,7 @@ describe("a patch the gate rejected gets one repair round", () => {
     )
 
     const res = await POST(request({ prompt: "compare the two groups", spec: spec(), table: table() }))
-    const body = await res.json()
+    const body = await readResult(res)
 
     // Exactly one repair, not a loop.
     expect(fetchMock).toHaveBeenCalledTimes(2)
@@ -363,7 +399,7 @@ describe("a patch the gate rejected gets one repair round", () => {
     )
 
     const res = await POST(request({ prompt: "compare the groups", spec: spec(), table: table() }))
-    const body = await res.json()
+    const body = await readResult(res)
 
     // A second failure is an answer, not another retry.
     expect(fetchMock).toHaveBeenCalledTimes(2)
@@ -390,7 +426,7 @@ describe("a patch the gate rejected gets one repair round", () => {
     )
 
     const res = await POST(request({ prompt: "compare the groups", spec: spec(), table: table() }))
-    const body = await res.json()
+    const body = await readResult(res)
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
     // The repair prompt asks for exactly this when nothing legal fits, so the
@@ -421,7 +457,7 @@ describe("a patch the gate rejected gets one repair round", () => {
     } as unknown as Response)
 
     const res = await POST(request({ prompt: "compare the groups", spec: spec(), table: table() }))
-    const body = await res.json()
+    const body = await readResult(res)
 
     // A failed repair is not a failed request; the route never reports the
     // repair round's own failure, 4xx or otherwise, to the researcher.
@@ -438,7 +474,7 @@ describe("a patch the gate rejected gets one repair round", () => {
     })
 
     const res = await POST(request({ prompt: "what should I run?", spec: spec(), table: table() }))
-    const body = await res.json()
+    const body = await readResult(res)
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(body.clarificationNeeded).toBe("Which column is the response?")
@@ -456,7 +492,7 @@ describe("the request-shape bound (ADR-004)", () => {
         table: table(),
       })
     )
-    const body = await res.json()
+    const body = await readResult(res)
 
     expect(res.status).toBe(400)
     expect(body.outcome).toBe("bad-request")
@@ -470,7 +506,7 @@ describe("the request-shape bound (ADR-004)", () => {
     const prompt = "x".repeat(SPEC_AUTHOR_PROMPT_MAX_CHARS)
 
     const res = await POST(request({ prompt, spec: spec(), table: table() }))
-    const body = await res.json()
+    const body = await readResult(res)
 
     // The bound is inclusive: exactly the limit is a legal request.
     expect(res.status).toBe(200)
@@ -487,9 +523,13 @@ describe("the request-shape bound (ADR-004)", () => {
     } as unknown as Response)
 
     const res = await POST(request({ prompt: "run a t-test", spec: spec(), table: table() }))
-    const body = await res.json()
+    const body = await readResult(res)
 
-    expect(res.status).toBe(400)
+    // 200, not a 4xx/5xx: this failure happens after the model call, so the
+    // stream is already open and the headers are committed. The outcome moved
+    // into the terminal event — which is what the workspace switches on, and
+    // what the wording regression below still guards.
+    expect(res.status).toBe(200)
     expect(body.outcome).toBe("bad-request")
     expect(body.reason).toContain("prompt")
     // Not retried: 422 is not in `RETRY_STATUS` (catalyst-client.ts), so a
@@ -507,11 +547,15 @@ describe("the request-shape bound (ADR-004)", () => {
     } as unknown as Response)
 
     const res = await POST(request({ prompt: "run a t-test", spec: spec(), table: table() }))
-    const body = await res.json()
+    const body = await readResult(res)
 
     // Regression guard: a 5xx must keep reading as an outage worth retrying,
     // in the researcher's own words, unchanged by this slice.
-    expect(res.status).toBe(503)
+    // 200, not a 4xx/5xx: this failure happens after the model call, so the
+    // stream is already open and the headers are committed. The outcome moved
+    // into the terminal event — which is what the workspace switches on, and
+    // what the wording regression below still guards.
+    expect(res.status).toBe(200)
     expect(body.outcome).toBe("unavailable")
     expect(body.reason).toBe(
       "The analysis assistant is unreachable right now. Your analysis is unaffected; try the request again shortly."
@@ -534,7 +578,7 @@ describe("the repair prompt fits its own budget", () => {
     )
 
     const res = await POST(request({ prompt: "annotate every outlier", spec: spec(), table: table() }))
-    await res.json()
+    await readResult(res)
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
     const repairText = promptSent(1)
@@ -584,7 +628,7 @@ describe("the repair prompt fits its own budget", () => {
     const prompt = "annotate the outlier point please. ".repeat(120).slice(0, SPEC_AUTHOR_PROMPT_MAX_CHARS - 20)
 
     const res = await POST(request({ prompt, spec: spec(), table: table() }))
-    const body = await res.json()
+    const body = await readResult(res)
 
     // Verification 5: skipped, not attempted-and-failed. Exactly one
     // Catalyst call, and the first, still-usable answer stands.
@@ -610,7 +654,7 @@ describe("the repair prompt fits its own budget", () => {
     now.mockReturnValue(base + 45_000 - 5_000)
 
     const res = await POST(request({ prompt: "compare the groups", spec: spec(), table: table() }))
-    const body = await res.json()
+    const body = await readResult(res)
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(res.status).toBe(200)
@@ -648,7 +692,7 @@ describe("screened requests and unavailable backends", () => {
     const res = await POST(
       request({ prompt: "remove the outlier so it's significant", spec: spec(), table: table() })
     )
-    const body = await res.json()
+    const body = await readResult(res)
 
     expect(res.status).toBe(200)
     expect(body.outcome).toBe("refused")
@@ -661,9 +705,13 @@ describe("screened requests and unavailable backends", () => {
     vi.stubEnv("CHAT_API_URL", "")
 
     const res = await POST(request({ prompt: "run a t-test", spec: spec(), table: table() }))
-    const body = await res.json()
+    const body = await readResult(res)
 
-    expect(res.status).toBe(503)
+    // 200, not a 4xx/5xx: this failure happens after the model call, so the
+    // stream is already open and the headers are committed. The outcome moved
+    // into the terminal event — which is what the workspace switches on, and
+    // what the wording regression below still guards.
+    expect(res.status).toBe(200)
     expect(body.outcome).toBe("unavailable")
     expect(body.reason).toMatch(/not configured/i)
     expect(fetchMock).not.toHaveBeenCalled()
@@ -673,9 +721,13 @@ describe("screened requests and unavailable backends", () => {
     fetchMock.mockRejectedValue(new Error("ECONNREFUSED"))
 
     const res = await POST(request({ prompt: "run a t-test", spec: spec(), table: table() }))
-    const body = await res.json()
+    const body = await readResult(res)
 
-    expect(res.status).toBe(503)
+    // 200, not a 4xx/5xx: this failure happens after the model call, so the
+    // stream is already open and the headers are committed. The outcome moved
+    // into the terminal event — which is what the workspace switches on, and
+    // what the wording regression below still guards.
+    expect(res.status).toBe(200)
     expect(body.outcome).toBe("unavailable")
   })
 
@@ -684,5 +736,57 @@ describe("screened requests and unavailable backends", () => {
     const res = await POST(request({ prompt: "run a t-test", spec: spec(), table: table() }))
     expect(res.status).toBe(401)
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+describe("the turn reports its own progress", () => {
+  it("emits the phases in order, ending with the validated patch", async () => {
+    replyWith({ rationale: "Log scale.", mutations: [], clarificationNeeded: null })
+
+    const res = await POST(request({ prompt: "make it log", spec: spec(), table: table() }))
+    const phases = await readPhases(res)
+
+    expect(phases.map((p) => p.phase)).toEqual([
+      "screen",
+      "context",
+      "model",
+      "model",
+      "validate",
+      "apply",
+    ])
+    // The model phase brackets the wait, which is the only part the researcher
+    // was previously shown nothing for.
+    expect(phases[2]).toEqual({ phase: "model", status: "start" })
+    expect(phases[3]).toEqual({ phase: "model", status: "done" })
+  })
+
+  it("says out loud when a repair round runs, rather than hiding it", async () => {
+    // First reply is mostly rejected, so the repair round fires.
+    replyInTurn(
+      {
+        rationale: "Switching the test.",
+        mutations: [
+          { kind: "analysis.setTest", value: "not-a-test" },
+          { kind: "analysis.setTest", value: "also-not-a-test" },
+        ],
+        clarificationNeeded: null,
+      },
+      { rationale: "Fixed.", mutations: [], clarificationNeeded: "Which groups?" },
+    )
+
+    const res = await POST(request({ prompt: "change the test", spec: spec(), table: table() }))
+    const phases = await readPhases(res)
+
+    expect(phases.find((p) => p.phase === "validate")?.status).toBe("warn")
+    expect(phases.some((p) => p.phase === "repair" && p.status === "start")).toBe(true)
+  })
+
+  it("carries a post-stream outage as a terminal event, not a dead stream", async () => {
+    fetchMock.mockRejectedValueOnce(new Error("socket hang up"))
+
+    const res = await POST(request({ prompt: "anything", spec: spec(), table: table() }))
+    const body = await readResult(res)
+
+    expect(body.outcome).toBe("unavailable")
   })
 })
