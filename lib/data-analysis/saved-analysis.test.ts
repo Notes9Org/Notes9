@@ -7,7 +7,14 @@ import {
 import { parseSpec, type AnalysisSpec } from "@/lib/data-analysis/spec/analysis-spec"
 // A static import is safe despite the mock below: vi.mock is hoisted above the
 // import block, so the stub is installed before this module is evaluated.
-import { commitRevision, openRevision, buildPortableBundle } from "./saved-analysis"
+import {
+  buildPortableBundle,
+  commitRevision,
+  duplicateAnalysis,
+  importPortableBundle,
+  openRevision,
+  pinRevision,
+} from "./saved-analysis"
 
 /**
  * The reopen path (§3A.3 rule 3) is the highest-consequence code in the saved
@@ -181,6 +188,7 @@ describe("buildPortableBundle (§3A.3 rule 6: the analysis must be able to leave
         conversationThread: [],
         isFrozen: true,
         frozenAt: "2026-08-12T10:00:00Z",
+        isPinned: false,
         forkedFromRevisionId: null,
         authorId: "user-1",
         createdAt: "2026-08-12T10:00:00Z",
@@ -359,5 +367,249 @@ describe("openRevision checks the stored result against the stored spec", () => 
     expect(verdict.state).toBe("detached")
     if (verdict.state !== "detached") return
     expect(verdict.results).toBeNull()
+  })
+})
+
+/* ── Pin and duplicate (§3A.4) ─────────────────────────────────────────────*/
+
+describe("pinning is a reversible bookmark, not a freeze", () => {
+  it("pins through the RPC, since revisions have no UPDATE policy", async () => {
+    await pinRevision("rev-1", true)
+    expect(lastRpcArgs).toEqual({ p_revision_id: "rev-1", p_pinned: true })
+  })
+
+  it("unpins, which freezing can never do", async () => {
+    await pinRevision("rev-1", false)
+    expect(lastRpcArgs).toEqual({ p_revision_id: "rev-1", p_pinned: false })
+  })
+})
+
+describe("duplicate as a NEW analysis (§3A.4)", () => {
+  it("goes through duplicate_analysis, not through a fork", async () => {
+    await duplicateAnalysis({ revisionId: "rev-1", name: "Figure 2B variant" })
+    // forkFrozenRevision appends to the SAME analysis; this must not.
+    expect(lastRpcArgs).toEqual({
+      p_revision_id: "rev-1",
+      p_name: "Figure 2B variant",
+    })
+  })
+
+  it("lets the database pick the default name", async () => {
+    await duplicateAnalysis({ revisionId: "rev-1" })
+    expect((lastRpcArgs as { p_name: unknown }).p_name).toBeNull()
+  })
+})
+
+/* ── Rule 6: the analysis can leave, and come back ─────────────────────────*/
+
+describe("the portable bundle carries the whole analysis", () => {
+  const analysis = {
+    id: "an-1",
+    experimentId: "exp-1",
+    projectId: "proj-1",
+    name: "Viability 48h",
+    draftSpec: {},
+    sourceDataFileId: null,
+    workspaceState: {},
+    currentRevisionNo: 3,
+    updatedAt: "2026-08-12T10:00:00Z",
+  }
+
+  const rev = (no: number, patch: Record<string, unknown> = {}) =>
+    ({
+      id: `rev-${no}`,
+      analysisId: "an-1",
+      revisionNo: no,
+      name: null,
+      changeSummary: null,
+      spec: { schemaVersion: 1 },
+      specHash: `spec-hash-${no}`,
+      dataVersionHash: "sha256:v2",
+      dataSnapshot: { rows: [] },
+      results: null,
+      engineVersion: ENGINE_VERSION,
+      conversationThread: [{ role: "user", text: "why?" }],
+      isFrozen: false,
+      frozenAt: null,
+      isPinned: false,
+      forkedFromRevisionId: null,
+      authorId: "user-1",
+      createdAt: "2026-08-12T10:00:00Z",
+      ...patch,
+    }) as never
+
+  it("carries every revision, oldest first, not just the exported one", () => {
+    // v1 carried one revision. A bundle with one revision is a screenshot.
+    const bundle = buildPortableBundle(analysis as never, rev(3), {
+      revisions: [rev(3), rev(1), rev(2)],
+    })
+    expect(bundle.schemaVersion).toBe(2)
+    expect(bundle.revisions.map((r) => r.revisionNo)).toEqual([1, 2, 3])
+  })
+
+  it("carries lineage, which v1 dropped entirely", () => {
+    const bundle = buildPortableBundle(analysis as never, rev(2, { forkedFromRevisionId: "rev-1" }), {
+      revisions: [rev(1), rev(2, { forkedFromRevisionId: "rev-1" })],
+    })
+    expect(bundle.revisions[1].forkedFromRevisionId).toBe("rev-1")
+  })
+
+  it("carries the provenance card and the edit audit log", () => {
+    const card = { source: [], data: [], analysis: [], engine: [], exclusions: { count: 0, rows: [] }, history: [] }
+    const log = [{ applied: [], reverted: true }]
+    const bundle = buildPortableBundle(analysis as never, rev(1), {
+      provenanceCard: card as never,
+      editAuditLog: log as never,
+    })
+    expect(bundle.provenanceCard).toEqual(card)
+    expect(bundle.editAuditLog).toEqual(log)
+  })
+
+  it("still writes the v1 fields, so an existing reader keeps working", () => {
+    const bundle = buildPortableBundle(analysis as never, rev(3, { isFrozen: true }))
+    expect(bundle.spec).toBeTruthy()
+    expect(bundle.dataSnapshot).toBeTruthy()
+    expect(bundle.provenance.engineVersion).toBe(ENGINE_VERSION)
+    expect(bundle.provenance.frozen).toBe(true)
+    expect(bundle.conversationThread).toHaveLength(1)
+  })
+
+  it("degrades to the exported revision alone when given no history", () => {
+    const bundle = buildPortableBundle(analysis as never, rev(3))
+    expect(bundle.revisions).toHaveLength(1)
+    expect(bundle.revisions[0].revisionNo).toBe(3)
+  })
+})
+
+describe("importing a bundle (there was no importer at all)", () => {
+  const roundTrip = (extras = {}) => {
+    const analysis = {
+      id: "an-1",
+      experimentId: "exp-1",
+      projectId: "proj-1",
+      name: "Viability 48h",
+      draftSpec: {},
+      sourceDataFileId: null,
+      workspaceState: {},
+      currentRevisionNo: 2,
+      updatedAt: "2026-08-12T10:00:00Z",
+    }
+    const mk = (no: number, patch: Record<string, unknown> = {}) =>
+      ({
+        id: `rev-${no}`,
+        analysisId: "an-1",
+        revisionNo: no,
+        name: null,
+        changeSummary: null,
+        spec: { schemaVersion: 1 },
+        specHash: `h${no}`,
+        dataVersionHash: "sha256:v2",
+        dataSnapshot: { rows: [] },
+        results: null,
+        engineVersion: ENGINE_VERSION,
+        conversationThread: [],
+        isFrozen: false,
+        frozenAt: null,
+        isPinned: false,
+        forkedFromRevisionId: null,
+        authorId: "user-1",
+        createdAt: "2026-08-12T10:00:00Z",
+        ...patch,
+      }) as never
+    return buildPortableBundle(analysis as never, mk(2), {
+      revisions: [mk(1), mk(2, { forkedFromRevisionId: "rev-1" })],
+      ...extras,
+    })
+  }
+
+  it("reads back what it wrote — you can reopen your own export", () => {
+    const result = importPortableBundle(JSON.stringify(roundTrip()))
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.bundle.analysis.name).toBe("Viability 48h")
+    expect(result.bundle.revisions.map((r) => r.revisionNo)).toEqual([1, 2])
+    expect(result.bundle.revisions[1].forkedFromRevisionId).toBe("rev-1")
+  })
+
+  it("accepts the object as well as the JSON text", () => {
+    expect(importPortableBundle(roundTrip()).ok).toBe(true)
+  })
+
+  it("refuses a file that is not a notes9 bundle, without importing anything", () => {
+    for (const bad of ['{"schema":"prism.pzfx"}', "not json at all", "null", "[]"]) {
+      const result = importPortableBundle(bad)
+      expect(result.ok).toBe(false)
+      if (result.ok) return
+      expect(result.error).toBeTruthy()
+    }
+  })
+
+  it("reads a v1 bundle and SAYS it has no history", () => {
+    // Detect and offer, never silently repair. The synthesised single revision
+    // is a real inference and the user is told.
+    const v1 = {
+      schema: "notes9.analysis-bundle",
+      schemaVersion: 1,
+      exportedAt: "2026-08-12T10:00:00Z",
+      analysis: { id: "an-1", name: "Old export", revisionNo: 4 },
+      spec: { schemaVersion: 1 },
+      results: null,
+      dataSnapshot: { rows: [] },
+      provenance: {
+        engineVersion: ENGINE_VERSION,
+        dataVersionHash: "sha256:v2",
+        specHash: "h4",
+        frozen: false,
+        createdAt: "2026-08-12T10:00:00Z",
+        forkedFromRevisionId: null,
+      },
+      conversationThread: [],
+    }
+    const result = importPortableBundle(v1)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.bundle.revisions).toHaveLength(1)
+    expect(result.bundle.revisions[0].revisionNo).toBe(4)
+    expect(result.notices.join(" ")).toContain("v1 bundle")
+  })
+
+  it("keeps a lineage pointer that leaves the bundle, and flags it", () => {
+    const orphan = roundTrip()
+    orphan.revisions = [orphan.revisions[1]] // drop the parent
+    const result = importPortableBundle(orphan)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    // Kept: a dangling pointer beats losing the fact that there was a parent.
+    expect(result.bundle.revisions[0].forkedFromRevisionId).toBe("rev-1")
+    expect(result.notices.join(" ")).toContain("not in this bundle")
+  })
+
+  it("does not let an import restore frozen status, and says so", () => {
+    // Otherwise anyone could mint a "published" revision by editing a JSON file.
+    const bundle = roundTrip()
+    bundle.revisions[1].frozen = true
+    const result = importPortableBundle(bundle)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.notices.join(" ")).toContain("does not restore frozen status")
+    expect(result.bundle.provenance.frozen).toBe(false)
+  })
+
+  it("opens a bundle from a newer notes9 rather than stranding the reader", () => {
+    const future = { ...roundTrip(), schemaVersion: 99 as never }
+    const result = importPortableBundle(future)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.notices.join(" ")).toContain("newer version of notes9")
+  })
+
+  it("refuses a bundle with no revisions and no spec", () => {
+    const result = importPortableBundle({
+      schema: "notes9.analysis-bundle",
+      schemaVersion: 2,
+      analysis: { id: "a", name: "x", revisionNo: 1 },
+      revisions: [],
+    })
+    expect(result.ok).toBe(false)
   })
 })

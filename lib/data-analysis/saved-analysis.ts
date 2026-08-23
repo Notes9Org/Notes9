@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client"
+import type { EditAuditRecord, ProvenanceCard } from "@/lib/data-analysis/provenance"
 import {
   AnalysisSpec,
   migrateSpec,
@@ -55,8 +56,20 @@ export interface AnalysisRevision {
   conversationThread: unknown[]
   isFrozen: boolean
   frozenAt: string | null
+  /**
+   * A reversible bookmark (§3A.4), added in 117. Not freezing: pinning makes no
+   * claim about publication. Reads false on a database that predates 117.
+   */
+  isPinned: boolean
   forkedFromRevisionId: string | null
-  authorId: string
+  /**
+   * Null when the author's profile has been deleted. 117 changed this FK from
+   * ON DELETE CASCADE to ON DELETE SET NULL, because a person leaving the lab
+   * used to delete the revisions they had authored on other people's projects.
+   * Losing the name is the price of keeping the record, and it is the right way
+   * round.
+   */
+  authorId: string | null
   createdAt: string
 }
 
@@ -94,8 +107,11 @@ function toRevision(row: AnalysisRow): AnalysisRevision {
     conversationThread: (row.conversation_thread as unknown[]) ?? [],
     isFrozen: Boolean(row.is_frozen),
     frozenAt: (row.frozen_at as string) ?? null,
+    isPinned: Boolean(row.is_pinned),
     forkedFromRevisionId: (row.forked_from_revision_id as string) ?? null,
-    authorId: String(row.author_id),
+    // Not String(): a null author_id would become the string "null", which
+    // renders as a username and compares unequal to null everywhere downstream.
+    authorId: (row.author_id as string) ?? null,
     createdAt: String(row.created_at ?? ""),
   }
 }
@@ -389,15 +405,64 @@ export async function rerunIntoNewRevision(input: {
   results: EngineResult
   dataSnapshot: unknown
   previousRevisionId: string
+  /**
+   * The live conversation, when the caller has one. Omitted, the thread is
+   * fetched from the revision being re-run — see below.
+   */
+  conversationThread?: unknown[]
 }): Promise<AnalysisRevision> {
+  /**
+   * Carry Catalyst's thread across the re-run.
+   *
+   * This omitted the thread entirely, so `commitRevision` defaulted it to `[]`.
+   * Reopen r4, hit drift, click "Re-run into a new revision", and r5 — now the
+   * current revision — carried none of the reasoning that produced the figure.
+   * On the most reproducibility-sensitive path in the product, "a figure
+   * without its reasoning is just a picture" (§3A.2) was being made true by the
+   * one button whose whole job is to preserve the record.
+   *
+   * The fallback fetch is the reason this is fixed here rather than at the call
+   * site: `previousRevisionId` is already in hand, the previous revision
+   * already stores the thread, and doing it here means every caller of re-run
+   * is fixed at once instead of the one the bug report named. A caller with a
+   * live thread should still pass it — it is fresher than the stored copy, and
+   * an explicit value always wins.
+   */
+  const conversationThread =
+    input.conversationThread ?? (await fetchConversationThread(input.previousRevisionId))
+
   return commitRevision({
     analysisId: input.analysisId,
     spec: input.spec,
     results: input.results,
     dataSnapshot: input.dataSnapshot,
     changeSummary: "Re-run against updated data or engine.",
+    conversationThread,
     forkedFromRevisionId: input.previousRevisionId,
   })
+}
+
+/**
+ * The stored thread of one revision, or `[]`.
+ *
+ * Deliberately total: a re-run must not fail because the parent's thread could
+ * not be read. Losing the thread is bad; refusing to save the re-run because of
+ * it would be worse, and the caller already has the numbers in hand.
+ */
+async function fetchConversationThread(revisionId: string): Promise<unknown[]> {
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from("analysis_revisions")
+      .select("conversation_thread")
+      .eq("id", revisionId)
+      .maybeSingle()
+    if (error || !data) return []
+    const thread = (data as { conversation_thread?: unknown }).conversation_thread
+    return Array.isArray(thread) ? thread : []
+  } catch {
+    return []
+  }
 }
 
 /* ── Freeze ────────────────────────────────────────────────────────────────*/
@@ -410,6 +475,68 @@ export async function freezeRevision(revisionId: string): Promise<AnalysisRevisi
   })
   if (error) throw new Error(`Could not freeze this revision: ${error.message}`)
   return toRevision(Array.isArray(data) ? data[0] : data)
+}
+
+/* ── Pin (§3A.4) ───────────────────────────────────────────────────────────*/
+
+/**
+ * Pinning is a bookmark, and it is reversible. That is the entire difference
+ * from freezing, and the reason they are two verbs rather than one: freezing
+ * asserts "this is what was published" and can never be undone, pinning says
+ * "this is the one I keep coming back to" and can be undone freely. Conflating
+ * them would either make pinning dangerous or make freezing meaningless.
+ */
+export async function pinRevision(
+  revisionId: string,
+  pinned: boolean
+): Promise<AnalysisRevision> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc("set_analysis_revision_pinned", {
+    p_revision_id: revisionId,
+    p_pinned: pinned,
+  })
+  if (error) {
+    throw new Error(
+      `Could not ${pinned ? "pin" : "unpin"} this revision: ${error.message}`
+    )
+  }
+  return toRevision(Array.isArray(data) ? data[0] : data)
+}
+
+/* ── Duplicate as a new analysis (§3A.4) ───────────────────────────────────*/
+
+/**
+ * A genuinely independent analysis: new id, own revision chain starting at r1.
+ *
+ * Not to be confused with `forkFrozenRevision`, which appends a revision to the
+ * SAME analysis. That is a branch in one object's history; this is a second
+ * object. The distinction matters because editing a duplicate must not advance
+ * the original's revision numbering or appear in its history, which is exactly
+ * what a fork does.
+ *
+ * LINEAGE: the copy's r1 records `forked_from_revision_id` pointing at the
+ * source revision, and its change summary names the source analysis and
+ * revision in prose. The pointer crosses analyses and deliberately has no FK
+ * (105:120), so it survives the source being deleted — a dangling pointer beats
+ * losing the fact that there was a parent. What does NOT travel is frozen
+ * status: a copy of a published figure has not itself been published, and must
+ * not claim to have been.
+ */
+export async function duplicateAnalysis(input: {
+  /** The revision to copy. The new analysis starts from this state. */
+  revisionId: string
+  /** Defaults to "<source name> (copy)". */
+  name?: string
+}): Promise<SavedAnalysis> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc("duplicate_analysis", {
+    p_revision_id: input.revisionId,
+    p_name: input.name ?? null,
+  })
+  if (error) throw new Error(`Could not duplicate this analysis: ${error.message}`)
+  const row = Array.isArray(data) ? data[0] : data
+  if (!row) throw new Error("Could not duplicate this analysis: nothing was returned.")
+  return toAnalysis(row)
 }
 
 /**
@@ -439,11 +566,70 @@ export async function forkFrozenRevision(input: {
 
 /* ── Leave ─────────────────────────────────────────────────────────────────*/
 
+export const BUNDLE_SCHEMA = "notes9.analysis-bundle"
+
+/** One revision inside a bundle. Everything needed to reopen that revision. */
+export interface PortableRevision {
+  id: string
+  revisionNo: number
+  name: string | null
+  changeSummary: string | null
+  spec: unknown
+  specHash: string
+  results: EngineResult | null
+  dataSnapshot: unknown
+  dataVersionHash: string
+  engineVersion: string
+  conversationThread: unknown[]
+  frozen: boolean
+  frozenAt: string | null
+  pinned: boolean
+  /** Lineage. Travels now; in v1 it did not, so an imported bundle was an orphan. */
+  forkedFromRevisionId: string | null
+  authorId: string | null
+  createdAt: string
+}
+
 export interface PortableBundle {
-  schema: "notes9.analysis-bundle"
-  schemaVersion: 1
+  schema: typeof BUNDLE_SCHEMA
+  /**
+   * 2 carries history, lineage and the provenance card. 1 carried one revision
+   * and no way back in. `importPortableBundle` reads both.
+   */
+  schemaVersion: 1 | 2
   exportedAt: string
-  analysis: { id: string; name: string; revisionNo: number }
+  analysis: {
+    id: string
+    name: string
+    /** The revision the export was taken from. */
+    revisionNo: number
+    experimentId?: string | null
+    projectId?: string | null
+  }
+  /**
+   * Every revision the exporter could read, oldest first — so lineage inside
+   * the bundle resolves without a network call, and so "an analysis can leave
+   * notes9 intact" means the history and not just the last frame of it.
+   */
+  revisions: PortableRevision[]
+  /**
+   * The provenance card as rendered at export, in a form a human can read
+   * without notes9. Denormalised on purpose: the whole point of a portable
+   * bundle is that it outlives the application that wrote it, and a card
+   * reconstructed by a future version of `buildProvenanceCard` is not the card
+   * the researcher was looking at.
+   */
+  provenanceCard: ProvenanceCard | null
+  /**
+   * The append-only edit audit log for the exported revision. Read out of the
+   * revision's data snapshot, where the workspace persists it.
+   */
+  editAuditLog: EditAuditRecord[]
+
+  /* ── v1 fields, still written ──────────────────────────────────────────────
+     A v1 reader must keep working against a v2 file. These mirror the exported
+     revision and are the reason schemaVersion could go to 2 without anything
+     that already consumes a bundle breaking. */
   spec: unknown
   results: EngineResult | null
   dataSnapshot: unknown
@@ -468,15 +654,81 @@ export interface PortableBundle {
  * architecture. Prism itself moved to an open format; we should not be less open
  * than the incumbent we are displacing.
  */
+const toPortableRevision = (r: AnalysisRevision): PortableRevision => ({
+  id: r.id,
+  revisionNo: r.revisionNo,
+  name: r.name,
+  changeSummary: r.changeSummary,
+  spec: r.spec,
+  specHash: r.specHash,
+  results: r.results,
+  dataSnapshot: r.dataSnapshot,
+  dataVersionHash: r.dataVersionHash,
+  engineVersion: r.engineVersion,
+  conversationThread: r.conversationThread,
+  frozen: r.isFrozen,
+  frozenAt: r.frozenAt,
+  pinned: r.isPinned,
+  forkedFromRevisionId: r.forkedFromRevisionId,
+  authorId: r.authorId,
+  createdAt: r.createdAt,
+})
+
+/**
+ * What v2 adds, and what it deliberately leaves out.
+ *
+ * ADDED, because without them "the analysis leaves intact" was not true:
+ *   - every revision, oldest first, each with its own spec, snapshot, results
+ *     and thread. A bundle with one revision is a screenshot, not an analysis.
+ *   - lineage. `forked_from_revision_id` did not travel at all in v1, so an
+ *     imported bundle could not say what it was forked from — on a feature
+ *     whose entire justification is a walkable provenance chain.
+ *   - the provenance card, rendered, so the export is legible to someone who
+ *     does not have notes9.
+ *   - the edit audit log, so the who/what/when of each change survives the trip.
+ *
+ * LEFT OUT, stated rather than quietly dropped:
+ *   - the source file itself. It is referenced, never copied (§3A.3 rule 4);
+ *     each revision's row snapshot is what makes the bundle self-sufficient.
+ *   - profiles. `authorId` travels as an opaque id and resolves to nothing
+ *     outside the origin database. Denormalising names into an export is a
+ *     privacy decision, not a durability one, and is not mine to make here.
+ *   - anything from the experiment around the analysis.
+ *
+ * `revisions` is passed in rather than fetched so this stays a pure function —
+ * `listRevisions` is one call away and the caller usually has them already.
+ * Given none, the bundle degrades to the exported revision alone, which is v1's
+ * behaviour and still a valid v2 file.
+ */
 export function buildPortableBundle(
   analysis: SavedAnalysis,
-  revision: AnalysisRevision
+  revision: AnalysisRevision,
+  extras: {
+    revisions?: AnalysisRevision[]
+    provenanceCard?: ProvenanceCard | null
+    editAuditLog?: EditAuditRecord[]
+  } = {}
 ): PortableBundle {
+  const all = (extras.revisions?.length ? extras.revisions : [revision])
+    .slice()
+    .sort((a, b) => a.revisionNo - b.revisionNo)
+
   return {
-    schema: "notes9.analysis-bundle",
-    schemaVersion: 1,
+    schema: BUNDLE_SCHEMA,
+    schemaVersion: 2,
     exportedAt: new Date().toISOString(),
-    analysis: { id: analysis.id, name: analysis.name, revisionNo: revision.revisionNo },
+    analysis: {
+      id: analysis.id,
+      name: analysis.name,
+      revisionNo: revision.revisionNo,
+      experimentId: analysis.experimentId,
+      projectId: analysis.projectId,
+    },
+    revisions: all.map(toPortableRevision),
+    provenanceCard: extras.provenanceCard ?? null,
+    editAuditLog: extras.editAuditLog ?? [],
+
+    // v1 mirror.
     spec: revision.spec,
     results: revision.results,
     dataSnapshot: revision.dataSnapshot,
@@ -489,6 +741,173 @@ export function buildPortableBundle(
       forkedFromRevisionId: revision.forkedFromRevisionId,
     },
     conversationThread: revision.conversationThread,
+  }
+}
+
+/* ── Come back in ──────────────────────────────────────────────────────────*/
+
+export type BundleImport =
+  | { ok: true; bundle: PortableBundle; notices: string[] }
+  | { ok: false; error: string }
+
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null && !Array.isArray(v)
+
+/**
+ * Read a bundle back. There was no importer at all, so you could not reopen
+ * your own export — "the analysis can leave" was half a promise.
+ *
+ * Parses and REPORTS; it does not write. That split is the same one
+ * `openRevision` makes and for the same reason: the product's rule is detect
+ * and offer, never silently repair (see `reopen-banner.tsx`, whose two buttons
+ * are the precedent). Anything this function had to assume comes back in
+ * `notices` for the UI to show before the user commits to an import, rather
+ * than being fixed up quietly on the way in.
+ *
+ * Accepts v1 and v2. A v1 file has no `revisions` array, so one is synthesised
+ * from its flat fields — that is a real inference and it says so in `notices`.
+ */
+export function importPortableBundle(raw: unknown): BundleImport {
+  const parsed = typeof raw === "string" ? safeJson(raw) : raw
+  if (!isRecord(parsed)) {
+    return { ok: false, error: "This file is not a notes9 analysis bundle: it is not a JSON object." }
+  }
+  if (parsed.schema !== BUNDLE_SCHEMA) {
+    return {
+      ok: false,
+      error: `This file is not a notes9 analysis bundle (its schema is ${JSON.stringify(parsed.schema) ?? "missing"}). Nothing has been imported.`,
+    }
+  }
+
+  const version = Number(parsed.schemaVersion)
+  if (!Number.isFinite(version) || version < 1) {
+    return { ok: false, error: "This bundle does not declare a readable schema version." }
+  }
+
+  const notices: string[] = []
+  if (version > 2) {
+    // Forward-compatible rather than refusing: v2's fields are a subset of any
+    // later version's, and refusing to open a newer export would strand a
+    // researcher whose colleague is one release ahead. But it is stated.
+    notices.push(
+      `This bundle was written by a newer version of notes9 (schema v${version}). It has been read as v2; anything newer than that has been ignored rather than guessed at.`
+    )
+  }
+
+  const analysis = isRecord(parsed.analysis) ? parsed.analysis : {}
+  const name = typeof analysis.name === "string" && analysis.name.trim() ? analysis.name : "Imported analysis"
+
+  let revisions = Array.isArray(parsed.revisions)
+    ? (parsed.revisions.filter(isRecord) as unknown as PortableRevision[])
+    : []
+
+  if (revisions.length === 0) {
+    if (parsed.spec === undefined) {
+      return {
+        ok: false,
+        error: "This bundle contains no revisions and no spec, so there is nothing to open.",
+      }
+    }
+    const provenance = isRecord(parsed.provenance) ? parsed.provenance : {}
+    revisions = [
+      {
+        id: typeof analysis.id === "string" ? analysis.id : "imported",
+        revisionNo: Number(analysis.revisionNo ?? 1) || 1,
+        name: null,
+        changeSummary: null,
+        spec: parsed.spec,
+        specHash: String(provenance.specHash ?? ""),
+        results: (parsed.results as EngineResult) ?? null,
+        dataSnapshot: parsed.dataSnapshot ?? null,
+        dataVersionHash: String(provenance.dataVersionHash ?? ""),
+        engineVersion: String(provenance.engineVersion ?? "unknown"),
+        conversationThread: Array.isArray(parsed.conversationThread) ? parsed.conversationThread : [],
+        frozen: Boolean(provenance.frozen),
+        frozenAt: null,
+        pinned: false,
+        forkedFromRevisionId: (provenance.forkedFromRevisionId as string) ?? null,
+        authorId: null,
+        createdAt: String(provenance.createdAt ?? ""),
+      },
+    ]
+    notices.push(
+      "This is a v1 bundle: it carries a single revision and no history. The revision has been read; the analysis it came from may have had others that are not in this file."
+    )
+  }
+
+  revisions = revisions.slice().sort((a, b) => a.revisionNo - b.revisionNo)
+
+  /**
+   * Lineage that points outside the bundle is kept and flagged, never dropped.
+   * A pointer to a revision this file does not contain is still evidence that
+   * there was a parent, which is exactly why the column has no FK (105:120).
+   */
+  const present = new Set(revisions.map((r) => r.id))
+  const dangling = revisions.filter(
+    (r) => r.forkedFromRevisionId && !present.has(r.forkedFromRevisionId)
+  )
+  if (dangling.length > 0) {
+    notices.push(
+      `${dangling.length} revision${dangling.length === 1 ? " was" : "s were"} forked from a revision that is not in this bundle. The lineage pointer has been kept, but the parent cannot be opened from this file.`
+    )
+  }
+
+  const frozen = revisions.filter((r) => r.frozen).length
+  if (frozen > 0) {
+    // Freezing is a claim about a specific record in a specific database.
+    // An import is a copy, and a copy that arrived pre-frozen would let anyone
+    // manufacture a "published" revision by hand-editing a JSON file.
+    notices.push(
+      `${frozen} revision${frozen === 1 ? " is" : "s are"} marked frozen in this bundle. Importing does not restore frozen status: freeze it here if this copy is the record you intend to cite.`
+    )
+  }
+
+  if (!isRecord(parsed.provenanceCard)) {
+    notices.push("This bundle carries no rendered provenance card.")
+  }
+
+  return {
+    ok: true,
+    notices,
+    bundle: {
+      schema: BUNDLE_SCHEMA,
+      schemaVersion: version >= 2 ? 2 : 1,
+      exportedAt: String(parsed.exportedAt ?? ""),
+      analysis: {
+        id: typeof analysis.id === "string" ? analysis.id : "",
+        name,
+        revisionNo: Number(analysis.revisionNo ?? revisions[revisions.length - 1]?.revisionNo ?? 1),
+        experimentId: (analysis.experimentId as string) ?? null,
+        projectId: (analysis.projectId as string) ?? null,
+      },
+      revisions,
+      provenanceCard: isRecord(parsed.provenanceCard)
+        ? (parsed.provenanceCard as unknown as ProvenanceCard)
+        : null,
+      editAuditLog: Array.isArray(parsed.editAuditLog)
+        ? (parsed.editAuditLog as EditAuditRecord[])
+        : [],
+      spec: revisions[revisions.length - 1]?.spec,
+      results: revisions[revisions.length - 1]?.results ?? null,
+      dataSnapshot: revisions[revisions.length - 1]?.dataSnapshot ?? null,
+      provenance: {
+        engineVersion: revisions[revisions.length - 1]?.engineVersion ?? "unknown",
+        dataVersionHash: revisions[revisions.length - 1]?.dataVersionHash ?? "",
+        specHash: revisions[revisions.length - 1]?.specHash ?? "",
+        frozen: false,
+        createdAt: revisions[revisions.length - 1]?.createdAt ?? "",
+        forkedFromRevisionId: revisions[revisions.length - 1]?.forkedFromRevisionId ?? null,
+      },
+      conversationThread: revisions[revisions.length - 1]?.conversationThread ?? [],
+    },
+  }
+}
+
+function safeJson(text: string): unknown {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return null
   }
 }
 

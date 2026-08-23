@@ -4,6 +4,7 @@ import {
   canRedo,
   canUndo,
   commit,
+  auditRecords,
   emptyHistory,
   historyMutations,
   redo,
@@ -241,5 +242,129 @@ describe("undo", () => {
     const rail = makeRail()
     rail.human({ kind: "figure.setPalette", value: "n9" })
     expect(canUndo(rail.history())).toBe(false)
+  })
+})
+
+/**
+ * The audit log is not the undo stack.
+ *
+ * These were one object, and reading provenance out of `past` meant an edit the
+ * researcher tried and reversed left no trace: the card showed a tidied history
+ * rather than the real one. The two collections answer different questions and
+ * this block pins the difference.
+ */
+describe("the append-only audit log (L8)", () => {
+  it("keeps an undone edit, marked reverted, instead of erasing it", () => {
+    const rail = makeRail()
+    rail.human({ kind: "data.excludeRow", exclusion: goodExclusion })
+    rail.undo()
+
+    // The undo stack forgot it. That is correct — it is a stack.
+    expect(rail.history().past).toHaveLength(0)
+    // The record did not. That is the fix.
+    expect(auditRecords(rail.history())).toHaveLength(1)
+    expect(auditRecords(rail.history())[0].reverted).toBe(true)
+    // And it is still on the provenance card, which is the user-visible half.
+    expect(historyMutations(rail.history())).toHaveLength(1)
+  })
+
+  it("puts a reverted edit on the card struck through, not missing", () => {
+    const rail = makeRail()
+    rail.human({ kind: "data.excludeRow", exclusion: goodExclusion })
+    rail.undo()
+
+    const card = buildProvenanceCard(rail.spec(), null, {
+      auditLog: auditRecords(rail.history()),
+    })
+    expect(card.history).toHaveLength(1)
+    expect(card.history[0].reverted).toBe(true)
+    // The exclusion itself is gone from the spec: the edit was genuinely
+    // reversed. Only the RECORD of it survives, which is the point.
+    expect(card.exclusions.count).toBe(0)
+  })
+
+  it("clears the flag on redo rather than logging the edit twice", () => {
+    const rail = makeRail()
+    rail.human({ kind: "data.excludeRow", exclusion: goodExclusion })
+    rail.undo()
+    rail.redo()
+
+    const log = auditRecords(rail.history())
+    // The edit was made once. A log that grew an entry per Ctrl-Y would
+    // overstate what happened, which is its own kind of false record.
+    expect(log).toHaveLength(1)
+    expect(log[0].reverted).toBe(false)
+  })
+
+  it("keeps an edit that undo discarded from the redo branch", () => {
+    // Undo, then a NEW edit: the redo branch is thrown away. The undone edit is
+    // now unreachable by any button, and would previously have vanished from
+    // provenance entirely.
+    const rail = makeRail()
+    rail.human({ kind: "data.excludeRow", exclusion: goodExclusion })
+    rail.undo()
+    rail.human({ kind: "figure.setPalette", value: "viridis" })
+
+    expect(rail.history().future).toHaveLength(0)
+    const log = auditRecords(rail.history())
+    expect(log).toHaveLength(2)
+    expect(log.map((e) => e.reverted)).toEqual([true, false])
+  })
+
+  it("records both authors, and undoing one does not hide it", () => {
+    const rail = makeRail()
+    rail.ai([{ kind: "figure.setPalette", value: "viridis" }])
+    rail.human({ kind: "data.excludeRow", exclusion: goodExclusion })
+    rail.undo() // takes back the human edit
+
+    const card = buildProvenanceCard(rail.spec(), null, {
+      auditLog: auditRecords(rail.history()),
+    })
+    expect(card.history.map((h) => h.origin)).toEqual(["ai", "user"])
+    expect(card.history.map((h) => h.reverted)).toEqual([false, true])
+  })
+
+  it("reads chronologically, oldest first", () => {
+    const rail = makeRail()
+    rail.human({ kind: "figure.setPalette", value: "viridis" })
+    rail.human({ kind: "data.excludeRow", exclusion: goodExclusion })
+
+    const log = auditRecords(rail.history())
+    expect(log).toHaveLength(2)
+    expect(log[0].applied[0].description).not.toBe(log[1].applied[0].description)
+  })
+
+  it("survives a history restored from an older build with no log", () => {
+    // A `workspace_state` written before the log existed deserialises as
+    // {past, future}. It must degrade to an empty record, not throw.
+    const legacy = { past: [], future: [] } as unknown as ConfigHistory
+    expect(auditRecords(legacy)).toEqual([])
+    expect(historyMutations(legacy)).toEqual([])
+    expect(() => commit(legacy, {
+      before: { title: "a" },
+      after: { title: "b" },
+      applied: [],
+    })).not.toThrow()
+  })
+
+  it("logs nothing for a commit that moved nothing", () => {
+    const rail = makeRail()
+    rail.human({ kind: "figure.setPalette", value: "n9" })
+    expect(auditRecords(rail.history())).toHaveLength(0)
+  })
+})
+
+describe("the legacy `history` option still reads as standing", () => {
+  it("reports un-flagged mutations as not reverted", () => {
+    // Callers that have not adopted `auditLog` pass a bare mutation list, which
+    // carries no reverted flag. Reporting those as standing is the only thing
+    // that shape can honestly say.
+    const rail = makeRail()
+    rail.human({ kind: "data.excludeRow", exclusion: goodExclusion })
+    const card = buildProvenanceCard(rail.spec(), null, {
+      history: historyMutations(rail.history()),
+    })
+    expect(card.history).toHaveLength(1)
+    expect(card.history[0].reverted).toBe(false)
   })
 })
