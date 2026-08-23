@@ -886,6 +886,86 @@ export type Comparison = {
   ciLow: number
   ciHigh: number
   significant: boolean
+  /**
+   * Effect size for THIS row — §6.3 wants one beside every comparison, and a
+   * difference in assay units is not one. Hedges' g on the pooled within-group
+   * SD for the parametric rows, rank-biserial (Cliff's δ) for the rank-based
+   * ones. No interval: a simultaneous interval for a standardised effect is not
+   * defined by any correction offered here, and the multiplicity-adjusted
+   * interval on the raw difference beside it already carries the uncertainty.
+   */
+  effect: { label: string; value: number }
+}
+
+/**
+ * Per-comparison two-sided level whose interval agrees with the adjusted p.
+ *
+ * Bonferroni and Šidák are SINGLE-STEP: every hypothesis is judged against one
+ * threshold, so the simultaneous interval is just the per-comparison interval
+ * at that threshold and the agreement is exact. Bonferroni rejects when
+ * min(1, m·p) < α, i.e. p < α/m, which is precisely when the 1 − α/m interval
+ * excludes zero; Šidák rejects when 1 − (1−p)^m < α, i.e. p < 1 − (1−α)^(1/m).
+ *
+ * Returns null for the STEP-DOWN procedures (Holm, Holm–Šidák). Each ordered
+ * p is compared against a threshold that depends on how many hypotheses survive
+ * ahead of it, so there is no single level a fixed-width interval could be built
+ * at, and no generally accepted simultaneous interval exists. Reporting the
+ * conservative single-step interval instead is the tempting answer and the wrong
+ * one: Holm's adjusted p is never larger than Bonferroni's, so a comparison can
+ * be Holm-significant while the Bonferroni interval still contains zero — the
+ * same contradiction this file removes, pointing the other way, and wearing the
+ * costume of a real number. Callers report NaN, the "no interval defined"
+ * sentinel already used for unselected FDR rows.
+ *
+ * FDR methods return null too; they are handled by the FCR path, which is the
+ * interval that does exist for them.
+ */
+export function singleStepAlpha(method: CorrectionMethod, alpha: number, m: number): number | null {
+  switch (method) {
+    case "none":
+      return alpha
+    case "bonferroni":
+      return alpha / m
+    case "sidak":
+      return 1 - (1 - alpha) ** (1 / m)
+    default:
+      return null
+  }
+}
+
+/**
+ * Hedges' g for one post-hoc row, standardised on the ANOVA's pooled within-group
+ * SD so the whole family sits on one scale. The correction uses df_within, the df
+ * that SD was estimated with.
+ */
+function pooledHedgesG(diff: number, msw: number, dfw: number): number {
+  if (!(msw > 0) || dfw < 2) return NaN
+  const j = Math.exp(lnGamma(dfw / 2) - Math.log(Math.sqrt(dfw / 2)) - lnGamma((dfw - 1) / 2))
+  return (diff / Math.sqrt(msw)) * j
+}
+
+/** Lanczos ln Γ(z), z > 0 — only needed for Hedges' small-sample correction. */
+function lnGamma(z: number): number {
+  const g = [
+    676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059,
+    12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7,
+  ]
+  let x = 0.99999999999980993
+  for (let i = 0; i < g.length; i++) x += g[i] / (z + i)
+  const t = z + g.length - 0.5
+  return 0.5 * Math.log(2 * Math.PI) + (z - 0.5) * Math.log(t) - t + Math.log(x)
+}
+
+/** Rank-biserial correlation (Cliff's δ) for one pair, from the pair's own values. */
+function pairRankBiserial(x: number[], y: number[]): number {
+  const n1 = x.length
+  const n2 = y.length
+  if (n1 < 1 || n2 < 1) return NaN
+  // U₁ via mid-ranks, so ties contribute a half each — the same convention the
+  // rank tests above use.
+  let u1 = 0
+  for (const a of x) for (const b of y) u1 += a > b ? 1 : a === b ? 0.5 : 0
+  return (2 * u1) / (n1 * n2) - 1
 }
 
 /**
@@ -918,7 +998,10 @@ export function multipleComparisons(
   } else {
     for (let i = 0; i < k; i++) for (let j = i + 1; j < k; j++) pairs.push({ a: i, b: j })
   }
-  const tc = tCritical(alpha, dfw)
+  // The margin is a function of the CORRECTION, not of α alone. Building every
+  // interval at 1 − α/2 was the defect: it put a plain per-comparison interval
+  // that excludes zero beside an adjusted p saying the comparison is not
+  // significant — pAdj = 0.23967 next to [0.052, 1.948].
   const raw = pairs.map(({ a, b }) => {
     const mi = mean(g[a].values)
     const mj = mean(g[b].values)
@@ -944,9 +1027,14 @@ export function multipleComparisons(
   const R = sig.filter(Boolean).length
   const fdr = isFdr(method)
   const fcrCrit = fdr && R > 0 ? tCritical((alpha * R) / raw.length, dfw) : NaN
+  // Single-step (Bonferroni/Šidák/none) get their interval at the level their
+  // own adjusted p is judged at; step-down (Holm/Holm–Šidák) get NaN, because
+  // no simultaneous interval for them exists. See `singleStepAlpha`.
+  const perAlpha = singleStepAlpha(method, alpha, raw.length)
+  const singleStepCrit = perAlpha === null ? NaN : tCritical(perAlpha, dfw)
 
   return raw.map((r, i) => {
-    const crit = fdr ? (sig[i] ? fcrCrit : NaN) : tc
+    const crit = fdr ? (sig[i] ? fcrCrit : NaN) : singleStepCrit
     return {
       a: g[r.a].name,
       b: g[r.b].name,
@@ -957,6 +1045,7 @@ export function multipleComparisons(
       ciLow: r.diff - crit * r.se,
       ciHigh: r.diff + crit * r.se,
       significant: sig[i],
+      effect: { label: "Hedges' g", value: pooledHedgesG(r.diff, msw, dfw) },
     }
   })
 }
@@ -1278,6 +1367,7 @@ export function chiSquareGoodnessOfFit(observed: number[], expected?: number[]):
 export function dunnTest(
   groups: { name: string; values: number[] }[],
   method: CorrectionMethod = "holm",
+  alpha = 0.05,
 ): Comparison[] {
   const g = groups.map((x) => ({ name: x.name, values: x.values.filter(isFinite) })).filter((x) => x.values.length > 0)
   const k = g.length
@@ -1300,9 +1390,16 @@ export function dunnTest(
   const raw = pairs.map(({ a, b }) => {
     const se = Math.sqrt(sigmaFactor * (1 / g[a].values.length + 1 / g[b].values.length))
     const z = (meanRanks[a] - meanRanks[b]) / se
-    return { a, b, diff: meanRanks[a] - meanRanks[b], z, p: normalTwoSidedP(z) }
+    return { a, b, diff: meanRanks[a] - meanRanks[b], se, z, p: normalTwoSidedP(z) }
   })
   const adj = pAdjust(raw.map((r) => r.p), method)
+  // Rank units are not an excuse for a mismatched interval: a band on a
+  // rank-mean difference that excludes zero while the adjusted p says the pair
+  // is not separated contradicts itself exactly as one in assay units would.
+  // Single-step methods get the interval at their own level; step-down ones get
+  // NaN, which is what this function used to return unconditionally.
+  const perAlpha = singleStepAlpha(method, alpha, raw.length)
+  const zc = perAlpha === null ? NaN : normalInv(1 - perAlpha / 2)
   return raw.map((r, i) => ({
     a: g[r.a].name,
     b: g[r.b].name,
@@ -1310,9 +1407,13 @@ export function dunnTest(
     t: r.z,
     p: r.p,
     pAdj: adj[i],
-    ciLow: NaN,
-    ciHigh: NaN,
-    significant: adj[i] < 0.05,
+    ciLow: r.diff - zc * r.se,
+    ciHigh: r.diff + zc * r.se,
+    significant: adj[i] < alpha,
+    effect: {
+      label: "rank-biserial r",
+      value: pairRankBiserial(g[r.a].values, g[r.b].values),
+    },
   }))
 }
 
