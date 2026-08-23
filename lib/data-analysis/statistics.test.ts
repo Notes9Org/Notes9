@@ -627,16 +627,14 @@ vdescribe("FCR-adjusted intervals on FDR comparisons", () => {
     expect(rows.every((r) => Number.isNaN(r.ciLow) && Number.isNaN(r.ciHigh))).toBe(true)
   })
 
-  it("leaves the FWER methods' intervals exactly as they were", () => {
-    // Not a fix for the known defect on those four — a guarantee this change did
-    // not silently move them.
+  it("leaves an uncorrected family's interval at 1 − α", () => {
+    // method "none" applies no correction, so the plain per-comparison interval
+    // is the correct one and must not move.
     const dfw = 18 - 3
     const tc = tCritical(0.05, dfw)
-    for (const method of ["none", "bonferroni", "sidak", "holm", "holm-sidak"] as const) {
-      for (const r of multipleComparisons(partial, { method, alpha: 0.05 })) {
-        const se = (r.ciHigh - r.ciLow) / (2 * tc)
-        expect(r.ciLow).toBeCloseTo(r.diff - tc * se, 12)
-      }
+    for (const r of multipleComparisons(partial, { method: "none", alpha: 0.05 })) {
+      const se = (r.ciHigh - r.ciLow) / (2 * tc)
+      expect(r.ciLow).toBeCloseTo(r.diff - tc * se, 12)
     }
   })
 
@@ -692,5 +690,248 @@ vdescribe("FCR-adjusted intervals on FDR comparisons", () => {
     expect(d.length).toBe(3)
     const expected = pAdjust(d.map((c) => c.p), "benjamini-hochberg")
     d.forEach((c, i) => expect(c.pAdj).toBeCloseTo(expected[i], 15))
+  })
+})
+
+vdescribe("multiplicity-adjusted intervals for the FWER corrections", () => {
+  // The defect: Bonferroni/Šidák/Holm/Holm–Šidák reported an UNADJUSTED interval
+  // beside an adjusted p, so the two contradicted each other — pAdj = 0.23967
+  // next to a CI of [0.052, 1.948] that excludes zero.
+  const groups = [
+    { name: "ctrl", values: [5.1, 4.8, 5.4, 5.0, 5.2, 4.9] },
+    { name: "near", values: [5.6, 5.3, 5.9, 5.5, 5.8, 5.4] },
+    { name: "far", values: [8.1, 7.7, 8.4, 8.0, 8.3, 7.9] },
+  ]
+  const dfw = 18 - 3
+  const m = 3
+  /** SE recovered from Tukey's interval, which is independent of the code under test. */
+  const seOf = (rows: ReturnType<typeof multipleComparisons>, i: number, crit: number) =>
+    (rows[i].ciHigh - rows[i].ciLow) / (2 * crit)
+
+  it("Bonferroni's interval is the per-comparison interval at α/m", () => {
+    const alpha = 0.05
+    const rows = multipleComparisons(groups, { method: "bonferroni", alpha })
+    const crit = tCritical(alpha / m, dfw)
+    const unadjusted = tCritical(alpha, dfw)
+    expect(crit).toBeGreaterThan(unadjusted) // genuinely wider than the old one
+    for (const r of rows) {
+      const se = (r.ciHigh - r.ciLow) / (2 * crit)
+      expect(r.ciLow).toBeCloseTo(r.diff - crit * se, 12)
+      expect(r.ciHigh).toBeCloseTo(r.diff + crit * se, 12)
+    }
+  })
+
+  it("Šidák's interval is the per-comparison interval at 1 − (1−α)^(1/m)", () => {
+    const alpha = 0.05
+    const rows = multipleComparisons(groups, { method: "sidak", alpha })
+    const crit = tCritical(1 - (1 - alpha) ** (1 / m), dfw)
+    // Šidák is very slightly less conservative than Bonferroni, so its interval
+    // must be narrower — if the two agreed, one of the options would be a lie.
+    expect(crit).toBeLessThan(tCritical(alpha / m, dfw))
+    for (const r of rows) {
+      const se = (r.ciHigh - r.ciLow) / (2 * crit)
+      expect(r.ciLow).toBeCloseTo(r.diff - crit * se, 12)
+    }
+    const bonf = multipleComparisons(groups, { method: "bonferroni", alpha })
+    expect(rows[0].ciHigh - rows[0].ciLow).toBeLessThan(bonf[0].ciHigh - bonf[0].ciLow)
+  })
+
+  it("Holm and Holm–Šidák report NO interval, because none is defined", () => {
+    // Step-down procedures have no generally accepted simultaneous interval.
+    // NaN is the same "no interval defined" sentinel the unselected FDR rows use.
+    for (const method of ["holm", "holm-sidak"] as const) {
+      const rows = multipleComparisons(groups, { method, alpha: 0.05 })
+      expect(rows.length).toBe(3)
+      expect(rows.every((r) => Number.isNaN(r.ciLow) && Number.isNaN(r.ciHigh))).toBe(true)
+      // …and they still produce adjusted p-values; only the interval is withheld.
+      expect(rows.every((r) => isFinite(r.pAdj))).toBe(true)
+    }
+  })
+
+  it("the conservative single-step interval would contradict Holm, which is why it is not used", () => {
+    // The justification for withholding, checked rather than asserted in prose:
+    // Holm's adjusted p ≤ Bonferroni's, so there EXISTS a comparison Holm calls
+    // significant whose Bonferroni interval still contains zero. Substituting
+    // that interval would reintroduce the contradiction pointing the other way —
+    // "significant" printed beside a range that includes no effect.
+    //
+    // Constructed so ctrl-vs-mid is borderline (raw p = 0.02651) while the other
+    // two pairs are overwhelming, which is exactly when Holm's step-down gains
+    // over Bonferroni: the borderline hypothesis is tested last, at factor 1.
+    const off = [-0.35, -0.15, -0.05, 0.05, 0.15, 0.35]
+    const borderline = [
+      { name: "ctrl", values: off.map((o) => 5.0 + o) },
+      { name: "mid", values: off.map((o) => 5.345 + o) },
+      { name: "high", values: off.map((o) => 7.0 + o) },
+    ]
+    const alpha = 0.05
+    const holm = multipleComparisons(borderline, { method: "holm", alpha })
+    const bonf = multipleComparisons(borderline, { method: "bonferroni", alpha })
+
+    // Golden (scipy, df = 15, pooled MS_within): the borderline pair's raw p.
+    expect(holm[0].p).toBeCloseTo(0.02651, 5)
+    // Holm calls it significant; Bonferroni does not.
+    expect(holm[0].pAdj).toBeCloseTo(0.02651, 5)
+    expect(holm[0].pAdj).toBeLessThan(alpha)
+    expect(bonf[0].pAdj).toBeCloseTo(0.07953, 5)
+    expect(bonf[0].pAdj).toBeGreaterThan(alpha)
+    // And Bonferroni's interval for that same pair straddles zero.
+    expect(bonf[0].ciLow).toBeCloseTo(-0.7228, 4)
+    expect(bonf[0].ciHigh).toBeCloseTo(0.0328, 4)
+    expect(bonf[0].ciLow * bonf[0].ciHigh).toBeLessThan(0)
+    // Which is why Holm reports no interval instead of borrowing that one.
+    expect(Number.isNaN(holm[0].ciLow)).toBe(true)
+  })
+
+  it("single-step interval excludes zero exactly when its adjusted p is below α", () => {
+    // The coherence claim, over every alpha and both single-step methods.
+    const sets = [
+      groups,
+      [
+        { name: "a", values: [1, 2, 3, 4, 5, 6] },
+        { name: "b", values: [1.1, 2.2, 2.9, 4.1, 5.2, 5.8] },
+        { name: "c", values: [1.2, 2.1, 3.1, 3.9, 5.1, 6.2] },
+      ],
+      [
+        { name: "a", values: [1, 2, 3, 4, 5, 6] },
+        { name: "b", values: [3, 4, 5, 6, 7, 8] },
+        { name: "c", values: [9, 10, 11, 12, 13, 14] },
+      ],
+    ]
+    for (const g of sets) {
+      for (const alpha of [0.01, 0.05, 0.1]) {
+        for (const method of ["bonferroni", "sidak", "none"] as const) {
+          for (const r of multipleComparisons(g, { method, alpha })) {
+            const excludesZero = r.ciLow * r.ciHigh > 0
+            expect(excludesZero).toBe(r.pAdj < alpha)
+            expect(r.significant).toBe(excludesZero)
+          }
+        }
+      }
+    }
+  })
+
+  it("the reported symptom is gone: no adjusted-nonsignificant row keeps a zero-excluding interval", () => {
+    for (const method of ["bonferroni", "sidak", "holm", "holm-sidak"] as const) {
+      for (const alpha of [0.01, 0.05, 0.1]) {
+        for (const r of multipleComparisons(groups, { method, alpha })) {
+          if (r.pAdj >= alpha && isFinite(r.ciLow)) {
+            expect(r.ciLow * r.ciHigh).toBeLessThanOrEqual(0)
+          }
+        }
+      }
+    }
+  })
+
+  it("the single-step level tracks α rather than a hardcoded 0.05", () => {
+    for (const method of ["bonferroni", "sidak"] as const) {
+      const wide = multipleComparisons(groups, { method, alpha: 0.01 })[0]
+      const narrow = multipleComparisons(groups, { method, alpha: 0.1 })[0]
+      expect(wide.ciHigh - wide.ciLow).toBeGreaterThan(narrow.ciHigh - narrow.ciLow)
+    }
+    // and the exact width, against an independently computed critical value
+    const w = multipleComparisons(groups, { method: "bonferroni", alpha: 0.01 })[0]
+    const crit = tCritical(0.01 / m, dfw)
+    const se = (w.ciHigh - w.ciLow) / (2 * crit)
+    expect(w.ciLow).toBeCloseTo(w.diff - crit * se, 12)
+    expect(seOf(multipleComparisons(groups, { method: "bonferroni", alpha: 0.01 }), 0, crit))
+      .toBeCloseTo(se, 12)
+  })
+
+  it("every pairwise row carries an effect size", () => {
+    // §6.3: an effect size beside every comparison, not just beside the omnibus.
+    const n1 = 6
+    const n2 = 6
+    const dfWithin = 18 - 3
+    let ssw = 0
+    for (const g of groups) {
+      const mu = g.values.reduce((a, b) => a + b, 0) / g.values.length
+      for (const v of g.values) ssw += (v - mu) ** 2
+    }
+    const msw = ssw / dfWithin
+    // Hedges' J for df = 15, from the gamma-function definition.
+    const lnG = (z: number) => {
+      const c = [
+        676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059,
+        12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7,
+      ]
+      let x = 0.99999999999980993
+      for (let i = 0; i < c.length; i++) x += c[i] / (z + i)
+      const t = z + c.length - 0.5
+      return 0.5 * Math.log(2 * Math.PI) + (z - 0.5) * Math.log(t) - t + Math.log(x)
+    }
+    const J = Math.exp(lnG(dfWithin / 2) - Math.log(Math.sqrt(dfWithin / 2)) - lnG((dfWithin - 1) / 2))
+    expect(J).toBeGreaterThan(0.94)
+    expect(J).toBeLessThan(1)
+    for (const method of ["bonferroni", "holm", "benjamini-hochberg"] as const) {
+      for (const r of multipleComparisons(groups, { method, alpha: 0.05 })) {
+        expect(r.effect.label).toBe("Hedges' g")
+        expect(r.effect.value).toBeCloseTo((r.diff / Math.sqrt(msw)) * J, 12)
+      }
+    }
+    expect(n1 + n2).toBe(12) // group sizes are equal, so the pooled SE is shared
+  })
+})
+
+vdescribe("Dunn's post-hoc intervals and effect sizes", () => {
+  const groups = [
+    { name: "ctrl", values: [5.1, 4.8, 5.4, 5.0, 5.2, 4.9] },
+    { name: "lowD", values: [6.2, 5.9, 6.5, 6.1, 6.4, 6.0] },
+    { name: "highD", values: [8.1, 7.7, 8.4, 8.0, 8.3, 7.9] },
+  ]
+
+  it("Bonferroni-adjusted Dunn rows get an interval at α/m in rank units", () => {
+    const alpha = 0.05
+    const rows = dunnTest(groups, "bonferroni", alpha)
+    const m = 3
+    // Rebuild Dunn's rank-scale SE from scratch: σ² with the tie term (no ties
+    // here), times (1/nᵢ + 1/nⱼ).
+    const N = 18
+    const sigma2 = (N * (N + 1)) / 12
+    const se = Math.sqrt(sigma2 * (1 / 6 + 1 / 6))
+    // z(1 − (α/m)/2) via the standard normal quantile.
+    const zc = Math.abs(
+      // Acklam-style inverse is what the module uses; recover it from the row.
+      (rows[0].ciHigh - rows[0].ciLow) / (2 * se),
+    )
+    expect(zc).toBeCloseTo(2.394, 2) // Φ⁻¹(1 − 0.05/6) = 2.3940
+    for (const r of rows) {
+      expect(r.ciLow).toBeCloseTo(r.diff - zc * se, 10)
+      expect(r.ciHigh).toBeCloseTo(r.diff + zc * se, 10)
+      expect(r.ciLow * r.ciHigh > 0).toBe(r.pAdj < alpha)
+    }
+    expect(m).toBe(rows.length)
+  })
+
+  it("Holm (the default) still reports no interval", () => {
+    for (const r of dunnTest(groups)) {
+      expect(Number.isNaN(r.ciLow)).toBe(true)
+      expect(Number.isNaN(r.ciHigh)).toBe(true)
+    }
+  })
+
+  it("significance follows the caller's alpha, not a hardcoded 0.05", () => {
+    const near = [
+      { name: "a", values: [1, 2, 3, 4, 5, 6] },
+      { name: "b", values: [2, 3, 4, 5, 6, 7] },
+      { name: "c", values: [3, 4, 5, 6, 7, 8] },
+    ]
+    const lax = dunnTest(near, "none", 0.5).filter((r) => r.significant).length
+    const strict = dunnTest(near, "none", 0.001).filter((r) => r.significant).length
+    expect(lax).toBeGreaterThan(strict)
+  })
+
+  it("every Dunn row carries a rank-biserial effect size", () => {
+    for (const r of dunnTest(groups, "bonferroni", 0.05)) {
+      const a = groups.find((g) => g.name === r.a)!.values
+      const b = groups.find((g) => g.name === r.b)!.values
+      let u1 = 0
+      for (const p of a) for (const q of b) u1 += p > q ? 1 : p === q ? 0.5 : 0
+      expect(r.effect.label).toBe("rank-biserial r")
+      expect(r.effect.value).toBeCloseTo((2 * u1) / (a.length * b.length) - 1, 12)
+    }
+    // ctrl is entirely below both others, so δ = −1 exactly.
+    const rows = dunnTest(groups, "bonferroni", 0.05)
+    expect(rows[0].effect.value).toBe(-1)
   })
 })

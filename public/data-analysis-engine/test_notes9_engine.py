@@ -962,6 +962,1024 @@ def test_end_to_end_bh_run_names_the_correction_that_ran():
     assert any("FCR-adjusted" in w for w in out["warnings"])
 
 
+# ══ multiplicity-adjusted intervals for the four FWER corrections ═════════════
+#
+# The defect: Bonferroni, Sidak, Holm and Holm-Sidak reported an UNADJUSTED
+# interval beside an adjusted p, so the two contradicted each other. Dunnett was
+# worse - the exact many-to-one p paired with a plain two-sided t interval,
+# while scipy's own DunnettResult.confidence_interval() sat unused.
+
+
+def _pooled(groups):
+    """dfw, MS_within and the pooled SE of an equal-n pair, computed here."""
+    arrays = [np.asarray(v, float) for v in groups.values()]
+    dfw = sum(a.size for a in arrays) - len(arrays)
+    msw = sum(float(np.sum((a - a.mean()) ** 2)) for a in arrays) / dfw
+    return arrays, dfw, msw
+
+
+#: ctrl-vs-mid is borderline (raw p = 0.02651) while the other two pairs are
+#: overwhelming - exactly when Holm's step-down gains over Bonferroni, because
+#: the borderline hypothesis is tested last at factor 1.
+_OFF = np.array([-0.35, -0.15, -0.05, 0.05, 0.15, 0.35])
+BORDERLINE = {"ctrl": (5.000 + _OFF).tolist(),
+              "mid": (5.345 + _OFF).tolist(),
+              "high": (7.000 + _OFF).tolist()}
+
+
+def test_bonferroni_interval_is_built_at_the_adjusted_level():
+    alpha = 0.05
+    got = eng.run_anova_one_way({"groups": GROUPS3, "alpha": alpha, "postHoc": "bonferroni"})
+    rows = got["pairwise"]
+    m = len(rows)
+    arrays, dfw, msw = _pooled(GROUPS3)
+    crit = float(stats.t.ppf(1 - (alpha / m) / 2, dfw))
+    unadjusted = float(stats.t.ppf(1 - alpha / 2, dfw))
+    assert crit > unadjusted, (crit, unadjusted)  # genuinely wider than before
+    se = math.sqrt(msw * (1 / 6 + 1 / 6))
+    for row in rows:
+        assert close(row["ciLow"], row["meanDifference"] - crit * se, 1e-12), row
+        assert close(row["ciHigh"], row["meanDifference"] + crit * se, 1e-12)
+        # and NOT the old unadjusted interval
+        assert not close(row["ciLow"], row["meanDifference"] - unadjusted * se, 1e-6)
+
+
+def test_sidak_interval_is_at_its_own_level_and_is_narrower_than_bonferroni():
+    alpha = 0.05
+    m = 3
+    arrays, dfw, msw = _pooled(GROUPS3)
+    se = math.sqrt(msw * (1 / 6 + 1 / 6))
+    per = 1 - (1 - alpha) ** (1 / m)
+    crit = float(stats.t.ppf(1 - per / 2, dfw))
+    rows = eng.run_anova_one_way({"groups": GROUPS3, "alpha": alpha,
+                                  "postHoc": "sidak"})["pairwise"]
+    for row in rows:
+        assert close(row["ciLow"], row["meanDifference"] - crit * se, 1e-12)
+    # Sidak is very slightly less conservative than Bonferroni. If the two
+    # produced the same interval, one of the two options would be a lie.
+    bonf = eng.run_anova_one_way({"groups": GROUPS3, "alpha": alpha,
+                                  "postHoc": "bonferroni"})["pairwise"]
+    assert (rows[0]["ciHigh"] - rows[0]["ciLow"]) < (bonf[0]["ciHigh"] - bonf[0]["ciLow"])
+
+
+def test_holm_and_holm_sidak_report_no_interval_at_all():
+    """Step-down procedures have no generally accepted simultaneous interval,
+    so none is reported - the same convention the FDR path uses for the rows it
+    did not select."""
+    for method in ("holm", "holm-sidak"):
+        got = eng.run_anova_one_way({"groups": GROUPS3, "alpha": 0.05, "postHoc": method})
+        rows = got["pairwise"]
+        assert len(rows) == 3
+        assert all(r["ciLow"] is None and r["ciHigh"] is None for r in rows), rows
+        # The adjusted p-values are still produced; only the interval is withheld.
+        assert all(math.isfinite(r["pAdjusted"]) for r in rows)
+
+
+def test_the_single_step_interval_would_contradict_holm_which_is_why_it_is_withheld():
+    """The justification, checked rather than asserted in prose.
+
+    Holm's adjusted p is never larger than Bonferroni's, so there EXISTS a
+    comparison Holm calls significant whose Bonferroni interval still contains
+    zero. Reporting that interval beside Holm's p would reintroduce the very
+    contradiction this work removes, pointing the other way."""
+    alpha = 0.05
+    holm = eng.run_anova_one_way({"groups": BORDERLINE, "alpha": alpha,
+                                  "postHoc": "holm"})["pairwise"]
+    bonf = eng.run_anova_one_way({"groups": BORDERLINE, "alpha": alpha,
+                                  "postHoc": "bonferroni"})["pairwise"]
+    arrays, dfw, msw = _pooled(BORDERLINE)
+    se = math.sqrt(msw * (1 / 6 + 1 / 6))
+    raw = float(2 * stats.t.sf(abs(arrays[0].mean() - arrays[1].mean()) / se, dfw))
+    assert close(raw, 0.0265094, 1e-5), raw               # golden, scipy, df = 15
+    assert close(holm[0]["pAdjusted"], raw, 1e-12)        # Holm: factor 1, tested last
+    assert holm[0]["pAdjusted"] < alpha                   # ... and significant
+    assert close(bonf[0]["pAdjusted"], min(1.0, raw * 3), 1e-12)
+    assert bonf[0]["pAdjusted"] > alpha                   # Bonferroni: not significant
+    # Bonferroni's interval for that same pair straddles zero.
+    assert bonf[0]["ciLow"] * bonf[0]["ciHigh"] < 0, bonf[0]
+    # Which is why Holm gets none rather than borrowing it.
+    assert holm[0]["ciLow"] is None
+
+
+def test_single_step_interval_excludes_zero_exactly_when_its_adjusted_p_is_below_alpha():
+    """Coherence by construction, over every alpha and both single-step methods.
+
+    Bonferroni rejects when p < alpha/m, which is precisely when the 1 - alpha/m
+    interval excludes zero; Sidak likewise at 1 - (1-alpha)^(1/m)."""
+    sets = (GROUPS3, BORDERLINE,
+            {"a": [1, 2, 3, 4, 5, 6], "b": [1.1, 2.2, 2.9, 4.1, 5.2, 5.8],
+             "c": [1.2, 2.1, 3.1, 3.9, 5.1, 6.2]})
+    for groups in sets:
+        for alpha in (0.01, 0.05, 0.10):
+            for method in ("bonferroni", "sidak"):
+                rows = eng.run_anova_one_way({"groups": groups, "alpha": alpha,
+                                              "postHoc": method})["pairwise"]
+                for row in rows:
+                    excludes = row["ciLow"] * row["ciHigh"] > 0
+                    assert excludes == (row["pAdjusted"] < alpha), (method, alpha, row)
+                    assert row["significant"] == excludes
+
+
+def test_the_reported_symptom_is_gone_across_all_four_fwer_methods():
+    """No adjusted-nonsignificant row may keep an interval that excludes zero."""
+    for method in ("bonferroni", "sidak", "holm", "holm-sidak"):
+        for alpha in (0.01, 0.05, 0.10):
+            for groups in (GROUPS3, BORDERLINE):
+                for row in eng.run_anova_one_way({"groups": groups, "alpha": alpha,
+                                                  "postHoc": method})["pairwise"]:
+                    if row["pAdjusted"] >= alpha and row["ciLow"] is not None:
+                        assert row["ciLow"] * row["ciHigh"] <= 0, (method, alpha, row)
+
+
+def test_single_step_level_follows_alpha_and_is_not_hardcoded():
+    for method in ("bonferroni", "sidak"):
+        wide = eng.run_anova_one_way({"groups": GROUPS3, "alpha": 0.01,
+                                      "postHoc": method})["pairwise"][0]
+        narrow = eng.run_anova_one_way({"groups": GROUPS3, "alpha": 0.10,
+                                        "postHoc": method})["pairwise"][0]
+        assert (wide["ciHigh"] - wide["ciLow"]) > (narrow["ciHigh"] - narrow["ciLow"])
+    arrays, dfw, msw = _pooled(GROUPS3)
+    se = math.sqrt(msw * (1 / 6 + 1 / 6))
+    w = eng.run_anova_one_way({"groups": GROUPS3, "alpha": 0.01,
+                               "postHoc": "bonferroni"})["pairwise"][0]
+    assert close(w["ciHigh"] - w["ciLow"],
+                 2 * float(stats.t.ppf(1 - (0.01 / 3) / 2, dfw)) * se, 1e-12)
+
+
+def test_tukey_intervals_are_untouched():
+    """Tukey was already correct; this pins it against collateral damage."""
+    alpha = 0.05
+    arrays, dfw, msw = _pooled(GROUPS3)
+    se = math.sqrt(msw * (1 / 6 + 1 / 6))
+    qcrit = float(stats.studentized_range.ppf(1 - alpha, 3, dfw))
+    rows = eng.run_anova_one_way({"groups": GROUPS3, "alpha": alpha,
+                                  "postHoc": "tukey"})["pairwise"]
+    for row in rows:
+        assert close(row["ciLow"], row["meanDifference"] - qcrit * se / math.sqrt(2), 1e-12)
+
+
+def test_dunnett_interval_is_scipys_exact_many_to_one_not_a_plain_t():
+    alpha = 0.05
+    names = list(GROUPS3)
+    arrays = [np.asarray(GROUPS3[n], float) for n in names]
+    gold = stats.dunnett(arrays[1], arrays[2], control=arrays[0], random_state=0)
+    band = gold.confidence_interval(confidence_level=1 - alpha)
+    rows = eng.run_anova_one_way({"groups": GROUPS3, "alpha": alpha, "postHoc": "dunnett",
+                                  "referenceLevel": "ctrl"})["pairwise"]
+    for row, lo, hi in zip(rows, np.atleast_1d(band.low), np.atleast_1d(band.high)):
+        assert close(row["ciLow"], float(lo), 1e-12), (row["ciLow"], lo)
+        assert close(row["ciHigh"], float(hi), 1e-12)
+    # And it is NOT the plain two-sided t interval the code used to pair with it.
+    _, dfw, msw = _pooled(GROUPS3)
+    se = math.sqrt(msw * (1 / 6 + 1 / 6))
+    tcrit = float(stats.t.ppf(1 - alpha / 2, dfw))
+    assert not close(rows[0]["ciLow"], rows[0]["meanDifference"] - tcrit * se, 1e-6)
+    # The Dunnett interval must be the WIDER one: it covers 2 comparisons at once.
+    assert (rows[0]["ciHigh"] - rows[0]["ciLow"]) > 2 * tcrit * se
+
+
+def test_dunnett_interval_honours_alpha_and_stays_reproducible():
+    wide = eng.run_anova_one_way({"groups": GROUPS3, "alpha": 0.01, "postHoc": "dunnett",
+                                  "referenceLevel": "ctrl"})["pairwise"][0]
+    narrow = eng.run_anova_one_way({"groups": GROUPS3, "alpha": 0.10, "postHoc": "dunnett",
+                                    "referenceLevel": "ctrl"})["pairwise"][0]
+    assert (wide["ciHigh"] - wide["ciLow"]) > (narrow["ciHigh"] - narrow["ciLow"])
+    runs = {eng.run_anova_one_way({"groups": GROUPS3, "alpha": 0.05, "postHoc": "dunnett",
+                                   "referenceLevel": "ctrl"})["pairwise"][0]["ciLow"]
+            for _ in range(5)}
+    assert len(runs) == 1, runs
+
+
+def test_dunnett_interval_and_adjusted_p_agree():
+    groups = {"ctrl": [5.1, 4.8, 5.4, 5.0, 5.2, 4.9],
+              "near": [5.3, 5.0, 5.5, 5.2, 5.4, 5.1],
+              "far": [8.1, 7.7, 8.4, 8.0, 8.3, 7.9]}
+    for alpha in (0.01, 0.05, 0.10):
+        rows = eng.run_anova_one_way({"groups": groups, "alpha": alpha, "postHoc": "dunnett",
+                                      "referenceLevel": "ctrl"})["pairwise"]
+        assert any(r["pAdjusted"] >= alpha for r in rows), "fixture must have a null row"
+        for row in rows:
+            assert (row["ciLow"] * row["ciHigh"] > 0) == (row["pAdjusted"] < alpha), (alpha, row)
+
+
+def test_dunn_rows_get_single_step_intervals_and_none_for_holm():
+    alpha = 0.05
+    m = 3
+    allv = np.concatenate([np.asarray(v, float) for v in GROUPS3.values()])
+    n = allv.size
+    _, counts = np.unique(allv, return_counts=True)
+    ties = float(np.sum(counts.astype(float) ** 3 - counts))
+    sigma2 = (n * (n + 1) / 12.0) - (ties / (12.0 * (n - 1)))
+    se = math.sqrt(sigma2 * (1 / 6 + 1 / 6))
+
+    rows = eng.run_kruskal({"groups": GROUPS3, "alpha": alpha,
+                            "postHoc": "bonferroni"})["pairwise"]
+    margin = float(stats.norm.ppf(1 - (alpha / m) / 2)) * se
+    for row in rows:
+        assert close(row["ciLow"], row["meanDifference"] - margin, 1e-12), row
+        assert close(row["ciHigh"], row["meanDifference"] + margin, 1e-12)
+        assert (row["ciLow"] * row["ciHigh"] > 0) == (row["pAdjusted"] < alpha)
+    # ... and the old unadjusted z(alpha) margin is a different number.
+    assert not close(margin, float(stats.norm.ppf(1 - alpha / 2)) * se, 1e-6)
+
+    # Holm is Dunn's default and now yields no interval, as it must.
+    holm = eng.run_kruskal({"groups": GROUPS3, "alpha": alpha, "postHoc": "dunn"})["pairwise"]
+    assert all(r["ciLow"] is None and r["ciHigh"] is None for r in holm)
+
+
+def test_the_record_states_the_single_step_interval_level():
+    """'The record names what ran': an interval at a level other than 1 - alpha
+    that appears without saying so is the same defect, just quieter."""
+    got = eng.run_anova_one_way({"groups": GROUPS3, "alpha": 0.05, "postHoc": "bonferroni"})
+    note = [w for w in got.get("_warnings", []) if "per-comparison level" in w]
+    assert len(note) == 1, got.get("_warnings")
+    assert "98.3333%" in note[0], note[0]      # 1 - 0.05/3
+    assert "95%" in note[0]                     # ... contrasted with the family-wise level
+    sid = eng.run_anova_one_way({"groups": GROUPS3, "alpha": 0.05, "postHoc": "sidak"})
+    assert any("98.3048%" in w for w in sid.get("_warnings", [])), sid.get("_warnings")
+
+
+def test_the_record_explains_the_missing_step_down_interval():
+    for method in ("holm", "holm-sidak"):
+        got = eng.run_anova_one_way({"groups": GROUPS3, "alpha": 0.05, "postHoc": method})
+        note = [w for w in got.get("_warnings", []) if "step-down" in w]
+        assert len(note) == 1, got.get("_warnings")
+        assert "no generally accepted" in note[0]
+        assert "bonferroni or sidak" in note[0]
+
+
+def test_tukey_and_dunnett_carry_no_interval_note():
+    """Both report a genuine simultaneous interval at 1 - alpha, so there is
+    nothing to disclose and a note would be noise."""
+    for p in ({"postHoc": "tukey"}, {"postHoc": "dunnett", "referenceLevel": "ctrl"}):
+        got = eng.run_anova_one_way({"groups": GROUPS3, "alpha": 0.05, **p})
+        assert not [w for w in got.get("_warnings", [])
+                    if "step-down" in w or "per-comparison level" in w]
+
+
+# ══ effect sizes beside every comparison (§6.3) ═══════════════════════════════
+
+
+def test_pairwise_rows_carry_hedges_g():
+    arrays, dfw, msw = _pooled(GROUPS3)
+    j = math.exp(math.lgamma(dfw / 2) - math.log(math.sqrt(dfw / 2))
+                 - math.lgamma((dfw - 1) / 2))
+    assert 0.94 < j < 1.0, j
+    for method in ("bonferroni", "holm", "tukey", "benjamini-hochberg"):
+        for row in eng.run_anova_one_way({"groups": GROUPS3, "alpha": 0.05,
+                                          "postHoc": method})["pairwise"]:
+            eff = row["effectSize"]
+            assert eff["name"] == "hedges-g"
+            assert close(eff["value"], (row["meanDifference"] / math.sqrt(msw)) * j, 1e-12)
+            # No CI is claimed for a standardised effect under multiplicity.
+            assert eff["ciLow"] is None and eff["ciHigh"] is None
+
+
+def test_dunnett_rows_carry_hedges_g_too():
+    arrays, dfw, msw = _pooled(GROUPS3)
+    rows = eng.run_anova_one_way({"groups": GROUPS3, "alpha": 0.05, "postHoc": "dunnett",
+                                  "referenceLevel": "ctrl"})["pairwise"]
+    assert all(r["effectSize"]["name"] == "hedges-g" for r in rows)
+    assert all(r["effectSize"]["value"] > 0 for r in rows)
+
+
+def test_dunn_rows_carry_a_rank_biserial_effect_size():
+    rows = eng.run_kruskal({"groups": GROUPS3, "alpha": 0.05,
+                            "postHoc": "bonferroni"})["pairwise"]
+    vals = {k: np.asarray(v, float) for k, v in GROUPS3.items()}
+    for row in rows:
+        a, b = vals[row["groupA"]], vals[row["groupB"]]
+        u = float(stats.mannwhitneyu(a, b, alternative="two-sided").statistic)
+        eff = row["effectSize"]
+        assert eff["name"] == "rank-biserial"
+        assert close(eff["value"], 2 * u / (a.size * b.size) - 1, 1e-12)
+    # ctrl lies entirely below both others, so Cliff's delta is exactly -1.
+    assert rows[0]["effectSize"]["value"] == -1.0
+
+
+WILCOXON = {"pairs": [[5.1, 4.4], [6.2, 5.0], [4.8, 4.9], [7.3, 6.1], [5.5, 5.0],
+                      [6.0, 5.2], [4.9, 5.3], [6.8, 5.9], [5.2, 4.7], [7.0, 6.4]],
+            "tails": "two", "alpha": 0.05, "labels": ["pre", "post"]}
+
+
+def test_wilcoxon_reports_a_rank_biserial_effect_size():
+    got = eng.run_wilcoxon(WILCOXON)
+    pairs = np.asarray(WILCOXON["pairs"], float)
+    d = pairs[:, 0] - pairs[:, 1]
+    d = d[d != 0]                                   # scipy's zero_method="wilcox"
+    r = stats.rankdata(np.abs(d))
+    w_plus = float(np.sum(r[d > 0]))
+    w_minus = float(np.sum(r[d < 0]))
+    gold = (w_plus - w_minus) / (d.size * (d.size + 1) / 2)
+    eff = got["effectSizes"][0]
+    assert eff["name"] == "rank-biserial", eff
+    assert close(eff["value"], gold, 1e-12), (eff["value"], gold)
+    # Kerby's coefficient is bounded; no CI for it is standard, so none is given.
+    assert -1 <= eff["value"] <= 1
+    assert eff["ciLow"] is None and eff["ciHigh"] is None
+    assert "rank-biserial" in got["reportSentence"]
+
+
+def test_wilcoxon_rank_biserial_is_plus_one_under_complete_dominance():
+    got = eng.run_wilcoxon({"pairs": [[2, 1], [4, 1], [6, 2], [8, 3], [10, 4]],
+                            "tails": "two", "alpha": 0.05, "labels": ["a", "b"]})
+    assert close(got["effectSizes"][0]["value"], 1.0, 1e-12)
+
+
+def test_wilcoxon_effect_size_ignores_zero_differences_like_scipy_does():
+    """A tied pair contributes to neither W+ nor W-, so it must not enter the
+    denominator either - otherwise the effect shrinks toward zero for a reason
+    the p-value does not share."""
+    base = [[5.0, 4.0], [6.0, 5.0], [7.0, 5.0], [8.0, 6.0], [9.0, 7.0], [10.0, 8.0]]
+    tied = base + [[3.0, 3.0]]
+    a = eng.run_wilcoxon({"pairs": base, "tails": "two", "alpha": 0.05, "labels": ["a", "b"]})
+    b = eng.run_wilcoxon({"pairs": tied, "tails": "two", "alpha": 0.05, "labels": ["a", "b"]})
+    assert close(a["effectSizes"][0]["value"], b["effectSizes"][0]["value"], 1e-12)
+
+
+def test_rm_anova_reports_partial_eta_squared():
+    got = eng.run_anova_rm(RM)
+    m = np.asarray(RM["matrix"], float)
+    n, k = m.shape
+    # Golden from the sums-of-squares decomposition, not from F.
+    gm = m.mean()
+    ss_cond = n * float(np.sum((m.mean(axis=0) - gm) ** 2))
+    ss_subj = k * float(np.sum((m.mean(axis=1) - gm) ** 2))
+    ss_err = float(np.sum((m - gm) ** 2)) - ss_cond - ss_subj
+    gold = ss_cond / (ss_cond + ss_err)
+    eff = got["effectSizes"][0]
+    assert eff["name"] == "partial-eta-squared", eff
+    assert close(eff["value"], gold, 1e-10), (eff["value"], gold)
+    assert eff["ciLow"] is None and eff["ciHigh"] is None
+    assert "partial η²" in got["reportSentence"]
+
+
+def test_rm_partial_eta_squared_does_not_move_with_greenhouse_geisser():
+    """Epsilon rescales the reference distribution, not the variance explained,
+    and it multiplies both df by the same factor - so the effect size cancels."""
+    got = eng.run_anova_rm(RM)
+    assert got["assumptions"][0]["passed"] is False, "fixture must violate sphericity"
+    df1, df2 = (float(v) for v in got["df"].split(","))
+    assert (df1, df2) != (2.0, 14.0)                 # the p really was corrected
+    f = got["statistic"]
+    corrected = (f * df1) / (f * df1 + df2)
+    uncorrected = (f * 2.0) / (f * 2.0 + 14.0)
+    assert close(corrected, uncorrected, 1e-12)
+    assert close(got["effectSizes"][0]["value"], uncorrected, 1e-10)
+
+
+MIXED_LONG = {
+    "y": [], "f1": [], "subject": [],
+}
+for _i, _s in enumerate([f"s{j}" for j in range(10)]):
+    for _j, _l in enumerate(["a", "b", "c"]):
+        MIXED_LONG["y"].append(10.0 + 2.0 * _j + 1.7 * _i + (0.4 if _j == 1 else -0.3))
+        MIXED_LONG["f1"].append(_l)
+        MIXED_LONG["subject"].append(_s)
+
+
+def test_mixed_effects_reports_nakagawa_pseudo_r_squared():
+    if not eng._HAS_SM:
+        return
+    got = eng.run_mixed_effects({"long": MIXED_LONG, "alpha": 0.05})
+    import pandas as pd
+    from statsmodels.formula.api import mixedlm
+    df = pd.DataFrame(MIXED_LONG)
+    gold_model = mixedlm("y ~ C(f1)", df, groups=df["subject"]).fit()
+    var_f = float(np.var(np.asarray(gold_model.model.exog)
+                         @ np.asarray(gold_model.fe_params), ddof=0))
+    var_r = float(np.asarray(gold_model.cov_re)[0, 0])
+    var_e = float(gold_model.scale)
+    total = var_f + var_r + var_e
+    effects = got["effectSizes"]
+    assert [e["name"] for e in effects] == ["r-squared", "r-squared"], effects
+    assert effects[0]["term"] == "marginal (fixed effects)"
+    assert effects[1]["term"] == "conditional (fixed + random)"
+    assert close(effects[0]["value"], var_f / total, 1e-10)
+    assert close(effects[1]["value"], (var_f + var_r) / total, 1e-10)
+    # Conditional always dominates marginal; both are proportions.
+    assert effects[1]["value"] >= effects[0]["value"]
+    assert 0 <= effects[0]["value"] <= 1 and 0 <= effects[1]["value"] <= 1
+    assert effects[0]["ciLow"] is None and effects[1]["ciLow"] is None
+    assert "marginal R²" in got["reportSentence"]
+
+
+def test_mixed_effects_marginal_r2_is_not_the_fitted_value_variance():
+    """statsmodels' `fittedvalues` folds in the PREDICTED random effects, so
+    using it would push marginal R² up toward conditional R² and hide exactly
+    the between-subject share the two numbers exist to separate."""
+    if not eng._HAS_SM:
+        return
+    import pandas as pd
+    from statsmodels.formula.api import mixedlm
+    df = pd.DataFrame(MIXED_LONG)
+    fit = mixedlm("y ~ C(f1)", df, groups=df["subject"]).fit()
+    wrong = float(np.var(np.asarray(fit.fittedvalues), ddof=0))
+    right = float(np.var(np.asarray(fit.model.exog) @ np.asarray(fit.fe_params), ddof=0))
+    assert not close(wrong, right, 1e-6), (wrong, right)
+    got = eng.run_mixed_effects({"long": MIXED_LONG, "alpha": 0.05})
+    var_r = float(np.asarray(fit.cov_re)[0, 0])
+    total = right + var_r + float(fit.scale)
+    assert close(got["effectSizes"][0]["value"], right / total, 1e-10)
+
+
+# ── log-rank hazard ratio ─────────────────────────────────────────────────────
+
+
+def _peto(durations, events, groups):
+    """Independent reference: per-group O-E and the diagonal of the
+    hypergeometric covariance, from which log HR = (O-E)/V and SE = 1/sqrt(V)."""
+    d = np.asarray(durations, float)
+    e = np.asarray(events, float)
+    g = np.asarray(groups)
+    labs = sorted(set(groups))
+    ome = np.zeros(len(labs))
+    v = np.zeros(len(labs))
+    for t in np.unique(d[e == 1]):
+        n = float(np.sum(d >= t))
+        dt = float(np.sum((d == t) & (e == 1)))
+        if n <= 1:
+            continue
+        r = np.array([float(np.sum(d[g == l] >= t)) for l in labs])
+        o = np.array([float(np.sum((d[g == l] == t) & (e[g == l] == 1))) for l in labs])
+        ome += o - dt * r / n
+        f = r / n
+        v += dt * (n - dt) / (n - 1) * (f - f * f)
+    return labs, ome, v
+
+
+SURV2 = {"durations": SURV3["durations"][:20], "events": SURV3["events"][:20],
+         "groups": SURV3["groups"][:20], "alpha": 0.05}
+
+
+def test_log_rank_reports_a_peto_hazard_ratio_with_interval():
+    got = eng.run_survival(SURV2)
+    labs, ome, v = _peto(SURV2["durations"], SURV2["events"], SURV2["groups"])
+    loghr = ome[0] / v[0]
+    se = 1.0 / math.sqrt(v[0])
+    z = float(stats.norm.ppf(0.975))
+    effects = got["effectSizes"]
+    assert len(effects) == 1, effects        # two groups yield ONE ratio
+    eff = effects[0]
+    assert eff["name"] == "hazard-ratio"
+    assert eff["term"] == f"{labs[0]} vs {labs[1]}"
+    assert close(eff["value"], math.exp(loghr), 1e-10), (eff["value"], math.exp(loghr))
+    assert close(eff["ciLow"], math.exp(loghr - z * se), 1e-10)
+    assert close(eff["ciHigh"], math.exp(loghr + z * se), 1e-10)
+    assert "HR" in got["reportSentence"]
+
+
+def test_hazard_ratio_interval_agrees_with_the_log_rank_test_by_construction():
+    """chi2 = (O-E)^2/V and log HR = (O-E)/V with SE = 1/sqrt(V), so the interval
+    excludes 1 exactly when the log-rank p falls below alpha. A Mantel-Haenszel
+    ratio with SE = sqrt(1/E1 + 1/E2) does not have that property."""
+    strong = SURV2
+    weak = {"durations": SURV3["durations"][:10] * 2,
+            "events": SURV3["events"][:10] * 2,
+            "groups": ["A"] * 10 + ["B"] * 10}
+    for payload in (strong, weak):
+        for alpha in (0.01, 0.05, 0.10, 0.5):
+            got = eng.run_survival({**payload, "alpha": alpha})
+            eff = got["effectSizes"][0]
+            excludes_one = (eff["ciLow"] - 1) * (eff["ciHigh"] - 1) > 0
+            assert excludes_one == (got["pValue"] < alpha), (alpha, eff, got["pValue"])
+
+
+def test_hazard_ratio_band_widens_as_alpha_shrinks():
+    a = eng.run_survival({**SURV2, "alpha": 0.05})["effectSizes"][0]
+    b = eng.run_survival({**SURV2, "alpha": 0.01})["effectSizes"][0]
+    assert (b["ciHigh"] - b["ciLow"]) > (a["ciHigh"] - a["ciLow"])
+
+
+def test_three_group_hazard_ratios_are_vs_the_rest_and_the_record_says_so():
+    got = eng.run_survival(SURV3)
+    labs, ome, v = _peto(SURV3["durations"], SURV3["events"], SURV3["groups"])
+    effects = got["effectSizes"]
+    assert len(effects) == 3
+    z = float(stats.norm.ppf(0.975))
+    for eff, l, o, vv in zip(effects, labs, ome, v):
+        assert eff["term"] == f"{l} vs. all other groups", eff
+        assert close(eff["value"], math.exp(o / vv), 1e-10)
+        assert close(eff["ciLow"], math.exp(o / vv - z / math.sqrt(vv)), 1e-10)
+    # An omnibus test has no single hazard ratio, and the record must not let a
+    # reader take these three for pairwise contrasts.
+    assert any("pooled remainder" in w for w in got.get("_warnings", [])), got.get("_warnings")
+
+
+def test_two_group_log_rank_statistic_is_unchanged_by_the_shared_covariance():
+    """vmat[0,0] must equal the scalar variance the two-group branch used to
+    accumulate on its own, or the log-rank statistic itself has moved."""
+    got = eng.run_survival(SURV2)
+    gold, df = _mantel_cox(SURV2["durations"], SURV2["events"], SURV2["groups"])
+    assert df == 1 and got["df"] == 1
+    assert close(got["statistic"], gold, 1e-10)
+
+
+def test_single_group_kaplan_meier_reports_no_hazard_ratio():
+    """Nothing to compare against; inventing a ratio against the whole cohort
+    would be a comparison the user never asked for."""
+    out = eng.run_survival({**_KM, "alpha": 0.05})
+    assert out["effectSizes"] == []
+
+
+# ══ regression diagnostics and the prediction interval ════════════════════════
+
+_RX = np.linspace(1.0, 20.0, 25)
+LINREG_CLEAN = {"x": _RX.tolist(),
+                "y": (2.0 * _RX + 1.0 + np.array(
+                    [0.31, -0.42, 0.15, 0.62, -0.28, 0.44, -0.51, 0.09, 0.37, -0.19,
+                     0.55, -0.33, 0.21, -0.47, 0.12, 0.39, -0.25, 0.48, -0.16, 0.29,
+                     -0.38, 0.17, 0.51, -0.22, 0.34])).tolist(),
+                "alpha": 0.05}
+#: Variance grows with x, so Breusch-Pagan must fire.
+LINREG_FUNNEL = {"x": _RX.tolist(),
+                 "y": (2.0 * _RX + 1.0 + _RX * np.array(
+                     [0.31, -0.42, 0.15, 0.62, -0.28, 0.44, -0.51, 0.09, 0.37, -0.19,
+                      0.55, -0.33, 0.21, -0.47, 0.12, 0.39, -0.25, 0.48, -0.16, 0.29,
+                      -0.38, 0.17, 0.51, -0.22, 0.34])).tolist(),
+                 "alpha": 0.05}
+#: A parabola fitted with a straight line, so RESET must fire. Scatter is added
+#: deliberately: an EXACT parabola is reproduced perfectly by the RESET auxiliary
+#: model, driving its residual sum to float dust and its F to ~1e21, where
+#: comparing against statsmodels tests the floating-point noise and nothing else.
+LINREG_CURVED = {"x": _RX.tolist(),
+                 "y": (0.5 * _RX ** 2 + np.array(
+                     [0.31, -0.42, 0.15, 0.62, -0.28, 0.44, -0.51, 0.09, 0.37, -0.19,
+                      0.55, -0.33, 0.21, -0.47, 0.12, 0.39, -0.25, 0.48, -0.16, 0.29,
+                      -0.38, 0.17, 0.51, -0.22, 0.34])).tolist(),
+                 "alpha": 0.05}
+
+
+def _checks(out):
+    return {c["name"].split(" (")[0]: c for c in out["assumptions"]}
+
+
+def test_linear_regression_now_carries_its_three_assumption_checks():
+    out = eng.run_linear_regression(LINREG_CLEAN)
+    names = [c["name"] for c in out["assumptions"]]
+    assert names == ["Residual normality (Shapiro-Wilk)",
+                     "Equal variance of residuals (Breusch-Pagan)",
+                     "Linearity (Ramsey RESET, powers 2-3)"], names
+    assert all(c["passed"] for c in out["assumptions"]), out["assumptions"]
+    assert "assumption checks" in out["reportSentence"]
+
+
+def test_breusch_pagan_matches_statsmodels():
+    from statsmodels.stats.diagnostic import het_breuschpagan
+    import statsmodels.api as sm
+    for payload in (LINREG_CLEAN, LINREG_FUNNEL, LINREG_CURVED):
+        x = np.asarray(payload["x"], float)
+        y = np.asarray(payload["y"], float)
+        fit = stats.linregress(x, y)
+        resid = y - (fit.intercept + fit.slope * x)
+        gold = het_breuschpagan(resid, sm.add_constant(x))
+        got = _checks(eng.run_linear_regression(payload))["Equal variance of residuals"]
+        assert close(got["statistic"], float(gold[0]), 1e-9), (got["statistic"], gold[0])
+        assert close(got["pValue"], float(gold[1]), 1e-9)
+
+
+def test_reset_matches_statsmodels_linear_reset():
+    from statsmodels.stats.diagnostic import linear_reset
+    import statsmodels.api as sm
+    for payload in (LINREG_CLEAN, LINREG_FUNNEL, LINREG_CURVED):
+        x = np.asarray(payload["x"], float)
+        y = np.asarray(payload["y"], float)
+        gold = linear_reset(sm.OLS(y, sm.add_constant(x)).fit(), power=3,
+                            test_type="fitted", use_f=True)
+        got = _checks(eng.run_linear_regression(payload))["Linearity"]
+        assert close(got["statistic"], float(gold.fvalue), 1e-6), (got["statistic"], gold.fvalue)
+        assert close(got["pValue"], float(gold.pvalue), 1e-6)
+
+
+def test_the_diagnostics_actually_fire_on_the_data_that_breaks_them():
+    """A check that passes on everything is decoration."""
+    funnel = _checks(eng.run_linear_regression(LINREG_FUNNEL))
+    assert funnel["Equal variance of residuals"]["passed"] is False
+    assert "weighted least squares" in funnel["Equal variance of residuals"]["alternative"]
+    curved = _checks(eng.run_linear_regression(LINREG_CURVED))
+    assert curved["Linearity"]["passed"] is False
+    assert "nonlinear model" in curved["Linearity"]["alternative"]
+    # A perfect parabola has R² = 0.94 against a line, so R² alone would not
+    # have caught it - which is the point of testing linearity separately.
+    assert eng.run_linear_regression(LINREG_CURVED)["effectSizes"][0]["value"] > 0.9
+
+
+def test_regression_diagnostics_decline_gracefully_when_n_is_too_small():
+    out = eng.run_linear_regression({"x": [1.0, 2.0, 3.0, 4.0], "y": [2.0, 4.1, 5.9, 8.2],
+                                     "alpha": 0.05})
+    checks = _checks(out)
+    assert checks["Linearity"]["statistic"] is None
+    assert "more than 4 points" in checks["Linearity"]["verdict"]
+
+
+def test_prediction_interval_is_wider_than_the_confidence_interval():
+    out = eng.run_linear_regression(LINREG_CLEAN)
+    reg = out["_regression"]
+    x = np.asarray(LINREG_CLEAN["x"], float)
+    y = np.asarray(LINREG_CLEAN["y"], float)
+    fit = stats.linregress(x, y)
+    n = x.size
+    resid = y - (fit.intercept + fit.slope * x)
+    syx = math.sqrt(float(np.sum(resid ** 2)) / (n - 2))
+    sxx = float(np.sum((x - x.mean()) ** 2))
+    tcrit = float(stats.t.ppf(0.975, n - 2))
+    grid = np.linspace(x.min(), x.max(), 120)
+    lev = 1.0 / n + (grid - x.mean()) ** 2 / sxx
+    gold_ci = tcrit * syx * np.sqrt(lev)
+    gold_pi = tcrit * syx * np.sqrt(1.0 + lev)
+    assert len(reg["x"]) == 120
+    assert close(reg["syx"], syx, 1e-12)
+    for i in (0, 42, 60, 119):
+        centre = fit.intercept + fit.slope * grid[i]
+        assert close(reg["fit"][i], centre, 1e-12)
+        assert close(reg["ciLow"][i], centre - gold_ci[i], 1e-10)
+        assert close(reg["piLow"][i], centre - gold_pi[i], 1e-10)
+        assert close(reg["piHigh"][i], centre + gold_pi[i], 1e-10)
+        # The prediction band must strictly contain the confidence band: it adds
+        # the residual scatter, which is what a reader interpolating an unknown
+        # off a standard curve is actually exposed to.
+        assert reg["piLow"][i] < reg["ciLow"][i] < reg["ciHigh"][i] < reg["piHigh"][i]
+
+
+def test_prediction_interval_honours_alpha_and_is_named_in_the_record():
+    a = eng.run_linear_regression({**LINREG_CLEAN, "alpha": 0.05})["_regression"]
+    b = eng.run_linear_regression({**LINREG_CLEAN, "alpha": 0.01})["_regression"]
+    assert close(a["level"], 0.95, 1e-12) and close(b["level"], 0.99, 1e-12)
+    assert (b["piHigh"][0] - b["piLow"][0]) > (a["piHigh"][0] - a["piLow"][0])
+    out = eng.run_linear_regression({**LINREG_CLEAN, "alpha": 0.01})
+    assert "99% prediction interval" in out["reportSentence"]
+
+
+def test_regression_block_reaches_the_top_level_run_result():
+    out = eng.run({"test": "linear-regression", "shape": "columns", **LINREG_CLEAN})
+    assert out["error"] is None and out["testRan"] == "linear-regression"
+    assert out["regression"] is not None and len(out["regression"]["piLow"]) == 120
+    # ... and it is not left inside the test object the renderer prints.
+    assert "_regression" not in out["test"]
+    assert len(out["test"]["assumptions"]) == 3
+
+
+def test_a_test_without_a_regression_block_reports_none():
+    out = eng.run({"test": "anova-one-way", "shape": "groups", "alpha": 0.05,
+                   "postHoc": "none", "groups": GROUPS3})
+    assert out["regression"] is None
+
+
+# ══ global fitting with shared parameters ═════════════════════════════════════
+#
+# `sharedParameters` was accepted by the resolver and never read by the engine,
+# and the payload carried a single {x, y} so multiple datasets could not even be
+# expressed. `datasets` is the additive, backward-compatible way to express them.
+
+_GX = np.array([1e-3, 3e-3, 1e-2, 3e-2, 1e-1, 3e-1, 1.0, 3.0, 10.0, 30.0])
+_GLX = np.log10(_GX)
+#: Two curves from ONE bottom/top/hill, differing only in potency, plus fixed
+#: (not random) perturbations so the fixture is reproducible forever.
+_NOISE_A = np.array([1.4, -2.1, 0.8, 3.2, -1.7, 2.6, -3.1, 1.1, -0.6, 2.2])
+_NOISE_B = np.array([-2.3, 1.9, -1.2, 2.8, 3.4, -2.7, 1.5, -0.9, 2.1, -1.8])
+_TRUE = (5.0, 100.0, 1.2)          # bottom, top, hill — shared by construction
+GLOBAL_A = (eng._four_pl(_GLX, _TRUE[0], _TRUE[1], -1.0, _TRUE[2]) + _NOISE_A).tolist()
+GLOBAL_B = (eng._four_pl(_GLX, _TRUE[0], _TRUE[1], 0.5, _TRUE[2]) + _NOISE_B).tolist()
+GLOBAL_SETS = [{"label": "cmpdA", "x": _GX.tolist(), "y": GLOBAL_A},
+               {"label": "cmpdB", "x": _GX.tolist(), "y": GLOBAL_B}]
+GLOBAL_BASE = {"model": "4pl", "weighting": "none", "alpha": 0.05}
+SHARED3 = ["bottom", "top", "hillSlope"]
+
+
+def _stacked_gold(shared, sigma_mode="none", model="4pl"):
+    """Independent reference fit: a stacked model written here, handed straight
+    to scipy.optimize.curve_fit. Nothing below is read back out of the engine."""
+    func = {"3pl": eng._three_pl, "4pl": eng._four_pl, "5pl": eng._five_pl}[model]
+    names = {"3pl": ["bottom", "top", "logEC50"],
+             "4pl": ["bottom", "top", "logEC50", "hillSlope"],
+             "5pl": ["bottom", "top", "logEC50", "hillSlope", "asymmetry"]}[model]
+    npar = len(names)
+    ys = [np.asarray(GLOBAL_A, float), np.asarray(GLOBAL_B, float)]
+    xs = [_GLX, _GLX]
+    idx, flat = {}, 0
+    for j, nm in enumerate(names):
+        if nm in shared:
+            idx[(j, None)] = flat
+            flat += 1
+        else:
+            for i in range(2):
+                idx[(j, i)] = flat
+                flat += 1
+    at = lambda j, i: idx[(j, None)] if names[j] in shared else idx[(j, i)]
+
+    def guess(i):
+        g = [float(ys[i].min()), float(ys[i].max()), float(np.median(xs[i]))]
+        if npar >= 4:
+            g.append(1.0)
+        if npar == 5:
+            g.append(1.0)
+        return g
+
+    gs = [guess(0), guess(1)]
+    p0 = np.empty(flat)
+    for j, nm in enumerate(names):
+        if nm in shared:
+            p0[idx[(j, None)]] = float(np.mean([gs[0][j], gs[1][j]]))
+        else:
+            for i in range(2):
+                p0[idx[(j, i)]] = gs[i][j]
+    xall = np.concatenate(xs)
+    yall = np.concatenate(ys)
+    own = np.concatenate([np.full(xs[0].size, 0), np.full(xs[1].size, 1)])
+
+    def stacked(_x, *th):
+        th = np.asarray(th, float)
+        out = np.empty(xall.size)
+        for i in range(2):
+            m = own == i
+            out[m] = func(xall[m], *[th[at(j, i)] for j in range(npar)])
+        return out
+
+    absy = np.where(np.abs(yall) > 0, np.abs(yall), 1.0)
+    sig = (np.sqrt(absy) if sigma_mode == "1/Y"
+           else absy if sigma_mode == "1/Y^2" else None)
+    popt, pcov = optimize.curve_fit(stacked, xall, yall, p0=p0, sigma=sig, maxfev=40000)
+    return names, at, popt, pcov
+
+
+def test_global_fit_matches_an_independently_stacked_curve_fit():
+    names, at, gold, gcov = _stacked_gold(SHARED3)
+    cf = eng.run_dose_response({**GLOBAL_BASE, "datasets": GLOBAL_SETS,
+                                "sharedParameters": SHARED3})["curveFit"]
+    assert cf["global"] is True and cf["converged"] is True
+    assert cf["sharedParameters"] == SHARED3
+    for nm in SHARED3:
+        j = names.index(nm)
+        assert close(cf["parameters"][nm]["value"], gold[at(j, None)], 1e-7), nm
+    for i, d in enumerate(cf["datasets"]):
+        j = names.index("logEC50")
+        assert close(d["parameters"]["logEC50"]["value"], gold[at(j, i)], 1e-7)
+        assert close(d["ec50"], 10.0 ** gold[at(j, i)], 1e-7)
+
+
+def test_global_fit_recovers_the_parameters_the_data_was_built_from():
+    cf = eng.run_dose_response({**GLOBAL_BASE, "datasets": GLOBAL_SETS,
+                                "sharedParameters": SHARED3})["curveFit"]
+    assert abs(cf["parameters"]["bottom"]["value"] - _TRUE[0]) < 2.0
+    assert abs(cf["parameters"]["top"]["value"] - _TRUE[1]) < 2.0
+    assert abs(cf["parameters"]["hillSlope"]["value"] - _TRUE[2]) < 0.15
+    assert abs(math.log10(cf["datasets"][0]["ec50"]) - (-1.0)) < 0.1
+    assert abs(math.log10(cf["datasets"][1]["ec50"]) - 0.5) < 0.1
+
+
+def test_the_shared_fit_provably_differs_from_the_independent_fits():
+    """The whole point of a global fit. One Hill slope estimated from all 20
+    points is not either curve's own slope, and it is not their average either -
+    it is a joint least-squares solution, so the curve with less scatter pulls
+    harder."""
+    single = {**GLOBAL_BASE, "x": _GX.tolist()}
+    a = eng.run_dose_response({**single, "y": GLOBAL_A})["curveFit"]
+    b = eng.run_dose_response({**single, "y": GLOBAL_B})["curveFit"]
+    cf = eng.run_dose_response({**GLOBAL_BASE, "datasets": GLOBAL_SETS,
+                                "sharedParameters": SHARED3})["curveFit"]
+    ha = a["parameters"]["hillSlope"]["value"]
+    hb = b["parameters"]["hillSlope"]["value"]
+    hg = cf["parameters"]["hillSlope"]["value"]
+    assert not close(hg, ha, 1e-3), (hg, ha)
+    assert not close(hg, hb, 1e-3), (hg, hb)
+    assert not close(hg, (ha + hb) / 2, 1e-3), "a global fit is not an average"
+    # The potencies move too: each logEC50 is now estimated against plateaus
+    # that every point paid for.
+    for i, ind in enumerate((a, b)):
+        assert not close(cf["datasets"][i]["parameters"]["logEC50"]["value"],
+                         ind["parameters"]["logEC50"]["value"], 1e-4)
+
+
+def test_sharing_narrows_the_potency_intervals():
+    """The pharmacological payoff: three parameters stop being re-estimated per
+    curve, so the logEC50 standard errors fall."""
+    single = {**GLOBAL_BASE, "x": _GX.tolist()}
+    ind = [eng.run_dose_response({**single, "y": y})["curveFit"]
+           for y in (GLOBAL_A, GLOBAL_B)]
+    cf = eng.run_dose_response({**GLOBAL_BASE, "datasets": GLOBAL_SETS,
+                                "sharedParameters": SHARED3})["curveFit"]
+    for i in range(2):
+        wide = (ind[i]["parameters"]["logEC50"]["ciHigh"]
+                - ind[i]["parameters"]["logEC50"]["ciLow"])
+        narrow = (cf["datasets"][i]["parameters"]["logEC50"]["ciHigh"]
+                  - cf["datasets"][i]["parameters"]["logEC50"]["ciLow"])
+        assert narrow < wide, (i, narrow, wide)
+
+
+def test_sharing_nothing_reproduces_the_independent_fits_exactly():
+    """The control that proves the machinery is not quietly constraining
+    something: with no shared names the joint objective separates, so every
+    parameter must land where the standalone fit put it.
+
+    Agreement is to 1e-4 relative, not to machine precision, and the reason is
+    the optimiser rather than the model: curve_fit's convergence test is on the
+    POOLED objective, so a parameter stops moving once its contribution to the
+    combined residual is negligible, a slightly weaker condition than its own
+    standalone fit imposes. 1e-4 is still three orders tighter than the shift
+    that real sharing produces, which the assertion below pins."""
+    single = {**GLOBAL_BASE, "x": _GX.tolist()}
+    ind = [eng.run_dose_response({**single, "y": y})["curveFit"]
+           for y in (GLOBAL_A, GLOBAL_B)]
+    out = eng.run_dose_response({**GLOBAL_BASE, "datasets": GLOBAL_SETS,
+                                 "sharedParameters": []})
+    cf = out["curveFit"]
+    shared = eng.run_dose_response({**GLOBAL_BASE, "datasets": GLOBAL_SETS,
+                                    "sharedParameters": SHARED3})["curveFit"]
+    for i in range(2):
+        for nm in ("bottom", "top", "logEC50", "hillSlope"):
+            free_v = cf["datasets"][i]["parameters"][nm]["value"]
+            ind_v = ind[i]["parameters"][nm]["value"]
+            shared_v = shared["datasets"][i]["parameters"][nm]["value"]
+            assert close(free_v, ind_v, 1e-4), (i, nm, free_v, ind_v)
+            # The unshared fit sits on top of the independent one; the shared fit
+            # does not. If both were within tolerance the test would prove nothing.
+            assert abs(free_v - ind_v) < abs(shared_v - ind_v) / 100, (i, nm)
+    # ... and the record says the fit was unconstrained rather than letting the
+    # user believe the curves informed each other.
+    assert any("no shared parameters" in w for w in out["warnings"]), out["warnings"]
+
+
+def test_global_fit_shares_only_the_names_that_are_real_parameters():
+    out = eng.run_dose_response({**GLOBAL_BASE, "datasets": GLOBAL_SETS,
+                                 "sharedParameters": ["bottom", "slope", "Emax"]})
+    assert out["curveFit"]["sharedParameters"] == ["bottom"]
+    note = [w for w in out["warnings"] if "not a parameter" in w]
+    assert len(note) == 1 and "'slope'" in note[0] and "'Emax'" in note[0], out["warnings"]
+
+
+def test_global_fit_model_option_3pl_4pl_5pl():
+    for model, npar in (("3pl", 3), ("4pl", 4), ("5pl", 5)):
+        shared = [s for s in SHARED3 if s in _stacked_gold([], model=model)[0]]
+        out = eng.run_dose_response({**GLOBAL_BASE, "model": model,
+                                     "datasets": GLOBAL_SETS, "sharedParameters": shared})
+        cf = out["curveFit"]
+        assert cf["model"] == model.upper(), cf["model"]
+        assert len(cf["datasets"][0]["parameters"]) == npar + 1   # + derived ec50
+        names, at, gold, _ = _stacked_gold(shared, model=model)
+        j = names.index("logEC50")
+        assert close(cf["datasets"][0]["parameters"]["logEC50"]["value"],
+                     gold[at(j, 0)], 1e-6), model
+
+
+def test_global_fit_weighting_option():
+    """Weighting is a user-selectable option and two earlier defects lived on
+    non-default option values, so every one of the three is exercised."""
+    seen = []
+    for w in ("none", "1/Y", "1/Y^2"):
+        names, at, gold, _ = _stacked_gold(SHARED3, sigma_mode=w)
+        cf = eng.run_dose_response({**GLOBAL_BASE, "weighting": w, "datasets": GLOBAL_SETS,
+                                    "sharedParameters": SHARED3})["curveFit"]
+        j = names.index("logEC50")
+        assert close(cf["datasets"][0]["parameters"]["logEC50"]["value"],
+                     gold[at(j, 0)], 1e-6), w
+        seen.append(round(cf["datasets"][0]["ec50"], 10))
+    assert len(set(seen)) == 3, seen   # if they agreed the option would be decorative
+
+
+def test_global_fit_confidence_bands_option_on_and_off():
+    on = eng.run_dose_response({**GLOBAL_BASE, "datasets": GLOBAL_SETS,
+                                "sharedParameters": SHARED3,
+                                "confidenceBands": True})["curveFit"]
+    off = eng.run_dose_response({**GLOBAL_BASE, "datasets": GLOBAL_SETS,
+                                 "sharedParameters": SHARED3,
+                                 "confidenceBands": False})["curveFit"]
+    for d in off["datasets"]:
+        assert d["confidenceBand"] is None
+    for d in on["datasets"]:
+        assert d["confidenceBand"] is not None
+        assert len(d["confidenceBand"]["x"]) == 120
+        assert all(u > l for u, l in zip(d["confidenceBand"]["upper"],
+                                         d["confidenceBand"]["lower"]))
+
+
+def test_global_band_carries_the_shared_parameters_uncertainty():
+    """A curve's band must widen for the uncertainty in parameters it did not
+    estimate alone; taking only this dataset's own slots would understate it."""
+    shared = eng.run_dose_response({**GLOBAL_BASE, "datasets": GLOBAL_SETS,
+                                    "sharedParameters": SHARED3})["curveFit"]
+    free = eng.run_dose_response({**GLOBAL_BASE, "datasets": GLOBAL_SETS,
+                                  "sharedParameters": []})["curveFit"]
+    sb = shared["datasets"][0]["confidenceBand"]
+    fb = free["datasets"][0]["confidenceBand"]
+    assert any(u - l > 0 for u, l in zip(sb["upper"], sb["lower"]))
+    assert any(u - l > 0 for u, l in zip(fb["upper"], fb["lower"]))
+    # Different fits, so different bands - the shared one is not a copy.
+    assert not close(sb["upper"][60] - sb["lower"][60],
+                     fb["upper"][60] - fb["lower"][60], 1e-6)
+
+
+def test_global_fit_alpha_option_widens_every_parameter_interval():
+    a = eng.run_dose_response({**GLOBAL_BASE, "alpha": 0.05, "datasets": GLOBAL_SETS,
+                               "sharedParameters": SHARED3})["curveFit"]
+    b = eng.run_dose_response({**GLOBAL_BASE, "alpha": 0.01, "datasets": GLOBAL_SETS,
+                               "sharedParameters": SHARED3})["curveFit"]
+    for nm in SHARED3:
+        assert ((b["parameters"][nm]["ciHigh"] - b["parameters"][nm]["ciLow"])
+                > (a["parameters"][nm]["ciHigh"] - a["parameters"][nm]["ciLow"])), nm
+    # and the exact critical value, against scipy: df = n_total - n_flat.
+    names, at, gold, gcov = _stacked_gold(SHARED3)
+    n_total, n_flat = 20, gold.size
+    t = float(stats.t.ppf(1 - 0.01 / 2, n_total - n_flat))
+    j = names.index("top")
+    se = float(np.sqrt(np.diag(gcov))[at(j, None)])
+    assert close(b["parameters"]["top"]["ciHigh"], gold[at(j, None)] + t * se, 1e-6)
+
+
+def test_global_fit_declines_interpolation_and_says_so():
+    out = eng.run_dose_response({**GLOBAL_BASE, "datasets": GLOBAL_SETS,
+                                 "sharedParameters": SHARED3,
+                                 "unknowns": [{"label": "u1", "signal": 50.0}]})
+    assert out["curveFit"]["interpolated"] is None
+    assert any("not interpolated from a global fit" in w for w in out["warnings"])
+
+
+def test_global_fit_reports_a_shared_ec50_only_when_logec50_is_shared():
+    with_ec = eng.run_dose_response({**GLOBAL_BASE, "datasets": GLOBAL_SETS,
+                                     "sharedParameters": ["logEC50"]})["curveFit"]
+    assert with_ec["ec50"] is not None
+    assert close(with_ec["ec50"], 10.0 ** with_ec["parameters"]["logEC50"]["value"], 1e-12)
+    without = eng.run_dose_response({**GLOBAL_BASE, "datasets": GLOBAL_SETS,
+                                     "sharedParameters": SHARED3})["curveFit"]
+    assert without["ec50"] is None
+
+
+def test_global_fit_needs_two_usable_datasets_and_says_when_it_does_not_have_them():
+    out = eng.run_dose_response({**GLOBAL_BASE, "sharedParameters": SHARED3,
+                                 "datasets": [GLOBAL_SETS[0],
+                                              {"label": "empty", "x": [0.0], "y": [1.0]}]})
+    assert out["curveFit"]["converged"] is False
+    assert any("at least two datasets" in w for w in out["warnings"]), out["warnings"]
+
+
+def test_global_fit_pooled_scores_come_from_the_pooled_residuals():
+    names, at, gold, _ = _stacked_gold(SHARED3)
+    func = eng._four_pl
+    ys = np.concatenate([np.asarray(GLOBAL_A, float), np.asarray(GLOBAL_B, float)])
+    pred = np.concatenate([
+        func(_GLX, *[gold[at(j, i)] for j in range(4)]) for i in range(2)])
+    ss_res = float(np.sum((ys - pred) ** 2))
+    ss_tot = float(np.sum((ys - ys.mean()) ** 2))
+    n, k = 20, gold.size
+    cf = eng.run_dose_response({**GLOBAL_BASE, "datasets": GLOBAL_SETS,
+                                "sharedParameters": SHARED3})["curveFit"]
+    assert close(cf["rSquared"], 1 - ss_res / ss_tot, 1e-7)
+    assert close(cf["syx"], math.sqrt(ss_res / (n - k)), 1e-7)
+    kk = k + 1
+    assert close(cf["aicc"], n * math.log(ss_res / n) + 2 * kk
+                 + (2 * kk * (kk + 1)) / (n - kk - 1), 1e-7)
+
+
+# ── backward compatibility of the additive payload ────────────────────────────
+
+
+def test_a_payload_without_datasets_is_unchanged():
+    """The single-curve path must be bit-identical to what it was before
+    `datasets` existed, or the option is a breaking change wearing an additive
+    costume."""
+    out = eng.run_dose_response({"x": DOSE_X, "y": DOSE_Y, "model": "4pl",
+                                 "weighting": "none", "alpha": 0.05})
+    gold = _fit(None)
+    cf = out["curveFit"]
+    assert "global" not in cf
+    assert close(cf["ec50"], 10.0 ** gold[2], 1e-9)
+    assert cf["curve"] is not None and cf["confidenceBand"] is not None
+
+
+def test_one_dataset_is_a_single_fit_not_a_degenerate_global_one():
+    a = eng.run_dose_response({"x": DOSE_X, "y": DOSE_Y, "model": "4pl",
+                               "weighting": "none", "alpha": 0.05})["curveFit"]
+    b = eng.run_dose_response({"model": "4pl", "weighting": "none", "alpha": 0.05,
+                               "sharedParameters": SHARED3,
+                               "datasets": [{"label": "only", "x": DOSE_X,
+                                             "y": DOSE_Y}]})["curveFit"]
+    assert "global" not in b
+    assert close(b["ec50"], a["ec50"], 1e-12)
+    assert close(b["rSquared"], a["rSquared"], 1e-12)
+
+
+def test_global_fit_reaches_the_engine_entry_point():
+    out = eng.run({"test": "nonlinear-regression", "shape": "curve", **GLOBAL_BASE,
+                   "datasets": GLOBAL_SETS, "sharedParameters": SHARED3})
+    assert out["error"] is None and out["testRan"] == "nonlinear-regression"
+    assert out["curveFit"]["global"] is True
+    assert [d["label"] for d in out["curveFit"]["datasets"]] == ["cmpdA", "cmpdB"]
+
+
+def test_global_fit_excludes_zero_dose_points_per_dataset_and_names_the_dataset():
+    sets = [{"label": "cmpdA", "x": [0.0] + _GX.tolist(), "y": [5.0] + GLOBAL_A},
+            GLOBAL_SETS[1]]
+    out = eng.run_dose_response({**GLOBAL_BASE, "datasets": sets,
+                                 "sharedParameters": SHARED3})
+    assert out["curveFit"]["converged"] is True
+    w = [x for x in out["warnings"] if "zero or negative" in x]
+    assert len(w) == 1 and "cmpdA" in w[0], out["warnings"]
+    # Excluded, not substituted: identical to the fit without the vehicle row.
+    gold = eng.run_dose_response({**GLOBAL_BASE, "datasets": GLOBAL_SETS,
+                                  "sharedParameters": SHARED3})["curveFit"]
+    assert close(out["curveFit"]["datasets"][0]["ec50"], gold["datasets"][0]["ec50"], 1e-9)
+
+
+
 if __name__ == "__main__":
     import sys
     tests = [(k, v) for k, v in sorted(globals().items()) if k.startswith("test_")]
