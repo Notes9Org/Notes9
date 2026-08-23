@@ -403,12 +403,28 @@ export async function computeCacheKey(
  * on reopen we load the stored result and CHECK it, never silently recompute.
  * The three booleans let the reopen banner say precisely what moved.
  */
+/**
+ * Data-version digests were once written under a `sha256:` label that was simply
+ * wrong: the digits were always FNV-1a-64, and no real SHA-256 was ever stored.
+ * Relabelling to `fnv1a64:` fixed the false cryptographic claim on the provenance
+ * card, but a whole-string comparison would then report drift on every analysis
+ * saved before the relabel, for data that has not changed. Compare digests, not
+ * labels, so the rename stays invisible to integrity.
+ *
+ * ponytail: delete once no stored revision carries a `sha256:` prefix.
+ */
+const VERSION_HASH_LABEL = /^(?:sha256|fnv1a64):/
+
+function sameDataVersion(stored: string, current: string): boolean {
+  return stored.replace(VERSION_HASH_LABEL, "") === current.replace(VERSION_HASH_LABEL, "")
+}
+
 export function checkResultIntegrity(
   stored: Pick<EngineResult, "engineVersion" | "dataVersionHash" | "specHash">,
   current: { engineVersion: string; dataVersionHash: string; specHash: string }
 ): { valid: boolean; engineChanged: boolean; dataChanged: boolean; specChanged: boolean } {
   const engineChanged = stored.engineVersion !== current.engineVersion
-  const dataChanged = stored.dataVersionHash !== current.dataVersionHash
+  const dataChanged = !sameDataVersion(stored.dataVersionHash, current.dataVersionHash)
   const specChanged = stored.specHash !== current.specHash
   return {
     valid: !engineChanged && !dataChanged && !specChanged,
