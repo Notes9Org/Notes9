@@ -422,8 +422,37 @@ export interface SpecHistory {
   userEditedPaths: Set<string>
 }
 
-export function initHistory(spec: AnalysisSpec): SpecHistory {
-  return { spec, past: [], future: [], userEditedPaths: new Set() }
+/**
+ * `userEditedPaths` is a parameter because the surface that owns the sticky set
+ * is not this module. The workspace keeps one history for the whole analysis
+ * and derives the set from its audit log (`edit-history.ts`), then hands it in
+ * here for the one call that needs it, `applyAiPatch`. Defaulting it to empty
+ * was not a placeholder — it was the whole of L6 failing quietly, because every
+ * caller took the default and no collision could ever be detected.
+ */
+export function initHistory(spec: AnalysisSpec, userEditedPaths: Iterable<string> = []): SpecHistory {
+  return { spec, past: [], future: [], userEditedPaths: new Set(userEditedPaths) }
+}
+
+/**
+ * The record form of a mutation.
+ *
+ * Split out of `dispatchMutation` for the caller that needs the ENTRY but not a
+ * new spec — a rail control that has already moved its own state and only wants
+ * the edit written to history. Sharing this is what keeps a hand-turned knob and
+ * an assistant patch indistinguishable to the undo stack and the provenance
+ * card, which is the property the whole of L6 rests on.
+ */
+export function appliedMutation(
+  mutation: SpecMutation,
+  origin: MutationOrigin = "user"
+): AppliedMutation {
+  return {
+    mutation,
+    origin,
+    at: new Date().toISOString(),
+    description: describeMutation(mutation),
+  }
 }
 
 export function dispatchMutation(
@@ -431,12 +460,7 @@ export function dispatchMutation(
   mutation: SpecMutation,
   origin: MutationOrigin = "user"
 ): SpecHistory {
-  const applied: AppliedMutation = {
-    mutation,
-    origin,
-    at: new Date().toISOString(),
-    description: describeMutation(mutation),
-  }
+  const applied = appliedMutation(mutation, origin)
   const nextSpec = applyMutation(history.spec, mutation)
   const userEditedPaths = new Set(history.userEditedPaths)
   if (origin === "user") userEditedPaths.add(mutationPath(mutation))
