@@ -298,6 +298,20 @@ export const PostHocKind = z.enum([
   "holm-sidak",
   "dunn",
   "none",
+  /**
+   * False-discovery-rate corrections. Appended, never reordered: a stored spec
+   * names its correction by string, so moving a member would silently reparse
+   * an already-saved analysis as a different one.
+   *
+   * These control the expected PROPORTION of false positives among the
+   * rejections rather than the probability of any at all, which is the trade a
+   * comparison count in the hundreds — an omics panel, a multi-marker plate —
+   * has to make: a family-wise correction over 300 pairs has no power left.
+   * The engine implements both, and pairs them with Benjamini-Yekutieli (2005)
+   * FCR intervals so the interval and the adjusted p cannot contradict.
+   */
+  "benjamini-hochberg",
+  "benjamini-yekutieli",
 ])
 
 /** Nonlinear model library for Tier 0's non-negotiable dose-response work (§2). */
