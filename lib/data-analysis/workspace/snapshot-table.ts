@@ -1,16 +1,27 @@
 /**
  * Reading the live sheet the chart workspace draws from.
  *
- * The primary read is deliberately dumb and unchanged from the original
- * implementation: first sheet, row 0 as the header, verbatim. Column names
- * become `xKey`/`yKeys` in a saved spec and row order becomes `rowId`s a saved
- * exclusion list references — changing either for a sheet that already reads
- * fine would silently reshuffle every analysis saved against it. That reading
- * is only replaced when it demonstrably failed: an empty first sheet (the data
- * lives on another sheet), or a first row `detectHeader` itself concludes is a
- * title sitting above the real header. Both are recovered by scanning sheets
- * with `detectHeader`/`tableFromGrid` (workspace/bootstrap.ts), which already
- * knows how to skip a preamble, fold a unit row and drop a trailing footnote.
+ * There is one reader now: `detectHeader`/`tableFromGrid` (workspace/bootstrap.ts),
+ * which knows how to skip a preamble, fold a two-row merged header, read a unit
+ * row and drop a trailing footnote. It used to be consulted only as a veto over
+ * a verbatim row-0 read, and a veto that fires only when row 0 is a TITLE is no
+ * veto at all for the four shapes that actually break: a unit row became a data
+ * row, a two-row header collapsed four columns into two, a footnote became a
+ * data row, and two columns of the same name silently became one.
+ *
+ * The compatibility hazard that kept the verbatim read is real and unchanged:
+ * a saved spec references column names and row ids, so a sheet that starts
+ * reading differently reshuffles the analyses saved against it. It is handled
+ * by making the difference visible rather than by preserving the wrong reading:
+ *  - Where the two readings agree — a header on row 1, no unit row, no merged
+ *    group, no footnote, no blank or duplicate header cells — the columns, the
+ *    values, the row ids and `hashTable` are byte-identical to before. That is
+ *    the overwhelming majority of sheets, and `ingest-identity.test.ts` pins it.
+ *  - Where they disagree, the sheet was being read wrong. Those saved analyses
+ *    see a changed `versionHash`, so the reopen path already reports drift
+ *    instead of quietly recomputing, and `checkExclusions`
+ *    (saved-analysis-session.ts) says which exclusions no longer name their
+ *    own sample.
  *
  * `parseError` makes the failure visible instead of returning a silently empty
  * table: R1 in ARCHITECTURE.md is a placeholder ("Attach a data file to
@@ -21,7 +32,7 @@
 
 import * as XLSX from "xlsx"
 import { snapshotToXlsxWorkbook, type UniverWorkbookSnapshot } from "@/lib/spreadsheet-workbook"
-import { detectHeader, tableFromGrid } from "@/lib/data-analysis/workspace/bootstrap"
+import { detectHeader, rememberRowIds, tableFromGrid } from "@/lib/data-analysis/workspace/bootstrap"
 
 /** One row keyed by column name, the shape the chart and stats panels hold. */
 export type Row = Record<string, number | string>
@@ -29,6 +40,12 @@ export type Row = Record<string, number | string>
 export type SnapshotTable = {
   columns: string[]
   rows: Row[]
+  /**
+   * The spreadsheet row each entry of `rows` came from, as a `rowId`. Parallel
+   * to `rows`; also carried on the array itself, so `tableFromChartRows` picks
+   * them up without every caller being rewritten to pass them.
+   */
+  rowIds: string[]
   /** Non-null explains why the table is empty. Never set just because there are 0 rows. */
   parseError: string | null
 }
@@ -44,8 +61,19 @@ function sheetToGrid(ws: XLSX.WorkSheet): Grid {
   return XLSX.utils.sheet_to_json<(string | number)[]>(ws, { header: 1, blankrows: true })
 }
 
-/** Coerce a `tableFromGrid` cell the way the legacy reader always has: blank
- *  becomes `""`, a numeric-looking string becomes a number. */
+/**
+ * Coerce a `tableFromGrid` cell for the flat row shape.
+ *
+ * `Row` is the chart and stats panels' own shape and cannot hold `null`, so a
+ * blank stays `""` here; `tableFromChartRows` is where the two readers converge
+ * on the `Table` contract's `null`, which is the layer the missing-value logic
+ * actually reads. `hashTable` writes `?? ""` either way, so converging costs no
+ * stored hash.
+ *
+ * A numeric-looking string still becomes a number: that is the one coercion the
+ * old reader did that the grid reader does not, and dropping it would turn
+ * every text-formatted number column categorical.
+ */
 function coerceCell(v: number | string | null): number | string {
   if (v === null) return ""
   if (typeof v === "number") return v
@@ -53,24 +81,9 @@ function coerceCell(v: number | string | null): number | string {
   return Number(v)
 }
 
-function legacyReadFirstSheet(ws: XLSX.WorkSheet): { columns: string[]; rows: Row[] } {
-  const aoa = sheetToGrid(ws)
-  const header = (aoa[0] ?? []).map((c) => String(c ?? "").trim()).filter(Boolean)
-  const rows: Row[] = aoa.slice(1).map((r) => {
-    const o: Row = {}
-    header.forEach((h, i) => {
-      o[h] = coerceCell((r[i] ?? null) as number | string | null)
-    })
-    return o
-  })
-  return { columns: header, rows }
-}
-
 /** Read one sheet with the preamble/unit-row-aware detector, folded into the
  *  flat row shape every other reader here expects. */
-function detectedReadSheet(grid: Grid): { columns: string[]; rows: Row[] } | null {
-  const plan = detectHeader(grid)
-  if (plan.columns.length === 0) return null
+function detectedReadSheet(grid: Grid): { columns: string[]; rows: Row[]; rowIds: string[] } | null {
   const table = tableFromGrid(grid)
   if (table.columns.length === 0) return null
   const rows: Row[] = table.rows.map((r) => {
@@ -78,7 +91,8 @@ function detectedReadSheet(grid: Grid): { columns: string[]; rows: Row[] } | nul
     for (const c of table.columns) o[c] = coerceCell(r.values[c] ?? null)
     return o
   })
-  return { columns: table.columns, rows }
+  const rowIds = table.rows.map((r) => r.rowId)
+  return { columns: table.columns, rows: rememberRowIds(rows, rowIds), rowIds }
 }
 
 export function snapshotToTable(snapshot: UniverWorkbookSnapshot): SnapshotTable {
@@ -86,35 +100,21 @@ export function snapshotToTable(snapshot: UniverWorkbookSnapshot): SnapshotTable
   try {
     wb = snapshotToXlsxWorkbook(snapshot)
   } catch (err) {
-    return { columns: [], rows: [], parseError: `Could not read this file: ${errorMessage(err)}` }
+    return {
+      columns: [],
+      rows: [],
+      rowIds: [],
+      parseError: `Could not read this file: ${errorMessage(err)}`,
+    }
   }
 
   const sheetNames = wb.SheetNames ?? []
   if (sheetNames.length === 0) {
-    return { columns: [], rows: [], parseError: "This file has no sheets." }
+    return { columns: [], rows: [], rowIds: [], parseError: "This file has no sheets." }
   }
 
-  const firstSheet = wb.Sheets[sheetNames[0]]
-  if (firstSheet) {
-    try {
-      const legacy = legacyReadFirstSheet(firstSheet)
-      if (legacy.columns.length > 0) {
-        const grid = sheetToGrid(firstSheet)
-        const plan = detectHeader(grid)
-        // Trust the verbatim row-0 reading unless detection itself concludes
-        // row 0 is a title sitting above the real header — that is the one
-        // case the legacy reader gets silently wrong rather than just empty.
-        if (plan.startRow === 0) {
-          return { ...legacy, parseError: null }
-        }
-      }
-    } catch {
-      // Fall through to the sheet scan below.
-    }
-  }
-
-  // The legacy reading of sheet 1 was empty or a title row. Look for the real
-  // table: on sheet 1 itself (past the preamble) first, then later sheets.
+  // Sheet 1 first, then later sheets: an empty first sheet means the data lives
+  // somewhere else in the workbook, not that the file is unreadable.
   let lastRationale: string | null = null
   for (const name of sheetNames) {
     const ws = wb.Sheets[name]
@@ -132,6 +132,7 @@ export function snapshotToTable(snapshot: UniverWorkbookSnapshot): SnapshotTable
   return {
     columns: [],
     rows: [],
+    rowIds: [],
     parseError:
       sheetNames.length > 1
         ? `No header row was found on any of the ${sheetNames.length} sheets in this file.`
