@@ -35,6 +35,19 @@ const WEIGHTS: { id: WeightMode; label: string }[] = [
 
 const num = (v: number, d = 3) => (isFinite(v) ? v.toFixed(d) : "-")
 
+/**
+ * The 95% interval beside the EC₅₀, when the fit produced one.
+ *
+ * A bare EC₅₀ reads as a measurement when it is an estimate, and for a sigmoid
+ * the interval is the informative half — it is asymmetric in concentration
+ * (`curve-fitting` back-transforms the log₁₀EC₅₀ interval rather than reporting
+ * `v ± t·SE`), so it cannot be inferred from the point estimate.
+ */
+export const ec50Interval = (fit: { ec50CI?: [number, number] }) =>
+  fit.ec50CI && fit.ec50CI.every(isFinite)
+    ? ` (95% CI ${num(fit.ec50CI[0], 3)}–${num(fit.ec50CI[1], 3)})`
+    : ""
+
 type Row = Record<string, number | string>
 
 /**
@@ -172,7 +185,7 @@ export function useStandardCurve(table: Table, numericCols: string[], plate: Pla
       <section className="flex min-w-0 flex-col rounded-2xl border border-border bg-card/80 shadow-sm backdrop-blur-sm">
         <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
           <span className="text-sm font-semibold">Standard curve</span>
-          {fit && <span className="ml-auto text-[11px] text-muted-foreground">{model.toUpperCase()} · R² = {num(fit.r2, 4)}{fit.ec50 != null ? ` · EC₅₀ ${num(fit.ec50, 3)}` : ""}</span>}
+          {fit && <span className="ml-auto text-[11px] text-muted-foreground">{model.toUpperCase()} · R² = {num(fit.r2, 4)}{fit.ec50 != null ? ` · EC₅₀ ${num(fit.ec50, 3)}${ec50Interval(fit)}` : ""}</span>}
         </div>
         <div className="p-2">
           <div className="h-[420px] w-full">

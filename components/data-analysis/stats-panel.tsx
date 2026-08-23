@@ -295,7 +295,21 @@ function ResultView({
             <Pill p={result.p} />
           </div>
         </div>
-        {result.effect && <Stat label={result.effect.label} value={num(result.effect.value)} />}
+        {result.effect && (
+          <Stat
+            label={result.effect.label}
+            value={num(result.effect.value)}
+            /* An effect size without its interval reads as a measurement when
+               it is an estimate, and the interval is what says whether the
+               effect is pinned down or merely non-zero. Shown only when the
+               test actually produced one — never manufactured here. */
+            sub={
+              result.effectCI && result.effectCI.every(Number.isFinite)
+                ? `95% CI ${num(result.effectCI[0])} to ${num(result.effectCI[1])}`
+                : undefined
+            }
+          />
+        )}
       </div>
       {result.note && <p className="text-xs text-muted-foreground">{result.note}</p>}
       {tukey.length > 0 && (
@@ -356,8 +370,8 @@ function Pill({ p }: { p: number }) {
   const sig = p < 0.05
   return <span className={cn("rounded px-1.5 py-0.5 text-[11px] font-semibold", sig ? "bg-[var(--n9-accent,#965034)]/12 text-[var(--n9-accent,#965034)]" : "bg-muted text-muted-foreground")}>{sigStars(p)}</span>
 }
-function Stat({ label, value }: { label: string; value: string }) {
-  return (<div><div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/70">{label}</div><div className="mt-0.5 font-mono text-lg font-semibold">{value}</div></div>)
+function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (<div><div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/70">{label}</div><div className="mt-0.5 font-mono text-lg font-semibold">{value}</div>{sub && <div className="mt-0.5 font-mono text-[11px] tabular-nums text-muted-foreground">{sub}</div>}</div>)
 }
 function ColSelect({ cols, value, onChange }: { cols: string[]; value: string; onChange: (v: string) => void }) {
   return (

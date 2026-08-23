@@ -119,3 +119,98 @@ export function ReopenBanner({
     </motion.div>
   )
 }
+
+/**
+ * Saved exclusions that no longer name the sample they were written for (§8.1).
+ *
+ * Row ids are sheet-anchored. Insert a row above an exclusion and every id
+ * below it shifts: the excluded sample rejoins the analysis, an innocent one
+ * leaves, and the recorded author, reason and timestamp stay attached to the
+ * wrong measurement. Nothing errors, nothing is missing, and the figure still
+ * draws — which is exactly why this needs a screen rather than a log line.
+ *
+ * It reports; it does not repair. Re-anchoring automatically would mean this
+ * code deciding which sample a researcher meant to exclude, and a wrong guess
+ * is indistinguishable from a right one afterwards. Same two choices as the
+ * integrity banner above it, for the same reason.
+ */
+export function MovedExclusionsBanner({
+  moved,
+  rerunning,
+  onKeepStored,
+  onRerun,
+  className,
+}: {
+  moved: readonly { rowId: string; status: "missing" | "moved" | "ok" }[]
+  rerunning?: boolean
+  onKeepStored: () => void
+  onRerun: () => void
+  className?: string
+}) {
+  const reduce = useReducedMotion()
+  const shifted = moved.filter((m) => m.status === "moved")
+  const gone = moved.filter((m) => m.status === "missing")
+  if (shifted.length === 0 && gone.length === 0) return null
+
+  return (
+    <motion.div
+      initial={reduce ? { opacity: 0 } : { opacity: 0, y: -6 }}
+      animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0 }}
+      transition={reduce ? { duration: 0.12 } : { duration: 0.28, ease: EASE_OUT }}
+      className={cn("rounded-xl border border-destructive/30 bg-destructive/[0.06] px-4 py-3.5", className)}
+    >
+      <div className="flex items-start gap-3">
+        <WarningCircle className="mt-0.5 size-4 shrink-0 text-destructive" weight="fill" />
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-semibold text-foreground">
+            {shifted.length > 0
+              ? "Excluded rows no longer hold the data they were excluded for"
+              : "Excluded rows are no longer in this dataset"}
+          </p>
+          <p className="mt-1 max-w-3xl text-[13px] leading-[1.65] text-foreground/80">
+            {shifted.length > 0 && (
+              <>
+                {shifted.length === 1 ? "One exclusion" : `${shifted.length} exclusions`} point at a
+                row whose values have changed since this revision was saved — rows were most likely
+                inserted or reordered above{" "}
+                {shifted.length === 1 ? "it" : "them"} ({shifted.map((m) => m.rowId).join(", ")}).
+                The reason and author recorded against{" "}
+                {shifted.length === 1 ? "it" : "them"} now describe a different measurement.{" "}
+              </>
+            )}
+            {gone.length > 0 && (
+              <>
+                {gone.length === 1 ? "One excluded row" : `${gone.length} excluded rows`} ({gone
+                .map((m) => m.rowId)
+                .join(", ")}) {gone.length === 1 ? "is" : "are"} no longer present.{" "}
+              </>
+            )}
+            Nothing has been changed for you: re-anchoring an exclusion is a judgement about which
+            sample was meant, and it is yours to make.
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={onKeepStored}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[var(--n9-accent)] px-3 text-[13px] font-medium text-white transition-colors hover:bg-[var(--n9-accent-hover)]"
+            >
+              Keep the stored result
+            </button>
+            <button
+              type="button"
+              onClick={onRerun}
+              disabled={rerunning}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-[13px] font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-60"
+            >
+              <ArrowClockwise className={cn("size-3.5", rerunning && "animate-spin")} weight="bold" />
+              {rerunning ? "Re-running…" : "Re-run into a new revision"}
+            </button>
+            <span className="text-[12px] text-muted-foreground">
+              Re-running never changes the stored revision.
+            </span>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  )
+}

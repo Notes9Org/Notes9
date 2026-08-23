@@ -138,7 +138,7 @@ import {
   type ChartState,
 } from "@/lib/data-analysis/workspace/chart-state-spec"
 import { legalTests } from "@/lib/data-analysis/semantic/infer"
-import { ReopenBanner } from "@/components/data-analysis/workspace/reopen-banner"
+import { MovedExclusionsBanner, ReopenBanner } from "@/components/data-analysis/workspace/reopen-banner"
 import {
   LibraryDialog,
   isWorkbookUnreadableReason,
@@ -161,6 +161,8 @@ import {
 } from "@/lib/data-analysis/saved-analysis"
 import {
   autosaveDraft,
+  checkExclusions,
+  type ExclusionStatus,
   freezeOnce,
   readDataSnapshot,
   readWorkspaceConfig,
@@ -2853,6 +2855,8 @@ export function DataAnalysisWorkspace({
    * shipped to nobody. It belongs on the surface that actually renders results.
    */
   const [provenanceOpen, setProvenanceOpen] = useState(false)
+  /** Saved exclusions whose row id no longer names the sample it was written for. */
+  const [movedExclusions, setMovedExclusions] = useState<ExclusionStatus[]>([])
   const [exclusionPreview, setExclusionPreview] = useState<ExclusionPreview | null>(null)
   const [exclusionPreviewLoading, setExclusionPreviewLoading] = useState(false)
 
@@ -3141,7 +3145,10 @@ export function DataAnalysisWorkspace({
 
   const tableOf = useCallback((snap: UniverWorkbookSnapshot) => {
     const t = snapshotToTable(snap)
-    return tableFromChartRows(t.columns, t.rows)
+    // Take the reader's own row ids rather than re-minting them from position:
+    // `checkExclusions` compares saved ids against live ids, so the two sides
+    // have to agree on where an id comes from or every row reads as moved.
+    return tableFromChartRows(t.columns, t.rows, t.rowIds)
   }, [])
 
   const refreshRevisions = useCallback(async (analysisId: string) => {
@@ -3173,9 +3180,11 @@ export function DataAnalysisWorkspace({
       setBusyRevisionId(revision.id)
       try {
         let liveHash: string | null = revision.dataVersionHash
+        let liveTable: ReturnType<typeof tableOf> | null = null
         if (analysis.sourceDataFileId) {
           const live = await fetchSourceWorkbook(analysis)
-          liveHash = live ? hashTable(tableOf(live)) : null
+          liveTable = live ? tableOf(live) : null
+          liveHash = liveTable ? hashTable(liveTable) : null
         }
 
         const verdict = await openRevision(revision.id, liveHash)
@@ -3186,6 +3195,28 @@ export function DataAnalysisWorkspace({
         }
 
         const snapshot = readDataSnapshot(verdict.revision.dataSnapshot)
+
+        /**
+         * Did the saved exclusions stay on the samples they were written for?
+         *
+         * Row ids are sheet-anchored, so inserting a row above an exclusion
+         * shifts every id below it: the excluded sample quietly rejoins the
+         * analysis and an innocent one quietly leaves, while the provenance
+         * line keeps the original author, reason and timestamp against the
+         * wrong measurement. The hash check cannot see this — it only says the
+         * file changed — and the orphan check structurally cannot, because
+         * after an insert every id still resolves. §8.1 calls a falsified
+         * record worse than a lost one, so this reports and lets the researcher
+         * decide; it never re-runs or re-anchors on its own.
+         */
+        setMovedExclusions(
+          snapshot?.table && liveTable
+            ? checkExclusions(snapshot.table, liveTable, verdict.spec.exclusions).filter(
+                (e) => e.status !== "ok"
+              )
+            : []
+        )
+
         // The stored rows, so the figure is drawn from what it was computed
         // from even when the source file has been edited or deleted.
         if (snapshot?.workbook) {
@@ -4472,6 +4503,17 @@ export function DataAnalysisWorkspace({
           rerunning={rerunning}
         />
       )}
+
+      {/* §8.1. A shifted row id is the one integrity failure that leaves every
+          check green: the ids all still resolve, so only comparing the saved
+          rows to the live ones can see it. Reported next to the integrity
+          banner, with the same two choices, and never repaired silently. */}
+      <MovedExclusionsBanner
+        moved={movedExclusions}
+        onKeepStored={() => setMovedExclusions([])}
+        onRerun={rerunIntoNewRevisionNow}
+        rerunning={rerunning}
+      />
 
       {/* Scoped to the analysis above it, and deliberately below the tabs: what
           it changes is this analysis, not the page. */}
