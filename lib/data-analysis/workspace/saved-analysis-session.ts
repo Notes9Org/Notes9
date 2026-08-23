@@ -104,6 +104,52 @@ export function readWorkspaceConfig(
   return config && typeof config === "object" ? (config as Record<string, unknown>) : null
 }
 
+/* ── Exclusions across an edit (§8.1) ──────────────────────────────────────*/
+
+export type ExclusionStatus = {
+  rowId: string
+  /** `ok`: same sample. `missing`: the row is gone. `moved`: the id resolves to different values. */
+  status: "ok" | "missing" | "moved"
+}
+
+/**
+ * Does each saved exclusion still name the sample it was recorded against?
+ *
+ * `rowId` is the spreadsheet row number, which is stable against a cell edit and
+ * NOT stable against an insert or delete above it. The resolver's orphan warning
+ * only fires when an id VANISHES, so inserting a row above an exclusion is the
+ * silent case: every id still resolves, the excluded sample quietly rejoins the
+ * analysis, an innocent one quietly leaves, and the provenance line keeps the
+ * original author, reason and timestamp against the wrong measurement. §8.1
+ * calls a falsified record worse than a lost one, so this reports rather than
+ * guesses.
+ *
+ * The comparison is against `AnalysisDataSnapshot.table` — the exact rows the
+ * revision was computed on, already persisted with every revision — so no
+ * schema change and no re-minted id is needed to tell "same sample" from "same
+ * row number". Only the saved table's own columns are compared: a column added
+ * since is not evidence that the sample changed.
+ */
+export function checkExclusions(
+  saved: SpecTable,
+  live: SpecTable,
+  exclusions: readonly { rowId: string }[]
+): ExclusionStatus[] {
+  const liveRows = new Map(live.rows.map((r) => [r.rowId, r]))
+  // The same `?? ""` normalisation `hashTable` uses, so "" and null are one
+  // thing here too and a converged reader does not read as a moved sample.
+  const same = (a: SpecTable["rows"][number], b: SpecTable["rows"][number]) =>
+    saved.columns.every((c) => String(a.values[c] ?? "") === String(b.values[c] ?? ""))
+
+  return exclusions.map(({ rowId }) => {
+    const before = saved.rows.find((r) => r.rowId === rowId)
+    const after = liveRows.get(rowId)
+    if (!after) return { rowId, status: "missing" as const }
+    if (!before) return { rowId, status: "ok" as const }
+    return { rowId, status: same(before, after) ? ("ok" as const) : ("moved" as const) }
+  })
+}
+
 /* ── Writes ────────────────────────────────────────────────────────────────*/
 
 interface RevisionInput {

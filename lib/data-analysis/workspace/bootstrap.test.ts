@@ -265,9 +265,11 @@ describe("the separator byte hashTable joins column names with", () => {
     )
   })
 
-  it("hashes a fixed table to the value stored analyses were saved with", () => {
-    // This is dataset.versionHash. Any change here reports drift on, or
-    // detaches, every analysis already in the database.
-    expect(hashTable(unpaired)).toBe("sha256:9cee431b12aaa0b7")
+  it("hashes a fixed table to the digits stored analyses were saved with", () => {
+    // This is dataset.versionHash. Any change to the DIGITS reports drift on,
+    // or detaches, every analysis already in the database. The label in front
+    // of them changed once, from "sha256" to the function this actually is;
+    // the digits below are the ones the old label carried, unchanged.
+    expect(hashTable(unpaired)).toBe("fnv1a64:9cee431b12aaa0b7")
   })
 })
