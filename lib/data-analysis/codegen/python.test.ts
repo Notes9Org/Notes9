@@ -267,6 +267,44 @@ describeIf("generated Python reproduces the engine", () => {
     })
   }, RUNS_PYTHON)
 
+  it("carries an FDR correction through to the engine unchanged", () => {
+    const rows: (string | number)[][] = []
+    const means: Record<string, number> = { A: 10, B: 10.4, C: 21 }
+    for (const g of ["A", "B", "C"]) {
+      for (let i = 0; i < 5; i++) rows.push([g, means[g] + (i % 3) * 0.6])
+    }
+    const { file, table } = csvTable("fdr.csv", ["arm", "value"], rows)
+    const s = spec({
+      test: "anova-one-way",
+      responseColumns: ["value"],
+      groupColumn: "arm",
+      // The spec enum only just gained this; the pipeline passes `postHoc`
+      // straight through, so a correction the engine grows is reachable from a
+      // generated script the day it lands.
+      postHoc: "benjamini-hochberg",
+      alpha: 0.05,
+      tails: "two",
+    })
+
+    const reference = engineReference(s, table)
+    const { json } = scriptResult(s, table, file)
+
+    expectSameNumbers(json, reference)
+    const pairwise = (json.test as {
+      pairwise: { correctionMethod: string; ciLow: number | null; significant: boolean }[]
+    }).pairwise
+    expect(pairwise.map((c) => c.correctionMethod)).toEqual([
+      "benjamini-hochberg",
+      "benjamini-hochberg",
+      "benjamini-hochberg",
+    ])
+    // FCR intervals exist only over the selected set; an unselected row keeps
+    // no interval, and the script reproduces that rather than back-filling one.
+    for (const c of pairwise) {
+      expect(c.ciLow === null).toBe(!c.significant)
+    }
+  }, RUNS_PYTHON)
+
   it("dose-response 4PL with 1/Y^2 weighting and a vehicle control row", () => {
     const bottom = 20
     const top = 1200
