@@ -67,25 +67,37 @@ describe("the outlier method offered is one that exists", () => {
 })
 
 describe("the confirmation describes the row being excluded", () => {
+  /** Ids come from the reader and are anchored to the SPREADSHEET row. */
   const table = {
-    columns: ["Dose", "OD450", "Plate"],
     rows: [
-      { Dose: 1, OD450: 0.11, Plate: "A" },
-      { Dose: 3, OD450: 0.22, Plate: "A" },
-      { Dose: 10, OD450: 0.42, Plate: "B" },
+      { rowId: "row-2", values: { Dose: 1, OD450: 0.11, Plate: "A" } },
+      { rowId: "row-3", values: { Dose: 3, OD450: 0.22, Plate: "A" } },
+      { rowId: "row-4", values: { Dose: 10, OD450: 0.42, Plate: "B" } },
     ],
   }
 
-  it("resolves the positional rowId back to its own row, not the cursor's", () => {
-    // `row-4` is table.rows[2] (`row-${i + 2}`). Right-clicking this point on
-    // the figure while the sheet cursor sits on row 2 used to show row 4's id
-    // above row 2's values.
+  it("describes the row the exclusion targets, not the sheet cursor's row", () => {
+    // Right-clicking this point on the figure while the cursor sits elsewhere
+    // used to show row 4's id above the cursor row's values.
     expect(describeExcludedRow("row-4", table, ["Dose", "OD450"])).toBe(
-      "Row 4 · Dose 10 · OD450 0.42",
+      "Row 4 \u00b7 Dose 10 \u00b7 OD450 0.42",
     )
     expect(describeExcludedRow("row-2", table, ["Dose", "OD450"])).toBe(
-      "Row 2 · Dose 1 · OD450 0.11",
+      "Row 2 \u00b7 Dose 1 \u00b7 OD450 0.11",
     )
+  })
+
+  it("resolves by id, so a unit row or preamble cannot shift the description", () => {
+    // A sheet whose data starts on row 3: `row-3` is the FIRST data row, not
+    // the second. Any arithmetic on the id gets this wrong by exactly one row.
+    const offset = {
+      rows: [
+        { rowId: "row-3", values: { Sample: "S1", OD600: 0.42 } },
+        { rowId: "row-4", values: { Sample: "S2", OD600: 0.61 } },
+      ],
+    }
+    expect(describeExcludedRow("row-3", offset, ["Sample"])).toBe("Row 3 \u00b7 Sample S1")
+    expect(describeExcludedRow("row-4", offset, ["Sample"])).toBe("Row 4 \u00b7 Sample S2")
   })
 
   it("never returns another row's values for an id it cannot resolve", () => {
@@ -94,17 +106,23 @@ describe("the confirmation describes the row being excluded", () => {
     expect(describeExcludedRow("nonsense", table, ["Dose"])).toBeUndefined()
   })
 
-  it("falls back to the first columns when the plotted ones are unset", () => {
-    expect(describeExcludedRow("row-3", table, ["", ""])).toBe("Row 3 · Dose 3 · OD450 0.22")
+  it("falls back to the row's own columns when the plotted ones are unset", () => {
+    expect(describeExcludedRow("row-3", table, ["", ""])).toBe(
+      "Row 3 \u00b7 Dose 3 \u00b7 OD450 0.22 \u00b7 Plate A",
+    )
   })
 
   it("caps the summary at three columns so the dialog stays readable", () => {
-    const wide = {
-      columns: ["a", "b", "c", "d", "e"],
-      rows: [{ a: 1, b: 2, c: 3, d: 4, e: 5 }],
-    }
+    const wide = { rows: [{ rowId: "row-2", values: { a: 1, b: 2, c: 3, d: 4, e: 5 } }] }
     const out = describeExcludedRow("row-2", wide, ["a", "b", "c", "d", "e"])!
-    expect(out.split("·")).toHaveLength(4) // "Row 2" + three columns
+    expect(out.split("\u00b7")).toHaveLength(4) // "Row 2" + three columns
     expect(out).not.toContain("d 4")
+  })
+
+  it("renders an em dash rather than the word undefined for a blank cell", () => {
+    const blank = { rows: [{ rowId: "row-2", values: { Dose: null, OD450: 0.4 } }] }
+    expect(describeExcludedRow("row-2", blank, ["Dose", "OD450"])).toBe(
+      "Row 2 \u00b7 Dose \u2014 \u00b7 OD450 0.4",
+    )
   })
 })

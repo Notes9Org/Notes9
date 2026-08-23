@@ -263,28 +263,30 @@ type ErrorMode = "none" | "sd" | "sem" | "ci90" | "ci95" | "ci99" | "range" | "i
 /**
  * Describe the row an exclusion actually targets (§8.1).
  *
- * `rowId` is positional — `row-${i + 2}`, the sheet's 1-based numbering with a
- * header row — so the row it names can always be recovered from the table, and
- * the confirmation describes the point that was clicked rather than wherever
- * the spreadsheet cursor happens to be parked. This is the screen whose entire
- * job is making the researcher certain which point they are removing; showing
- * one row's id above another row's values is the one thing it must never do.
+ * Looked up BY ID, never by position. Row ids are anchored to the spreadsheet
+ * row the sample came from, so a sheet with a unit row or a preamble makes
+ * `row-N` the Nth spreadsheet row and not the Nth data row — arithmetic on the
+ * id would reintroduce exactly the bug this exists to prevent, one row's id
+ * above another row's values. This is the screen whose entire job is making
+ * the researcher certain which point they are removing, so it either describes
+ * that point or it says nothing.
  */
 export function describeExcludedRow(
   rowId: string,
-  table: { columns: string[]; rows: Record<string, string | number>[] },
+  table: { rows: readonly { rowId: string; values: Record<string, unknown> }[] },
   prefer: string[],
 ): string | undefined {
-  const i = Number(rowId.slice("row-".length)) - 2
-  const row = Number.isInteger(i) && i >= 0 ? table.rows[i] : undefined
+  const row = table.rows.find((r) => r.rowId === rowId)
   if (!row) return undefined
   const seen = new Set<string>()
-  const cols = prefer.filter((c) => c && table.columns.includes(c) && !seen.has(c) && seen.add(c))
-  const cells = (cols.length ? cols : table.columns.slice(0, 2))
-    .slice(0, 3)
-    .map((c) => `${c} ${row[c] ?? "—"}`)
-    .join(" · ")
-  return `Row ${i + 2}${cells ? ` · ${cells}` : ""}`
+  const named = prefer.filter((c) => c && c in row.values && !seen.has(c) && seen.add(c))
+  const cols = (named.length ? named : Object.keys(row.values)).slice(0, 3)
+  const cells = cols
+    .map((c) => `${c} ${row.values[c] ?? "\u2014"}`)
+    .join(" \u00b7 ")
+  // The number the researcher sees in the sheet is the one in the id.
+  const shown = rowId.startsWith("row-") ? rowId.slice(4) : rowId
+  return `Row ${shown}${cells ? ` \u00b7 ${cells}` : ""}`
 }
 
 /**
@@ -4337,7 +4339,7 @@ export function DataAnalysisWorkspace({
         <ExclusionDialog
           open
           rowId={exclusionRowId}
-          rowSummary={describeExcludedRow(exclusionRowId, table, [xKey, ...activeY])}
+          rowSummary={describeExcludedRow(exclusionRowId, specTable, [xKey, ...activeY])}
           preview={exclusionPreview}
           previewLoading={exclusionPreviewLoading}
           currentUserId={excludedBy}
