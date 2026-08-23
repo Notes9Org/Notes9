@@ -89,7 +89,7 @@ describe("FCR intervals are described at the level they were built at", () => {
   ]
 
   it("says nothing for a family-wise correction, whose intervals are all 1 - alpha", () => {
-    expect(fcrNote(multipleComparisons(groups, { method: "holm-sidak" }))).toBeNull()
+    expect(fcrNote(multipleComparisons(groups, { method: "holm-sidak" }), "holm-sidak")).toBeNull()
   })
 
   it("states the actual FCR level, which is not 95%", () => {
@@ -98,7 +98,7 @@ describe("FCR intervals are described at the level they were built at", () => {
     expect(selected).toBeGreaterThan(0)
     expect(selected).toBeLessThan(rows.length)
 
-    const note = fcrNote(rows)
+    const note = fcrNote(rows, "benjamini-hochberg")
     expect(note).toMatch(/FCR-adjusted at /)
     expect(note).not.toMatch(/FCR-adjusted at 95\.00%/)
     expect(note).toContain(`${selected} of ${rows.length} comparisons were selected`)
@@ -120,7 +120,7 @@ describe("FCR intervals are described at the level they were built at", () => {
     ]
     const rows = multipleComparisons(flat, { method: "benjamini-hochberg" })
     expect(rows.some((r) => r.significant)).toBe(false)
-    expect(fcrNote(rows)).toMatch(/No comparison was selected/)
+    expect(fcrNote(rows, "benjamini-hochberg")).toMatch(/No comparison was selected/)
   })
 })
 

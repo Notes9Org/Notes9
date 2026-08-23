@@ -28,6 +28,7 @@ import {
   type TestResult,
   type Tail,
   type CorrectionMethod,
+  FDR_METHODS,
 } from "@/lib/data-analysis/statistics"
 
 export type Table = { columns: string[]; rows: Record<string, number | string>[] }
@@ -192,7 +193,7 @@ export function useStatsPanel(table: Table, numericCols: string[]): { canvas: Re
         >
           <Card title="Test result" subtitle={result?.name ?? "Choose a test"}>
             {result ? (
-              <ResultView result={result} tukey={tukey} postHoc={postHocPairs} />
+              <ResultView result={result} tukey={tukey} postHoc={postHocPairs} correction={postHoc} />
             ) : (
               <p className="text-sm text-muted-foreground">Not enough data for this test with the selected columns.</p>
             )}
@@ -312,10 +313,12 @@ function ResultView({
   result,
   tukey,
   postHoc,
+  correction,
 }: {
   result: TestResult
   tukey: ReturnType<typeof tukeyHSD>
   postHoc: ReturnType<typeof multipleComparisons>
+  correction: CorrectionMethod
 }) {
   return (
     <div className="space-y-4">
@@ -405,8 +408,8 @@ function ResultView({
               </tbody>
             </table>
           </div>
-          {fcrNote(postHoc) && (
-            <p className="mt-2 text-[11px] text-muted-foreground">{fcrNote(postHoc)}</p>
+          {fcrNote(postHoc, correction) && (
+            <p className="mt-2 text-[11px] text-muted-foreground">{fcrNote(postHoc, correction)}</p>
           )}
         </div>
       )}
@@ -420,13 +423,19 @@ function ResultView({
  * An FDR run's intervals are NOT 1−α: they are 1 − Rα/m over the R selected
  * comparisons. A reader who assumes 95% because that is what every other table
  * on the screen means has misread the width, so the number is said out loud.
- * Detected from the rows rather than passed in, because the absence of an
- * interval on an unselected row is what identifies an FDR run.
+ * Identified by the correction method, not by row shape. The old heuristic --
+ * "some unselected row has no interval" -- held only while every FWER method
+ * still emitted one. Holm and Holm-Sidak now withhold theirs too (no simultaneous
+ * interval for a step-down procedure is generally accepted), so shape alone would
+ * caption a Holm family with FCR prose about a level it never used.
  */
-export function fcrNote(rows: ReturnType<typeof multipleComparisons>, alpha = 0.05): string | null {
+export function fcrNote(
+  rows: ReturnType<typeof multipleComparisons>,
+  method: CorrectionMethod,
+  alpha = 0.05,
+): string | null {
+  if (!(FDR_METHODS as readonly CorrectionMethod[]).includes(method)) return null
   const selected = rows.filter((c) => c.significant).length
-  const unselectedHasNoInterval = rows.some((c) => !c.significant && !isFinite(c.ciLow))
-  if (!unselectedHasNoInterval) return null
   if (selected === 0) {
     return "No comparison was selected, so no FCR interval is defined for any of them."
   }
