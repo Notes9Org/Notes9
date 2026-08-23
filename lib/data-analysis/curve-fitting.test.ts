@@ -102,3 +102,60 @@ describe("model comparison & bands", () => {
     }
   })
 })
+
+/* ── EC₅₀ interval geometry ───────────────────────────────────────────────── */
+describe("EC₅₀ confidence interval", () => {
+  // Real-shaped dose-response truncated before the upper plateau: a very good
+  // fit (r² ≈ 0.9995) whose EC₅₀ is nonetheless poorly pinned down. Fitting
+  // EC₅₀ linearly and reporting v ± t·SE gave 4PL EC₅₀ = 6.90 with the
+  // interval [−8.58, 22.39] — a negative concentration.
+  const x = [0.3, 1, 3, 10, 30]
+  const y = [4, 9, 22, 40, 55]
+  const models = ["3pl", "4pl", "5pl"] as const
+  const weights = ["none", "1/Y", "1/Y^2"] as const
+
+  it("is strictly positive for every sigmoid model and every weighting", () => {
+    for (const m of models) {
+      for (const w of weights) {
+        const f = fitCurve(m, x, y, w)!
+        expect(f.ec50CI, `${m} ${w}`).toBeDefined()
+        expect(f.ec50CI![0], `${m} ${w} lower`).toBeGreaterThan(0)
+        expect(f.ec50CI![0], `${m} ${w} brackets`).toBeLessThanOrEqual(f.ec50! * (1 + 1e-9))
+        expect(f.ec50CI![1], `${m} ${w} brackets`).toBeGreaterThanOrEqual(f.ec50! * (1 - 1e-9))
+      }
+    }
+  })
+
+  it("is the log₁₀EC₅₀ interval back-transformed (geometric, not arithmetic)", () => {
+    const f = fitCurve("4pl", x, y)!
+    const i = f.paramNames.indexOf("log₁₀EC₅₀")
+    expect(i).toBe(2)
+    expect(10 ** f.params[i]).toBeCloseTo(f.ec50!, 10)
+    expect(f.ec50CI![0]).toBeCloseTo(10 ** f.paramCI[i][0], 10)
+    expect(f.ec50CI![1]).toBeCloseTo(10 ** f.paramCI[i][1], 10)
+    // Geometric symmetry: √(lo·hi) = point estimate. The old linear interval
+    // was arithmetically symmetric instead, which is what let it cross zero.
+    expect(Math.sqrt(f.ec50CI![0] * f.ec50CI![1])).toBeCloseTo(f.ec50!, 8)
+  })
+
+  it("still recovers the true EC₅₀ on a well-determined curve", () => {
+    // 4PL with a = 0, d = 100, Hill = 1, EC₅₀ = 10 sampled exactly.
+    const xs = [0.01, 0.1, 1, 10, 100, 1000, 10000]
+    const ys = xs.map((v) => 100 / (1 + 10 / v))
+    const f = fitCurve("4pl", xs, ys)!
+    expect(f.ec50).toBeCloseTo(10, 4)
+    expect(f.ec50CI![0]).toBeGreaterThan(0)
+    expect(f.ec50CI![0]).toBeLessThan(10)
+    expect(f.ec50CI![1]).toBeGreaterThan(10)
+  })
+
+  it("is not reported for models whose midpoint is not a concentration", () => {
+    // Boltzmann's V50 lives on a linear (voltage) axis, so a log interval would
+    // be wrong there — it keeps the symmetric parameter CI and no ec50CI.
+    const xs = [-80, -60, -40, -20, 0, 20, 40]
+    const ys = xs.map((v) => 1 / (1 + Math.exp((-20 - v) / 8)))
+    const f = fitCurve("boltzmann", xs, ys)!
+    expect(f.ec50).toBeCloseTo(-20, 3)
+    expect(f.ec50CI).toBeUndefined()
+  })
+})
