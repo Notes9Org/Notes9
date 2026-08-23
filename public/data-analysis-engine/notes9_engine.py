@@ -49,18 +49,33 @@ except Exception:  # pragma: no cover
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 
-def _clean(values) -> np.ndarray:
-    out = []
+def _clean_counted(values) -> tuple[np.ndarray, int]:
+    """Numeric values plus the number of submitted entries that were discarded.
+
+    Dropping is correct; dropping silently is not. A reported n that is smaller
+    than the n the user submitted, with nothing saying why, reads as a
+    transcription error in the methods section. The count travels back so `run`
+    can say it out loud, the same way the resolver already warns about the
+    missing values it filtered upstream."""
+    out, dropped = [], 0
     for v in values or []:
         if v is None or v == "":
+            dropped += 1
             continue
         try:
             f = float(v)
         except (TypeError, ValueError):
+            dropped += 1
             continue
         if math.isfinite(f):
             out.append(f)
-    return np.asarray(out, dtype=float)
+        else:
+            dropped += 1
+    return np.asarray(out, dtype=float), dropped
+
+
+def _clean(values) -> np.ndarray:
+    return _clean_counted(values)[0]
 
 
 def _fmt_p(p) -> str:
@@ -265,11 +280,23 @@ def _post_hoc(names, arrays, method, alpha, ms_within, df_within, reference=None
     if method == "none" or len(arrays) < 2 or df_within <= 0:
         return []
 
+    if method == "dunnett" and reference not in names:
+        # No control level means no many-to-one distribution to test against.
+        # Falling through to the pairwise branch is a defensible substitution;
+        # continuing to stamp "dunnett" on the rows is not, because the label is
+        # what the methods section will claim was run.
+        method = "holm-sidak"
+
     if method == "dunnett" and reference in names:
         # A real Dunnett: scipy implements the many-to-one distribution exactly.
         ci = names.index(reference)
         others = [i for i in range(len(arrays)) if i != ci]
-        res = stats.dunnett(*[arrays[i] for i in others], control=arrays[ci])
+        # Seeded: scipy integrates the many-to-one distribution by quasi-Monte
+        # Carlo, so an unseeded call returns a different p on every run. Law 4
+        # promises the same payload yields the same number forever, and a
+        # p-value that moves between two runs of the same analysis cannot be
+        # reproduced by the reviewer who checks it.
+        res = stats.dunnett(*[arrays[i] for i in others], control=arrays[ci], random_state=0)
         crit = float(stats.t.ppf(1 - alpha / 2, df_within))
         out = []
         for slot, i in enumerate(others):
@@ -445,10 +472,16 @@ def run_anova_one_way(p) -> dict:
          f"η² = {eta:.3f} (n = {n_total} across {k} groups).")
     if pw:
         s += f" Post-hoc: {pw[0]['correctionMethod']}."
-    return _result("One-way ANOVA", float(f), f"{df_b}, {df_w}", float(pv),
-                   [{"name": "eta-squared", "value": float(eta), "ciLow": None, "ciHigh": None}],
-                   [_normality(arrays), _variance(arrays)], pw,
-                   {n: int(a.size) for n, a in zip(names, arrays)}, s)
+    out = _result("One-way ANOVA", float(f), f"{df_b}, {df_w}", float(pv),
+                  [{"name": "eta-squared", "value": float(eta), "ciLow": None, "ciHigh": None}],
+                  [_normality(arrays), _variance(arrays)], pw,
+                  {n: int(a.size) for n, a in zip(names, arrays)}, s)
+    if pw and p.get("postHoc") != pw[0]["correctionMethod"]:
+        out["_warnings"] = [
+            f"Dunnett's test needs a control group and the reference level "
+            f"{p.get('referenceLevel')!r} is not one of the groups analysed, so "
+            f"{pw[0]['correctionMethod']} pairwise comparisons were run instead."]
+    return out
 
 
 def run_kruskal(p) -> dict:
@@ -456,12 +489,27 @@ def run_kruskal(p) -> dict:
     arrays = [_clean(p["groups"][n]) for n in names]
     h, pv = stats.kruskal(*arrays)
     k, n_total = len(arrays), sum(a.size for a in arrays)
-    eps = (float(h) - k + 1) / (n_total - k) if n_total > k else float("nan")
-    pw = _dunn(names, arrays, p["alpha"]) if p.get("postHoc", "none") != "none" else []
-    return _result("Kruskal-Wallis", float(h), k - 1, float(pv),
-                   [{"name": "epsilon-squared", "value": float(eps), "ciLow": None, "ciHigh": None}],
-                   [], pw, {n: int(a.size) for n, a in zip(names, arrays)},
-                   f"Kruskal-Wallis H({k - 1}) = {float(h):.3f}, {_fmt_p(float(pv))} (n = {n_total}).")
+    # (H - k + 1) / (n - k) is eta-squared-H. Epsilon-squared is H / (n - 1),
+    # a different number; naming this one epsilon-squared misreports the effect
+    # size a reader will look up to interpret it.
+    eta_h = (float(h) - k + 1) / (n_total - k) if n_total > k else float("nan")
+    # The chosen correction is the user's decision, not a default to discard:
+    # Dunn's rank comparisons take whichever family-wise adjustment was asked
+    # for. Tukey and Dunnett are not defined on ranks, so those fall back and
+    # `correctionMethod` names the adjustment that actually ran.
+    requested = p.get("postHoc", "none")
+    pw = (_dunn(names, arrays, p["alpha"],
+                requested if requested in ("bonferroni", "sidak", "holm-sidak") else "holm")
+          if requested != "none" else [])
+    out = _result("Kruskal-Wallis", float(h), k - 1, float(pv),
+                  [{"name": "eta-squared-H", "value": float(eta_h), "ciLow": None, "ciHigh": None}],
+                  [], pw, {n: int(a.size) for n, a in zip(names, arrays)},
+                  f"Kruskal-Wallis H({k - 1}) = {float(h):.3f}, {_fmt_p(float(pv))} (n = {n_total}).")
+    if requested in ("tukey", "dunnett"):
+        out["_warnings"] = [
+            f"{requested.title()}'s test is defined on group means, not ranks; Dunn's "
+            f"test with a Holm adjustment was run after the Kruskal-Wallis instead."]
+    return out
 
 
 def run_friedman(p) -> dict:
@@ -470,7 +518,7 @@ def run_friedman(p) -> dict:
     n, k = m.shape
     w = float(chi) / (n * (k - 1)) if n and k > 1 else float("nan")  # Kendall's W
     return _result("Friedman", float(chi), k - 1, float(pv),
-                   [{"name": "epsilon-squared", "value": w, "ciLow": None, "ciHigh": None}],
+                   [{"name": "kendalls-w", "value": w, "ciLow": None, "ciHigh": None}],
                    sizes={c: int(n) for c in p["conditions"]},
                    sentence=f"Friedman χ²({k - 1}) = {float(chi):.3f}, {_fmt_p(float(pv))} "
                             f"({n} subjects × {k} conditions).")
@@ -481,7 +529,14 @@ def run_anova_rm(p) -> dict:
     n, k = m.shape
     subjects, conditions = p["subjects"], p["conditions"]
     if not _HAS_SM:
-        return run_friedman(p)
+        # Friedman is a reasonable stand-in without statsmodels, but the record
+        # has to name what ran, not what was asked for.
+        out = run_friedman(p)
+        out["_test_ran"] = "friedman"
+        out["_warnings"] = ["statsmodels is unavailable in this session, so the "
+                            "nonparametric Friedman test was run instead of a "
+                            "repeated-measures ANOVA."]
+        return out
 
     long = pd.DataFrame({"y": m.flatten(),
                          "subject": np.repeat(subjects, k),
@@ -494,6 +549,7 @@ def run_anova_rm(p) -> dict:
     sph = _sphericity(m)
 
     note = ""
+    rdf1, rdf2 = df1, df2  # the df the reported p was actually computed against
     if sph["passed"] is False:
         # Greenhouse-Geisser. Reporting an uncorrected RM p-value against
         # violated sphericity inflates significance.
@@ -503,12 +559,16 @@ def run_anova_rm(p) -> dict:
         den = d * (np.sum(cov**2) - 2 * k * np.sum(np.mean(cov, axis=0) ** 2) + (k**2) * np.mean(cov) ** 2)
         if den > 0:
             gg = float(min(max(num / den, 1.0 / d), 1.0))
-            pv = float(stats.f.sf(f, df1 * gg, df2 * gg))
+            rdf1, rdf2 = df1 * gg, df2 * gg
+            pv = float(stats.f.sf(f, rdf1, rdf2))
             note = f" Greenhouse-Geisser corrected (ε = {gg:.3f})."
 
-    return _result("Repeated-measures ANOVA", f, f"{df1:.0f}, {df2:.0f}", pv, [], [sph], [],
+    # The df reported are the df the p-value came from. Quoting the uncorrected
+    # integer df beside a Greenhouse-Geisser p is a pairing no reader can
+    # reproduce, and the mismatch is invisible unless they try.
+    return _result("Repeated-measures ANOVA", f, f"{rdf1:.2f}, {rdf2:.2f}", pv, [], [sph], [],
                    {c: int(n) for c in conditions},
-                   f"RM ANOVA: F({df1:.0f}, {df2:.0f}) = {f:.3f}, {_fmt_p(pv)} ({n} subjects).{note}")
+                   f"RM ANOVA: F({rdf1:.2f}, {rdf2:.2f}) = {f:.3f}, {_fmt_p(pv)} ({n} subjects).{note}")
 
 
 def run_anova_two_way(p) -> dict:
@@ -597,7 +657,14 @@ def run_contingency(p) -> dict:
     # the label when used rather than silently changing the number behind a
     # result the user reads as a plain chi-square.
     chi2, p_chi, dof, expected = stats.chi2_contingency(table, correction=is_2x2)
-    small = bool((expected < 5).any())
+    # Cochran's rule, not "any cell below 5". On a 2x2 the strict form is right
+    # and it is what escalates to Fisher. On anything larger the chi-square
+    # approximation survives a fifth of the cells below 5 provided none is below
+    # 1, and firing "unreliable" on a single sparse cell of a 5x4 table trains
+    # the reader to ignore the warning that does matter.
+    n_below5 = int((expected < 5).sum())
+    small = (n_below5 > 0 if is_2x2
+             else n_below5 > 0.20 * expected.size or bool((expected < 1).any()))
 
     if is_2x2:
         # Haldane-Anscombe: a zero cell otherwise yields an infinite odds ratio.
@@ -644,11 +711,12 @@ def run_contingency(p) -> dict:
         if small:
             # Fisher on a large R x C table is not tractable in the browser, so
             # the chi-square stands but the user is told its p is approximate.
-            cells = int((expected < 5).sum())
             warnings.append(
-                f"{cells} of {expected.size} expected cell counts are below 5, so the "
-                f"chi-square approximation is unreliable here. Consider pooling sparse "
-                f"categories or collecting more observations.")
+                f"{n_below5} of {expected.size} expected cell counts are below 5"
+                + (f" and {int((expected < 1).sum())} below 1" if (expected < 1).any() else "")
+                + ", which breaches Cochran's rule, so the chi-square approximation is "
+                "unreliable here. Consider pooling sparse categories or collecting more "
+                "observations.")
 
     ors = ""
     if is_2x2:
@@ -719,7 +787,7 @@ def run_linear_regression(p) -> dict:
                    terms=terms)
 
 
-def _km_curve(durations: np.ndarray, events: np.ndarray) -> dict:
+def _km_curve(durations: np.ndarray, events: np.ndarray, alpha: float = 0.05) -> dict:
     """
     One Kaplan-Meier product-limit curve, with Greenwood standard errors.
 
@@ -734,6 +802,7 @@ def _km_curve(durations: np.ndarray, events: np.ndarray) -> dict:
     step_lo = [1.0]
     step_hi = [1.0]
     at_risk_out = [int(durations.size)]
+    zc = _z(alpha)  # the spec's alpha governs the band, not a hard-coded 1.96
     surv = 1.0
     greenwood = 0.0
     median = None
@@ -748,8 +817,8 @@ def _km_curve(durations: np.ndarray, events: np.ndarray) -> dict:
         se = surv * math.sqrt(greenwood) if greenwood > 0 else 0.0
         step_t.append(float(t))
         step_s.append(float(surv))
-        step_lo.append(float(max(0.0, surv - 1.96 * se)))
-        step_hi.append(float(min(1.0, surv + 1.96 * se)))
+        step_lo.append(float(max(0.0, surv - zc * se)))
+        step_hi.append(float(min(1.0, surv + zc * se)))
         at_risk_out.append(int(n_risk))
         if median is None and surv <= 0.5:
             median = float(t)
@@ -772,9 +841,10 @@ def run_survival(p) -> dict:
     durations = np.asarray(p["durations"], float)
     events = np.asarray(p["events"], float)
     groups = p.get("groups")
+    alpha = float(p.get("alpha", 0.05))
 
     if not groups:
-        curve = _km_curve(durations, events)
+        curve = _km_curve(durations, events, alpha)
         median = curve["median"]
         out = _result("Kaplan-Meier", None, None, None, [], [], [],
                       {"subjects": int(durations.size)},
@@ -785,27 +855,47 @@ def run_survival(p) -> dict:
 
     labels = sorted(set(groups))
     g = np.asarray(groups)
+    k = len(labels)
     obs = {l: 0.0 for l in labels}
     exp = {l: 0.0 for l in labels}
     var = 0.0
+    # Hypergeometric covariance of the per-group death counts, accumulated over
+    # event times. Σ(O-E)²/E is a goodness-of-fit statistic and is not the
+    # log-rank test: the O-E are linearly dependent (they sum to zero) and
+    # strongly correlated, so treating them as independent Poisson cells
+    # understates the variance and inflates significance.
+    vmat = np.zeros((k, k))
     for t in np.unique(durations[events == 1]):
         n_risk = float(np.sum(durations >= t))
         d_t = float(np.sum((durations == t) & (events == 1)))
         if n_risk <= 1:
             continue
-        for l in labels:
+        at_risk = np.array([float(np.sum(durations[g == l] >= t)) for l in labels])
+        for i, l in enumerate(labels):
             m = g == l
             obs[l] += float(np.sum((durations[m] == t) & (events[m] == 1)))
-            exp[l] += d_t * float(np.sum(durations[m] >= t)) / n_risk
+            exp[l] += d_t * at_risk[i] / n_risk
+        if k > 2:
+            frac = at_risk / n_risk
+            scale = d_t * (n_risk - d_t) / (n_risk - 1)
+            vmat += scale * (np.diag(frac) - np.outer(frac, frac))
         if len(labels) == 2:
             n1 = float(np.sum(durations[g == labels[0]] >= t))
             var += d_t * (n1 / n_risk) * (1 - n1 / n_risk) * (n_risk - d_t) / (n_risk - 1)
 
+    df = len(labels) - 1
     if len(labels) == 2 and var > 0:
         chi, df = (obs[labels[0]] - exp[labels[0]]) ** 2 / var, 1
     else:
-        chi = sum((obs[l] - exp[l]) ** 2 / exp[l] for l in labels if exp[l] > 0)
-        df = len(labels) - 1
+        # Mantel-Cox quadratic form on any k-1 of the groups; the omitted group
+        # is redundant, and which one is dropped does not change the statistic.
+        d_vec = np.array([obs[l] - exp[l] for l in labels[:-1]])
+        v_red = vmat[:-1, :-1]
+        try:
+            chi = float(d_vec @ np.linalg.solve(v_red, d_vec))
+        except np.linalg.LinAlgError:
+            chi = float(d_vec @ np.linalg.pinv(v_red) @ d_vec)
+        chi = max(chi, 0.0)
     pv = float(stats.chi2.sf(chi, df))
 
     out = _result("Kaplan-Meier with log-rank", float(chi), df, pv, [], [], [],
@@ -814,7 +904,7 @@ def run_survival(p) -> dict:
                   f"{len(labels)} groups (n = {int(durations.size)}).")
     out["_survival"] = {
         "groups": [
-            {"label": str(l), **_km_curve(durations[g == l], events[g == l])} for l in labels
+            {"label": str(l), **_km_curve(durations[g == l], events[g == l], alpha)} for l in labels
         ]
     }
     return out
@@ -841,8 +931,24 @@ def run_dose_response(p) -> dict:
     its own standard error. Deriving an EC50 interval from a linear-x fit does
     not give you an honest one.
     """
-    xs = np.log10(np.asarray(p["x"], float))
+    warnings = []
+    x_raw = np.asarray(p["x"], float)
     ys = np.asarray(p["y"], float)
+    # log10 of a zero-dose vehicle control is -inf, which curve_fit rejects, so
+    # one control row otherwise takes the whole fit down as a generic
+    # convergence failure. A zero dose has no position on a log axis, so it is
+    # excluded and the exclusion is reported: substituting an arbitrary value
+    # some decades below the lowest real dose would invent an anchor point the
+    # reader cannot see and the EC50 would move with the invention.
+    usable = x_raw > 0
+    if not np.all(usable):
+        warnings.append(
+            f"{int((~usable).sum())} point(s) at zero or negative concentration were "
+            f"excluded from the fit, because the curve is parameterised in "
+            f"log10(concentration) where a vehicle control has no position. The fit "
+            f"uses the remaining {int(usable.sum())} point(s).")
+        x_raw, ys = x_raw[usable], ys[usable]
+    xs = np.log10(x_raw)
     model = p.get("model", "4pl")
     func, n_params, names = (
         (_three_pl, 3, ["bottom", "top", "logEC50"]) if model == "3pl"
@@ -856,28 +962,54 @@ def run_dose_response(p) -> dict:
         p0.append(1.0)
 
     weighting = p.get("weighting", "none")
-    sigma = (np.where(np.abs(ys) > 0, np.abs(ys), 1.0) if weighting == "1/Y"
-             else np.where(np.abs(ys) > 0, ys**2, 1.0) if weighting == "1/Y^2" else None)
+    # curve_fit minimises Σ((y - f)/σ)², so the effective weight is 1/σ², not
+    # 1/σ. Passing σ = |y| for "1/Y" delivers 1/Y² and σ = y² delivers 1/Y⁴:
+    # both over-weight the low end by a whole power and pull the EC50 with them.
+    absy = np.where(np.abs(ys) > 0, np.abs(ys), 1.0)
+    sigma = (np.sqrt(absy) if weighting == "1/Y"
+             else absy if weighting == "1/Y^2" else None)
 
-    warnings = []
     try:
         popt, pcov = optimize.curve_fit(func, xs, ys, p0=p0, sigma=sigma, maxfev=20000)
     except (RuntimeError, ValueError) as exc:
         return {"curveFit": {"converged": False, "model": model.upper()},
-                "warnings": [f"Fit did not converge: {exc}"]}
+                "warnings": warnings + [f"Fit did not converge: {exc}"]}
 
     resid = ys - func(xs, *popt)
-    ss_res = float(np.sum(resid**2))
-    ss_tot = float(np.sum((ys - np.mean(ys)) ** 2))
+    # The weights that chose the parameters have to be the weights that judge
+    # them. Scoring a weighted fit with unweighted residuals describes a fit
+    # that was never performed, and R², adjusted R², Sy.x and AICc all inherit
+    # the mismatch — the reported R² can even beat the fit's own optimum.
+    ss_res = float(np.sum((resid if sigma is None else resid / sigma) ** 2))
+    if sigma is None:
+        ss_tot = float(np.sum((ys - np.mean(ys)) ** 2))
+    else:
+        wt = 1.0 / sigma**2
+        ss_tot = float(np.sum(wt * (ys - np.sum(wt * ys) / np.sum(wt)) ** 2))
     r2 = 1 - ss_res / ss_tot if ss_tot > 0 else float("nan")
     n, k = int(xs.size), len(popt)
     adj = 1 - (1 - r2) * (n - 1) / (n - k - 1) if n - k - 1 > 0 else float("nan")
     syx = math.sqrt(ss_res / (n - k)) if n > k else float("nan")
-    aicc = (n * math.log(ss_res / n) + 2 * k + (2 * k * (k + 1)) / (n - k - 1)
-            if n - k - 1 > 0 and ss_res > 0 else float("nan"))
+    # Burnham-Anderson, and GraphPad after them, count the residual variance as
+    # a parameter: K = p + 1, so the small-sample correction divides by
+    # n - K - 1 = n - p - 2. Using K = p understates the penalty and biases
+    # model selection toward the larger model, which is the whole reason AICc
+    # exists. Below n = p + 3 the correction is undefined and there is no honest
+    # finite value to report.
+    kk = k + 1
+    aicc = (n * math.log(ss_res / n) + 2 * kk + (2 * kk * (kk + 1)) / (n - kk - 1)
+            if n - kk - 1 > 0 and ss_res > 0 else None)
+    if aicc is None:
+        warnings.append(
+            f"AICc is not defined for {n} points and a {k}-parameter model (it needs "
+            f"more than {k + 2}), so no value is reported; comparing models on this "
+            f"data set is not supported.")
 
     perr = np.sqrt(np.diag(pcov))
-    tcrit = float(stats.t.ppf(0.975, max(n - k, 1)))
+    # The caller's alpha governs the parameter intervals too. An analysis
+    # declared at alpha = 0.01 must not quote 95% limits on its EC50.
+    alpha = float(p.get("alpha", 0.05))
+    tcrit = float(stats.t.ppf(1 - alpha / 2, max(n - k, 1)))
     params = {}
     for name, val, err in zip(names, popt, perr):
         e = float(err) if math.isfinite(err) else None
@@ -895,13 +1027,18 @@ def run_dose_response(p) -> dict:
     grid = np.linspace(float(np.min(xs)), float(np.max(xs)), 120)
     band = None
     if p.get("confidenceBands", True) and np.all(np.isfinite(pcov)):
-        lower, upper, eps = [], [], 1e-6
+        lower, upper = [], []
+        # A fixed absolute step is below float64 relative precision once a
+        # parameter is large (a plateau in RFU, an EC50 in nM): the bumped value
+        # equals the original, every gradient reads exactly zero, and the band
+        # collapses to zero width — which draws as a perfect fit.
+        steps = np.abs(np.asarray(popt, float)) * 1e-6 + 1e-6
         for gx in grid:
             grad = np.zeros(k)
             for i in range(k):
                 bumped = np.array(popt, float)
-                bumped[i] += eps
-                grad[i] = (func(gx, *bumped) - func(gx, *popt)) / eps
+                bumped[i] += steps[i]
+                grad[i] = (func(gx, *bumped) - func(gx, *popt)) / steps[i]
             v = float(grad @ pcov @ grad)
             half = tcrit * math.sqrt(v) if v > 0 else 0.0
             yv = float(func(gx, *popt))
@@ -936,7 +1073,7 @@ def run_dose_response(p) -> dict:
     return {
         "curveFit": {
             "model": model.upper(), "parameters": params, "ec50": ec50,
-            "rSquared": float(r2), "adjustedRSquared": float(adj), "aicc": float(aicc),
+            "rSquared": float(r2), "adjustedRSquared": float(adj), "aicc": aicc,
             "syx": float(syx),
             "curve": {"x": (10.0**grid).tolist(), "y": func(grid, *popt).tolist()},
             "confidenceBand": band, "interpolated": interpolated,
@@ -988,10 +1125,24 @@ def run(payload: dict) -> dict:
 
     descriptives = []
     shape = payload.get("shape")
+    series = {}
     if shape == "columns":
-        descriptives = [describe_column(n, v) for n, v in (payload.get("columns") or {}).items()]
+        series = payload.get("columns") or {}
     elif shape == "groups":
-        descriptives = [describe_column(n, v) for n, v in (payload.get("groups") or {}).items()]
+        series = payload.get("groups") or {}
+    descriptives = [describe_column(n, v) for n, v in series.items()]
+
+    # Every routine below reaches its data through `_clean`, which discards
+    # blanks and non-numeric entries. Silently is the problem: an n smaller than
+    # the n the user submitted, with nothing saying why, reads as a mistake in
+    # the methods section. One warning here covers every routine.
+    for name, values in series.items():
+        dropped = _clean_counted(values)[1]
+        if dropped:
+            warnings.append(
+                f"{dropped} of {len(values)} value(s) in {name} were blank or "
+                f"non-numeric and were excluded; the reported n counts only the "
+                f"values actually analysed.")
 
     test_result, curve_fit, survival, error = None, None, None, None
     test_ran = None
