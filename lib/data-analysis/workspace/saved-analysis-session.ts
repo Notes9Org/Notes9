@@ -2,6 +2,7 @@ import type { Table as SpecTable } from "@/lib/data-analysis/engine/resolver"
 import type { AnalysisSpec } from "@/lib/data-analysis/spec/analysis-spec"
 import type { EngineResult } from "@/lib/data-analysis/engine/contract"
 import type { UniverWorkbookSnapshot } from "@/lib/spreadsheet-workbook"
+import type { EditAuditRecord } from "@/lib/data-analysis/provenance"
 import {
   commitRevision,
   forkFrozenRevision,
@@ -44,24 +45,56 @@ export const ANALYSIS_SNAPSHOT_SCHEMA = "notes9.analysis-snapshot"
  */
 export interface AnalysisDataSnapshot {
   schema: typeof ANALYSIS_SNAPSHOT_SCHEMA
-  version: 1
+  /** 2 adds `auditLog`. `readDataSnapshot` accepts 1 and 2. */
+  version: 1 | 2
   table: SpecTable
   workbook: UniverWorkbookSnapshot | null
   config: unknown
+  /**
+   * The append-only edit audit log at the moment this revision was cut (L8).
+   *
+   * This is the fix for "the provenance card does not survive a reload": the
+   * actor, the action and the timestamp lived in React state and in no column,
+   * so refreshing the page produced a card that could describe the recipe but
+   * not who had made it or when.
+   *
+   * It rides in the snapshot for the same stated reason `config` does — the
+   * snapshot is already revision-scoped and already persisted, and a column of
+   * its own would mean changing `commit_analysis_revision`'s signature, which
+   * PostgREST resolves by argument name and which two applied migrations (105
+   * and 114) both install. The tradeoff is real and worth naming: this rides
+   * inside `data_snapshot`, so if that column is ever swapped for a manifest
+   * (`data_snapshot_is_manifest`, 105:99) the log must be lifted out with it.
+   */
+  auditLog: EditAuditRecord[]
 }
 
 export function buildDataSnapshot(
   table: SpecTable,
   workbook: UniverWorkbookSnapshot | null,
-  config: unknown
+  config: unknown,
+  auditLog: EditAuditRecord[] = []
 ): AnalysisDataSnapshot {
   return {
     schema: ANALYSIS_SNAPSHOT_SCHEMA,
-    version: 1,
+    version: 2,
     table,
     workbook: workbook ?? null,
     config: config ?? null,
+    auditLog,
   }
+}
+
+/**
+ * The persisted audit log of a revision, for the provenance card on reopen.
+ *
+ * Returns `[]` for a v1 snapshot rather than throwing: revisions saved before
+ * this existed have no log, and the card must still render for them. An empty
+ * log means "not recorded", which the card distinguishes from "no edits".
+ */
+export function readAuditLog(rawSnapshot: unknown): EditAuditRecord[] {
+  const snapshot = readDataSnapshot(rawSnapshot)
+  return snapshot?.auditLog ?? []
 }
 
 /**
@@ -80,10 +113,18 @@ export function readDataSnapshot(raw: unknown): AnalysisDataSnapshot | null {
   if (!table || !Array.isArray(table.columns) || !Array.isArray(table.rows)) return null
   return {
     schema: ANALYSIS_SNAPSHOT_SCHEMA,
-    version: 1,
+    version: value.version === 2 ? 2 : 1,
     table,
     workbook: (value.workbook as UniverWorkbookSnapshot | undefined) ?? null,
     config: value.config ?? null,
+    // Validated, not cast: this jsonb outlives every version of the reader, and
+    // a malformed log must degrade to "not recorded" rather than crash a reopen.
+    auditLog: Array.isArray(value.auditLog)
+      ? value.auditLog.filter(
+          (e): e is EditAuditRecord =>
+            !!e && typeof e === "object" && Array.isArray((e as EditAuditRecord).applied)
+        )
+      : [],
   }
 }
 
@@ -159,6 +200,19 @@ interface RevisionInput {
   workbook: UniverWorkbookSnapshot | null
   /** The rail configuration, i.e. `buildConfig()` in the workspace. */
   config: unknown
+  /**
+   * The append-only edit audit log, i.e. `auditRecords(editHistory)`. Persisted
+   * with the revision so the provenance card survives a reload (L8). Optional
+   * so a caller that has not adopted it yet still saves a valid revision — it
+   * just saves one with no recorded history.
+   */
+  auditLog?: EditAuditRecord[]
+  /**
+   * The analysis conversation. On `RevisionInput` rather than on one call's
+   * parameter list, because every path that writes a revision wants it: a
+   * figure without the reasoning that produced it is just a picture (§3A.2).
+   */
+  conversationThread?: unknown[]
 }
 
 /**
@@ -177,16 +231,14 @@ export function saveRevision(
     changeSummary?: string
     /** The revision currently on screen, if this analysis was reopened. */
     openRevision?: AnalysisRevision | null
-    /**
-     * The analysis conversation, snapshotted into the revision. Catalyst's
-     * reasoning is part of the scientific record (§3A.2) — a figure without the
-     * reasoning that produced it is just a picture. The column has existed since
-     * 105 and was written as `[]` by every caller until now.
-     */
-    conversationThread?: unknown[]
   }
 ): Promise<AnalysisRevision> {
-  const dataSnapshot = buildDataSnapshot(input.table, input.workbook, input.config)
+  const dataSnapshot = buildDataSnapshot(
+    input.table,
+    input.workbook,
+    input.config,
+    input.auditLog
+  )
   const open = input.openRevision
 
   if (open?.isFrozen) {
@@ -226,8 +278,17 @@ export function rerunRevision(
     analysisId: input.analysisId,
     spec: input.spec,
     results: input.results,
-    dataSnapshot: buildDataSnapshot(input.table, input.workbook, input.config),
+    dataSnapshot: buildDataSnapshot(
+      input.table,
+      input.workbook,
+      input.config,
+      input.auditLog
+    ),
     previousRevisionId: input.previousRevisionId,
+    // Carried, not dropped. Omitted here, `rerunIntoNewRevision` falls back to
+    // the thread stored on the revision being re-run, so the reasoning follows
+    // the figure even from a caller that has no live thread in hand.
+    conversationThread: input.conversationThread,
   })
 }
 

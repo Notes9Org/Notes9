@@ -35,7 +35,30 @@ export interface ProvenanceCard {
     count: number
     rows: { rowId: string; reason: string; by: string; at: string }[]
   }
-  history: { description: string; origin: "user" | "ai"; at: string }[]
+  history: {
+    description: string
+    origin: "user" | "ai"
+    at: string
+    /**
+     * The edit was made and later taken back. It stays on the card: a tidied
+     * history is not a record, and "we tried it and reversed it" is exactly the
+     * kind of thing a reviewer asks about eighteen months later.
+     */
+    reverted: boolean
+  }[]
+}
+
+/**
+ * One entry of the append-only edit audit log.
+ *
+ * Lives here rather than in `workspace/edit-history.ts` because it is a
+ * provenance concept that the workspace happens to produce, and because the
+ * persisted copy on a revision has to be readable without importing the
+ * workspace's undo machinery.
+ */
+export interface EditAuditRecord {
+  applied: AppliedMutation[]
+  reverted: boolean
 }
 
 const REASON_LABEL: Record<ExclusionReasonKind, string> = {
@@ -92,10 +115,23 @@ export function buildProvenanceCard(
   spec: AnalysisSpec,
   result: EngineResult | null,
   options: {
+    /**
+     * Legacy shape: the edits, with no record of which were reverted. Prefer
+     * `auditLog`, which is the append-only log and knows.
+     */
     history?: AppliedMutation[]
+    /** The append-only edit audit log. Takes precedence over `history`. */
+    auditLog?: EditAuditRecord[]
     revisionNo?: number
     isFrozen?: boolean
     sourceDetached?: boolean
+    /**
+     * Who authored the revision and when it was cut. Read from the revision
+     * row rather than React state, which is why the card now survives a reload:
+     * the actor and the timestamp used to exist only in memory (L8).
+     */
+    author?: { id: string | null; label?: string | null } | null
+    savedAt?: string | null
   } = {}
 ): ProvenanceCard {
   const source: ProvenanceEntry[] = [
@@ -118,6 +154,29 @@ export function buildProvenanceCard(
     source.push({
       label: "Revision",
       value: `v${options.revisionNo}${options.isFrozen ? " (frozen)" : ""}`,
+    })
+  }
+  /**
+   * Who and when, from the stored revision (L8).
+   *
+   * These two lines are the whole reason the card used to evaporate on reload:
+   * the actor and the timestamp lived in React state and nowhere else, so a
+   * refresh left a provenance card that could describe the recipe but not who
+   * had run it. Read from the revision row, they survive a reload and a reopen.
+   *
+   * "Unknown" is shown rather than the row omitted. A deleted profile nulls
+   * author_id (117), and silently dropping the line would read as "nobody
+   * changed this", which is a stronger and falser claim than "we no longer
+   * know who".
+   */
+  if (options.savedAt) {
+    source.push({ label: "Saved", value: new Date(options.savedAt).toLocaleString() })
+  }
+  if (options.author !== undefined && options.author !== null) {
+    source.push({
+      label: "Saved by",
+      value: options.author.label || options.author.id || "Unknown (account removed)",
+      emphasis: !options.author.label && !options.author.id,
     })
   }
 
@@ -198,10 +257,23 @@ export function buildProvenanceCard(
         at: e.excludedAt,
       })),
     },
-    history: (options.history ?? []).map((h) => ({
-      description: h.description,
-      origin: h.origin,
-      at: h.at,
+    /**
+     * `auditLog` wins when it is given, because it is the append-only record
+     * and it knows which edits were reverted. `history` is the older shape — a
+     * bare mutation list with no reverted flag — and is kept because callers
+     * still pass it; those entries are reported as standing, which is the only
+     * thing that shape can honestly say.
+     */
+    history: (options.auditLog
+      ? options.auditLog.flatMap((entry) =>
+          entry.applied.map((h) => ({ mutation: h, reverted: entry.reverted }))
+        )
+      : (options.history ?? []).map((h) => ({ mutation: h, reverted: false }))
+    ).map(({ mutation, reverted }) => ({
+      description: mutation.description,
+      origin: mutation.origin,
+      at: mutation.at,
+      reverted,
     })),
   }
 }
