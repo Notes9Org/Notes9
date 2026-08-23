@@ -860,10 +860,11 @@ def run_survival(p) -> dict:
     exp = {l: 0.0 for l in labels}
     var = 0.0
     # Hypergeometric covariance of the per-group death counts, accumulated over
-    # event times. Σ(O-E)²/E is a goodness-of-fit statistic and is not the
+    # event times. Σ(O-E)²/E is a Pearson goodness-of-fit statistic, not the
     # log-rank test: the O-E are linearly dependent (they sum to zero) and
-    # strongly correlated, so treating them as independent Poisson cells
-    # understates the variance and inflates significance.
+    # correlated, and E is not their variance. It does not follow chi²(k-1), so
+    # its p-value is wrong in a direction that depends on the data — neither
+    # reliably conservative nor reliably liberal, which is the worse failure.
     vmat = np.zeros((k, k))
     for t in np.unique(durations[events == 1]):
         n_risk = float(np.sum(durations >= t))
