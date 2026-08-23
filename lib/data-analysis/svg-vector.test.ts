@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest"
-import { PDFDocument } from "pdf-lib"
+import { PDFDocument, StandardFonts } from "pdf-lib"
 
+import { liberationSansBold, liberationSansRegular } from "./export/liberation-sans"
 import {
   parsePathData,
   parseSvg,
   parseTransform,
+  textWidth,
   vectorToEps,
   vectorToPdf,
+  type FontFamily,
 } from "./svg-vector"
 
 /**
@@ -33,7 +36,15 @@ const PLOTLY_LIKE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="700" hei
   </g>
 </svg>`
 
-const decode = (bytes: Uint8Array) => String.fromCharCode(...bytes)
+// Chunked: a PDF now carries an embedded font program, so spreading the whole
+// buffer into one fromCharCode call overflows the argument stack.
+const decode = (bytes: Uint8Array) => {
+  let out = ""
+  for (let i = 0; i < bytes.length; i += 8192) {
+    out += String.fromCharCode(...bytes.subarray(i, i + 8192))
+  }
+  return out
+}
 
 describe("parseTransform", () => {
   it("composes nested SVG transforms left to right", () => {
@@ -163,7 +174,12 @@ describe("vectorToPdf", () => {
     expect(pdf).toContain("1 0 0 1 200 300 cm")
 
     // Live text: a font resource, a text object and the string itself.
-    expect(pdf).toContain("/BaseFont /Helvetica")
+    // The sans face is embedded, so /BaseFont is the program's own PostScript
+    // name. Naming Helvetica while carrying Liberation would be a lie about
+    // what the file contains.
+    expect(pdf).toContain("/BaseFont /LiberationSans")
+    // The serif face has no program in this build, so it stays a base-14
+    // reference under its real base-14 name.
     expect(pdf).toContain("/BaseFont /Times-Roman")
     expect(pdf).toMatch(/BT\n\/F\d 13 Tf/)
     expect(pdf).toContain("(Concentration \\(uM\\)) Tj")
@@ -222,5 +238,182 @@ describe("vectorToEps", () => {
 
     // stringwidth is what centres the label; without it the anchor is guessed.
     expect(eps).toContain("stringwidth pop 0.5 mul neg 0 rmoveto")
+  })
+})
+
+/* ── Font embedding (the publication blocker) ──────────────────────────────*/
+
+const FACE_SVG = (family: string, weight: string, text = "Title") =>
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100">
+    <text x="100" y="50" text-anchor="middle" style="font-family: ${family}; font-weight: ${weight}; font-size: 12px; fill: rgb(0,0,0);">${text}</text>
+  </svg>`
+
+describe("fontOf, through parseSvg", () => {
+  const faceOf = (family: string, weight: string) => {
+    const node = parseSvg(FACE_SVG(family, weight)).nodes[0]
+    if (node.kind !== "text") throw new Error("expected a text node")
+    return node.font
+  }
+
+  it("keeps bold on the sans face", () => {
+    expect(faceOf("'Open Sans', sans-serif", "normal")).toBe("helvetica")
+    expect(faceOf("'Open Sans', sans-serif", "bold")).toBe("helvetica-bold")
+    expect(faceOf("'Open Sans', sans-serif", "700")).toBe("helvetica-bold")
+  })
+
+  /**
+   * The regression: the serif and mono branches returned before the weight was
+   * ever read, so a bold serif axis title came out roman with no warning.
+   */
+  it("keeps bold on the serif face", () => {
+    expect(faceOf("Georgia, serif", "normal")).toBe("times")
+    expect(faceOf("Georgia, serif", "bold")).toBe("times-bold")
+    expect(faceOf("Georgia, serif", "600")).toBe("times-bold")
+  })
+
+  it("keeps bold on the mono face", () => {
+    expect(faceOf("Menlo, monospace", "normal")).toBe("courier")
+    expect(faceOf("Menlo, monospace", "bold")).toBe("courier-bold")
+  })
+
+  it("still reads sans-serif as sans, not serif", () => {
+    expect(faceOf("Helvetica, sans-serif", "bold")).toBe("helvetica-bold")
+  })
+})
+
+describe("textWidth, per face", () => {
+  it("measures each base-14 face with its own AFM table", async () => {
+    const doc = await PDFDocument.create()
+    const cases: [FontFamily, StandardFonts][] = [
+      ["helvetica", StandardFonts.Helvetica],
+      ["helvetica-bold", StandardFonts.HelveticaBold],
+      ["times", StandardFonts.TimesRoman],
+      ["times-bold", StandardFonts.TimesRomanBold],
+      ["courier", StandardFonts.Courier],
+      ["courier-bold", StandardFonts.CourierBold],
+    ]
+    for (const [face, standard] of cases) {
+      const oracle = await doc.embedFont(standard)
+      for (let code = 32; code <= 126; code++) {
+        const ch = String.fromCharCode(code)
+        expect(Math.round(textWidth(ch, face) * 1000), `${face} U+${code.toString(16)}`).toBe(
+          Math.round(oracle.widthOfTextAtSize(ch, 1000))
+        )
+      }
+    }
+  })
+
+  /**
+   * One table for all four faces is why a centred bold title landed off-centre:
+   * Helvetica-Bold is wider, and PDF resolves `text-anchor` by measuring.
+   */
+  it("makes bold wider than roman, in both families", () => {
+    expect(textWidth("Response", "helvetica-bold")).toBeGreaterThan(
+      textWidth("Response", "helvetica")
+    )
+    expect(textWidth("Response", "times-bold")).toBeGreaterThan(textWidth("Response", "times"))
+  })
+
+  it("measures the embedded face's own glyphs beyond ASCII", () => {
+    // The old table stopped at 126 and charged 556 for everything above it.
+    // Liberation Sans says the micro sign is 556 and the degree sign is not.
+    expect(textWidth("°", "helvetica")).not.toBeCloseTo(0.556, 5)
+  })
+})
+
+describe("vectorToPdf font embedding", () => {
+  const pdfOf = (svg: string) => decode(vectorToPdf(parseSvg(svg)))
+
+  it("carries the sans program itself, byte for byte", () => {
+    const pdf = pdfOf(FACE_SVG("'Open Sans', sans-serif", "normal"))
+    expect(pdf).toContain("/FontFile2")
+    expect(pdf).toContain("/Type /FontDescriptor")
+    expect(pdf).toContain("/Subtype /TrueType")
+
+    const program = liberationSansRegular()
+    const declared = Number(/\/Length (\d+) \/Length1 (\d+) >>/.exec(pdf)![1])
+    expect(declared).toBe(program.length)
+
+    // Not "a stream of the right length" — the actual sfnt bytes.
+    const at = pdf.indexOf(`/Length ${program.length} /Length1`)
+    const start = pdf.indexOf("stream\n", at) + "stream\n".length
+    const embedded = new Uint8Array(program.length)
+    for (let i = 0; i < program.length; i++) embedded[i] = pdf.charCodeAt(start + i) & 0xff
+    expect(embedded).toEqual(program)
+  })
+
+  it("embeds roman and bold as two distinct programs", () => {
+    const pdf = pdfOf(
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100">
+        <text x="10" y="20" style="font-family: sans-serif; font-size: 12px; fill: rgb(0,0,0);">roman</text>
+        <text x="10" y="60" style="font-family: sans-serif; font-weight: bold; font-size: 12px; fill: rgb(0,0,0);">bold</text>
+      </svg>`
+    )
+    expect(pdf).toContain("/BaseFont /LiberationSans ")
+    expect(pdf).toContain("/BaseFont /LiberationSans-Bold")
+    expect(pdf.match(/\/FontFile2/g)).toHaveLength(2)
+    const lengths = [...pdf.matchAll(/\/Length (\d+) \/Length1 \1 >>/g)].map((m) => Number(m[1]))
+    expect(lengths).toEqual([liberationSansRegular().length, liberationSansBold().length])
+  })
+
+  /**
+   * The honesty check. This build has no serif program, so the serif face MUST
+   * come out as a plain base-14 reference. A /FontDescriptor here with no
+   * /FontFile2 behind it would tell preflight the font is embedded when it is
+   * not — worse than the reference, because the rejection then arrives from the
+   * publisher instead of from the export.
+   */
+  it("emits no descriptor at all for a face it cannot embed", () => {
+    const pdf = pdfOf(FACE_SVG("Georgia, serif", "bold"))
+    expect(pdf).toContain("/BaseFont /Times-Bold")
+    expect(pdf).toContain("/Subtype /Type1")
+    expect(pdf).not.toContain("/FontDescriptor")
+    expect(pdf).not.toContain("/FontFile")
+  })
+
+  it("keeps every xref offset pointing at its object once fonts are embedded", () => {
+    const bytes = vectorToPdf(
+      parseSvg(
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100">
+          <text x="10" y="20" style="font-family: sans-serif; font-size: 12px; fill: rgb(0,0,0);">a</text>
+          <text x="10" y="40" style="font-family: serif; font-size: 12px; fill: rgb(0,0,0);">b</text>
+          <text x="10" y="60" style="font-family: sans-serif; font-weight: bold; font-size: 12px; fill: rgb(0,0,0);">c</text>
+        </svg>`
+      )
+    )
+    const pdf = decode(bytes)
+    const xrefAt = Number(/startxref\n(\d+)/.exec(pdf)![1])
+    // "xref", the "0 <count>" header, then the free entry, then the objects.
+    const rows = pdf.slice(xrefAt).split("\n").slice(3)
+    let object = 1
+    for (const row of rows) {
+      const offset = /^(\d{10}) 00000 n $/.exec(row)
+      if (!offset) break
+      expect(pdf.slice(Number(offset[1]))).toMatch(new RegExp(`^${object} 0 obj\\n`))
+      object++
+    }
+    // catalog, pages, page, content = 4; sans = 3; serif reference = 1;
+    // sans bold = 3; /Info = 1. An embedded face costing one object instead of
+    // three is the numbering bug this catches.
+    expect(object - 1).toBe(12)
+  })
+
+  it("still opens as a PDF with an embedded font in it", async () => {
+    const doc = await PDFDocument.load(vectorToPdf(parseSvg(FACE_SVG("sans-serif", "bold"))))
+    expect(doc.getPageCount()).toBe(1)
+  })
+
+  /**
+   * PDF anchors by measuring; PostScript anchors with `stringwidth` at render
+   * time. They agree only if the number PDF used is the number the font really
+   * has — which is what makes the embedded face safe to swap in for Helvetica.
+   */
+  it("centres a bold title on the bold face's own metrics", () => {
+    const pdf = pdfOf(FACE_SVG("sans-serif", "bold", "Response"))
+    const tm = /1 0 0 -1 ([-\d.]+) [-\d.]+ Tm/.exec(pdf)!
+    const expected = 100 - textWidth("Response", "helvetica-bold") * 12 * 0.5
+    expect(Number(tm[1])).toBeCloseTo(expected, 3)
+    // And it is NOT where the roman table would have put it.
+    expect(Number(tm[1])).not.toBeCloseTo(100 - textWidth("Response", "helvetica") * 12 * 0.5, 3)
   })
 })

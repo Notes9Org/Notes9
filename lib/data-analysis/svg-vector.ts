@@ -19,9 +19,25 @@
  *     it would show. In practice the traces are already range-filtered.
  *   - EPS has no alpha (PostScript Level 2/3 has no simple transparency), so a
  *     semi-transparent mark comes out opaque there. PDF carries it properly.
- *   - Glyph widths for anchoring in PDF come from the Helvetica metrics below.
- *     PostScript measures the real font itself, so EPS is exact.
+ *   - PDF embeds the sans faces (Liberation Sans, metric-compatible with
+ *     Helvetica) as a real font program. Serif and mono still emit a base-14
+ *     REFERENCE and no font program, so a serif figure will still fail an
+ *     Elsevier or Springer preflight. See `export/liberation-sans.ts`.
+ *   - EPS embeds nothing at all: PostScript font embedding is Type 42 or Type 1,
+ *     a second format this does not implement. Every EPS here references the
+ *     base-14 faces and will fail the same preflight. PDF is the format to
+ *     submit until that is closed.
  */
+
+import {
+  liberationSansBold,
+  liberationSansRegular,
+} from "@/lib/data-analysis/export/liberation-sans"
+import {
+  parseTrueType,
+  pdfFontObjects,
+  type EmbeddableFont,
+} from "@/lib/data-analysis/export/truetype"
 
 /* ── Geometry ──────────────────────────────────────────────────────────────*/
 
@@ -359,7 +375,13 @@ export interface VectorPath {
   strokeAlpha: number
 }
 
-export type FontFamily = "helvetica" | "helvetica-bold" | "times" | "courier"
+export type FontFamily =
+  | "helvetica"
+  | "helvetica-bold"
+  | "times"
+  | "times-bold"
+  | "courier"
+  | "courier-bold"
 
 export interface VectorText {
   kind: "text"
@@ -468,10 +490,16 @@ function alphaOf(style: Style, key: "fill-opacity" | "stroke-opacity"): number {
 
 function fontOf(style: Style): FontFamily {
   const family = (style["font-family"] ?? "").toLowerCase()
-  if (/mono|courier|consolas|menlo/.test(family)) return "courier"
-  if (/serif|georgia|times/.test(family) && !/sans-serif/.test(family)) return "times"
   const weight = style["font-weight"] ?? ""
-  return weight === "bold" || num(weight, 400) >= 600 ? "helvetica-bold" : "helvetica"
+  // Weight is read before the family is branched on, not after. Reading it
+  // inside the sans branch is why a bold serif axis title used to come out
+  // roman: the serif and mono returns short-circuited past the weight test.
+  const bold = weight === "bold" || num(weight, 400) >= 600
+  if (/mono|courier|consolas|menlo/.test(family)) return bold ? "courier-bold" : "courier"
+  if (/serif|georgia|times/.test(family) && !/sans-serif/.test(family)) {
+    return bold ? "times-bold" : "times"
+  }
+  return bold ? "helvetica-bold" : "helvetica"
 }
 
 /** Elements that describe rather than draw. */
@@ -684,37 +712,131 @@ export function toLatin1(text: string): string {
 }
 
 /**
- * Helvetica advance widths (AFM, 1/1000 em) for the printable ASCII range.
+ * Base-14 advance widths (AFM, 1/1000 em) for the printable ASCII range, ONE
+ * TABLE PER FACE.
  *
- * ponytail: one table, used for every proportional face, so a centred label set
- * in Times is off by a percent or two. Add the Times table if a serif figure
- * ever looks misaligned -- PostScript measures the real font, so only PDF is
- * affected.
+ * There used to be a single Helvetica table used for all four faces. PDF
+ * resolves `text-anchor: middle` and `end` by measuring the string itself, so a
+ * centred title set in Helvetica-Bold — about 8% wider than the roman — landed
+ * visibly left of centre, and EPS did not, because PostScript's `stringwidth`
+ * measures the real font at render time. That is the whole reason a PDF and an
+ * EPS of the same figure disagreed.
+ *
+ * The numbers are the Adobe AFM metrics for the standard 14, and
+ * `svg-vector.test.ts` checks them against @pdf-lib/standard-fonts rather than
+ * trusting that they were transcribed correctly.
  */
-const HELVETICA_WIDTHS = [
-  278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556,
-  556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556, 1015, 667, 667, 722, 722, 667,
-  611, 778, 722, 278, 500, 667, 556, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667,
-  667, 611, 278, 278, 278, 469, 556, 333, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500,
-  222, 833, 556, 556, 556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584,
-]
+const COURIER_WIDTHS = new Array(95).fill(600)
 
-/** Text width in ems. */
-export function textWidth(text: string, font: FontFamily): number {
-  if (font === "courier") return text.length * 0.6
-  let total = 0
-  for (let i = 0; i < text.length; i++) {
-    const code = text.charCodeAt(i)
-    total += code >= 32 && code <= 126 ? HELVETICA_WIDTHS[code - 32] : 556
-  }
-  return total / 1000
+const FACE_WIDTHS: Record<FontFamily, number[]> = {
+  helvetica: [
+    278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556,
+    556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556, 1015, 667, 667, 722, 722, 667,
+    611, 778, 722, 278, 500, 667, 556, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667,
+    667, 611, 278, 278, 278, 469, 556, 333, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500,
+    222, 833, 556, 556, 556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584,
+  ],
+  "helvetica-bold": [
+    278, 333, 474, 556, 556, 889, 722, 238, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556,
+    556, 556, 556, 556, 556, 556, 556, 333, 333, 584, 584, 584, 611, 975, 722, 722, 722, 722, 667,
+    611, 778, 722, 278, 556, 722, 611, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667,
+    667, 611, 333, 278, 333, 584, 556, 333, 556, 611, 556, 611, 556, 333, 611, 611, 278, 278, 556,
+    278, 889, 611, 611, 611, 611, 389, 556, 333, 611, 556, 778, 556, 556, 500, 389, 280, 389, 584,
+  ],
+  times: [
+    250, 333, 408, 500, 500, 833, 778, 180, 333, 333, 500, 564, 250, 333, 250, 278, 500, 500, 500,
+    500, 500, 500, 500, 500, 500, 500, 278, 278, 564, 564, 564, 444, 921, 722, 667, 667, 722, 611,
+    556, 722, 722, 333, 389, 722, 611, 889, 722, 722, 556, 722, 667, 556, 611, 722, 722, 944, 722,
+    722, 611, 333, 278, 333, 469, 500, 333, 444, 500, 444, 500, 444, 333, 500, 500, 278, 278, 500,
+    278, 778, 500, 500, 500, 500, 333, 389, 278, 500, 500, 722, 500, 500, 444, 480, 200, 480, 541,
+  ],
+  "times-bold": [
+    250, 333, 555, 500, 500, 1000, 833, 278, 333, 333, 500, 570, 250, 333, 250, 278, 500, 500, 500,
+    500, 500, 500, 500, 500, 500, 500, 333, 333, 570, 570, 570, 500, 930, 722, 667, 722, 722, 667,
+    611, 778, 778, 389, 500, 778, 667, 944, 722, 778, 611, 778, 722, 556, 667, 722, 722, 1000, 722,
+    722, 667, 333, 278, 333, 581, 500, 333, 500, 556, 444, 556, 444, 333, 500, 556, 278, 333, 556,
+    278, 833, 556, 500, 556, 556, 444, 389, 333, 556, 500, 722, 500, 500, 444, 394, 220, 394, 520,
+  ],
+  courier: COURIER_WIDTHS,
+  "courier-bold": COURIER_WIDTHS,
+}
+
+/**
+ * The width used for a character the AFM table does not cover — anything above
+ * printable ASCII, so the micro sign and the degree sign on a concentration
+ * axis. Only reached for a face with no embedded program; an embedded face
+ * measures the real glyph.
+ */
+const FALLBACK_WIDTH: Record<FontFamily, number> = {
+  helvetica: 556,
+  "helvetica-bold": 556,
+  times: 500,
+  "times-bold": 500,
+  courier: 600,
+  "courier-bold": 600,
 }
 
 const BASE_FONT: Record<FontFamily, string> = {
   helvetica: "Helvetica",
   "helvetica-bold": "Helvetica-Bold",
   times: "Times-Roman",
+  "times-bold": "Times-Bold",
   courier: "Courier",
+  "courier-bold": "Courier-Bold",
+}
+
+/**
+ * The faces this build carries an actual font program for.
+ *
+ * Only these can be embedded; the rest fall through to a base-14 reference,
+ * which is honest but still bounces preflight. Adding a face here is the whole
+ * change needed to embed it — see the upgrade note in `liberation-sans.ts`.
+ */
+const EMBEDDABLE: Partial<Record<FontFamily, () => Uint8Array>> = {
+  helvetica: liberationSansRegular,
+  "helvetica-bold": liberationSansBold,
+}
+
+const faceCache = new Map<FontFamily, EmbeddableFont>()
+
+/**
+ * The parsed font program for a face, or null when this build has none.
+ *
+ * A parse failure is deliberately NOT caught. The programs are vendored and
+ * their bytes are asserted in the tests, so a throw here means the vendored
+ * font is corrupt — and an export that fails loudly is better than one that
+ * quietly reverts to the non-embedded output this code exists to replace.
+ */
+function embeddedFace(font: FontFamily): EmbeddableFont | null {
+  const load = EMBEDDABLE[font]
+  if (!load) return null
+  const hit = faceCache.get(font)
+  if (hit) return hit
+  const face = parseTrueType(load(), BASE_FONT[font])
+  faceCache.set(font, face)
+  return face
+}
+
+/**
+ * Text width in ems, in the face it will actually be set in.
+ *
+ * An embedded face is measured from its own `hmtx`, which is both exact and
+ * defined for the whole of Latin-1 rather than printable ASCII. For Liberation
+ * Sans those numbers are byte-identical to the Helvetica AFM (the test asserts
+ * it), so embedding moved nothing on the page and PDF still agrees with the
+ * EPS, which measures base-14 Helvetica with `stringwidth`.
+ */
+export function textWidth(text: string, font: FontFamily): number {
+  const face = embeddedFace(font)
+  const table = FACE_WIDTHS[font]
+  let total = 0
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i)
+    const measured = face?.advance(code) ?? null
+    if (measured !== null) total += measured
+    else total += code >= 32 && code <= 126 ? table[code - 32] : FALLBACK_WIDTH[font]
+  }
+  return total / 1000
 }
 
 const ANCHOR_FACTOR = { start: 0, middle: 0.5, end: 1 } as const
@@ -815,11 +937,35 @@ export function vectorToPdf(figure: VectorFigure, meta: { title?: string } = {})
   body.push("Q")
   const content = body.join("\n")
 
-  const fontObjects = fonts.map(
-    (f) =>
-      `<< /Type /Font /Subtype /Type1 /BaseFont /${BASE_FONT[f]} /Encoding /WinAnsiEncoding >>`
-  )
-  const fontRes = fonts.map((_, i) => `/F${i} ${5 + i} 0 R`).join(" ")
+  /**
+   * Font objects, and the reference each /Fn resource points at.
+   *
+   * An embedded face costs three objects — the /Font, its /FontDescriptor and
+   * the /FontFile2 stream carrying the program — and a base-14 reference costs
+   * one, so the numbering cannot be `5 + i` any more. Objects 1-4 are the
+   * catalog, pages, page and content stream, so the fonts start at 5.
+   */
+  const FIRST_FONT_OBJECT = 5
+  const fontObjects: string[] = []
+  const fontRefs: number[] = []
+  for (const f of fonts) {
+    const ref = FIRST_FONT_OBJECT + fontObjects.length
+    const face = embeddedFace(f)
+    if (face) {
+      const objects = pdfFontObjects(face, ref + 1, ref + 2)
+      fontObjects.push(objects.font, objects.descriptor, objects.fontFile)
+    } else {
+      // No program for this face, so no /FontDescriptor either. A descriptor
+      // without a /FontFile2 would claim an embedding that is not there, which
+      // is worse than an honest reference: preflight believes the claim and the
+      // rejection arrives later, from the publisher.
+      fontObjects.push(
+        `<< /Type /Font /Subtype /Type1 /BaseFont /${BASE_FONT[f]} /Encoding /WinAnsiEncoding >>`
+      )
+    }
+    fontRefs.push(ref)
+  }
+  const fontRes = fonts.map((_, i) => `/F${i} ${fontRefs[i]} 0 R`).join(" ")
   const gsRes = alphas
     .map((a, i) => `/GS${i} << /Type /ExtGState /ca ${n(a)} /CA ${n(a)} >>`)
     .join(" ")
