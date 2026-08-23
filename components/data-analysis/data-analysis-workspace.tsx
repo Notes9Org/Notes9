@@ -151,10 +151,14 @@ import {
 import {
   buildPortableBundle,
   createAnalysis,
+  // Aliased: `duplicateAnalysis` is already the name of the local callback that
+  // duplicates an open TAB. This one duplicates a saved analysis server-side.
+  duplicateAnalysis as duplicateSavedAnalysis,
   getAnalysis,
   listRecentAnalyses,
   listRevisions,
   openRevision,
+  pinRevision,
   type AnalysisRevision,
   type ReopenVerdict,
   type SavedAnalysis,
@@ -173,6 +177,7 @@ import { requestSpecPatch, type SpecPatchOutcome } from "@/lib/data-analysis/ai/
 import { applyAiPatch, applyMutation, describeMutation, dispatchMutation, initHistory, type AppliedMutation, type SpecMutation } from "@/lib/data-analysis/spec/mutations"
 import { aiNotice, applyOverlay, canExecuteProposal, splitApprovedMutations } from "@/lib/data-analysis/workspace/spec-prompt"
 import {
+  auditRecords,
   canRedo as canRedoOf,
   canUndo as canUndoOf,
   commit as commitEdit,
@@ -3469,6 +3474,10 @@ export function DataAnalysisWorkspace({
           openRevision: openRevisionRow,
           // The reasoning is saved with the figure, not beside it.
           conversationThread: toStoredThread(turnsRef.current),
+          // And so is the record of how it was edited (L8). The append-only log,
+          // not `past`: an edit that was tried and undone belongs on the
+          // provenance card, and the undo stack no longer holds it.
+          auditLog: auditRecords(editHistory),
         })
 
         await autosaveDraft(analysis.id, derivedSpec, config)
@@ -3505,7 +3514,7 @@ export function DataAnalysisWorkspace({
       }
       // eslint-disable-next-line react-hooks/exhaustive-deps
     },
-    [derivedSpec, savedAnalysis, sourceFile, engineResult, specTable, liveSnapshot, openRevisionRow]
+    [derivedSpec, savedAnalysis, sourceFile, engineResult, specTable, liveSnapshot, openRevisionRow, editHistory]
   )
 
   /**
@@ -3550,6 +3559,11 @@ export function DataAnalysisWorkspace({
         workbook,
         config: buildConfig(),
         previousRevisionId: openRevisionRow.id,
+        // The live thread, not the one stored on the revision being re-run:
+        // `rerunIntoNewRevision`'s database fallback covers the omission, but
+        // this session's transcript is the current one, and a re-run is the
+        // path where losing the reasoning behind the figure costs most.
+        conversationThread: toStoredThread(turnsRef.current),
       })
 
       if (live) {
@@ -3595,6 +3609,47 @@ export function DataAnalysisWorkspace({
       }
     },
     []
+  )
+
+  /** §3A.4 pin. A bookmark, and reversible — hence a toggle, not a confirm. */
+  const pinRevisionNow = useCallback(async (revision: AnalysisRevision, pinned: boolean) => {
+    setBusyRevisionId(revision.id)
+    try {
+      const next = await pinRevision(revision.id, pinned)
+      setRevisions((rs) => rs.map((r) => (r.id === next.id ? next : r)))
+      setOpenRevisionRow((r) => (r && r.id === next.id ? next : r))
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't pin this revision")
+    } finally {
+      setBusyRevisionId(null)
+    }
+  }, [])
+
+  /**
+   * §3A.4 duplicate. A SEPARATE analysis with its own revision chain, not a
+   * fork of this one — so it is a navigation, not a swap. Routing through the
+   * `?analysis=` param moves the address bar with the screen: the researcher
+   * can see they are somewhere else, and Back returns them to the original.
+   * Quietly rebinding the workspace would leave them editing a copy while
+   * believing they were editing the figure they opened.
+   */
+  const duplicateRevisionNow = useCallback(
+    async (revision: AnalysisRevision) => {
+      setBusyRevisionId(revision.id)
+      try {
+        const copy = await duplicateSavedAnalysis({ revisionId: revision.id })
+        setHistoryOpen(false)
+        toast.success(
+          `Copied revision ${revision.revisionNo} into a new analysis, "${copy.name}". Opening it now — the original is untouched.`
+        )
+        router.push(`/data-analysis?analysis=${copy.id}`)
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Couldn't duplicate this revision")
+      } finally {
+        setBusyRevisionId(null)
+      }
+    },
+    [router]
   )
 
   /** §3A.3 rule 6, from the history: one revision, under the documented schema. */
@@ -4414,6 +4469,8 @@ export function DataAnalysisWorkspace({
           if (savedAnalysis) void openSavedRevision(savedAnalysis, rev, restore)
         }}
         onFreeze={(rev) => void freezeRevisionNow(rev)}
+        onPin={(rev, pinned) => void pinRevisionNow(rev, pinned)}
+        onDuplicate={(rev) => void duplicateRevisionNow(rev)}
         onExport={exportRevision}
       />
 
@@ -4439,10 +4496,16 @@ export function DataAnalysisWorkspace({
         onClose={() => setProvenanceOpen(false)}
         spec={derivedSpec}
         result={engineResult}
-        history={historyMutations(editHistory)}
+        // The append-only log, so an edit that was undone reads as reverted
+        // rather than disappearing from the record (L8).
+        auditLog={auditRecords(editHistory)}
         revisionNo={openRevisionRow?.revisionNo}
         isFrozen={openRevisionRow?.isFrozen}
         sourceDetached={reopenVerdict?.state === "detached"}
+        // From the revision row rather than React state: who saved this and
+        // when has to survive a reload, and state does not.
+        author={openRevisionRow ? { id: openRevisionRow.authorId } : null}
+        savedAt={openRevisionRow?.createdAt ?? null}
       />
       )}
     </>
