@@ -27,7 +27,7 @@ import {
 } from "@/lib/data-analysis/spec/analysis-spec"
 import type { Table } from "@/lib/data-analysis/engine/resolver"
 import { defaultGroupColumn, inferDesign, inferRoles, legalTests, type TestCapability } from "@/lib/data-analysis/semantic/infer"
-import { hashTable } from "./bootstrap"
+import { hashTable, recallRowIds } from "./bootstrap"
 
 /** Every chart type the workspace offers, mapped onto a figure kind. */
 export const CHART_TYPE_TO_FIGURE_KIND: Record<string, FigureKind> = {
@@ -474,15 +474,37 @@ export function recomputeSignature(spec: AnalysisSpec): string {
   ])
 }
 
-/** Rows keyed by column name, as the chart workspace holds them, become a Table. */
+/**
+ * Rows keyed by column name, as the chart workspace holds them, become a Table.
+ *
+ * `rowId` is the sheet's own row number, so a mark traced back to a row lands
+ * where the user can find it and an "Excluded points" line cites the sample it
+ * actually names. `row-${i + 2}` is only that number when the header is on row 1
+ * and nothing was dropped in between: a title row, a blank spacer, a unit row or
+ * a footnote all move the data without moving the index. So the true ids are
+ * taken from the reader that knew them — passed in, or recalled from the array
+ * `snapshotToTable` produced — and the positional form is the last resort for
+ * rows assembled by hand (tests, the AI's synthetic tables), where it is right.
+ *
+ * This is also where the two readers converge on what "missing" means. The flat
+ * row shape says `""` because it cannot hold `null`; `tableFromGrid` says
+ * `null`, which is what the `Table` contract declares and what the resolver and
+ * the semantic layer treat as absent. Two spellings of missing arriving at one
+ * missing-value path is a defect waiting for the first `eq ""` filter, so a
+ * blank becomes `null` here. `hashTable` writes `?? ""` either way, so no
+ * stored version hash moves.
+ */
 export function tableFromChartRows(
   columns: string[],
-  rows: Record<string, number | string>[]
+  rows: Record<string, number | string | null>[],
+  rowIds?: readonly string[]
 ): Table {
+  const known = rowIds ?? recallRowIds(rows)
   return {
     columns,
-    // The sheet's own row number, so a mark traced back to a row lands where
-    // the user can find it. Header occupies row 1.
-    rows: rows.map((values, i) => ({ rowId: `row-${i + 2}`, values })),
+    rows: rows.map((row, i) => ({
+      rowId: known?.[i] ?? `row-${i + 2}`,
+      values: Object.fromEntries(Object.entries(row).map(([k, v]) => [k, v === "" ? null : v])),
+    })),
   }
 }
