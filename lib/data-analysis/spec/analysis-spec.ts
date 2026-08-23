@@ -431,7 +431,15 @@ export const ErrorBarKind = z.enum([
 export const AxisSpec = z.object({
   label: z.string().max(256).nullable().default(null),
   unit: z.string().max(64).nullable().default(null),
-  scale: z.enum(["linear", "log10"]).default("linear"),
+  /**
+   * "auto" defers to the figure kind, which is not the same statement as
+   * "linear". A four-parameter logistic fit is unreadable at the low end on a
+   * linear dose axis, so `dose-response` wants log x — but only until someone
+   * says otherwise, and a schema whose only default IS "linear" cannot tell a
+   * chosen linear axis from an unset one. `parseSpec` resolves "auto" to a
+   * concrete scale, so every consumer downstream still sees "linear"|"log10".
+   */
+  scale: z.enum(["auto", "linear", "log10"]).default("auto"),
   min: z.number().nullable().default(null),
   max: z.number().nullable().default(null),
   tickCount: z.number().int().min(2).max(50).nullable().default(null),
@@ -579,6 +587,45 @@ export const FigureSpec = z.object({
    * figure are the same cut-offs the reader is told were applied.
    */
   volcanoFoldChange: z.number().min(0).max(100).default(1),
+  /**
+   * Volcano only: how many significant features get an on-plot label.
+   *
+   * A volcano a reader cannot read gene names off is half a volcano, and a
+   * volcano that labels all 20 000 of them is none. The cap is stored rather
+   * than hardcoded so the figure can state which bound was applied, and the
+   * subtitle says "top N of M" whenever M exceeds it — a truncation a reader
+   * cannot see is a truncation that misrepresents the result.
+   */
+  volcanoLabelCount: z.number().int().min(0).max(100).default(10),
+  /**
+   * Violin only: stop the kernel density at the observed range.
+   *
+   * Plotly's default (`spanmode: "soft"`) runs the KDE past the extreme
+   * observations, so a violin of a concentration, a count or an elapsed time
+   * draws density below zero — a claim about values the assay cannot produce.
+   * Truncation is the default for that reason; the soft tail stays available
+   * because it is the right picture for a genuinely unbounded quantity.
+   */
+  violinTruncate: z.boolean().default(true),
+  /**
+   * Violin only: mirror the second factor's two levels about each group's tick.
+   *
+   * Off by default because it needs a second factor with exactly two levels;
+   * asking for it without one is reported on the figure, never ignored.
+   */
+  violinSplit: z.boolean().default(false),
+  /** Violin only: the median/IQR box inside the density, as journals draw it. */
+  violinInnerBox: z.boolean().default(true),
+  /**
+   * Histogram only: bin count. Null asks for Freedman-Diaconis, which is the
+   * rule that survives the skewed, outlier-heavy distributions lab data
+   * actually has; a number here overrides it.
+   */
+  histogramBins: z.number().int().min(1).max(500).nullable().default(null),
+  /** Histogram only: what the bar height means. */
+  histogramNorm: z
+    .enum(["count", "probability", "density", "probability density"])
+    .default("count"),
 })
 export type FigureSpec = z.infer<typeof FigureSpec>
 
@@ -623,6 +670,29 @@ export const AnalysisSpec = z.object({
 export type AnalysisSpec = z.infer<typeof AnalysisSpec>
 
 /**
+ * Kinds whose x axis is a concentration series, where log is the readable
+ * default. A 4PL fit on a linear dose axis crushes every low-dose point into
+ * the left margin, which is the half of the curve the EC50 is estimated from.
+ */
+const LOG_X_BY_DEFAULT = new Set<FigureKind>(["dose-response"])
+
+/**
+ * Resolve an "auto" axis scale against the figure kind.
+ *
+ * Only the x axis of a dose-response gets a non-linear default: no kind in the
+ * catalogue wants a log y unless its author asks. Exported because the renderer
+ * has to make the same decision for a spec that never went through `parseSpec`.
+ */
+export function effectiveScale(
+  scale: AxisSpec["scale"],
+  kind: FigureKind,
+  axis: "x" | "y" | "y2"
+): "linear" | "log10" {
+  if (scale !== "auto") return scale
+  return axis === "x" && LOG_X_BY_DEFAULT.has(kind) ? "log10" : "linear"
+}
+
+/**
  * Parse-and-validate. The AI layer (§6.6) must route every proposed spec through
  * this: invalid specs are rejected and repaired, never rendered. Returning the
  * issues rather than throwing is what lets the orchestrator run its repair loop.
@@ -631,9 +701,24 @@ export function parseSpec(
   input: unknown
 ): { ok: true; spec: AnalysisSpec } | { ok: false; issues: z.ZodIssue[] } {
   const result = AnalysisSpec.safeParse(input)
-  return result.success
-    ? { ok: true, spec: result.data }
-    : { ok: false, issues: result.error.issues }
+  if (!result.success) return { ok: false, issues: result.error.issues }
+  // "auto" is resolved here rather than left for each reader. The chart-state
+  // round trip writes a concrete "linear"|"log10" back on every conversion, so
+  // a sentinel that survived parsing would be erased by the first UI edit and
+  // the log default would silently revert.
+  const { figure } = result.data
+  const spec: AnalysisSpec = {
+    ...result.data,
+    figure: {
+      ...figure,
+      x: { ...figure.x, scale: effectiveScale(figure.x.scale, figure.kind, "x") },
+      y: { ...figure.y, scale: effectiveScale(figure.y.scale, figure.kind, "y") },
+      y2: figure.y2
+        ? { ...figure.y2, scale: effectiveScale(figure.y2.scale, figure.kind, "y2") }
+        : figure.y2,
+    },
+  }
+  return { ok: true, spec }
 }
 
 /**
