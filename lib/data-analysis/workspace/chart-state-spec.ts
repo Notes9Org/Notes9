@@ -24,7 +24,9 @@ import {
   type RowFilter,
   type Transform,
   type Exclusion,
+  type SeriesStyle,
 } from "@/lib/data-analysis/spec/analysis-spec"
+import type { SpecMutation } from "@/lib/data-analysis/spec/mutations"
 import type { Table } from "@/lib/data-analysis/engine/resolver"
 import { defaultGroupColumn, inferDesign, inferRoles, legalTests, type TestCapability } from "@/lib/data-analysis/semantic/infer"
 import { hashTable, recallRowIds } from "./bootstrap"
@@ -162,6 +164,30 @@ const LEGEND_POSITIONS = new Set(["bottom", "right", "top", "none"])
 const LINE_STYLES = new Set(["solid", "dash", "dot", "dashdot", "none"])
 const POINT_SHAPES = new Set(["circle", "square", "diamond", "triangle", "cross", "x", "star"])
 
+/** The rail holds a CSS stack; the spec names one of three faces. */
+const figureFontFamily = (v: string | undefined): AnalysisSpec["figure"]["fontFamily"] =>
+  v === "serif" || v === "mono" ? v : "sans"
+
+/**
+ * One rail series entry as the spec's `SeriesStyle`. Shared by the derivation
+ * below and by `seriesStyleMutation`, so the mutation a colour picker
+ * dispatches cannot describe a different style from the one the derivation
+ * would have produced from the same rail state.
+ */
+function figureSeriesStyle(key: string, s: NonNullable<ChartState["seriesStyles"]>[string]): SeriesStyle {
+  return {
+    key,
+    colour: s.color ?? null,
+    pointShape: (POINT_SHAPES.has(s.marker ?? "") ? s.marker : "circle") as SeriesStyle["pointShape"],
+    pointSize: s.size ?? 6,
+    opacity: s.opacity ?? 1,
+    jitter: 0,
+    lineStyle: (LINE_STYLES.has(s.dash ?? "") ? s.dash : "solid") as SeriesStyle["lineStyle"],
+    lineWidth: s.width ?? 2,
+    axis: s.axis === "y2" ? "right" : "left",
+  }
+}
+
 /**
  * Choose the test the chart implies.
  *
@@ -255,7 +281,7 @@ export function specFromChartState(
     legendPosition: LEGEND_POSITIONS.has(state.legendPos ?? "")
       ? (state.legendPos as "bottom" | "right" | "top" | "none")
       : "bottom",
-    fontFamily: state.fontFamily === "serif" || state.fontFamily === "mono" ? state.fontFamily : "sans",
+    fontFamily: figureFontFamily(state.fontFamily),
     titleFontSize: state.titleSize ?? 17,
     axisFontSize: state.axisTitleSize ?? 13,
     width: state.width ?? 720,
@@ -277,16 +303,7 @@ export function specFromChartState(
     },
     // Per-series overrides carry across unchanged; they are the lab's figure
     // look, and losing them on save is the complaint §Tier1.2 is about.
-    series: Object.entries(state.seriesStyles ?? {}).map(([key, s]) => ({
-      key,
-      colour: s.color ?? null,
-      pointShape: POINT_SHAPES.has(s.marker ?? "") ? s.marker : "circle",
-      pointSize: s.size ?? 6,
-      opacity: s.opacity ?? 1,
-      lineStyle: LINE_STYLES.has(s.dash ?? "") ? s.dash : "solid",
-      lineWidth: s.width ?? 2,
-      axis: s.axis === "y2" ? ("right" as const) : ("left" as const),
-    })),
+    series: Object.entries(state.seriesStyles ?? {}).map(([key, s]) => figureSeriesStyle(key, s)),
   }
 
   const draft = parseSpec({
@@ -336,6 +353,118 @@ export function specFromChartState(
 }
 
 export class SpecDerivationError extends Error {}
+
+/* ── The rail, as mutations ────────────────────────────────────────────────*/
+
+/**
+ * The style controls that now dispatch instead of only setting React state.
+ *
+ * Deliberately NOT the whole rail. `markers`, `showPoints`, `hlines`, `vlines`
+ * and `chartH` have no field in the spec at all — `railFromConfig` excludes
+ * them for exactly that reason — so there is no mutation to dispatch and no
+ * sticky path to defend. The binding controls (`chartType`, `xKey`, `yKeys`,
+ * `zKey`, `sizeKey`) and the statistics slice do have mutations, but they
+ * change what the ENGINE computes rather than how it is drawn, so routing them
+ * moves the recompute gate as well as the history and belongs in its own change.
+ */
+export type RailControlKey =
+  | "title" | "subtitle" | "caption"
+  | "xLabel" | "xUnit" | "yLabel" | "yUnit"
+  | "xLog" | "yLog" | "xMin" | "xMax" | "yMin" | "yMax" | "nticks"
+  | "showGrid" | "showLegend" | "legendPos"
+  | "paletteName" | "fontFamily" | "titleSize" | "axisTitleSize"
+  | "errorMode"
+
+/**
+ * The typed mutation a rail control means, read off the rail state AFTER the
+ * change.
+ *
+ * Every conversion here is the one `specFromChartState` already performs on the
+ * same field — the CSS stack narrowed to one of three faces, the axis-limit
+ * text parsed to a number or null, the empty unit string read as absent. That
+ * is not a coincidence to be maintained by hand: `chart-state-spec.test.ts`
+ * asserts, per control, that applying this mutation to the spec derived from
+ * the state BEFORE lands exactly on the spec derived from the state AFTER. A
+ * conversion that drifts from `specFromChartState` fails that test, which is
+ * also the backward-compatibility guarantee — a saved analysis still derives
+ * through the same function it always did, and the mutations only describe the
+ * steps between two of its outputs.
+ *
+ * `null` means the control has no spec effect worth recording.
+ */
+export function railControlMutation(key: RailControlKey, next: ChartState): SpecMutation | null {
+  switch (key) {
+    case "title":
+      return { kind: "figure.setTitle", value: next.title }
+    case "subtitle":
+      return { kind: "figure.setSubtitle", value: next.subtitle || null }
+    case "caption":
+      return { kind: "figure.setCaption", value: next.caption ?? null }
+    // Label and unit travel together, as the legend's show/position do below.
+    // The spec keeps them on one path, and one control moves both: binding an
+    // axis title from a sheet cell sets the label and clears the unit. A
+    // mutation naming only half of that would under-describe the edit it is the
+    // record of. Re-stating the unchanged half is a no-op — `axis.set` merges.
+    case "xLabel":
+    case "xUnit":
+      return { kind: "axis.set", axis: "x", patch: { label: next.xLabel, unit: next.xUnit || null } }
+    case "yLabel":
+    case "yUnit":
+      return { kind: "axis.set", axis: "y", patch: { label: next.yLabel, unit: next.yUnit || null } }
+    case "xLog":
+      return { kind: "axis.set", axis: "x", patch: { scale: next.xLog ? "log10" : "linear" } }
+    case "yLog":
+      return { kind: "axis.set", axis: "y", patch: { scale: next.yLog ? "log10" : "linear" } }
+    case "xMin":
+      return { kind: "axis.set", axis: "x", patch: { min: num(next.xMin) } }
+    case "xMax":
+      return { kind: "axis.set", axis: "x", patch: { max: num(next.xMax) } }
+    case "yMin":
+      return { kind: "axis.set", axis: "y", patch: { min: num(next.yMin) } }
+    case "yMax":
+      return { kind: "axis.set", axis: "y", patch: { max: num(next.yMax) } }
+    case "nticks":
+      return { kind: "axis.set", axis: "x", patch: { tickCount: num(next.nticks) } }
+    case "showGrid":
+      return { kind: "figure.setGridlines", value: next.showGrid ?? true }
+    // One mutation for the pair, because the spec holds them on one field and
+    // `figure.setLegend` writes both. The position rides along on either edit so
+    // the mutation always reproduces the whole of what the rail shows.
+    case "showLegend":
+    case "legendPos":
+      return {
+        kind: "figure.setLegend",
+        show: next.showLegend ?? true,
+        position: LEGEND_POSITIONS.has(next.legendPos ?? "")
+          ? (next.legendPos as AnalysisSpec["figure"]["legendPosition"])
+          : "bottom",
+      }
+    case "paletteName":
+      return { kind: "figure.setPalette", value: next.paletteName }
+    case "fontFamily":
+      return { kind: "figure.setFont", family: figureFontFamily(next.fontFamily) }
+    case "titleSize":
+      return { kind: "figure.setFont", titleSize: next.titleSize ?? 17 }
+    case "axisTitleSize":
+      return { kind: "figure.setFont", axisSize: next.axisTitleSize ?? 13 }
+    case "errorMode":
+      return { kind: "figure.setErrorBars", value: next.errorMode }
+  }
+}
+
+/**
+ * A series' style, as one mutation.
+ *
+ * Separate from `railControlMutation` because the path it owns names the series
+ * (`figure.series.<key>`), so the key is an argument rather than a case. That
+ * path is the point: two series restyled by hand are two independent sticky
+ * edits, and an AI patch recolouring one must not be reported as colliding with
+ * the other.
+ */
+export function seriesStyleMutation(seriesKey: string, next: ChartState): SpecMutation {
+  const { key: _key, ...patch } = figureSeriesStyle(seriesKey, next.seriesStyles?.[seriesKey] ?? {})
+  return { kind: "figure.setSeriesStyle", seriesKey, patch }
+}
 
 /**
  * Drive the rail from a spec, the direction a saved analysis or an AI-proposed
