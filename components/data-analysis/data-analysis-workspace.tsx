@@ -1898,6 +1898,12 @@ export function DataAnalysisWorkspace({
    * Rapid edits from one control coalesce into one undo step inside
    * `edit-history.ts` — the rule is there rather than here because it is a
    * property of the history, and a debounce here would delay the picture.
+   *
+   * The command palette above calls this from a `useMemo` declared EARLIER in
+   * this component, which is safe because the call is deferred to a click and
+   * this callback is stable for the component's lifetime. Do not add `railEdit`
+   * to that memo's dependency array: the array is evaluated during render, when
+   * this binding is still in its temporal dead zone, and the page would throw.
    */
   const railEdit = useCallback(
     (key: RailControlKey, patch: Record<string, unknown>, apply: () => void) => {
