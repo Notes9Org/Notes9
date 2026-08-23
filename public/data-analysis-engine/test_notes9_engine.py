@@ -626,6 +626,342 @@ def test_end_to_end_run_shape_is_intact():
     assert out["test"]["pairwise"][0]["correctionMethod"] == "bonferroni"
 
 
+
+# ══ Anderson-Darling normality (§6.3's third normality test) ══════════════════
+#
+# scipy.stats.anderson gives A^2 and a critical-value TABLE but no p-value, so
+# the p has to come from the D'Agostino & Stephens (1986) analytic fit. Every
+# golden below is either scipy's own A^2 or that fit transcribed independently
+# here, never a number the engine produced.
+
+AD_SETS = {
+    "normalish": [4.1, 4.5, 4.3, 4.9, 5.2, 4.7, 5.0, 4.4, 4.8, 4.6],
+    "right-skewed": [1, 1, 1, 2, 2, 3, 3, 4, 6, 10, 18, 40],
+    "uniform": [1, 2, 3, 4, 5, 6, 7, 8, 9],
+    "bimodal": [1, 1.1, 1.2, 1.3, 1.4, 1.5, 9, 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8, 9.9],
+    "outlier": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1e6],
+    # Chosen to land A* in the fit's [0.2, 0.34) and [0.34, 0.6) pieces, which no
+    # other sample here reaches; see test_anderson_darling_covers_every_branch.
+    "fit-piece-2": [6.3, 13.1, 9.8, 11.4, 9.7, 9.2, 10.9, 11.6],
+    "fit-piece-3": [12.7, 12.4, 9.0, 9.4, 8.9, 11.1, 9.9, 11.5],
+}
+
+
+def _ad_p_reference(a2, n):
+    """D'Agostino & Stephens (1986) table 4.9, transcribed from the published
+    coefficients rather than read back out of the engine."""
+    a = a2 * (1 + 0.75 / n + 2.25 / n / n)
+    if a < 0.2:
+        return 1 - math.exp(-13.436 + 101.14 * a - 223.73 * a * a)
+    if a < 0.34:
+        return 1 - math.exp(-8.318 + 42.796 * a - 59.938 * a * a)
+    if a < 0.6:
+        return math.exp(0.9177 - 4.279 * a - 1.38 * a * a)
+    if a < 10:
+        return math.exp(1.2937 - 5.709 * a + 0.0186 * a * a)
+    return 3.7e-24
+
+
+def test_anderson_darling_statistic_matches_scipy():
+    for label, values in AD_SETS.items():
+        a = np.asarray(values, float)
+        got = eng._anderson_darling(a)
+        assert close(got["statistic"], float(stats.anderson(a, "norm").statistic), 1e-12), label
+
+
+def test_anderson_darling_p_matches_the_published_approximation():
+    for label, values in AD_SETS.items():
+        a = np.asarray(values, float)
+        got = eng._anderson_darling(a)
+        assert close(got["pValue"], _ad_p_reference(got["statistic"], a.size), 1e-12), label
+
+
+def test_anderson_darling_covers_every_branch_of_the_fit():
+    """The fit is piecewise in A*; two prior defects lived on non-default paths
+    and a p-value formula with four unexercised branches is the same trap."""
+    seen = set()
+    for values in AD_SETS.values():
+        a = np.asarray(values, float)
+        n = a.size
+        a2 = eng._anderson_darling(a)["statistic"]
+        star = a2 * (1 + 0.75 / n + 2.25 / n / n)
+        seen.add(0 if star < 0.2 else 1 if star < 0.34 else 2 if star < 0.6 else 3)
+    assert seen == {0, 1, 2, 3}, seen
+    # and the >= 10 floor, which no natural sample reaches
+    assert eng._ad_pvalue(20.0, 30) == 3.7e-24
+
+
+def test_anderson_darling_rejects_a_clearly_non_normal_column():
+    got = eng._anderson_darling(np.asarray(AD_SETS["bimodal"], float))
+    assert got["passed"] is False and got["pValue"] < 0.01
+    assert got["alternative"] == "a nonparametric test"
+
+
+def test_anderson_darling_accepts_a_normal_column():
+    got = eng._anderson_darling(np.asarray(AD_SETS["normalish"], float))
+    assert got["passed"] is True and got["pValue"] > 0.05
+
+
+def test_anderson_darling_declines_below_its_minimum_n():
+    """R's nortest::ad.test refuses under 8; extrapolating the fit off the end of
+    the range it was built on is worse than saying no."""
+    got = eng._anderson_darling(np.arange(7.0))
+    assert got["statistic"] is None and got["pValue"] is None
+    assert "at least 8" in got["verdict"]
+
+
+def test_anderson_darling_declines_on_a_constant_column():
+    got = eng._anderson_darling(np.full(12, 3.0))
+    assert got["statistic"] is None and got["pValue"] is None
+
+
+def test_anderson_darling_survives_a_far_tail_outlier():
+    """A 1e6 outlier drives z past -5, where a naive Phi loses all significant
+    digits and ln Phi(z) goes to nan. A^2 must stay finite."""
+    got = eng._anderson_darling(np.asarray(AD_SETS["outlier"], float))
+    assert math.isfinite(got["statistic"]) and got["passed"] is False
+
+
+def test_run_normality_reports_shapiro_and_anderson_for_every_column():
+    out = eng.run_normality({"columns": {"a": AD_SETS["normalish"], "b": AD_SETS["bimodal"]}})
+    names = [c["name"] for c in out["assumptions"]]
+    assert names == ["Normality, a (Shapiro-Wilk)", "Normality, a (Anderson-Darling)",
+                     "Normality, b (Shapiro-Wilk)", "Normality, b (Anderson-Darling)"]
+    ad_a = out["assumptions"][1]
+    assert close(ad_a["statistic"],
+                 float(stats.anderson(np.asarray(AD_SETS["normalish"], float), "norm").statistic), 1e-12)
+    assert "approximation" in ad_a["verdict"]
+    assert "approximation" in out["reportSentence"]
+
+
+def test_run_normality_end_to_end_names_anderson_darling():
+    out = eng.run({"test": "normality", "shape": "columns", "alpha": 0.05,
+                   "columns": {"a": AD_SETS["right-skewed"]}})
+    assert out["error"] is None and out["testRan"] == "normality"
+    ad = [c for c in out["test"]["assumptions"] if "Anderson-Darling" in c["name"]]
+    assert len(ad) == 1 and ad[0]["passed"] is False
+
+
+# ══ FDR: Benjamini-Hochberg and Benjamini-Yekutieli ═══════════════════════════
+
+FDR_P = {
+    "spread": [0.001, 0.008, 0.039, 0.041, 0.042, 0.6],
+    "ties": [0.01, 0.01, 0.01, 0.04, 0.04, 0.9],
+    "monotonicity": [0.02, 0.03, 0.04, 0.05],
+    "single": [0.03],
+    "large": [0.0001, 0.0002, 0.02, 0.03, 0.04, 0.05, 0.2, 0.3, 0.5, 0.9],
+    "unsorted": [0.6, 0.001, 0.042, 0.008, 0.041, 0.039],
+}
+
+
+def test_bh_and_by_match_statsmodels():
+    from statsmodels.stats.multitest import multipletests
+    for label, pv in FDR_P.items():
+        for method, sm in (("benjamini-hochberg", "fdr_bh"), ("benjamini-yekutieli", "fdr_by")):
+            gold = [float(x) for x in multipletests(pv, method=sm)[1]]
+            got = eng._adjust(pv, method)
+            assert all(close(a, b, 1e-12) for a, b in zip(got, gold)), (label, method, got, gold)
+
+
+def test_bh_enforces_step_up_monotonicity():
+    """Raw (m/k)p_(k) is not monotone in k; without the reverse cumulative
+    minimum, [0.02,0.03,0.04,0.05] adjusts to 0.08/0.06/0.0533/0.05, so the
+    SMALLEST raw p gets the LARGEST adjusted p."""
+    got = eng._adjust([0.02, 0.03, 0.04, 0.05], "benjamini-hochberg")
+    assert got == sorted(got)
+    assert all(close(x, 0.05, 1e-12) for x in got)
+
+
+def test_by_is_bh_times_the_harmonic_number():
+    m = 6
+    c = sum(1.0 / i for i in range(1, m + 1))
+    pv = FDR_P["spread"]
+    bh = eng._adjust(pv, "benjamini-hochberg")
+    by = eng._adjust(pv, "benjamini-yekutieli")
+    assert all(close(y, min(1.0, c * h), 1e-12) for h, y in zip(bh, by))
+
+
+def test_bh_never_exceeds_one_or_falls_below_the_raw_p():
+    pv = FDR_P["large"]
+    for method in eng.FDR_METHODS:
+        got = eng._adjust(pv, method)
+        assert all(0 <= a <= 1 for a in got)
+        assert all(a >= raw - 1e-12 for a, raw in zip(got, pv))
+
+
+def test_bh_is_less_conservative_than_holm():
+    pv = FDR_P["large"]
+    bh = eng._adjust(pv, "benjamini-hochberg")
+    holm = eng._adjust(pv, "holm")
+    assert all(b <= h + 1e-12 for b, h in zip(bh, holm))
+    assert any(b < h - 1e-12 for b, h in zip(bh, holm))
+
+
+def _pairwise_bh(method="benjamini-hochberg", alpha=0.05, groups=None):
+    return eng.run_anova_one_way({"groups": groups or GROUPS3, "alpha": alpha,
+                                  "postHoc": method})
+
+
+def test_post_hoc_bh_option_matches_statsmodels_on_the_pairwise_ps():
+    from statsmodels.stats.multitest import multipletests
+    for method, sm in (("benjamini-hochberg", "fdr_bh"), ("benjamini-yekutieli", "fdr_by")):
+        got = _pairwise_bh(method)
+        rows = got["pairwise"]
+        assert [r["correctionMethod"] for r in rows] == [method] * 3
+        gold = [float(x) for x in multipletests([r["pValue"] for r in rows], method=sm)[1]]
+        for row, g in zip(rows, gold):
+            assert close(row["pAdjusted"], g, 1e-12), (method, row["pAdjusted"], g)
+
+
+def test_bh_intervals_are_fcr_adjusted_not_unadjusted():
+    """The known defect elsewhere: an adjusted p beside a 1-alpha interval that
+    contradicts it. FDR rows carry the Benjamini & Yekutieli (2005) FCR interval
+    at 1 - R*alpha/m instead, or none at all."""
+    alpha = 0.05
+    got = _pairwise_bh(alpha=alpha)
+    rows = got["pairwise"]
+    m = len(rows)
+    r = sum(1 for row in rows if row["significant"])
+    assert r == m == 3, r  # all three pairs separate cleanly in GROUPS3
+
+    arrays = [np.asarray(v, float) for v in GROUPS3.values()]
+    dfw = sum(a.size for a in arrays) - len(arrays)
+    msw = sum(float(np.sum((a - a.mean()) ** 2)) for a in arrays) / dfw
+    crit = float(stats.t.ppf(1 - (alpha * r / m) / 2, dfw))
+    unadjusted = float(stats.t.ppf(1 - alpha / 2, dfw))
+    a, b = arrays[0], arrays[1]
+    se = math.sqrt(msw * (1 / a.size + 1 / b.size))
+    diff = float(a.mean()) - float(b.mean())
+    assert close(rows[0]["ciLow"], diff - crit * se, 1e-12)
+    assert close(rows[0]["ciHigh"], diff + crit * se, 1e-12)
+    # R == m here, so the FCR level collapses to 1 - alpha; the point is that it
+    # is computed from R, not assumed. Confirm with a case where R < m below.
+    assert close(crit, unadjusted, 1e-12)
+
+
+def test_fcr_interval_widens_and_drops_rows_when_only_some_are_selected():
+    # Two of three pairs separate; the third does not, so R = 2 of m = 3 and the
+    # surviving intervals are built at 1 - 2*alpha/3 = 96.67%, not 95%.
+    groups = {"ctrl": [5.1, 4.8, 5.4, 5.0, 5.2, 4.9],
+              "near": [5.3, 5.0, 5.5, 5.2, 5.4, 5.1],
+              "far": [8.1, 7.7, 8.4, 8.0, 8.3, 7.9]}
+    alpha = 0.05
+    got = _pairwise_bh(alpha=alpha, groups=groups)
+    rows = got["pairwise"]
+    m, r = len(rows), sum(1 for row in rows if row["significant"])
+    assert (m, r) == (3, 2), [(row["groupA"], row["groupB"], row["pAdjusted"]) for row in rows]
+
+    arrays = [np.asarray(v, float) for v in groups.values()]
+    dfw = sum(a.size for a in arrays) - len(arrays)
+    msw = sum(float(np.sum((a - a.mean()) ** 2)) for a in arrays) / dfw
+    crit = float(stats.t.ppf(1 - (alpha * r / m) / 2, dfw))
+    assert crit > float(stats.t.ppf(1 - alpha / 2, dfw))  # genuinely wider
+
+    for row in rows:
+        if row["significant"]:
+            se = math.sqrt(msw * (1 / 6 + 1 / 6))
+            assert close(row["ciLow"], row["meanDifference"] - crit * se, 1e-12)
+            assert row["ciLow"] * row["ciHigh"] > 0  # excludes zero, agreeing with pAdj
+        else:
+            assert row["ciLow"] is None and row["ciHigh"] is None
+
+
+def test_fcr_interval_excludes_zero_exactly_for_the_selected_rows():
+    """The coherence claim, checked rather than asserted in prose: a BH-selected
+    row has raw p <= R*alpha/m, so its 1 - R*alpha/m interval cannot contain
+    zero, and an unselected row is not given one to misread."""
+    for groups in (GROUPS3,
+                   {"a": [1, 2, 3, 4, 5, 6], "b": [1.1, 2.2, 2.9, 4.1, 5.2, 5.8],
+                    "c": [1.2, 2.1, 3.1, 3.9, 5.1, 6.2]},
+                   {"a": [1, 2, 3, 4, 5, 6], "b": [3, 4, 5, 6, 7, 8], "c": [9, 10, 11, 12, 13, 14]}):
+        for alpha in (0.01, 0.05, 0.10):
+            rows = _pairwise_bh(alpha=alpha, groups=groups)["pairwise"]
+            for row in rows:
+                if row["significant"]:
+                    assert row["ciLow"] is not None
+                    assert row["ciLow"] * row["ciHigh"] > 0, (alpha, row)
+                else:
+                    assert row["ciLow"] is None and row["ciHigh"] is None
+
+
+def test_no_selection_means_no_interval_at_all():
+    groups = {"a": [1, 2, 3, 4, 5, 6], "b": [1.1, 2.2, 2.9, 4.1, 5.2, 5.8],
+              "c": [1.2, 2.1, 3.1, 3.9, 5.1, 6.2]}
+    rows = _pairwise_bh(groups=groups)["pairwise"]
+    assert not any(row["significant"] for row in rows)
+    assert all(row["ciLow"] is None and row["ciHigh"] is None for row in rows)
+
+
+def test_fdr_interval_convention_is_stated_in_the_record():
+    """'The record names what ran': an interval at a level other than 1 - alpha
+    that appears without saying so is exactly the defect being avoided."""
+    got = _pairwise_bh()
+    note = [w for w in got.get("_warnings", []) if "FCR-adjusted" in w]
+    assert len(note) == 1 and "benjamini-hochberg" in note[0], got.get("_warnings")
+
+    groups = {"a": [1, 2, 3, 4, 5, 6], "b": [1.1, 2.2, 2.9, 4.1, 5.2, 5.8],
+              "c": [1.2, 2.1, 3.1, 3.9, 5.1, 6.2]}
+    empty = _pairwise_bh(groups=groups)
+    assert any("no confidence interval is reported" in w for w in empty.get("_warnings", []))
+
+
+def test_alpha_drives_the_fcr_level_and_is_not_hardcoded():
+    wide = _pairwise_bh(alpha=0.01)["pairwise"][0]
+    narrow = _pairwise_bh(alpha=0.10)["pairwise"][0]
+    assert (wide["ciHigh"] - wide["ciLow"]) > (narrow["ciHigh"] - narrow["ciLow"])
+    arrays = [np.asarray(v, float) for v in GROUPS3.values()]
+    dfw = sum(a.size for a in arrays) - len(arrays)
+    msw = sum(float(np.sum((a - a.mean()) ** 2)) for a in arrays) / dfw
+    se = math.sqrt(msw * (1 / 6 + 1 / 6))
+    assert close(wide["ciHigh"] - wide["ciLow"], 2 * float(stats.t.ppf(1 - 0.01 / 2, dfw)) * se, 1e-12)
+
+
+def test_dunn_accepts_the_fdr_corrections_instead_of_discarding_them():
+    from statsmodels.stats.multitest import multipletests
+    for method, sm in (("benjamini-hochberg", "fdr_bh"), ("benjamini-yekutieli", "fdr_by")):
+        got = eng.run_kruskal({"groups": GROUPS3, "alpha": 0.05, "postHoc": method})
+        rows = got["pairwise"]
+        assert [r["correctionMethod"] for r in rows] == [f"dunn ({method})"] * 3
+        gold = [float(x) for x in multipletests([r["pValue"] for r in rows], method=sm)[1]]
+        for row, g in zip(rows, gold):
+            assert close(row["pAdjusted"], g, 1e-12), (method, row["pAdjusted"], g)
+
+
+def test_dunn_fdr_rows_also_carry_fcr_intervals():
+    got = eng.run_kruskal({"groups": GROUPS3, "alpha": 0.05,
+                           "postHoc": "benjamini-hochberg"})
+    rows = got["pairwise"]
+    m = len(rows)
+    r = sum(1 for row in rows if row["significant"])
+    assert r > 0
+
+    # Rebuild Dunn's rank-scale standard error from scratch: sigma^2 with the
+    # tie term, times (1/ni + 1/nj); margin = z(alpha*R/m) * se.
+    allv = np.concatenate([np.asarray(v, float) for v in GROUPS3.values()])
+    n = allv.size
+    _, counts = np.unique(allv, return_counts=True)
+    ties = float(np.sum(counts.astype(float) ** 3 - counts))
+    sigma2 = (n * (n + 1) / 12.0) - (ties / (12.0 * (n - 1)))
+    se = math.sqrt(sigma2 * (1 / 6 + 1 / 6))
+    margin = float(stats.norm.ppf(1 - (0.05 * r / m) / 2)) * se
+
+    for row in rows:
+        if row["significant"]:
+            assert close(row["ciHigh"] - row["ciLow"], 2 * margin, 1e-12)
+            assert close(row["ciLow"], row["meanDifference"] - margin, 1e-12)
+        else:
+            assert row["ciLow"] is None and row["ciHigh"] is None
+    assert any("FCR-adjusted" in w for w in got.get("_warnings", []))
+
+
+def test_end_to_end_bh_run_names_the_correction_that_ran():
+    out = eng.run({"test": "anova-one-way", "shape": "groups", "alpha": 0.05,
+                   "postHoc": "benjamini-hochberg", "groups": GROUPS3})
+    assert out["error"] is None
+    assert out["test"]["pairwise"][0]["correctionMethod"] == "benjamini-hochberg"
+    assert any("FCR-adjusted" in w for w in out["warnings"])
+
+
 if __name__ == "__main__":
     import sys
     tests = [(k, v) for k, v in sorted(globals().items()) if k.startswith("test_")]
