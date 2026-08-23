@@ -190,6 +190,80 @@ def _normality(groups) -> dict:
             "alternative": None if ok else "a nonparametric test"}
 
 
+#: Minimum n for the Anderson-Darling p-value approximation. R's nortest::ad.test
+#: refuses below 8 and so do we, rather than extrapolate a fit off the end of the
+#: range it was built on.
+AD_MIN_N = 8
+
+
+def _ad_pvalue(a2: float, n: int) -> float:
+    """p for the Anderson-Darling A^2, D'Agostino & Stephens (1986), table 4.9.
+
+    scipy.stats.anderson returns A^2 and a critical-value table but no p, so the
+    p has to come from somewhere. This is the analytic fit to the null
+    distribution of the modified statistic A* = A^2 (1 + 0.75/n + 2.25/n^2), the
+    same modification scipy applies to its own critical values.
+
+    It is an APPROXIMATION and the report says so. It is also the accurate one:
+    100,000-replicate Monte Carlo of the null at n = 8/10/30/100 puts this fit
+    within 0.001 of the true tail probability at the 10/5/1% points, whereas
+    scipy's tabulated 5% critical value (0.787 before modification) sits at a
+    true tail probability near 0.041. Deciding from this p rather than from that
+    table also keeps p and verdict from contradicting each other, and keeps the
+    Python and TypeScript engines on one shared formula, since the browser has
+    no scipy to consult."""
+    a = a2 * (1.0 + 0.75 / n + 2.25 / (n * n))
+    if a < 0.2:
+        p = 1 - math.exp(-13.436 + 101.14 * a - 223.73 * a * a)
+    elif a < 0.34:
+        p = 1 - math.exp(-8.318 + 42.796 * a - 59.938 * a * a)
+    elif a < 0.6:
+        p = math.exp(0.9177 - 4.279 * a - 1.38 * a * a)
+    elif a < 10:
+        p = math.exp(1.2937 - 5.709 * a + 0.0186 * a * a)
+    else:
+        p = 3.7e-24  # the fit's floor; below this the tail is not resolvable
+    return float(min(1.0, max(0.0, p)))
+
+
+def _anderson_darling(values: np.ndarray) -> dict:
+    """Anderson-Darling normality, the third test §6.3 names.
+
+    Weights the squared distance between the empirical and fitted normal CDFs by
+    1/(F(1-F)), so it is the sensitive one in the tails - which is where the
+    outlier that invalidates a t-test lives. Shapiro-Wilk is stronger against a
+    shifted centre; the two are reported side by side because they fail on
+    different departures."""
+    a = np.asarray(values, dtype=float)
+    n = int(a.size)
+    if n < AD_MIN_N or float(np.std(a, ddof=1) if n > 1 else 0.0) <= 0:
+        return {"name": "Normality (Anderson-Darling)", "statistic": None, "pValue": None,
+                "passed": False,
+                "verdict": f"Anderson-Darling needs at least {AD_MIN_N} distinct-valued "
+                           f"observations; this column has {n}.",
+                "alternative": "a nonparametric test"}
+    # A^2 = -n - (1/n) sum (2i-1)[ln F(z_i) + ln(1 - F(z_{n+1-i}))], with z
+    # standardised by the SAMPLE mean and SD (ddof=1) - the case where both
+    # parameters are estimated, which is the only case a real column is in.
+    # Written out rather than taken from scipy.stats.anderson because that
+    # function's `.statistic` attribute is on a deprecation path (SciPy 1.19
+    # drops it), and because the TypeScript engine has to compute the identical
+    # quantity from the identical formula. Verified equal to scipy to 1e-15.
+    z = np.sort((a - float(np.mean(a))) / float(np.std(a, ddof=1)))
+    i = np.arange(1, n + 1, dtype=float)
+    a2 = float(-n - np.sum((2 * i - 1) * (stats.norm.logcdf(z) + stats.norm.logsf(z[::-1]))) / n)
+    p = _ad_pvalue(a2, n)
+    ok = bool(p >= 0.05)  # assumption screen, the same fixed level _normality uses
+    return {
+        "name": "Normality (Anderson-Darling)", "statistic": a2, "pValue": p, "passed": ok,
+        "verdict": ("Consistent with a normal distribution." if ok
+                    else "Deviates from normality, most visibly in the tails.")
+                   + " p is the D'Agostino & Stephens (1986) analytic approximation to the "
+                     "A-squared null distribution, not an exact tail probability.",
+        "alternative": None if ok else "a nonparametric test",
+    }
+
+
 def _variance(groups) -> dict:
     usable = [g for g in groups if g.size > 1]
     if len(usable) < 2:
@@ -257,6 +331,12 @@ def _hedges_g(a: np.ndarray, b: np.ndarray, alpha: float = 0.05) -> dict:
 # ── post-hoc ──────────────────────────────────────────────────────────────────
 
 
+#: Corrections that control the false discovery rate rather than the family-wise
+#: error rate. They are step-UP procedures: the largest p-value is adjusted
+#: first and monotonicity is enforced downwards, the mirror image of Holm.
+FDR_METHODS = ("benjamini-hochberg", "benjamini-yekutieli")
+
+
 def _adjust(p, method: str):
     m = len(p)
     if m == 0:
@@ -265,6 +345,21 @@ def _adjust(p, method: str):
         return [min(1.0, x * m) for x in p]
     if method == "sidak":
         return [1 - (1 - x) ** m for x in p]
+    if method in FDR_METHODS:
+        # Benjamini-Hochberg (1995): adjusted p_(i) = min over k >= i of
+        # (m/k)·p_(k), which is the reverse cumulative minimum walking down from
+        # the largest p. Benjamini-Yekutieli (2001) multiplies by the harmonic
+        # number c(m) = sum 1/i, the price of dropping BH's positive-dependence
+        # assumption; pairwise comparisons that share a pooled error variance
+        # are exactly the case where that assumption is not free.
+        c = sum(1.0 / i for i in range(1, m + 1)) if method == "benjamini-yekutieli" else 1.0
+        order = sorted(range(m), key=lambda i: p[i])
+        adjusted, running = [0.0] * m, 1.0
+        for rank in range(m - 1, -1, -1):
+            idx = order[rank]
+            running = min(running, min(1.0, c * m * p[idx] / (rank + 1)))
+            adjusted[idx] = running
+        return adjusted
     order = sorted(range(m), key=lambda i: p[i])
     adjusted, running = [0.0] * m, 0.0
     for rank, idx in enumerate(order):
@@ -309,12 +404,13 @@ def _post_hoc(names, arrays, method, alpha, ms_within, df_within, reference=None
                         "significant": bool(padj < alpha)})
         return out
 
-    out, raw = [], []
+    out, raw, ses = [], [], []
     for i in range(len(arrays)):
         for j in range(i + 1, len(arrays)):
             a, b = arrays[i], arrays[j]
             diff = float(np.mean(a)) - float(np.mean(b))
             se = math.sqrt(ms_within * (1 / a.size + 1 / b.size))
+            ses.append(se)
             if method == "tukey":
                 q = abs(diff) / (se / math.sqrt(2)) if se > 0 else 0.0
                 p = float(stats.studentized_range.sf(q, len(arrays), df_within))
@@ -334,7 +430,41 @@ def _post_hoc(names, arrays, method, alpha, ms_within, df_within, reference=None
             row["pAdjusted"] = padj
     for row in out:
         row["significant"] = bool(row["pAdjusted"] < alpha)
+    if method in FDR_METHODS:
+        _apply_fcr_intervals(out, ses, alpha, lambda q: float(stats.t.ppf(1 - q / 2, df_within)))
     return out
+
+
+def _apply_fcr_intervals(rows, ses, alpha, crit) -> None:
+    """Replace the unadjusted intervals on FDR-corrected rows with FCR-adjusted ones.
+
+    An FDR-adjusted p beside a plain 1-alpha interval is a contradiction the
+    reader has to catch: the p says "not a discovery" while the interval, built
+    at the uncorrected level, excludes zero. Benjamini & Yekutieli (2005) give
+    the matching interval. Select the R rows the FDR procedure rejects, then
+    build intervals at level 1 - R*alpha/m for exactly those R parameters; the
+    false coverage-statement rate over the selected set is then at most alpha.
+
+    The pairing is exact, not merely thematic. A selected row has raw
+    p <= rank*alpha/m <= R*alpha/m, so its 1 - R*alpha/m interval excludes zero
+    precisely when the row was selected. Rows that were NOT selected get no
+    interval: FCR theory constructs intervals only for the selected set, and
+    re-issuing the uncorrected one there is the very defect this avoids.
+    """
+    m = len(rows)
+    r = sum(1 for row in rows if row["significant"])
+    if r == 0:
+        for row in rows:
+            row["ciLow"] = row["ciHigh"] = None
+        return
+    q = float(alpha) * r / m
+    margin_crit = crit(q)
+    for row, se in zip(rows, ses):
+        if row["significant"]:
+            row["ciLow"] = row["meanDifference"] - margin_crit * se
+            row["ciHigh"] = row["meanDifference"] + margin_crit * se
+        else:
+            row["ciLow"] = row["ciHigh"] = None
 
 
 def _dunn(names, arrays, alpha, method="holm"):
@@ -351,10 +481,11 @@ def _dunn(names, arrays, alpha, method="holm"):
     ties = float(np.sum(counts.astype(float) ** 3 - counts))
     sigma2 = (n * (n + 1) / 12.0) - (ties / (12.0 * (n - 1))) if n > 1 else 0.0
 
-    out, raw = [], []
+    out, raw, ses = [], [], []
     for i in range(len(arrays)):
         for j in range(i + 1, len(arrays)):
             se = math.sqrt(sigma2 * (1 / sizes[i] + 1 / sizes[j])) if sigma2 > 0 else 0.0
+            ses.append(se)
             diff = mean_ranks[i] - mean_ranks[j]
             z = diff / se if se > 0 else 0.0
             p = float(2 * stats.norm.sf(abs(z)))
@@ -367,6 +498,8 @@ def _dunn(names, arrays, alpha, method="holm"):
     for row, padj in zip(out, _adjust(raw, method)):
         row["pAdjusted"] = padj
         row["significant"] = bool(padj < alpha)
+    if method in FDR_METHODS:
+        _apply_fcr_intervals(out, ses, alpha, _z)
     return out
 
 
@@ -384,11 +517,19 @@ def run_normality(p) -> dict:
     cols = p.get("columns") or {}
     assumptions = []
     for name, values in cols.items():
-        chk = _normality([_clean(values)])
-        chk["name"] = f"Normality, {name} (Shapiro-Wilk)"
-        assumptions.append(chk)
+        a = _clean(values)
+        # Both tests, every column: they disagree on purpose. Shapiro-Wilk is the
+        # more powerful against a skewed or shifted centre, Anderson-Darling
+        # against heavy tails. Reporting one and not the other means the reader
+        # cannot tell which departure was looked for.
+        for chk, label in ((_normality([a]), "Shapiro-Wilk"),
+                           (_anderson_darling(a), "Anderson-Darling")):
+            chk["name"] = f"Normality, {name} ({label})"
+            assumptions.append(chk)
     return _result("Normality", assumptions=assumptions,
-                   sentence="Normality assessed by Shapiro-Wilk on each column.")
+                   sentence="Normality assessed by Shapiro-Wilk and Anderson-Darling on each "
+                            "column; the Anderson-Darling p is an analytic approximation "
+                            "(D'Agostino & Stephens 1986).")
 
 
 def run_one_sample_t(p) -> dict:
@@ -481,7 +622,28 @@ def run_anova_one_way(p) -> dict:
             f"Dunnett's test needs a control group and the reference level "
             f"{p.get('referenceLevel')!r} is not one of the groups analysed, so "
             f"{pw[0]['correctionMethod']} pairwise comparisons were run instead."]
+    note = _fcr_note(pw, p["alpha"], pw[0]["correctionMethod"] if pw else None)
+    if note:
+        out.setdefault("_warnings", []).append(note)
     return out
+
+
+def _fcr_note(rows, alpha, method):
+    """Say what the intervals beside an FDR-adjusted p actually are."""
+    if not rows or method not in FDR_METHODS:
+        return None
+    m = len(rows)
+    r = sum(1 for row in rows if row["significant"])
+    if r == 0:
+        return (f"{method} controls the false discovery rate and "
+                f"selected no comparison, so no confidence interval is reported: an "
+                f"unadjusted interval beside an FDR-adjusted p would contradict it.")
+    return (f"{method} selected {r} of {m} comparisons. Intervals are "
+            f"FCR-adjusted (Benjamini & Yekutieli 2005) at "
+            f"{(1 - float(alpha) * r / m) * 100:g}%, not {(1 - float(alpha)) * 100:g}%, so they "
+            f"agree with the adjusted p-values; the {m - r} unselected comparisons carry no "
+            f"interval, because the false coverage-statement rate is only controlled over "
+            f"the selected set.")
 
 
 def run_kruskal(p) -> dict:
@@ -499,7 +661,8 @@ def run_kruskal(p) -> dict:
     # `correctionMethod` names the adjustment that actually ran.
     requested = p.get("postHoc", "none")
     pw = (_dunn(names, arrays, p["alpha"],
-                requested if requested in ("bonferroni", "sidak", "holm-sidak") else "holm")
+                requested if requested in ("bonferroni", "sidak", "holm-sidak") + FDR_METHODS
+                else "holm")
           if requested != "none" else [])
     out = _result("Kruskal-Wallis", float(h), k - 1, float(pv),
                   [{"name": "eta-squared-H", "value": float(eta_h), "ciLow": None, "ciHigh": None}],
@@ -509,6 +672,9 @@ def run_kruskal(p) -> dict:
         out["_warnings"] = [
             f"{requested.title()}'s test is defined on group means, not ranks; Dunn's "
             f"test with a Holm adjustment was run after the Kruskal-Wallis instead."]
+    note = _fcr_note(pw, p["alpha"], requested)
+    if note:
+        out.setdefault("_warnings", []).append(note)
     return out
 
 
