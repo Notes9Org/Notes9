@@ -44,6 +44,18 @@ const JOURNAL_PRESETS: {
   { id: "slide", label: "Slide or poster", note: "600 dpi · PNG · transparent", format: "png", dpi: 600, widthMm: null, colourSpace: "rgb", transparent: true },
   { id: "preprint", label: "Preprint / web", note: "150 dpi · PNG", format: "png", dpi: 150, widthMm: null, colourSpace: "rgb", transparent: false },
 ]
+/**
+ * Output pixel width for a physical width in millimetres at a given DPI.
+ *
+ * Exported so the arithmetic behind every journal preset is testable on its own
+ * rather than only through a rendered popover. Returns null for "auto".
+ */
+export function widthMmToPx(widthMm: string | number, dpi: number): number | null {
+  const mm = Number(widthMm)
+  if (!Number.isFinite(mm) || mm <= 0) return null
+  return Math.round((mm / MM_PER_INCH) * dpi)
+}
+
 const DPI_MIN = 72
 const DPI_MAX = 2400
 const PANEL_W = 300
@@ -110,8 +122,13 @@ export function ExportMenu({
   const dpi = Math.max(DPI_MIN, Math.min(DPI_MAX, Math.round(dpiNum) || 0))
 
   const size = open ? getCanvasSize?.() ?? null : null
-  const outW = size ? Math.round((size.width * dpi) / 96) : null
-  const outH = size ? Math.round((size.height * dpi) / 96) : null
+  // A width in millimetres IS the output width once the DPI is applied; without
+  // one the on-screen box is scaled by the DPI. Both the estimate shown here and
+  // the bytes written by `doDownload` read this same number, so the preview and
+  // the file can no longer disagree.
+  const targetPx = widthMmToPx(widthMmText, dpi)
+  const outW = targetPx ?? (size ? Math.round((size.width * dpi) / 96) : null)
+  const outH = outW && size ? Math.round((outW * size.height) / size.width) : null
 
   const place = useCallback(() => {
     const t = triggerRef.current
@@ -181,8 +198,7 @@ export function ExportMenu({
   const doDownload = async () => {
     setBusy("export")
     try {
-      const widthMm = Number(widthMmText)
-      const px = Number.isFinite(widthMm) && widthMm > 0 ? Math.round((widthMm / MM_PER_INCH) * dpi) : null
+      const px = widthMmToPx(widthMmText, dpi)
       const size = getCanvasSize?.() ?? null
       await onExport({
         format,

@@ -52,6 +52,7 @@ import {
   ClockCounterClockwise,
   Prohibit,
   DotsThree,
+  Info,
 } from "@phosphor-icons/react/ssr"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -99,6 +100,11 @@ import { LayoutCanvas } from "@/components/data-analysis/workspace/layout-canvas
 import { PipelineTabs } from "@/components/data-analysis/workspace/pipeline-tabs"
 import { ResultsCard } from "@/components/data-analysis/workspace/results-card"
 import { ExclusionDialog, type ExclusionPreview } from "@/components/data-analysis/workspace/exclusion-dialog"
+import { ProvenancePanel } from "@/components/data-analysis/workspace/provenance-panel"
+import {
+  resultsSheetToCsv,
+  resultsSheetToMarkdown,
+} from "@/lib/data-analysis/export/results-sheet-text"
 import { useAuthUser } from "@/components/auth/auth-provider"
 import { Exclusion, parseSpec } from "@/lib/data-analysis/spec/analysis-spec"
 import {
@@ -132,7 +138,7 @@ import {
   type ChartState,
 } from "@/lib/data-analysis/workspace/chart-state-spec"
 import { legalTests } from "@/lib/data-analysis/semantic/infer"
-import { ReopenBanner } from "@/components/data-analysis/workspace/reopen-banner"
+import { MovedExclusionsBanner, ReopenBanner } from "@/components/data-analysis/workspace/reopen-banner"
 import {
   LibraryDialog,
   isWorkbookUnreadableReason,
@@ -155,6 +161,8 @@ import {
 } from "@/lib/data-analysis/saved-analysis"
 import {
   autosaveDraft,
+  checkExclusions,
+  type ExclusionStatus,
   freezeOnce,
   readDataSnapshot,
   readWorkspaceConfig,
@@ -251,6 +259,35 @@ const slugify = (s: string) => (s || "analysis").replace(/\s+/g, "-").toLowerCas
 
 /** Error-bar representation for aggregated replicates. */
 type ErrorMode = "none" | "sd" | "sem" | "ci90" | "ci95" | "ci99" | "range" | "iqr" | "mad"
+
+/**
+ * Describe the row an exclusion actually targets (§8.1).
+ *
+ * Looked up BY ID, never by position. Row ids are anchored to the spreadsheet
+ * row the sample came from, so a sheet with a unit row or a preamble makes
+ * `row-N` the Nth spreadsheet row and not the Nth data row — arithmetic on the
+ * id would reintroduce exactly the bug this exists to prevent, one row's id
+ * above another row's values. This is the screen whose entire job is making
+ * the researcher certain which point they are removing, so it either describes
+ * that point or it says nothing.
+ */
+export function describeExcludedRow(
+  rowId: string,
+  table: { rows: readonly { rowId: string; values: Record<string, unknown> }[] },
+  prefer: string[],
+): string | undefined {
+  const row = table.rows.find((r) => r.rowId === rowId)
+  if (!row) return undefined
+  const seen = new Set<string>()
+  const named = prefer.filter((c) => c && c in row.values && !seen.has(c) && seen.add(c))
+  const cols = (named.length ? named : Object.keys(row.values)).slice(0, 3)
+  const cells = cols
+    .map((c) => `${c} ${row.values[c] ?? "\u2014"}`)
+    .join(" \u00b7 ")
+  // The number the researcher sees in the sheet is the one in the id.
+  const shown = rowId.startsWith("row-") ? rowId.slice(4) : rowId
+  return `Row ${shown}${cells ? ` \u00b7 ${cells}` : ""}`
+}
 
 /**
  * Aggregate rows sharing an X value into mean ± error, preserving first-seen
@@ -2814,6 +2851,14 @@ export function DataAnalysisWorkspace({
   const currentUser = useAuthUser()
   const excludedBy = currentUser?.email ?? currentUser?.id ?? "unknown"
   const [exclusionRowId, setExclusionRowId] = useState<string | null>(null)
+  /**
+   * §10.5. The provenance card used to exist only inside the preview harness,
+   * which nothing imports, behind a route that is a bare `redirect()` — so it
+   * shipped to nobody. It belongs on the surface that actually renders results.
+   */
+  const [provenanceOpen, setProvenanceOpen] = useState(false)
+  /** Saved exclusions whose row id no longer names the sample it was written for. */
+  const [movedExclusions, setMovedExclusions] = useState<ExclusionStatus[]>([])
   const [exclusionPreview, setExclusionPreview] = useState<ExclusionPreview | null>(null)
   const [exclusionPreviewLoading, setExclusionPreviewLoading] = useState(false)
 
@@ -3102,7 +3147,10 @@ export function DataAnalysisWorkspace({
 
   const tableOf = useCallback((snap: UniverWorkbookSnapshot) => {
     const t = snapshotToTable(snap)
-    return tableFromChartRows(t.columns, t.rows)
+    // Take the reader's own row ids rather than re-minting them from position:
+    // `checkExclusions` compares saved ids against live ids, so the two sides
+    // have to agree on where an id comes from or every row reads as moved.
+    return tableFromChartRows(t.columns, t.rows, t.rowIds)
   }, [])
 
   const refreshRevisions = useCallback(async (analysisId: string) => {
@@ -3134,9 +3182,11 @@ export function DataAnalysisWorkspace({
       setBusyRevisionId(revision.id)
       try {
         let liveHash: string | null = revision.dataVersionHash
+        let liveTable: ReturnType<typeof tableOf> | null = null
         if (analysis.sourceDataFileId) {
           const live = await fetchSourceWorkbook(analysis)
-          liveHash = live ? hashTable(tableOf(live)) : null
+          liveTable = live ? tableOf(live) : null
+          liveHash = liveTable ? hashTable(liveTable) : null
         }
 
         const verdict = await openRevision(revision.id, liveHash)
@@ -3147,6 +3197,28 @@ export function DataAnalysisWorkspace({
         }
 
         const snapshot = readDataSnapshot(verdict.revision.dataSnapshot)
+
+        /**
+         * Did the saved exclusions stay on the samples they were written for?
+         *
+         * Row ids are sheet-anchored, so inserting a row above an exclusion
+         * shifts every id below it: the excluded sample quietly rejoins the
+         * analysis and an innocent one quietly leaves, while the provenance
+         * line keeps the original author, reason and timestamp against the
+         * wrong measurement. The hash check cannot see this — it only says the
+         * file changed — and the orphan check structurally cannot, because
+         * after an insert every id still resolves. §8.1 calls a falsified
+         * record worse than a lost one, so this reports and lets the researcher
+         * decide; it never re-runs or re-anchors on its own.
+         */
+        setMovedExclusions(
+          snapshot?.table && liveTable
+            ? checkExclusions(snapshot.table, liveTable, verdict.spec.exclusions).filter(
+                (e) => e.status !== "ok"
+              )
+            : []
+        )
+
         // The stored rows, so the figure is drawn from what it was computed
         // from even when the source file has been edited or deleted.
         if (snapshot?.workbook) {
@@ -3560,6 +3632,18 @@ export function DataAnalysisWorkspace({
       <PaneHeader Icon={ChartLine} title="Chart">
         <div className="ml-auto flex items-center gap-2">
           <span className="hidden text-[11px] text-muted-foreground lg:block">Double-click to edit · right-click for menu</span>
+          {/* §10.5: the provenance card is one click from the FIGURE too, not
+              only from the statistics. A figure travels into a manuscript on
+              its own, and "what produced this?" is asked of the picture. */}
+          <button
+            type="button"
+            onClick={() => setProvenanceOpen(true)}
+            disabled={!hasPlot}
+            title="Show provenance"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-[var(--n9-accent,#965034)]/40 hover:bg-[var(--n9-accent,#965034)]/[0.06] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Info className="h-4 w-4" /> Provenance
+          </button>
           <ExportMenu variant="ghost" disabled={!hasPlot} defaultName={title} onExport={runExport} getPng={getChartPng} getCanvasSize={getChartSize} onSaveToLibrary={() => setSaveChartOpen(true)} />
         </div>
       </PaneHeader>
@@ -4002,6 +4086,33 @@ export function DataAnalysisWorkspace({
     XLSX.writeFile(wb, `${(title || "analysis").replace(/[^\w-]+/g, "-")}-statistics.xlsx`)
   }, [derivedSpec, engineResult, title, table])
 
+  /**
+   * The same results sheet as CSV or Markdown (§8.1 asks for all three).
+   *
+   * Both emitters read the identical `buildResultsSheet` rows the workbook
+   * uses, so the three files cannot disagree about a number.
+   */
+  const exportStatsText = useCallback(
+    (kind: "csv" | "md") => {
+      if (!derivedSpec) return
+      const rows = buildResultsSheet(derivedSpec, engineResult, { analysisName: title })
+      const text =
+        kind === "csv" ? resultsSheetToCsv(rows) : resultsSheetToMarkdown(rows, { title })
+      const blob = new Blob([text], {
+        type: kind === "csv" ? "text/csv;charset=utf-8" : "text/markdown;charset=utf-8",
+      })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `${(title || "analysis").replace(/[^\w-]+/g, "-")}-statistics.${kind}`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    },
+    [derivedSpec, engineResult, title],
+  )
+
   useEffect(() => {
     addStatsSheetRef.current = addStatsSheet
     copyStatsRef.current = copyStats
@@ -4023,6 +4134,12 @@ export function DataAnalysisWorkspace({
           <Button variant="outline" size="sm" onClick={exportStats}>
             <DownloadSimple className="mr-1.5 h-4 w-4" /> Export (.xlsx)
           </Button>
+          <Button variant="outline" size="sm" onClick={() => exportStatsText("csv")}>
+            <DownloadSimple className="mr-1.5 h-4 w-4" /> Export (.csv)
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => exportStatsText("md")}>
+            <DownloadSimple className="mr-1.5 h-4 w-4" /> Export (.md)
+          </Button>
           <span className="text-[11.5px] text-muted-foreground/70">
             Every number here came from the engine, not from this page.
           </span>
@@ -4034,6 +4151,7 @@ export function DataAnalysisWorkspace({
           result={engineResult}
           computing={engineBusy}
           onEditCaption={setCaption}
+          onShowProvenance={() => setProvenanceOpen(true)}
         />
       )}
       {engineNote && !engineBusy && (
@@ -4221,21 +4339,27 @@ export function DataAnalysisWorkspace({
         <ExclusionDialog
           open
           rowId={exclusionRowId}
-          // Only when the sheet is actually sitting on the row being excluded.
-          // The figure can now start an exclusion too, and describing the row
-          // the cursor happens to be on instead of the point that was clicked
-          // would put the wrong row in front of the person approving it.
-          rowSummary={
-            sheetSel && selRowId === exclusionRowId
-              ? `Row ${sheetSel.row + 1}${selColumn ? ` · ${selColumn} ${sheetSel.text}` : ""}`
-              : undefined
-          }
+          rowSummary={describeExcludedRow(exclusionRowId, specTable, [xKey, ...activeY])}
           preview={exclusionPreview}
           previewLoading={exclusionPreviewLoading}
           currentUserId={excludedBy}
           onCancel={() => setExclusionRowId(null)}
           onConfirm={confirmExclusion}
         />
+      )}
+      {/* §10.5. Everything a reader needs to judge the figure or the result,
+          one click from either. Mounted once, opened from both. */}
+      {derivedSpec && (
+      <ProvenancePanel
+        open={provenanceOpen}
+        onClose={() => setProvenanceOpen(false)}
+        spec={derivedSpec}
+        result={engineResult}
+        history={historyMutations(editHistory)}
+        revisionNo={openRevisionRow?.revisionNo}
+        isFrozen={openRevisionRow?.isFrozen}
+        sourceDetached={reopenVerdict?.state === "detached"}
+      />
       )}
     </>
   )
@@ -4381,6 +4505,17 @@ export function DataAnalysisWorkspace({
           rerunning={rerunning}
         />
       )}
+
+      {/* §8.1. A shifted row id is the one integrity failure that leaves every
+          check green: the ids all still resolve, so only comparing the saved
+          rows to the live ones can see it. Reported next to the integrity
+          banner, with the same two choices, and never repaired silently. */}
+      <MovedExclusionsBanner
+        moved={movedExclusions}
+        onKeepStored={() => setMovedExclusions([])}
+        onRerun={rerunIntoNewRevisionNow}
+        rerunning={rerunning}
+      />
 
       {/* Scoped to the analysis above it, and deliberately below the tabs: what
           it changes is this analysis, not the page. */}
