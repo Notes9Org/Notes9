@@ -135,7 +135,10 @@ import {
   tableFromChartRows,
   recomputeSignature,
   recommendTestForChart,
+  railControlMutation,
+  seriesStyleMutation,
   type ChartState,
+  type RailControlKey,
 } from "@/lib/data-analysis/workspace/chart-state-spec"
 import { legalTests } from "@/lib/data-analysis/semantic/infer"
 import { MovedExclusionsBanner, ReopenBanner } from "@/components/data-analysis/workspace/reopen-banner"
@@ -174,7 +177,7 @@ import {
   saveRevision,
 } from "@/lib/data-analysis/workspace/saved-analysis-session"
 import { requestSpecPatch, type SpecPatchOutcome } from "@/lib/data-analysis/ai/spec-author-client"
-import { applyAiPatch, applyMutation, describeMutation, dispatchMutation, initHistory, type AppliedMutation, type SpecMutation } from "@/lib/data-analysis/spec/mutations"
+import { appliedMutation, applyAiPatch, applyMutation, describeMutation, dispatchMutation, initHistory, requiresRecompute, type AppliedMutation, type SpecMutation } from "@/lib/data-analysis/spec/mutations"
 import { aiNotice, applyOverlay, canExecuteProposal, splitApprovedMutations } from "@/lib/data-analysis/workspace/spec-prompt"
 import {
   auditRecords,
@@ -185,6 +188,9 @@ import {
   emptyHistory,
   redo as redoEdit,
   undo as undoEdit,
+  ownsUndo,
+  undoShortcut,
+  userEditedPaths,
   type ConfigHistory,
 } from "@/lib/data-analysis/workspace/edit-history"
 import { PipelineBar } from "@/components/data-analysis/pipeline-bar"
@@ -679,10 +685,28 @@ const MAX_OPEN_ANALYSES = 8
  * out and left nothing behind is a transcript that lies about what happened, and
  * the researcher is left wondering whether their figure changed.
  */
+/**
+ * L6's announcement, worded.
+ *
+ * "A subsequent AI change must preserve [a manual edit] or explicitly announce
+ * the override." `applyAiPatch` does the preserving; this is the announcing.
+ * It reuses the plan's `rejected` list rather than growing a fourth kind of
+ * plan note, because that list already means "proposed, left out, and here is
+ * why" and the card already renders it under "Left out".
+ */
+export function preservedNotices(
+  overrides: { path: string; description: string }[],
+): { reason: string }[] {
+  return overrides.map((o) => ({
+    reason: `${o.description} — left out. You set that by hand, so your edit stands. Ask again if you want it changed anyway.`,
+  }))
+}
+
 function assistantTurnFor(
   outcome: SpecPatchOutcome,
   steps: string[],
   specToken: string,
+  preserved: { reason: string }[] = [],
 ): AnalysisAssistantTurn {
   const now = new Date().toISOString()
   const base = {
@@ -699,7 +723,7 @@ function assistantTurnFor(
       plan: {
         steps,
         mutations: outcome.mutations,
-        rejected: outcome.rejected.map((r) => ({ reason: r.reason })),
+        rejected: [...outcome.rejected.map((r) => ({ reason: r.reason })), ...preserved],
         clarificationNeeded: outcome.clarificationNeeded,
         status: "proposed",
       },
@@ -982,9 +1006,6 @@ export function DataAnalysisWorkspace({
    * resets it to false, so a fresh table never inherits a stale approval.
    */
   const [analysisApproved, setAnalysisApproved] = useState(false)
-  const setStyle = useCallback((series: string, patch: Partial<SeriesStyle>) => {
-    setSeriesStyles((prev) => ({ ...prev, [series]: { ...prev[series], ...patch } }))
-  }, [])
 
   // Publication export
   const chartExportRef = useRef<ChartExportFn | null>(null)
@@ -1692,20 +1713,20 @@ export function DataAnalysisWorkspace({
             label: o.id === "none" ? "No error bars" : ERROR_BAR_LABEL[o.id],
             section: "Error bars",
             checked: errorMode === o.id,
-            onClick: () => setErrorMode(o.id),
+            onClick: () => railEdit("errorMode", { errorMode: o.id }, () => setErrorMode(o.id)),
           })),
           ...PALETTE_DEFINITIONS.map((p) => ({
             label: p.label,
             section: "Palette",
             hint: p.cvdSafe ? "CVD" : undefined,
             checked: paletteName === p.id,
-            onClick: () => setPaletteName(p.id),
+            onClick: () => railEdit("paletteName", { paletteName: p.id }, () => setPaletteName(p.id)),
           })),
-          { label: "Gridlines", section: "Show", checked: showGrid, onClick: () => setShowGrid(!showGrid) },
-          { label: "Legend", section: "Show", checked: showLegend, onClick: () => setShowLegend(!showLegend) },
+          { label: "Gridlines", section: "Show", checked: showGrid, onClick: () => railEdit("showGrid", { showGrid: !showGrid }, () => setShowGrid(!showGrid)) },
+          { label: "Legend", section: "Show", checked: showLegend, onClick: () => railEdit("showLegend", { showLegend: !showLegend }, () => setShowLegend(!showLegend)) },
           { label: "Markers", section: "Show", checked: markers, onClick: () => setMarkers(!markers) },
-          { label: "Log X axis", section: "Show", checked: xLog, onClick: () => setXLog(!xLog) },
-          { label: "Log Y axis", section: "Show", checked: yLog, onClick: () => setYLog(!yLog) },
+          { label: "Log X axis", section: "Show", checked: xLog, onClick: () => railEdit("xLog", { xLog: !xLog }, () => setXLog(!xLog)) },
+          { label: "Log Y axis", section: "Show", checked: yLog, onClick: () => railEdit("yLog", { yLog: !yLog }, () => setYLog(!yLog)) },
           { label: "Individual points", section: "Show", checked: showPoints, onClick: () => setShowPoints(!showPoints) },
         ],
       },
@@ -1821,19 +1842,96 @@ export function DataAnalysisWorkspace({
      to be able to clear it. */
   const [editHistory, setEditHistory] = useState<ConfigHistory>(emptyHistory)
 
+  /**
+   * Write an edit to history that has ALREADY moved the rail.
+   *
+   * The half of `commitEdits` that does not touch `applyConfig`, and the reason
+   * the style controls can dispatch without paying for a thirty-setter
+   * whole-configuration rewrite on every keystroke of a label or every frame of
+   * a slider. The control keeps its own `useState` setter and behaves exactly as
+   * it did; what changes is that the edit is now also a typed mutation on the
+   * record, which is what makes it undoable, sticky against a later AI patch,
+   * and visible on the provenance card.
+   *
+   * `before` is the configuration as of THIS render. A caller that has already
+   * called its own setter still reads the pre-edit value here, because
+   * `buildConfigRef` holds the current render's closure and React has not
+   * re-rendered yet — so the order of the two calls does not matter.
+   *
+   * ADR-025 / Law 5: "loaded" becomes "approved" only for an edit that actually
+   * needs the engine. The classification is `requiresRecompute`, the same one
+   * the compute gate uses, rather than a second opinion held here — so a colour,
+   * a font or an axis label cannot start a compute, and an error-bar change or
+   * an exclusion still does.
+   */
+  const recordEdit = useCallback(
+    (applied: AppliedMutation[], patch: Record<string, unknown>, before: Record<string, unknown>) => {
+      setEditHistory((h) => commitEdit(h, { before, after: { ...before, ...patch }, applied }))
+      if (applied.some((a) => requiresRecompute(a.mutation))) setAnalysisApproved(true)
+    },
+    []
+  )
+
   const commitEdits = useCallback(
     (applied: AppliedMutation[], patch: Record<string, unknown>) => {
       const before = buildConfigRef.current() as Record<string, unknown>
-      const after = { ...before, ...patch }
-      applyConfigRef.current(after)
-      setEditHistory((h) => commitEdit(h, { before, after, applied }))
-      // ADR-025: the only two writers into this function are an approved AI
-      // plan and a hand edit (`applySpecMutation`) — both are the researcher
-      // explicitly choosing to analyse, so this is where "loaded" becomes
-      // "approved," unblocking the compute effect below.
-      setAnalysisApproved(true)
+      applyConfigRef.current({ ...before, ...patch })
+      recordEdit(applied, patch, before)
     },
-    []
+    [recordEdit]
+  )
+
+  /**
+   * A Chart Studio style control, routed through the mutation system.
+   *
+   * This is the fix for the rail-over-spec split. Every one of these controls
+   * was a bare `useState`: it moved the picture and left no mutation, so the
+   * edit could not be undone, could not be announced, and could not be defended
+   * against a later AI patch — `applyAiPatch` walked a sticky set that was
+   * empty by construction and therefore never fired.
+   *
+   * The control still owns its own state and still sets it the way it always
+   * did (`set`), because that is the part with no defects in it. What is added
+   * is the record: the typed mutation the control means, in the same
+   * `AppliedMutation` shape an assistant patch produces, on the same history.
+   *
+   * Rapid edits from one control coalesce into one undo step inside
+   * `edit-history.ts` — the rule is there rather than here because it is a
+   * property of the history, and a debounce here would delay the picture.
+   */
+  const railEdit = useCallback(
+    (key: RailControlKey, patch: Record<string, unknown>, apply: () => void) => {
+      const before = buildConfigRef.current() as Record<string, unknown>
+      apply()
+      // `patch` rather than one key/value pair, because one control can move
+      // two fields the spec holds on one path: binding an axis title from a
+      // sheet cell sets the label AND clears the unit, and both are `axis.set`.
+      // Recording them as two commits would coalesce them into one entry whose
+      // `after` names only the second, quietly losing the first from history.
+      const mutation = railControlMutation(key, { ...before, ...patch } as unknown as ChartState)
+      if (mutation) recordEdit([appliedMutation(mutation, "user")], patch, before)
+    },
+    [recordEdit]
+  )
+
+  /**
+   * The per-series inspector, routed the same way.
+   *
+   * Separate from `railEdit` because a series' sticky path names the series
+   * (`figure.series.<key>`), so recolouring one by hand must not make the
+   * assistant's change to a DIFFERENT series read as a collision. That
+   * distinction is the only reason this is not one more `RailControlKey`.
+   */
+  const setStyle = useCallback(
+    (series: string, patch: Partial<SeriesStyle>) => {
+      const before = buildConfigRef.current() as Record<string, unknown>
+      const previous = (before.seriesStyles ?? {}) as Record<string, SeriesStyle>
+      const seriesStyles = { ...previous, [series]: { ...previous[series], ...patch } }
+      setSeriesStyles(seriesStyles)
+      const mutation = seriesStyleMutation(series, { ...before, seriesStyles } as unknown as ChartState)
+      recordEdit([appliedMutation(mutation, "user")], { seriesStyles }, before)
+    },
+    [recordEdit]
   )
 
   /* Merged over the CURRENT configuration rather than restored wholesale: a
@@ -1852,6 +1950,32 @@ export function DataAnalysisWorkspace({
     applyConfigRef.current({ ...(buildConfigRef.current() as object), ...patch })
     setEditHistory(history)
   }, [editHistory])
+
+  /**
+   * Cmd-Z / Ctrl-Z, and the redo counterpart.
+   *
+   * The undo buttons in the chart header have been here all along; what was
+   * missing was the keystroke, which is how anyone actually undoes anything.
+   * Bound on `window` so it works wherever the researcher's focus happens to be
+   * on this page, and refused wherever something else owns the shortcut
+   * (`ownsUndo`) — above all the spreadsheet, which has its own stack.
+   *
+   * `window` is touched inside an effect, so this never runs during SSR.
+   */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const action = undoShortcut(e)
+      if (!action) return
+      if (ownsUndo(e.target)) return
+      // Only once it is certain this is ours: a plain Cmd-Z that we decline
+      // must still reach whatever would have handled it.
+      e.preventDefault()
+      if (action === "undo") undoEdits()
+      else redoEdits()
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [undoEdits, redoEdits])
 
   /** A whole-configuration swap, a different analysis tab or a template, is not
    *  an edit. Undo must not reach back across one into another analysis. */
@@ -2676,25 +2800,32 @@ export function DataAnalysisWorkspace({
       if (outcome.outcome === "aborted") return
 
       let applied: string[] = []
+      let preserved: { reason: string }[] = []
       if (outcome.outcome === "patch" && outcome.mutations.length > 0) {
-        // `initHistory` starts with an empty sticky set on purpose: this rail
-        // holds its settings in React state rather than dispatching mutations,
-        // so there is no record of which paths were edited by hand and nothing
-        // for a patch to collide with. The patch still goes through
-        // `applyAiPatch` so the spec and the sentences describing it come from
-        // the one code path the rest of L6 uses.
+        // The sticky set comes from the audit log, so it is every path the
+        // researcher has edited by hand and not undone — across this whole
+        // analysis, including edits restored with a reopened revision. It used
+        // to be `new Set()` here, on the reasoning that a rail holding its
+        // settings in React state records nothing for a patch to collide with.
+        // That was true, and it is what made L6 dead code: `overrides` was
+        // always empty, so an AI "tidy up the figure" replaced a hand-picked
+        // colour silently, every time. The rail dispatches now, so there is a
+        // record, and the collision is real.
         //
         // This only COMPUTES the patch, `applyMutation` underneath is pure
         // and never touches `derivedSpec`, and stops. Nothing is applied
         // until the researcher approves the plan (`approvePlan`, below).
-        const patched = applyAiPatch(initHistory(derivedSpec), outcome.mutations)
+        const patched = applyAiPatch(initHistory(derivedSpec, userEditedPaths(editHistory)), outcome.mutations)
         // The sentences the user reads and the mutations Approve runs come from
         // the same result, so the plan on screen cannot describe something other
         // than what lands. That is why the plan is the dry-run rather than a
         // separate thing the model wrote (ADR-014).
         applied = patched.applied.map(describeMutation)
+        // Announced, not dropped. The plan card lists these under "Left out",
+        // which is the whole of L6's second half.
+        preserved = preservedNotices(patched.overrides)
       }
-      const assistantTurn = assistantTurnFor(outcome, applied, specToken)
+      const assistantTurn = assistantTurnFor(outcome, applied, specToken, preserved)
 
       // Route by the identity captured when this was asked, never by
       // whatever tab is mounted now (ADR-026). A newer ask on the same
@@ -2783,7 +2914,11 @@ export function DataAnalysisWorkspace({
       if (!turn || turn.role !== "assistant" || !turn.plan) return
       if (!canApprovePlan(turn, specToken)) return
 
-      const patched = applyAiPatch(initHistory(derivedSpec), turn.plan.mutations)
+      // The same sticky set the dry-run used, so Approve lands exactly the plan
+      // the card described. `canApprovePlan` has already refused a plan whose
+      // spec moved, and a hand edit between propose and approve moves the spec,
+      // so the set cannot have grown underneath this.
+      const patched = applyAiPatch(initHistory(derivedSpec, userEditedPaths(editHistory)), turn.plan.mutations)
       const approved = patched.history.past.map((entry) => entry.applied)
       const { edits, overlay } = splitApprovedMutations(derivedSpec, approved, specTable)
       // Merged over the current configuration, not applied alone: `applyConfig`
@@ -2806,7 +2941,7 @@ export function DataAnalysisWorkspace({
         return next
       })
     },
-    [aiOverlay, derivedSpec, specTable, specToken, commitEdits]
+    [aiOverlay, derivedSpec, specTable, specToken, commitEdits, editHistory]
   )
 
   /** Never touches the spec, settling the plan is the entire effect, which is
@@ -3924,9 +4059,14 @@ export function DataAnalysisWorkspace({
                   <div>
                     <p className="mb-1.5 text-xs text-muted-foreground">Set a title from this text</p>
                     <div className="grid grid-cols-3 gap-1.5">
-                      <BindBtn icon={ChartLine} label="Chart" active={title === sheetSel.text} onClick={() => setTitle(sheetSel.text)} />
-                      <BindBtn icon={ArrowRight} label="X axis" active={xLabel === sheetSel.text} onClick={() => { setXLabel(sheetSel.text); setXUnit("") }} />
-                      <BindBtn icon={ArrowUp} label="Y axis" active={yLabel === sheetSel.text} onClick={() => { setYLabel(sheetSel.text); setYUnit("") }} />
+                      {/* The same edits the Chart title / X label / Y unit fields
+                          make, so they take the same door: a title bound from a
+                          cell is as undoable, as sticky and as announceable as
+                          one that was typed. Label and unit move together in ONE
+                          call because the spec holds them on one path. */}
+                      <BindBtn icon={ChartLine} label="Chart" active={title === sheetSel.text} onClick={() => railEdit("title", { title: sheetSel.text }, () => setTitle(sheetSel.text))} />
+                      <BindBtn icon={ArrowRight} label="X axis" active={xLabel === sheetSel.text} onClick={() => railEdit("xLabel", { xLabel: sheetSel.text, xUnit: "" }, () => { setXLabel(sheetSel.text); setXUnit("") })} />
+                      <BindBtn icon={ArrowUp} label="Y axis" active={yLabel === sheetSel.text} onClick={() => railEdit("yLabel", { yLabel: sheetSel.text, yUnit: "" }, () => { setYLabel(sheetSel.text); setYUnit("") })} />
                     </div>
                   </div>
                 )}
@@ -4000,27 +4140,27 @@ export function DataAnalysisWorkspace({
       )}
       </div>
       <div id="cs-title" className={cn(!showRail("cs-title") && "!hidden", "scroll-mt-3 space-y-4 rounded-lg transition-shadow", flashId === "cs-title" && "ring-2 ring-[var(--n9-accent,#965034)]/40")}>
-        <Field label="Chart title"><Input className="h-9" value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
-        <Field label="Subtitle"><Input className="h-9" value={subtitle} onChange={(e) => setSubtitle(e.target.value)} placeholder="optional" /></Field>
+        <Field label="Chart title"><Input className="h-9" value={title} onChange={(e) => railEdit("title", { title: e.target.value }, () => setTitle(e.target.value))} /></Field>
+        <Field label="Subtitle"><Input className="h-9" value={subtitle} onChange={(e) => railEdit("subtitle", { subtitle: e.target.value }, () => setSubtitle(e.target.value))} placeholder="optional" /></Field>
         <div className="grid grid-cols-2 gap-2">
-          <Field label="X label"><Input className="h-9" value={xLabel} onChange={(e) => setXLabel(e.target.value)} /></Field>
-          <Field label="X unit"><Input className="h-9" value={xUnit} onChange={(e) => setXUnit(e.target.value)} /></Field>
-          <Field label="Y label"><Input className="h-9" value={yLabel} onChange={(e) => setYLabel(e.target.value)} /></Field>
-          <Field label="Y unit"><Input className="h-9" value={yUnit} onChange={(e) => setYUnit(e.target.value)} /></Field>
+          <Field label="X label"><Input className="h-9" value={xLabel} onChange={(e) => railEdit("xLabel", { xLabel: e.target.value }, () => setXLabel(e.target.value))} /></Field>
+          <Field label="X unit"><Input className="h-9" value={xUnit} onChange={(e) => railEdit("xUnit", { xUnit: e.target.value }, () => setXUnit(e.target.value))} /></Field>
+          <Field label="Y label"><Input className="h-9" value={yLabel} onChange={(e) => railEdit("yLabel", { yLabel: e.target.value }, () => setYLabel(e.target.value))} /></Field>
+          <Field label="Y unit"><Input className="h-9" value={yUnit} onChange={(e) => railEdit("yUnit", { yUnit: e.target.value }, () => setYUnit(e.target.value))} /></Field>
         </div>
       </div>
       <div id="cs-toggles" className={cn(!showRail("cs-toggles") && "!hidden", "scroll-mt-3 flex flex-col gap-2.5 border-t border-border pt-3 text-sm transition-shadow", flashId === "cs-toggles" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
         <Toggle label="Show markers" checked={markers} onChange={setMarkers} />
-        <Toggle label="Log X axis" checked={xLog} onChange={setXLog} />
-        <Toggle label="Log Y axis" checked={yLog} onChange={setYLog} />
-        <Toggle label="Gridlines" checked={showGrid} onChange={setShowGrid} />
-        <Toggle label="Legend" checked={showLegend} onChange={setShowLegend} />
+        <Toggle label="Log X axis" checked={xLog} onChange={(v) => railEdit("xLog", { xLog: v }, () => setXLog(v))} />
+        <Toggle label="Log Y axis" checked={yLog} onChange={(v) => railEdit("yLog", { yLog: v }, () => setYLog(v))} />
+        <Toggle label="Gridlines" checked={showGrid} onChange={(v) => railEdit("showGrid", { showGrid: v }, () => setShowGrid(v))} />
+        <Toggle label="Legend" checked={showLegend} onChange={(v) => railEdit("showLegend", { showLegend: v }, () => setShowLegend(v))} />
         {showLegend && (
           <div className="flex items-center justify-between gap-2 pl-0.5">
             <span className="text-xs text-muted-foreground">Legend position</span>
             <div className="inline-flex rounded-md border border-border bg-background p-0.5 text-xs">
               {(["bottom", "right", "top"] as const).map((pos) => (
-                <button key={pos} onClick={() => setLegendPos(pos)}
+                <button key={pos} onClick={() => railEdit("legendPos", { legendPos: pos }, () => setLegendPos(pos))}
                   className={cn("rounded px-2 py-0.5 capitalize transition-colors", legendPos === pos ? "bg-[var(--n9-accent,#965034)] text-white" : "text-muted-foreground hover:text-foreground")}>
                   {pos}
                 </button>
@@ -4034,7 +4174,7 @@ export function DataAnalysisWorkspace({
       <div id="cs-error" className={cn(!showRail("cs-error") && "!hidden", "flex scroll-mt-3 flex-col gap-2.5 border-t border-border pt-3 transition-shadow", flashId === "cs-error" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
         <SectionLabel><TrendUp className="h-3.5 w-3.5" /> Error &amp; annotations</SectionLabel>
         <Field label="Error bars (aggregate replicate rows sharing an X value)">
-          <NativeSelect value={errorMode} onChange={(v) => setErrorMode(v as ErrorMode)}>
+          <NativeSelect value={errorMode} onChange={(v) => railEdit("errorMode", { errorMode: v as ErrorMode }, () => setErrorMode(v as ErrorMode))}>
             {ERROR_BAR_OPTIONS.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.id === "none" ? "None" : ERROR_BAR_LABEL[o.id]}
@@ -4103,20 +4243,20 @@ export function DataAnalysisWorkspace({
         </div>
       )}
       <div id="cs-palette" className={cn(!showRail("cs-palette") && "!hidden", "scroll-mt-3 rounded-lg transition-shadow", flashId === "cs-palette" && "ring-2 ring-[var(--n9-accent,#965034)]/40")}>
-        <PalettePicker value={paletteName} onChange={setPaletteName} />
+        <PalettePicker value={paletteName} onChange={(v) => railEdit("paletteName", { paletteName: v }, () => setPaletteName(v))} />
       </div>
 
       {/* Axes */}
       <div id="cs-axes" className={cn(!showRail("cs-axes") && "!hidden", "scroll-mt-3 border-t border-border pt-3 transition-shadow", flashId === "cs-axes" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
         <SectionLabel><Ruler className="h-3.5 w-3.5" /> Axes</SectionLabel>
         <div className="grid grid-cols-2 gap-2">
-          <Field label="X min"><Input className="h-9" value={xMin} onChange={(e) => setXMin(e.target.value)} placeholder="auto" /></Field>
-          <Field label="X max"><Input className="h-9" value={xMax} onChange={(e) => setXMax(e.target.value)} placeholder="auto" /></Field>
-          <Field label="Y min"><Input className="h-9" value={yMin} onChange={(e) => setYMin(e.target.value)} placeholder="auto" /></Field>
-          <Field label="Y max"><Input className="h-9" value={yMax} onChange={(e) => setYMax(e.target.value)} placeholder="auto" /></Field>
+          <Field label="X min"><Input className="h-9" value={xMin} onChange={(e) => railEdit("xMin", { xMin: e.target.value }, () => setXMin(e.target.value))} placeholder="auto" /></Field>
+          <Field label="X max"><Input className="h-9" value={xMax} onChange={(e) => railEdit("xMax", { xMax: e.target.value }, () => setXMax(e.target.value))} placeholder="auto" /></Field>
+          <Field label="Y min"><Input className="h-9" value={yMin} onChange={(e) => railEdit("yMin", { yMin: e.target.value }, () => setYMin(e.target.value))} placeholder="auto" /></Field>
+          <Field label="Y max"><Input className="h-9" value={yMax} onChange={(e) => railEdit("yMax", { yMax: e.target.value }, () => setYMax(e.target.value))} placeholder="auto" /></Field>
         </div>
         <div className="mt-2">
-          <Field label="Approx. tick count (X)"><Input className="h-9" value={nticks} onChange={(e) => setNticks(e.target.value)} placeholder="auto" /></Field>
+          <Field label="Approx. tick count (X)"><Input className="h-9" value={nticks} onChange={(e) => railEdit("nticks", { nticks: e.target.value }, () => setNticks(e.target.value))} placeholder="auto" /></Field>
         </div>
       </div>
 
@@ -4124,13 +4264,13 @@ export function DataAnalysisWorkspace({
       <div id="cs-type-face" className={cn(!showRail("cs-type-face") && "!hidden", "scroll-mt-3 border-t border-border pt-3 transition-shadow", flashId === "cs-type-face" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
         <SectionLabel><TextAa className="h-3.5 w-3.5" /> Typography</SectionLabel>
         <Field label="Font family">
-          <NativeSelect value={fontFamily} onChange={setFontFamily}>
+          <NativeSelect value={fontFamily} onChange={(v) => railEdit("fontFamily", { fontFamily: v }, () => setFontFamily(v))}>
             {FONT_OPTIONS.map((f) => (<option key={f.label} value={f.value}>{f.label}</option>))}
           </NativeSelect>
         </Field>
         <div className="mt-2 grid grid-cols-2 gap-2">
-          <RangeRow label="Title size" value={titleSize} min={11} max={28} step={1} onChange={setTitleSize} />
-          <RangeRow label="Axis size" value={axisTitleSize} min={9} max={20} step={1} onChange={setAxisTitleSize} />
+          <RangeRow label="Title size" value={titleSize} min={11} max={28} step={1} onChange={(v) => railEdit("titleSize", { titleSize: v }, () => setTitleSize(v))} />
+          <RangeRow label="Axis size" value={axisTitleSize} min={9} max={20} step={1} onChange={(v) => railEdit("axisTitleSize", { axisTitleSize: v }, () => setAxisTitleSize(v))} />
         </div>
       </div>
 
@@ -4286,7 +4426,7 @@ export function DataAnalysisWorkspace({
           spec={derivedSpec}
           result={engineResult}
           computing={engineBusy}
-          onEditCaption={setCaption}
+          onEditCaption={(v: string | null) => railEdit("caption", { caption: v }, () => setCaption(v))}
           onShowProvenance={() => setProvenanceOpen(true)}
         />
       )}
@@ -4867,7 +5007,7 @@ export function DataAnalysisWorkspace({
               <ArrowsInSimple className="h-4 w-4" /> Done
             </button>
           </div>
-          <div className="p-2">
+          <div className="p-2" data-n9-sheet>
             <SheetHost mountSnapshot={mountSnapshot} mountKey={mountKey} onPersist={setLiveSnapshot} onSelectionChange={setSheetSel} heightClass="h-[calc(100vh-13rem)]" compact={false} />
           </div>
         </div>
@@ -4930,7 +5070,7 @@ export function DataAnalysisWorkspace({
           >
             {/* The sheet stays mounted through a collapse: remounting Univer
                 would drop the user's cursor and selection. */}
-            <div className="h-full p-2">
+            <div className="h-full p-2" data-n9-sheet>
               <SheetHost mountSnapshot={mountSnapshot} mountKey={mountKey} onPersist={setLiveSnapshot} onSelectionChange={setSheetSel} heightClass="h-full" compact />
             </div>
           </Dock>
@@ -4943,7 +5083,7 @@ export function DataAnalysisWorkspace({
                 <ArrowsOutSimple className="h-4 w-4" />
               </button>
             </div>
-            <div className="p-2">
+            <div className="p-2" data-n9-sheet>
               <SheetHost mountSnapshot={mountSnapshot} mountKey={mountKey} onPersist={setLiveSnapshot} onSelectionChange={setSheetSel} heightClass="h-[560px]" compact />
             </div>
           </div>
