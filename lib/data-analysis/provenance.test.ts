@@ -1,7 +1,12 @@
 import { describe, it, expect } from "vitest"
 import { parseSpec, type AnalysisSpec } from "@/lib/data-analysis/spec/analysis-spec"
 import { ENGINE_VERSION, type EngineResult } from "@/lib/data-analysis/engine/contract"
-import { buildProvenanceCard, draftFigureLegend, draftMethodsSentence } from "./provenance"
+import {
+  buildProvenanceCard,
+  draftFigureLegend,
+  draftMethodsSentence,
+  type JournalStyle,
+} from "./provenance"
 
 function spec(overrides: Record<string, unknown> = {}): AnalysisSpec {
   const parsed = parseSpec({
@@ -237,5 +242,201 @@ describe("provenance card (§6.7)", () => {
     const transforms = card.data.find((e) => e.label === "Transforms")?.value ?? ""
     // Order matters: these operations do not commute.
     expect(transforms.indexOf("minus")).toBeLessThan(transforms.indexOf("log₁₀"))
+  })
+})
+
+/* ── Journal house styles ──────────────────────────────────────────────────*/
+
+describe("draftFigureLegend, journal styles", () => {
+  const legend = (style: JournalStyle) =>
+    draftFigureLegend(spec(), anovaResult, { figureNumber: "Fig. 1", journalStyle: style })
+
+  it("leaves the default wording exactly as it was", () => {
+    // The style dimension is additive: a caller that does not ask for one gets
+    // the string this function has always produced.
+    expect(draftFigureLegend(spec(), anovaResult, { figureNumber: "Fig. 1" })).toBe(
+      legend("default")
+    )
+    expect(legend("default")).toContain("One-way ANOVA (2, 12) = 224.667, p < 0.0001.")
+    expect(legend("default")).toContain("η² = 0.974.")
+  })
+
+  it("renders APA: no leading zero on p, symbol form, effect inline", () => {
+    const text = legend("apa")
+    expect(text).toContain("One-way ANOVA: F(2, 12) = 224.67")
+    expect(text).toContain("p < .001")
+    expect(text).not.toContain("p < 0.001")
+    // η² is bounded by 1, so APA drops its leading zero too, and the effect
+    // rides in the same clause as the test.
+    expect(text).toContain("p < .001, η² = .97.")
+  })
+
+  it("renders Nature: capital P, leading zero, sidedness stated", () => {
+    const text = legend("nature")
+    expect(text).toContain("One-way ANOVA (two-sided): F(2, 12) = 224.67, P < 0.001.")
+    expect(text).toContain("η² = 0.97.")
+    expect(text).not.toContain("p <")
+  })
+
+  it("renders Cell Press: lowercase p, leading zero, no sidedness", () => {
+    const text = legend("cell")
+    expect(text).toContain("One-way ANOVA: F(2, 12) = 224.67, p < 0.001.")
+    expect(text).not.toContain("two-sided")
+    expect(text).not.toContain("P <")
+  })
+
+  it("brackets the confidence interval only under APA", () => {
+    const withCi = {
+      ...anovaResult,
+      test: {
+        ...anovaResult.test!,
+        effectSizes: [{ name: "cohens-d" as const, value: 1.08, ciLow: 0.1, ciHigh: 2.06 }],
+      },
+    }
+    const apa = draftFigureLegend(spec(), withCi, { journalStyle: "apa" })
+    const cell = draftFigureLegend(spec(), withCi, { journalStyle: "cell" })
+    expect(apa).toContain("Cohen's d = 1.08, 95% CI [0.10, 2.06]")
+    expect(cell).toContain("Cohen's d = 1.08 (95% CI 0.10 to 2.06)")
+    // d can exceed 1, so it keeps its leading zero even under APA.
+    expect(apa).toContain("[0.10, 2.06]")
+  })
+
+  it("drops the symbol when the engine reported no statistic to hang it on", () => {
+    const pOnly: EngineResult = {
+      ...anovaResult,
+      test: { ...anovaResult.test!, statistic: null, df: null },
+    }
+    const text = draftFigureLegend(
+      spec({ analysis: { test: "chi-square", postHoc: "none", alpha: 0.05 } }),
+      pOnly,
+      { journalStyle: "apa" }
+    )
+    // Not "chi-square test: χ², p = ...", which reads as a missing number.
+    expect(text).not.toContain("χ²,")
+    expect(text).toContain("One-way ANOVA, p < .001,")
+  })
+
+  it("spaces the symbol from its value when there is no df", () => {
+    const noDf: EngineResult = {
+      ...anovaResult,
+      test: { ...anovaResult.test!, test: "Mann-Whitney U test", statistic: 12, df: null },
+    }
+    const text = draftFigureLegend(
+      spec({ analysis: { test: "mann-whitney", postHoc: "none", alpha: 0.05 } }),
+      noDf,
+      { journalStyle: "cell" }
+    )
+    expect(text).toContain("Mann-Whitney U test: U = 12.00")
+  })
+
+  it("spells the test name where the spec's test has no single symbol", () => {
+    const fisher = draftFigureLegend(
+      spec({ analysis: { test: "fisher-exact", postHoc: "none", alpha: 0.05 } }),
+      anovaResult,
+      { journalStyle: "apa" }
+    )
+    // No made-up symbol: the test name takes the symbol's place.
+    expect(fisher).toContain("One-way ANOVA (2, 12) = 224.67")
+  })
+
+  /**
+   * Law 2, asserted rather than asserted-about.
+   *
+   * Every numeral that reaches the page must be traceable to a field of the
+   * engine result or the spec. If a style could introduce one -- a rounded
+   * constant, a "typical" n, anything -- it would show up here as a token with
+   * no source.
+   */
+  it("emits no number that does not come from the engine result or the spec", () => {
+    const s = spec()
+    const t = anovaResult.test!
+    const allowed = new Set<string>()
+    const add = (v: number) => {
+      for (const dp of [0, 2, 3, 4]) {
+        allowed.add(v.toFixed(dp))
+        allowed.add(v.toFixed(dp).replace(/^0\./, "."))
+      }
+      allowed.add(String(v))
+    }
+    // Engine numbers.
+    for (const n of Object.values(t.groupSizes)) add(n)
+    add(t.statistic!)
+    for (const part of String(t.df).split(", ")) add(Number(part))
+    add(t.pValue!)
+    for (const e of t.effectSizes) add(e.value)
+    // Spec numbers, and the p floors the styles round to.
+    add((1 - s.analysis.alpha) * 100)
+    add(s.exclusions.length)
+    for (const floor of [0.0001, 0.001]) add(floor)
+    allowed.add("1") // the figure number
+    // The user's own title is quoted verbatim, so any numeral in it is theirs.
+    for (const token of (s.figure.title ?? "").match(/\d+(?:\.\d+)?/g) ?? []) allowed.add(token)
+
+    for (const style of ["default", "apa", "nature", "cell"] as JournalStyle[]) {
+      const text = draftFigureLegend(s, anovaResult, {
+        figureNumber: "Fig. 1",
+        journalStyle: style,
+      })
+      for (const token of text.match(/\d+(?:\.\d+)?|\.\d+/g) ?? []) {
+        expect(allowed.has(token), `${style}: "${token}" has no source in spec or result`).toBe(
+          true
+        )
+      }
+    }
+  })
+
+  it("moves every number when the engine's numbers move", () => {
+    const moved: EngineResult = {
+      ...anovaResult,
+      test: {
+        ...anovaResult.test!,
+        statistic: 3.111,
+        df: "1, 9",
+        pValue: 0.0431,
+        effectSizes: [{ name: "eta-squared" as const, value: 0.512, ciLow: null, ciHigh: null }],
+        groupSizes: { Control: 5, Treated: 4 },
+      },
+    }
+    for (const style of ["default", "apa", "nature", "cell"] as JournalStyle[]) {
+      const text = draftFigureLegend(spec(), moved, { journalStyle: style })
+      expect(text, style).toContain("1, 9")
+      expect(text, style).toContain("3.11")
+      expect(text, style).toContain("n = 5 (Control), 4 (Treated).")
+      expect(text, style).not.toContain("224")
+    }
+  })
+})
+
+describe("draftFigureLegend, correction disclosure", () => {
+  const noPairwise: EngineResult = {
+    ...anovaResult,
+    test: { ...anovaResult.test!, pairwise: [] },
+  }
+
+  /**
+   * The gap: the correction used to be announced only when the engine also
+   * returned a pairwise family, so a correction applied anywhere else vanished
+   * from the legend and the result read as uncorrected.
+   */
+  it("states the correction even when no pairwise family came back", () => {
+    const text = draftFigureLegend(spec(), noPairwise)
+    expect(text).toContain("corrected for multiple comparisons by tukey")
+  })
+
+  it("still prefers the engine's own correction name when it has one", () => {
+    expect(draftFigureLegend(spec(), anovaResult)).toContain(
+      `corrected by ${anovaResult.test!.pairwise[0].correctionMethod}`
+    )
+  })
+
+  it("says nothing about a correction when none was applied", () => {
+    const uncorrected = spec({ analysis: { test: "anova-one-way", postHoc: "none", alpha: 0.05 } })
+    expect(draftFigureLegend(uncorrected, noPairwise).toLowerCase()).not.toContain("correct")
+  })
+
+  it("capitalises the correction sentence's p to match the style", () => {
+    expect(draftFigureLegend(spec(), noPairwise, { journalStyle: "nature" })).toContain(
+      "P-values corrected for multiple comparisons by tukey."
+    )
   })
 })

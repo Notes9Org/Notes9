@@ -1,5 +1,5 @@
 import type { AnalysisSpec, ExclusionReasonKind } from "@/lib/data-analysis/spec/analysis-spec"
-import type { EngineResult } from "@/lib/data-analysis/engine/contract"
+import type { EffectSize, EngineResult } from "@/lib/data-analysis/engine/contract"
 import type { AppliedMutation } from "@/lib/data-analysis/spec/mutations"
 
 /**
@@ -280,9 +280,180 @@ export function buildProvenanceCard(
 
 /* ── Figure legend (§2 Output, §6.8) ───────────────────────────────────────*/
 
-function formatP(p: number | null): string {
-  if (p === null || !Number.isFinite(p)) return "p = n/a"
-  return p < 0.0001 ? "p < 0.0001" : `p = ${p.toFixed(4)}`
+/* ── Journal house styles ──────────────────────────────────────────────────*/
+
+/**
+ * The house styles the legend can be drafted in.
+ *
+ * "In the target journal's style" is a formatting question, not a content one:
+ * every style below states the same numbers, read from the same engine fields,
+ * and differs only in how they are spelled. That is what keeps Law 2 intact
+ * across the whole dimension — a style cannot introduce a value, only re-render
+ * one, because a style is a table of punctuation rules and nothing else.
+ *
+ * `default` is the wording this function has always produced and stays the
+ * fallback, so a caller that does not ask for a style gets what it got before.
+ */
+export type JournalStyle = "default" | "apa" | "nature" | "cell"
+
+interface StyleRules {
+  /** Shown in a style picker. */
+  label: string
+  /** Where the conventions below come from, so they can be re-checked. */
+  source: string
+  /** The letter on the p-value. Nature capitalises it; APA and Cell do not. */
+  pLetter: "p" | "P"
+  /**
+   * APA drops the zero before the decimal point on any statistic that cannot
+   * exceed 1 (Publication Manual 7th ed., section 6.44). Everyone else keeps it.
+   */
+  leadingZero: boolean
+  /** Decimal places on p, and the floor below which "<" is used instead. */
+  pDecimals: number
+  /** Decimal places on the test statistic and on effect sizes. */
+  statDecimals: number
+  /**
+   * Whether to write the statistic under its symbol -- t(18) = 2.41 -- rather
+   * than spelling the test name where the symbol goes. The symbol comes from
+   * the spec's closed test enum, never from parsing the engine's test string.
+   */
+  useSymbol: boolean
+  /** Effect size in the same clause as the test, or in a sentence of its own. */
+  effectPlacement: "inline" | "sentence"
+  /** APA brackets a confidence interval: 95% CI [0.10, 2.06]. */
+  ciFormat: "bracket" | "prose"
+  /**
+   * Nature Portfolio requires the legend to say whether the test was one- or
+   * two-sided. The value is read from `spec.analysis.tails`, like every other
+   * number here.
+   */
+  statesTails: boolean
+}
+
+export const JOURNAL_STYLES: Record<JournalStyle, StyleRules> = {
+  default: {
+    label: "Notes9 default",
+    source: "This app's own wording; the fallback when no journal is chosen.",
+    pLetter: "p",
+    leadingZero: true,
+    pDecimals: 4,
+    statDecimals: 3,
+    useSymbol: false,
+    effectPlacement: "sentence",
+    ciFormat: "prose",
+    statesTails: false,
+  },
+  apa: {
+    label: "APA 7th edition",
+    source:
+      "APA Publication Manual, 7th ed., section 6.44 (no leading zero on a statistic that cannot exceed 1) and Table 6.5.",
+    pLetter: "p",
+    leadingZero: false,
+    pDecimals: 3,
+    statDecimals: 2,
+    useSymbol: true,
+    effectPlacement: "inline",
+    ciFormat: "bracket",
+    statesTails: false,
+  },
+  nature: {
+    label: "Nature Portfolio / Springer Nature",
+    source:
+      "Nature Portfolio statistics-reporting guidance: italic capital P, exact values, and the sidedness of the test stated.",
+    pLetter: "P",
+    leadingZero: true,
+    pDecimals: 3,
+    statDecimals: 2,
+    useSymbol: true,
+    effectPlacement: "sentence",
+    ciFormat: "prose",
+    statesTails: true,
+  },
+  cell: {
+    label: "Cell Press",
+    source: "Cell Press figure guidelines (cell.com/figure-guidelines): lowercase p, leading zero retained.",
+    pLetter: "p",
+    leadingZero: true,
+    pDecimals: 3,
+    statDecimals: 2,
+    useSymbol: true,
+    effectPlacement: "sentence",
+    ciFormat: "prose",
+    statesTails: false,
+  },
+}
+
+/**
+ * The statistic's symbol, keyed on the spec's closed test enum.
+ *
+ * Keyed on the ENUM and not on `result.test.test`, which is a free-text name
+ * the engine composes. Matching against that string would be a heuristic, and a
+ * heuristic that guesses wrong prints the wrong symbol for the test that was
+ * actually run -- a factual error about the analysis, in a legend whose whole
+ * point is that it cannot contain one.
+ *
+ * null means "no single symbol": either the test has no statistic (Fisher's
+ * exact reports only p), or it has one per term (regression, mixed models), or
+ * the family covers several statistics (normality). Those fall back to spelling
+ * the test name, which is what every style did before.
+ */
+const STATISTIC_SYMBOL: Record<AnalysisSpec["analysis"]["test"], string | null> = {
+  descriptives: null,
+  normality: null,
+  "t-one-sample": "t",
+  "t-unpaired": "t",
+  "t-welch": "t",
+  "t-paired": "t",
+  "mann-whitney": "U",
+  "wilcoxon-signed-rank": "W",
+  "kruskal-wallis": "H",
+  friedman: "χ²",
+  "anova-one-way": "F",
+  "anova-two-way": "F",
+  "anova-rm": "F",
+  "mixed-effects": null,
+  "chi-square": "χ²",
+  "fisher-exact": null,
+  "correlation-pearson": "r",
+  "correlation-spearman": "ρ",
+  "linear-regression": null,
+  "nonlinear-regression": null,
+  "kaplan-meier": null,
+  none: null,
+}
+
+/**
+ * Effect sizes that are bounded by 1, and so lose their leading zero under APA.
+ *
+ * Cohen's d, Hedges' g and the ratio measures are NOT in here: they can exceed
+ * 1, so APA keeps the zero on them. Getting this set wrong is the difference
+ * between APA style and something that merely looks like it.
+ */
+const BOUNDED_BY_ONE = new Set<EffectSize["name"]>([
+  "eta-squared",
+  "partial-eta-squared",
+  "omega-squared",
+  "epsilon-squared",
+  "r-squared",
+  "pearson-r",
+  "spearman-rho",
+  "rank-biserial",
+  "kendalls-w",
+  "cramers-v",
+  "phi",
+])
+
+/** "0.027" -> ".027" when the style drops the leading zero. */
+function dropZero(text: string, rules: StyleRules): string {
+  return rules.leadingZero ? text : text.replace(/^(-?)0\./, "$1.")
+}
+
+function formatP(p: number | null, rules: StyleRules): string {
+  if (p === null || !Number.isFinite(p)) return `${rules.pLetter} = n/a`
+  const floor = Number(`1e-${rules.pDecimals}`)
+  const value = p < floor ? floor : p
+  const rendered = dropZero(value.toFixed(rules.pDecimals), rules)
+  return `${rules.pLetter} ${p < floor ? "<" : "="} ${rendered}`
 }
 
 const ERROR_BAR_PHRASE: Record<AnalysisSpec["figure"]["errorBars"], string> = {
@@ -328,8 +499,9 @@ export const EFFECT_LABEL: Record<string, string> = {
 export function draftFigureLegend(
   spec: AnalysisSpec,
   result: EngineResult | null,
-  options: { figureNumber?: string } = {}
+  options: { figureNumber?: string; journalStyle?: JournalStyle } = {}
 ): string {
+  const rules = JOURNAL_STYLES[options.journalStyle ?? "default"]
   const parts: string[] = []
   const prefix = options.figureNumber ? `${options.figureNumber}. ` : ""
 
@@ -349,38 +521,77 @@ export function draftFigureLegend(
       parts.push(`n = ${sizes.map(([g, n]) => `${n} (${g})`).join(", ")}.`)
     }
 
-    const stat: string[] = [t.test]
-    if (t.statistic !== null && t.df !== null) {
-      stat.push(`(${t.df}) = ${t.statistic.toFixed(3)}`)
-    } else if (t.statistic !== null) {
-      stat.push(`= ${t.statistic.toFixed(3)}`)
+    // The symbol form -- "Welch's t-test: t(18) = 2.41" -- names the test AND
+    // gives the statistic the letter a journal expects. Where the spec's test
+    // has no single symbol the test name takes the symbol's place, which is
+    // what every style did before there were styles.
+    // The symbol is dropped when there is no statistic to hang it on: a test
+    // that reports only p (Fisher's exact, or any test whose statistic the
+    // engine left null) would otherwise read "chi-square test: χ², p = 0.03".
+    const symbol =
+      rules.useSymbol && t.statistic !== null ? STATISTIC_SYMBOL[spec.analysis.test] : null
+    const sidedness = rules.statesTails
+      ? ` (${spec.analysis.tails === "two" ? "two-sided" : "one-sided"})`
+      : ""
+
+    let testClause = symbol ? `${t.test}${sidedness}: ${symbol}` : `${t.test}${sidedness}`
+    if (t.statistic !== null) {
+      const value = t.statistic.toFixed(rules.statDecimals)
+      // A symbol binds tight to its parenthesised df -- "t(18)" -- where a
+      // spelled-out test name needs the space: "Welch's t-test (18)".
+      testClause += t.df !== null ? `${symbol ? "" : " "}(${t.df}) = ${value}` : ` = ${value}`
     }
-    parts.push(`${stat.join(" ")}, ${formatP(t.pValue)}.`)
 
     // Every effect size is stated, not just the first. A factorial design has one
     // per term, and naming only one of them would let the legend imply the whole
     // model was tested by a single number.
     const ciPct = `${+((1 - spec.analysis.alpha) * 100).toFixed(4)}% CI`
     const effects = t.effectSizes.filter((e) => Number.isFinite(e.value))
-    if (effects.length > 0) {
-      parts.push(
-        effects
-          .map((effect) => {
-            const label = EFFECT_LABEL[effect.name] ?? effect.name
-            const named = effect.term ? `${label} (${effect.term})` : label
-            const ci =
-              effect.ciLow !== null && effect.ciHigh !== null
-                ? ` (${ciPct} ${effect.ciLow.toFixed(2)} to ${effect.ciHigh.toFixed(2)})`
-                : ""
-            return `${named} = ${effect.value.toFixed(3)}${ci}`
-          })
-          .join("; ") + "."
-      )
+    const rendered = effects.map((effect) => {
+      const label = EFFECT_LABEL[effect.name] ?? effect.name
+      const named = effect.term ? `${label} (${effect.term})` : label
+      // Only an effect size that cannot exceed 1 loses its leading zero under
+      // APA; d and the ratio measures keep theirs.
+      const bounded = BOUNDED_BY_ONE.has(effect.name)
+      const scale = (v: number) => {
+        const text = v.toFixed(2)
+        return bounded ? dropZero(text, rules) : text
+      }
+      const ci =
+        effect.ciLow !== null && effect.ciHigh !== null
+          ? rules.ciFormat === "bracket"
+            ? `, ${ciPct} [${scale(effect.ciLow)}, ${scale(effect.ciHigh)}]`
+            : ` (${ciPct} ${scale(effect.ciLow)} to ${scale(effect.ciHigh)})`
+          : ""
+      const value = effect.value.toFixed(rules.statDecimals)
+      return `${named} = ${bounded ? dropZero(value, rules) : value}${ci}`
+    })
+
+    if (rules.effectPlacement === "inline" && rendered.length > 0) {
+      parts.push(`${testClause}, ${formatP(t.pValue, rules)}, ${rendered.join(", ")}.`)
+    } else {
+      parts.push(`${testClause}, ${formatP(t.pValue, rules)}.`)
+      if (rendered.length > 0) parts.push(`${rendered.join("; ")}.`)
     }
 
-    if (spec.analysis.postHoc !== "none" && t.pairwise.length > 0) {
+    /**
+     * The correction is stated whenever one was APPLIED, not only when a
+     * pairwise family came back.
+     *
+     * The old condition also required `t.pairwise.length > 0`, so a correction
+     * applied outside a pairwise family -- across the terms of a factorial
+     * model, or to a family the engine reports somewhere other than `pairwise`
+     * -- vanished from the legend entirely. A legend that omits the correction
+     * overstates the result, which is the one direction it must never fail in.
+     * The engine's own `correctionMethod` still wins when it is there; the
+     * spec's `postHoc` is the fallback, and both are read, never composed.
+     */
+    if (spec.analysis.postHoc !== "none") {
+      const method = t.pairwise[0]?.correctionMethod ?? spec.analysis.postHoc
       parts.push(
-        `Pairwise comparisons corrected by ${t.pairwise[0].correctionMethod}; adjusted p-values shown.`
+        t.pairwise.length > 0
+          ? `Pairwise comparisons corrected by ${method}; adjusted ${rules.pLetter}-values shown.`
+          : `${rules.pLetter}-values corrected for multiple comparisons by ${method}.`
       )
     }
   }
@@ -392,7 +603,13 @@ export function draftFigureLegend(
       ec && ec.ciLow !== null && ec.ciHigh !== null
         ? `EC50 = ${f.ec50?.toPrecision(4)} (95% CI ${ec.ciLow.toPrecision(4)} to ${ec.ciHigh.toPrecision(4)})`
         : `EC50 = ${f.ec50?.toPrecision(4)}`
-    parts.push(`Curve fitted by ${f.model} nonlinear regression; ${ecText}, R² = ${f.rSquared.toFixed(4)}.`)
+    // R² cannot exceed 1, so it takes the same leading-zero rule as a bounded
+    // effect size. The four decimals stay: a fit is reported more precisely
+    // than a test statistic, in every style.
+    parts.push(
+      `Curve fitted by ${f.model} nonlinear regression; ${ecText}, ` +
+        `R² = ${dropZero(f.rSquared.toFixed(4), rules)}.`
+    )
     if (spec.analysis.nonlinear?.weighting && spec.analysis.nonlinear.weighting !== "none") {
       parts.push(`Fit weighted by ${spec.analysis.nonlinear.weighting}.`)
     }
