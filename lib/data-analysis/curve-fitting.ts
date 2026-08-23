@@ -58,6 +58,12 @@ export type CurveFit = {
   predictSE: (x: number) => number
   /** Half-maximal effective concentration / dissociation constant, where defined. */
   ec50?: number
+  /**
+   * 95% CI on `ec50`. For the sigmoid models it is the log₁₀EC₅₀ interval
+   * back-transformed, so it is asymmetric in concentration and strictly
+   * positive — never the `v ± t·SE` interval, which can go negative.
+   */
+  ec50CI?: [number, number]
 }
 
 const r2Of = (y: number[], yhat: number[]) => {
@@ -146,7 +152,7 @@ function buildFit(
   x: number[],
   y: number[],
   w: number[],
-  extras: { interpolate?: (y: number) => number; ec50?: number } = {},
+  extras: { interpolate?: (y: number) => number; ec50?: number; logEc50Index?: number } = {},
 ): CurveFit {
   const n = x.length
   const p = params.length
@@ -174,6 +180,13 @@ function buildFit(
   const paramSE = params.map((_, j) => (cov ? Math.sqrt(Math.max(0, s2 * cov[j][j])) : NaN))
   const tMult = tInv(0.975, dof)
   const paramCI = params.map((v, j): [number, number] => [v - tMult * paramSE[j], v + tMult * paramSE[j]])
+  // EC₅₀ interval = the log₁₀EC₅₀ interval back-transformed. Asymmetric in
+  // concentration and strictly positive, unlike v ± t·SE on a linear EC₅₀.
+  const li = extras.logEc50Index
+  const ec50CI: [number, number] | undefined =
+    li !== undefined && isFinite(paramCI[li][0]) && isFinite(paramCI[li][1])
+      ? [10 ** paramCI[li][0], 10 ** paramCI[li][1]]
+      : undefined
   const predictSE = (xv: number) => {
     if (!cov) return NaN
     const g = params.map((_, j) => {
@@ -203,6 +216,7 @@ function buildFit(
     interpolate: extras.interpolate ?? (() => NaN),
     predictSE,
     ec50: extras.ec50,
+    ec50CI,
   }
 }
 
@@ -311,6 +325,8 @@ type ModelDef = {
   guess: (x: number[], y: number[]) => number[]
   interpolate?: (p: number[]) => (y: number) => number
   ec50?: (p: number[]) => number
+  /** Index of the log₁₀EC₅₀ parameter, if the model is parameterised that way. */
+  logEc50Index?: number
   /** Overlay curve is drawn on a log-spaced x grid (dose-response style). */
   logX?: boolean
 }
@@ -397,42 +413,51 @@ const NONLINEAR: Partial<Record<FitModel, ModelDef>> = {
     },
     ec50: ([, , v50]) => v50,
   },
+  // The sigmoid models are parameterised by log₁₀EC₅₀, not EC₅₀. EC₅₀ is a
+  // scale parameter: its sampling distribution is roughly symmetric in log
+  // concentration, not in concentration. Fitting it linearly and reporting
+  // v ± t·SE yields an interval that can include zero or negative
+  // concentrations. Fitting logEC₅₀ and back-transforming (10^lo, 10^hi) —
+  // what the Python engine and GraphPad Prism both do — cannot.
   "3pl": {
-    // 4PL with Hill slope fixed to 1: Y = d + (a − d)/(1 + x/c)
-    fn: (x, [a, c, d]) => d + (a - d) / (1 + x / c),
-    paramNames: ["a (min)", "c (EC₅₀)", "d (max)"],
-    guess: (x, y) => [y[argmin(x)], median(x.filter((v) => v > 0)) || 1, y[argmax(x)]],
-    interpolate: ([a, c, d]) => (yv) => {
+    // 4PL with Hill slope fixed to 1: Y = d + (a − d)/(1 + x/10^logC)
+    fn: (x, [a, logC, d]) => d + (a - d) / (1 + x / 10 ** logC),
+    paramNames: ["a (min)", "log₁₀EC₅₀", "d (max)"],
+    guess: (x, y) => [y[argmin(x)], Math.log10(median(x.filter((v) => v > 0)) || 1), y[argmax(x)]],
+    interpolate: ([a, logC, d]) => (yv) => {
       const inner = (a - d) / (yv - d) - 1
-      return inner > 0 ? c * inner : NaN
+      return inner > 0 ? 10 ** logC * inner : NaN
     },
-    ec50: ([, c]) => c,
+    ec50: ([, logC]) => 10 ** logC,
+    logEc50Index: 1,
     logX: true,
   },
   "4pl": {
-    fn: (x, [a, b, c, d]) => d + (a - d) / (1 + (x / c) ** b),
-    paramNames: ["a (min)", "b (Hill)", "c (EC₅₀)", "d (max)"],
-    guess: (x, y) => [y[argmin(x)], 1, median(x.filter((v) => v > 0)) || 1, y[argmax(x)]],
-    interpolate: ([a, b, c, d]) => (yv) => {
+    fn: (x, [a, b, logC, d]) => d + (a - d) / (1 + (x / 10 ** logC) ** b),
+    paramNames: ["a (min)", "b (Hill)", "log₁₀EC₅₀", "d (max)"],
+    guess: (x, y) => [y[argmin(x)], 1, Math.log10(median(x.filter((v) => v > 0)) || 1), y[argmax(x)]],
+    interpolate: ([a, b, logC, d]) => (yv) => {
       const ratio = (a - d) / (yv - d)
       if (!isFinite(ratio) || ratio <= 0) return NaN
       const inner = ratio - 1
-      return inner > 0 ? c * inner ** (1 / b) : NaN
+      return inner > 0 ? 10 ** logC * inner ** (1 / b) : NaN
     },
-    ec50: ([, , c]) => c,
+    ec50: ([, , logC]) => 10 ** logC,
+    logEc50Index: 2,
     logX: true,
   },
   "5pl": {
-    fn: (x, [a, b, c, d, g]) => d + (a - d) / (1 + (x / c) ** b) ** g,
-    paramNames: ["a (min)", "b (Hill)", "c (EC₅₀)", "d (max)", "g (asym)"],
-    guess: (x, y) => [y[argmin(x)], 1, median(x.filter((v) => v > 0)) || 1, y[argmax(x)], 1],
-    interpolate: ([a, b, c, d, g]) => (yv) => {
+    fn: (x, [a, b, logC, d, g]) => d + (a - d) / (1 + (x / 10 ** logC) ** b) ** g,
+    paramNames: ["a (min)", "b (Hill)", "log₁₀EC₅₀", "d (max)", "g (asym)"],
+    guess: (x, y) => [y[argmin(x)], 1, Math.log10(median(x.filter((v) => v > 0)) || 1), y[argmax(x)], 1],
+    interpolate: ([a, b, logC, d, g]) => (yv) => {
       const ratio = (a - d) / (yv - d)
       if (!isFinite(ratio) || ratio <= 0) return NaN
       const inner = ratio ** (1 / g) - 1
-      return inner > 0 ? c * inner ** (1 / b) : NaN
+      return inner > 0 ? 10 ** logC * inner ** (1 / b) : NaN
     },
-    ec50: ([, , c]) => c,
+    ec50: ([, , logC]) => 10 ** logC,
+    logEc50Index: 2,
     logX: true,
   },
 }
@@ -507,6 +532,7 @@ export function fitCurve(model: FitModel, x: number[], y: number[], weight: Weig
   return buildFit(model, def.paramNames, def.fn, res.params, res.cov, xs, ys, w, {
     interpolate: def.interpolate?.(res.params),
     ec50: def.ec50?.(res.params),
+    logEc50Index: def.logEc50Index,
   })
 }
 
