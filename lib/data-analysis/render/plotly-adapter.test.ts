@@ -882,6 +882,341 @@ describe("pie composition", () => {
   })
 })
 
+/* ── Two-factor bars ───────────────────────────────────────────────────────*/
+
+/**
+ * A real two-way design: 2 treatments × 2 timepoints × 3 replicates.
+ *
+ * Cell means are 10, 20, 40, 80, all distinct, so a figure that collapsed the
+ * second factor cannot accidentally produce the right numbers.
+ */
+const twoWay = result({
+  plotData: [
+    { rowId: "a1", values: { treatment: "Ctrl", time: "24h", y: 9 }, excluded: false },
+    { rowId: "a2", values: { treatment: "Ctrl", time: "24h", y: 10 }, excluded: false },
+    { rowId: "a3", values: { treatment: "Ctrl", time: "24h", y: 11 }, excluded: false },
+    { rowId: "b1", values: { treatment: "Ctrl", time: "48h", y: 19 }, excluded: false },
+    { rowId: "b2", values: { treatment: "Ctrl", time: "48h", y: 20 }, excluded: false },
+    { rowId: "b3", values: { treatment: "Ctrl", time: "48h", y: 21 }, excluded: false },
+    { rowId: "c1", values: { treatment: "Drug", time: "24h", y: 38 }, excluded: false },
+    { rowId: "c2", values: { treatment: "Drug", time: "24h", y: 40 }, excluded: false },
+    { rowId: "c3", values: { treatment: "Drug", time: "24h", y: 42 }, excluded: false },
+    { rowId: "d1", values: { treatment: "Drug", time: "48h", y: 76 }, excluded: false },
+    { rowId: "d2", values: { treatment: "Drug", time: "48h", y: 80 }, excluded: false },
+    { rowId: "d3", values: { treatment: "Drug", time: "48h", y: 84 }, excluded: false },
+  ],
+})
+
+function twoWaySpec(kind: "grouped-bar" | "stacked-bar", figureOverrides = {}) {
+  return spec({
+    analysis: {
+      test: "anova-two-way",
+      groupColumn: "treatment",
+      secondFactorColumn: "time",
+      responseColumns: ["y"],
+    },
+    figure: { kind, x: {}, y: {}, errorBars: "sd", ...figureOverrides },
+  })
+}
+
+describe("grouped bar draws the second factor", () => {
+  // bootstrap.ts picks grouped-bar as the DEFAULT figure for a two-way ANOVA,
+  // so a grouped bar that collapses the second factor is a two-way analysis
+  // whose default figure asserts a one-way comparison.
+  const bars = (f: ReturnType<typeof buildFigure>) => f.data.filter((t) => t.type === "bar")
+
+  it("emits one bar trace per second-factor level, not one in total", () => {
+    const figure = buildFigure(twoWaySpec("grouped-bar"), twoWay)
+    expect(bars(figure).map((t) => t.name)).toEqual(["24h", "48h"])
+  })
+
+  it("puts every primary level on every level's trace", () => {
+    const figure = buildFigure(twoWaySpec("grouped-bar"), twoWay)
+    // Two groups, both present in both traces: that is what makes it grouped
+    // rather than two half-populated charts side by side.
+    for (const trace of bars(figure)) expect(trace.x).toEqual([0, 1])
+    expect((figure.layout.xaxis as { ticktext: string[] }).ticktext).toEqual(["Ctrl", "Drug"])
+  })
+
+  it("carries the per-CELL mean, not the group mean", () => {
+    const figure = buildFigure(twoWaySpec("grouped-bar"), twoWay)
+    // Group means would be 15 and 60. Cell means are these.
+    expect(bars(figure)[0].y).toEqual([10, 40])
+    expect(bars(figure)[1].y).toEqual([20, 80])
+  })
+
+  it("draws per-cell error bars, sized from the cell", () => {
+    const figure = buildFigure(twoWaySpec("grouped-bar"), twoWay)
+    const sd = (vals: number[]) => {
+      const m = vals.reduce((a, b) => a + b, 0) / vals.length
+      return Math.sqrt(vals.reduce((a, v) => a + (v - m) ** 2, 0) / (vals.length - 1))
+    }
+    const first = bars(figure)[0].error_y as { array: number[]; arrayminus: number[] }
+    expect(first.array[0]).toBeCloseTo(sd([9, 10, 11]), 10)
+    expect(first.array[1]).toBeCloseTo(sd([38, 40, 42]), 10)
+    // Symmetric SD, but still written as an asymmetric pair, so a later switch
+    // to IQR cannot silently mirror the wrong half.
+    expect(first.arrayminus).toEqual(first.array)
+  })
+
+  it("actually groups: the sub-bars partition the band and do not overlap", () => {
+    const figure = buildFigure(twoWaySpec("grouped-bar"), twoWay)
+    // `barmode: "group"` was a no-op with one trace. It is set AND the geometry
+    // is explicit, because the point overlay is positioned from these numbers.
+    expect(figure.layout.barmode).toBe("group")
+    const spans = bars(figure).map((t) => [t.offset as number, (t.offset as number) + (t.width as number)])
+    expect(spans[0][1]).toBeCloseTo(spans[1][0], 10)
+    expect(spans[0][0]).toBeCloseTo(-0.4, 10)
+    expect(spans[1][1]).toBeCloseTo(0.4, 10)
+  })
+
+  it("puts each cell's replicates over their own sub-bar", () => {
+    const figure = buildFigure(twoWaySpec("grouped-bar"), twoWay)
+    const points = figure.data.filter((t) => t.type === "scatter" && t.mode === "markers")
+    expect(points).toHaveLength(2)
+    const at = (name: string) => points.find((t) => String(t.name).startsWith(name))!
+    // 24h occupies [-0.4, 0) of each group's band, 48h occupies (0, 0.4].
+    for (const x of at("24h").x as number[]) {
+      const withinGroup = x - Math.round(x)
+      expect(withinGroup).toBeGreaterThan(-0.4)
+      expect(withinGroup).toBeLessThan(0)
+    }
+    for (const x of at("48h").x as number[]) {
+      const withinGroup = x - Math.round(x)
+      expect(withinGroup).toBeGreaterThan(0)
+      expect(withinGroup).toBeLessThan(0.4)
+    }
+  })
+
+  it("keeps every replicate's row id on its mark", () => {
+    const figure = buildFigure(twoWaySpec("grouped-bar"), twoWay)
+    const ids = figure.data
+      .filter((t) => t.type === "scatter")
+      .flatMap((t) => t.customdata as string[])
+    expect(ids.sort()).toEqual(twoWay.plotData.map((r) => r.rowId).sort())
+  })
+
+  it("greys an excluded replicate without moving its cell's bar", () => {
+    const withExcluded = result({
+      plotData: twoWay.plotData.map((r) => (r.rowId === "a1" ? { ...r, excluded: true } : r)),
+    })
+    const shown = buildFigure(twoWaySpec("grouped-bar"), withExcluded)
+    const hidden = buildFigure(
+      twoWaySpec("grouped-bar", { showExcludedPoints: false }),
+      withExcluded
+    )
+    // The cell mean is 10.5 either way — computed from {10, 11}, never from {9}.
+    expect((bars(shown)[0].y as number[])[0]).toBeCloseTo(10.5, 10)
+    expect(bars(hidden)[0].y).toEqual(bars(shown)[0].y)
+    // Drawn, greyed, not removed (§8.1).
+    const marker = figureMarker(shown, "24h")
+    expect(marker.symbol).toContain("circle-open")
+    expect(hidden.data.filter((t) => t.type === "scatter").flatMap((t) => t.customdata as string[]))
+      .not.toContain("a1")
+  })
+
+  function figureMarker(f: ReturnType<typeof buildFigure>, level: string) {
+    const trace = f.data.find((t) => t.type === "scatter" && String(t.name).startsWith(level))!
+    return trace.marker as { symbol: string[] }
+  }
+
+  it("falls back to a plain bar-with-points when no second factor is mapped", () => {
+    // Naming the same column twice is a one-factor design described twice, and
+    // splitting on it would draw one occupied cell per group and one empty.
+    for (const second of [null, "treatment"]) {
+      const figure = buildFigure(
+        spec({
+          analysis: {
+            test: "none",
+            groupColumn: "treatment",
+            secondFactorColumn: second,
+            responseColumns: ["y"],
+          },
+          figure: { kind: "grouped-bar", x: {}, y: {}, errorBars: "sd" },
+        }),
+        twoWay
+      )
+      expect(bars(figure)).toHaveLength(1)
+      expect(bars(figure)[0].y).toEqual([15, 60])
+      expect(figure.data.some((t) => t.type === "scatter" && t.mode === "markers")).toBe(true)
+    }
+  })
+})
+
+describe("stacked bar is a composition, not stacked means", () => {
+  const bars = (f: ReturnType<typeof buildFigure>) => f.data.filter((t) => t.type === "bar")
+
+  it("emits one trace per component level and stacks them", () => {
+    const figure = buildFigure(twoWaySpec("stacked-bar"), twoWay)
+    expect(bars(figure).map((t) => t.name)).toEqual(["24h", "48h"])
+    expect(figure.layout.barmode).toBe("stack")
+  })
+
+  it("segments are SUMS, so the stack height is the group total", () => {
+    const figure = buildFigure(twoWaySpec("stacked-bar"), twoWay)
+    // Stacking means would give 10+20 = 30 and 40+80 = 120, numbers nothing
+    // measured. The sums are the totals actually observed.
+    expect(bars(figure)[0].y).toEqual([30, 120])
+    expect(bars(figure)[1].y).toEqual([60, 240])
+    const totals = [0, 1].map((i) => bars(figure).reduce((a, t) => a + (t.y as number[])[i], 0))
+    expect(totals).toEqual([90, 360])
+  })
+
+  it("sits on a category axis so the group names actually draw", () => {
+    // It passed group NAMES as x while the layout declared the axis "linear",
+    // which draws an empty numeric frame.
+    const figure = buildFigure(twoWaySpec("stacked-bar"), twoWay)
+    expect(bars(figure)[0].x).toEqual(["Ctrl", "Drug"])
+    expect((figure.layout.xaxis as { type: string }).type).toBe("category")
+  })
+
+  it("draws no error bars and does not claim any", () => {
+    // A whisker on a segment floating mid-stack measures a part against a
+    // baseline made of other parts.
+    const figure = buildFigure(twoWaySpec("stacked-bar"), twoWay)
+    expect(figure.data.some((t) => t.error_y !== undefined || t.error_x !== undefined)).toBe(false)
+    expect((figure.layout.title as { text: string }).text).not.toContain("mean ±")
+  })
+
+  it("composes over the response columns when there is no second factor", () => {
+    const figure = buildFigure(
+      spec({
+        analysis: { test: "none", groupColumn: "treatment", responseColumns: ["y", "z"] },
+        figure: { kind: "stacked-bar", x: {}, y: {}, errorBars: "sd" },
+      }),
+      result({
+        plotData: [
+          { rowId: "p1", values: { treatment: "Ctrl", y: 1, z: 4 }, excluded: false },
+          { rowId: "p2", values: { treatment: "Drug", y: 2, z: 8 }, excluded: false },
+        ],
+      })
+    )
+    expect(bars(figure).map((t) => t.name)).toEqual(["y", "z"])
+    expect(bars(figure)[0].y).toEqual([1, 2])
+    expect(bars(figure)[1].y).toEqual([4, 8])
+  })
+
+  it("treats a component absent from a group as zero, not as a gap", () => {
+    const sparse = result({
+      plotData: [
+        { rowId: "s1", values: { treatment: "Ctrl", time: "24h", y: 5 }, excluded: false },
+        { rowId: "s2", values: { treatment: "Drug", time: "48h", y: 7 }, excluded: false },
+      ],
+    })
+    const figure = buildFigure(twoWaySpec("stacked-bar"), sparse)
+    // In a composition "none of this component" is a real answer.
+    expect(bars(figure)[0].y).toEqual([5, 0])
+    expect(bars(figure)[1].y).toEqual([0, 7])
+  })
+
+  it("never counts an excluded row into a segment", () => {
+    const withExcluded = result({
+      plotData: twoWay.plotData.map((r) => (r.rowId === "a1" ? { ...r, excluded: true } : r)),
+    })
+    const shown = buildFigure(twoWaySpec("stacked-bar"), withExcluded)
+    const hidden = buildFigure(
+      twoWaySpec("stacked-bar", { showExcludedPoints: false }),
+      withExcluded
+    )
+    expect((bars(shown)[0].y as number[])[0]).toBe(21)
+    expect(bars(hidden)[0].y).toEqual(bars(shown)[0].y)
+  })
+})
+
+/* ── Secondary axis ────────────────────────────────────────────────────────*/
+
+describe("a series marked right lands on a right-hand axis", () => {
+  const dual = result({
+    plotData: [
+      { rowId: "t1", values: { day: 1, od: 0.1, rfu: 1200, treatment: "Ctrl" }, excluded: false },
+      { rowId: "t2", values: { day: 2, od: 0.4, rfu: 4800, treatment: "Ctrl" }, excluded: false },
+      { rowId: "t3", values: { day: 3, od: 0.9, rfu: 9100, treatment: "Ctrl" }, excluded: false },
+    ],
+  })
+
+  function dualSpec(kind: string, right: string, y2: unknown = null) {
+    return spec({
+      analysis: { test: "none", groupColumn: "day", responseColumns: ["od", "rfu"] },
+      figure: {
+        kind,
+        x: {},
+        y: {},
+        y2,
+        errorBars: "none",
+        series: [{ key: right, axis: "right" }],
+      },
+    })
+  }
+
+  it("routes the marked series on a time course, and only that series", () => {
+    const figure = buildFigure(dualSpec("line-timecourse", "rfu"), dual)
+    const byName = Object.fromEntries(figure.data.map((t) => [t.name, t.yaxis]))
+    expect(byName).toEqual({ od: "y", rfu: "y2" })
+  })
+
+  it("creates the axis even when the spec carries no y2", () => {
+    // Targeting an axis Plotly was never told about drops the trace from the
+    // figure entirely — worse than ignoring the request.
+    const figure = buildFigure(dualSpec("line-timecourse", "rfu"), dual)
+    expect(figure.layout.y2).toBeUndefined()
+    const y2 = figure.layout.yaxis2 as { overlaying: string; side: string }
+    expect(y2).toBeDefined()
+    expect(y2.overlaying).toBe("y")
+    expect(y2.side).toBe("right")
+  })
+
+  it("keeps the spec's own y2 when there is one", () => {
+    const figure = buildFigure(
+      dualSpec("line-timecourse", "rfu", { label: "Fluorescence", unit: "RFU" }),
+      dual
+    )
+    const title = (figure.layout.yaxis2 as { title: { text: string } }).title
+    expect(title.text).toBe("Fluorescence (RFU)")
+  })
+
+  it("routes an area band and rests it on its own zero", () => {
+    const figure = buildFigure(dualSpec("area", "rfu"), dual)
+    const rfu = figure.data.find((t) => t.name === "rfu")!
+    expect(rfu.yaxis).toBe("y2")
+    // "tonexty" would stack it onto the primary band, whose scale it does not
+    // share. The primary band still rests on zero itself.
+    expect(rfu.fill).toBe("tozeroy")
+    expect(figure.data.find((t) => t.name === "od")!.fill).toBe("tozeroy")
+  })
+
+  it("routes both of a Q-Q column's traces together", () => {
+    const figure = buildFigure(dualSpec("qq", "rfu"), dual)
+    const rfuTraces = figure.data.filter((t) => String(t.name).startsWith("rfu"))
+    expect(rfuTraces).toHaveLength(2)
+    // A reference line left behind on the primary axis stops being a reference.
+    for (const t of rfuTraces) expect(t.yaxis).toBe("y2")
+    for (const t of figure.data.filter((t) => String(t.name).startsWith("od"))) {
+      expect(t.yaxis).toBe("y")
+    }
+  })
+
+  it.each(["bar-scatter-error", "stacked-bar", "horizontal-bar", "box", "roc", "pie-composition"])(
+    "refuses the request out loud on a %s instead of silently ignoring it",
+    (kind) => {
+      const figure = buildFigure(dualSpec(kind, "rfu"), dual)
+      expect(figure.data.some((t) => t.yaxis === "y2")).toBe(false)
+      expect(figure.layout.yaxis2).toBeUndefined()
+      // The refusal is on the figure, where it survives export.
+      expect((figure.layout.title as { text: string }).text).toContain(
+        "secondary axis not available"
+      )
+    }
+  )
+
+  it("says nothing when no series asked", () => {
+    const figure = buildFigure(
+      spec({ figure: { kind: "bar-scatter-error", x: {}, y: {}, errorBars: "sd" } }),
+      result()
+    )
+    expect((figure.layout.title as { text: string }).text).not.toContain("secondary axis")
+  })
+})
+
 describe("every chart kind the spec names can be drawn", () => {
   // A kind the adapter cannot build is a kind that can be chosen, saved and
   // reopened as an empty figure, worse than not offering it.
@@ -935,8 +1270,22 @@ describe("every chart kind the spec names can be drawn", () => {
       // The individual replicates over the bars, not the bars alone.
       expect(f.data.some((t) => t.type === "scatter" && t.mode === "markers")).toBe(true)
     },
-    "grouped-bar": (f) => expect(f.data.some((t) => t.type === "bar")).toBe(true),
-    "stacked-bar": (f) => expect(f.data.some((t) => t.type === "bar")).toBe(true),
+    // `everyKind` names one column for both factors, which is a one-factor
+    // design described twice, so the honest drawing is the single-factor bar
+    // with its replicate overlay. The real grouping is asserted against a real
+    // two-way fixture in "grouped bar draws the second factor".
+    "grouped-bar": (f) => {
+      expect(f.data.some((t) => t.type === "bar")).toBe(true)
+      expect(f.data.some((t) => t.type === "scatter" && t.mode === "markers")).toBe(true)
+    },
+    "stacked-bar": (f) => {
+      // One trace per component, or `barmode: "stack"` has nothing to stack.
+      const segments = f.data.filter((t) => t.type === "bar")
+      expect(segments.length).toBeGreaterThan(1)
+      expect(f.layout.barmode).toBe("stack")
+      // A composition, so no whisker anywhere on it.
+      expect(segments.some((t) => t.error_y !== undefined)).toBe(false)
+    },
     "horizontal-bar": (f) =>
       expect(f.data.some((t) => t.type === "bar" && t.orientation === "h")).toBe(true),
     box: (f) => expect(f.data.some((t) => t.type === "box")).toBe(true),
@@ -1020,6 +1369,32 @@ describe("every chart kind the spec names can be drawn", () => {
         .filter((t) => t.mode !== "markers" && t.type !== "scatter3d")
         .map((t) => JSON.stringify([t.type, t.z, t.values, t.error_y, t.error_x]))
     expect(stats(hidden), kind).toEqual(stats(shown))
+  })
+
+  it.each(KINDS)("never points a %s trace at an axis that was not created", (kind) => {
+    // Plotly drops a trace whose `yaxis` names an axis the layout does not
+    // declare, so the figure loses a whole series with nothing to show for it.
+    // Either the kind routes the request and the axis exists, or it declines
+    // and no trace asks — never the third state.
+    for (const y2 of [null, { label: "Second" }]) {
+      const figure = buildFigure(
+        spec({
+          analysis: {
+            test: "none", groupColumn: "treatment", secondFactorColumn: "treatment",
+            responseColumns: ["a", "b", "c"],
+          },
+          figure: {
+            kind, x: {}, y: {}, y2, errorBars: "sd",
+            series: [{ key: "b", axis: "right" }, { key: "Ctrl", axis: "right" }],
+          },
+        }),
+        xy
+      )
+      const targets = new Set(figure.data.map((t) => t.yaxis).filter(Boolean))
+      if (targets.has("y2")) expect(figure.layout.yaxis2, kind).toBeDefined()
+      // Nothing may name a third axis at all; only y and y2 are ever built.
+      expect([...targets].every((t) => t === "y" || t === "y2"), kind).toBe(true)
+    }
   })
 
   it("puts categories on the y axis for horizontal kinds", () => {

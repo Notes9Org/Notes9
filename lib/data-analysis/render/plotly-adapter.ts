@@ -128,21 +128,82 @@ function axisTitle(axis: AnalysisSpec["figure"]["x"]): string {
  * category axis turns every distinct numeric offset into a new category rather
  * than reading it as a position, so those use a numbered axis with the group
  * names supplied as tick labels instead (see `categoryTicks`).
+ *
+ * A stacked bar has no scatter overlay to jitter, so it belongs here with box
+ * and violin: it was passing group NAMES as x while the layout declared the
+ * axis "linear", which draws an empty numeric frame.
  */
-const CATEGORICAL_X = new Set<AnalysisSpec["figure"]["kind"]>(["box", "violin"])
+const CATEGORICAL_X = new Set<AnalysisSpec["figure"]["kind"]>(["box", "violin", "stacked-bar"])
 
 /**
  * Chart kinds that actually draw error bars, and so may claim them in the
  * subtitle. Box and violin show their spread natively and are labelled by their
  * own geometry; everything absent here draws no whisker at all.
+ *
+ * `stacked-bar` is absent deliberately: a composition stack draws no whisker
+ * (see `stackedComposition`), so claiming one in the subtitle would be the
+ * label contradicting the geometry again.
  */
 const ERROR_BAR_KINDS = new Set<AnalysisSpec["figure"]["kind"]>([
   "bar-scatter-error",
   "grouped-bar",
-  "stacked-bar",
   "horizontal-bar",
   "line-timecourse",
 ])
+
+/**
+ * Chart kinds where a second y axis means something.
+ *
+ * The case is narrow and physical: two series in DIFFERENT UNITS over a shared
+ * x. That needs one trace per response column, and a y carrying that column's
+ * own measured value — which is line/time-course, area and Q-Q, and nothing
+ * else in the catalogue.
+ *
+ * Every other kind is a refusal on purpose, not an oversight:
+ *   - bar, grouped-bar, box and violin split ONE response column across groups
+ *     or levels, so a group on its own scale would measure one quantity against
+ *     two different rulers;
+ *   - a stacked-bar segment is part of a total, and a part on a second scale is
+ *     not part of that total any more;
+ *   - horizontal-bar and forest carry their value on x, and y is categorical;
+ *   - ECDF, ROC and Kaplan-Meier put a probability on y, which has one scale by
+ *     definition;
+ *   - histogram's y is a count, volcano's is −log10 p, bland-altman's is a
+ *     difference, xy-scatter-fit/dose-response and bubble draw a single y
+ *     series — in each there is no second series to move;
+ *   - heatmap, correlation-matrix, pie and the 3-D kinds have no cartesian y.
+ *
+ * A series marked `right` on any of those is named in the subtitle rather than
+ * quietly drawn on the left, which is indistinguishable from never having asked.
+ */
+const SECONDARY_AXIS_KINDS = new Set<AnalysisSpec["figure"]["kind"]>([
+  "line-timecourse",
+  "area",
+  "qq",
+])
+
+/** The y axis a series' trace targets; "y2" only where the kind can honour it. */
+function axisTarget(figure: AnalysisSpec["figure"], axis: "left" | "right"): "y" | "y2" {
+  return axis === "right" && SECONDARY_AXIS_KINDS.has(figure.kind) ? "y2" : "y"
+}
+
+/**
+ * The secondary axis a `right` series gets when the spec carries no `figure.y2`.
+ *
+ * Targeting an axis that was never created is the one outcome forbidden here:
+ * Plotly drops the trace off the figure entirely. Creating a bare axis makes
+ * the request visible — a right-hand scale appears, which is what asking for
+ * one means — and the labels stay empty because nobody has written them.
+ */
+const IMPLIED_Y2: AnalysisSpec["figure"]["x"] = {
+  label: null,
+  unit: null,
+  scale: "linear",
+  min: null,
+  max: null,
+  tickCount: null,
+  breaks: [],
+}
 
 /** Chart kinds drawn at integer x positions with group names as tick labels. */
 const NUMBERED_X = new Set<AnalysisSpec["figure"]["kind"]>([
@@ -294,6 +355,53 @@ function groupRows(spec: AnalysisSpec, result: EngineResult) {
     groups.set(key, entry)
   }
   return groups
+}
+
+/**
+ * The second factor a grouped or stacked bar splits on, or null.
+ *
+ * Naming the same column for both factors is not a two-factor design, it is a
+ * one-factor design described twice: splitting on it would put one occupied
+ * cell and L−1 empty ones in every group. Reported as "no second factor" so the
+ * chart falls back to its single-factor form instead of drawing that.
+ */
+function secondFactor(spec: AnalysisSpec): string | null {
+  const col = spec.analysis.secondFactorColumn
+  return col && col !== spec.analysis.groupColumn ? col : null
+}
+
+/**
+ * Rows bucketed per (group × second-factor level) cell.
+ *
+ * Deliberately the same shape `groupRows` returns, with the level folded into
+ * the key. That is what lets `errorSpan`, `includedValues` and the exclusion
+ * handling produce per-cell summaries without any of them learning that a
+ * second factor exists. `groupKeys` comes out in the same first-seen order
+ * `groupRows` uses, so a cell's index is the tick the layout labels.
+ */
+function cellRows(spec: AnalysisSpec, result: EngineResult, levelCol: string) {
+  const groupCol = spec.analysis.groupColumn
+  const responseCol = spec.analysis.responseColumns[0]
+  const groupKeys: string[] = []
+  const levelKeys: string[] = []
+  const cells = new Map<string, { y: number[]; rowIds: string[]; excluded: boolean[] }>()
+
+  for (const row of result.plotData) {
+    const group = groupCol ? String(row.values[groupCol] ?? "-") : (responseCol ?? "Series")
+    const level = String(row.values[levelCol] ?? "-")
+    const raw = responseCol ? row.values[responseCol] : null
+    const value = typeof raw === "number" ? raw : Number(raw)
+    if (!Number.isFinite(value)) continue
+    if (!groupKeys.includes(group)) groupKeys.push(group)
+    if (!levelKeys.includes(level)) levelKeys.push(level)
+    const key = `${group}\x00${level}`
+    const cell = cells.get(key) ?? { y: [], rowIds: [], excluded: [] }
+    cell.y.push(value)
+    cell.rowIds.push(row.rowId)
+    cell.excluded.push(row.excluded)
+    cells.set(key, cell)
+  }
+  return { groupKeys, levelKeys, cells }
 }
 
 /**
@@ -606,6 +714,188 @@ function barWithPoints(spec: AnalysisSpec, result: EngineResult): Record<string,
   return traces
 }
 
+/**
+ * Grouped bars: one trace per SECOND-FACTOR level, side by side inside each
+ * level of the primary factor.
+ *
+ * `barmode: "group"` cannot group a single trace, which is why this kind fell
+ * through to `barWithPoints` and silently collapsed the second factor of every
+ * two-way ANOVA — the analysis whose DEFAULT figure this is
+ * (workspace/bootstrap.ts). A two-way design drawn as a one-way bar chart is
+ * not a styling defect, it is the figure asserting a comparison that was not
+ * the one run.
+ *
+ * The sub-bar geometry is stated with `offset` and `width` instead of left to
+ * Plotly's own grouping, because the replicate overlay has to land over its own
+ * sub-bar: reproducing Plotly's internal offsets by eye is how points end up
+ * beside the bar they belong to.
+ */
+function groupedBar(spec: AnalysisSpec, result: EngineResult): Record<string, unknown>[] {
+  const levelCol = secondFactor(spec)
+  // One factor is not a grouping. With no second factor this IS a bar chart,
+  // and drawing it as one keeps the replicate overlay and the engine's own
+  // descriptives that `barWithPoints` already gets right.
+  if (!levelCol) return barWithPoints(spec, result)
+
+  const figure = spec.figure
+  const { groupKeys, levelKeys, cells } = cellRows(spec, result, levelCol)
+  // The band one primary level occupies on the numbered axis, split evenly.
+  const band = 0.8
+  const width = band / levelKeys.length
+  /** Centre of level `l`'s sub-bar, relative to its group's tick. */
+  const centreOf = (l: number) => -band / 2 + (l + 0.5) * width
+
+  const traces: Record<string, unknown>[] = []
+
+  for (const [l, level] of levelKeys.entries()) {
+    const style = styleFor(figure, level, l)
+    // Per-cell summaries, from the cell's INCLUDED values only — the same rule
+    // `barWithPoints` follows, one level deeper.
+    const spans = groupKeys.map((g) => {
+      const cell = cells.get(`${g}\x00${level}`)
+      return cell
+        ? errorSpan(includedValues(cell), figure.errorBars)
+        : { centre: Number.NaN, minus: 0, plus: 0 }
+    })
+    traces.push({
+      type: "bar",
+      x: groupKeys.map((_, i) => i),
+      // A cell with no rows draws no bar rather than a bar at zero, which would
+      // read as "measured, and it was nothing".
+      y: spans.map((s) => (Number.isFinite(s.centre) ? s.centre : null)),
+      offset: centreOf(l) - width / 2,
+      width,
+      name: level,
+      marker: { color: style.colour, opacity: style.opacity },
+      error_y: errorBarProps(spans, figure.errorBars),
+      // %{x} is the numeric tick, so the group name rides along as customdata,
+      // exactly as the single-factor bar does.
+      customdata: groupKeys,
+      hovertemplate: `%{customdata} · ${level}: %{y:.3f}<extra></extra>`,
+    })
+  }
+
+  // Replicates over their own sub-bar, carrying their row ids.
+  for (const [l, level] of levelKeys.entries()) {
+    const style = styleFor(figure, level, l)
+    const jitter = style.jitter || 0.12
+    const xs: number[] = []
+    const ys: number[] = []
+    const ids: string[] = []
+    const excluded: boolean[] = []
+    for (const [i, g] of groupKeys.entries()) {
+      const cell = cells.get(`${g}\x00${level}`)
+      if (!cell) continue
+      // Display filter only: the bars above were computed without exclusions,
+      // so hiding these marks cannot move one.
+      const show = cell.y.map((_, k) => !cell.excluded[k] || figure.showExcludedPoints)
+      const shownIds = cell.rowIds.filter((_, k) => show[k])
+      // Spread across the SUB-bar, never the whole band, or a group's clouds
+      // overlap each other and stop identifying which bar they belong to.
+      const offsets = spreadOffsets(shownIds, Math.min(jitter, width * 0.4))
+      shownIds.forEach((id, k) => {
+        ids.push(id)
+        xs.push(i + centreOf(l) + offsets[k])
+      })
+      ys.push(...cell.y.filter((_, k) => show[k]))
+      excluded.push(...cell.excluded.filter((_, k) => show[k]))
+    }
+    if (ids.length === 0) continue
+    traces.push({
+      type: "scatter",
+      mode: "markers",
+      x: xs,
+      y: ys,
+      customdata: ids,
+      name: `${level} points`,
+      marker: {
+        color: excluded.map(() => style.colour),
+        // Excluded points stay on the figure, greyed and hollow (§8.1).
+        line: {
+          width: excluded.map((e) => (e ? 1.5 : 0)),
+          color: excluded.map((e) => (e ? EXCLUDED_COLOUR : style.colour)),
+        },
+        opacity: 0.75,
+        size: style.pointSize,
+        symbol: excluded.map((e) => (e ? "circle-open" : style.pointShape)),
+      },
+      hovertemplate: "%{y:.3f}<br>row %{customdata}<extra></extra>",
+      showlegend: false,
+    })
+  }
+  return traces
+}
+
+/**
+ * Stacked bars as COMPOSITION, not as stacked means.
+ *
+ * This is the deliberate idiom choice. Stacking means produces a bar whose top
+ * is not a quantity anything measured — no sample has the sum of three group
+ * means — and from which the reader can recover neither the parts nor a total.
+ * The idiom the source document names beside the pie is "pie/stacked
+ * composition": parts of a whole. So each segment is the SUM its component
+ * contributes to its group, and the full bar height is the group's total, which
+ * is a real measured quantity and the same one the pie would slice.
+ *
+ * Two consequences follow, both intended:
+ *   - No error bars. A whisker on a segment floating mid-stack would describe
+ *     the spread of a part about a baseline that is itself a sum of OTHER
+ *     parts, which is not an interval anyone can read. `stacked-bar` is out of
+ *     ERROR_BAR_KINDS so the subtitle stops claiming bars this kind never drew.
+ *   - A component absent from a group contributes zero, not a gap: in a
+ *     composition "none of this" is a real answer, unlike a missing mean.
+ *
+ * Components are the second factor's levels when one is mapped; otherwise the
+ * response columns, which is the other genuine composition this data carries
+ * (several measured fractions of one sample).
+ */
+function stackedComposition(spec: AnalysisSpec, result: EngineResult): Record<string, unknown>[] {
+  const figure = spec.figure
+  const levelCol = secondFactor(spec)
+  const groupCol = spec.analysis.groupColumn
+  const responseCol = spec.analysis.responseColumns[0]
+
+  const groupKeys: string[] = []
+  const components: string[] = []
+  const totals = new Map<string, number>()
+  const members = new Map<string, string[]>()
+
+  const add = (group: string, component: string, value: number, rowId: string) => {
+    if (!Number.isFinite(value)) return
+    if (!groupKeys.includes(group)) groupKeys.push(group)
+    if (!components.includes(component)) components.push(component)
+    const key = `${group}\x00${component}`
+    totals.set(key, (totals.get(key) ?? 0) + value)
+    members.set(key, [...(members.get(key) ?? []), rowId])
+  }
+
+  // A segment is a total, so exclusions stay out of it whatever the display
+  // flag says — a stack has no individual mark the flag could grey instead.
+  for (const row of analysisRows(result)) {
+    const group = groupCol ? String(row.values[groupCol] ?? "-") : "All"
+    if (levelCol) {
+      add(group, String(row.values[levelCol] ?? "-"), Number(row.values[responseCol ?? ""]), row.rowId)
+    } else {
+      for (const col of spec.analysis.responseColumns) add(group, col, Number(row.values[col]), row.rowId)
+    }
+  }
+
+  return components.map((component, i) => {
+    const style = styleFor(figure, component, i)
+    return {
+      type: "bar",
+      x: groupKeys,
+      y: groupKeys.map((g) => totals.get(`${g}\x00${component}`) ?? 0),
+      // A segment stands for several rows, so it carries all of their ids —
+      // the same convention a summarised time-course vertex uses.
+      customdata: groupKeys.map((g) => members.get(`${g}\x00${component}`) ?? []),
+      name: component,
+      marker: { color: style.colour, opacity: style.opacity },
+      hovertemplate: `%{x} · ${component}: %{y:.3f}<extra></extra>`,
+    }
+  })
+}
+
 function boxOrViolin(spec: AnalysisSpec, result: EngineResult, kind: "box" | "violin") {
   const figure = spec.figure
   const groups = groupRows(spec, result)
@@ -773,7 +1063,7 @@ function lineTimecourse(spec: AnalysisSpec, result: EngineResult) {
       line: { color: style.colour, width: style.lineWidth, dash: style.lineStyle },
       marker: { color: style.colour, size: style.pointSize, symbol: style.pointShape },
       opacity: style.opacity,
-      yaxis: style.axis === "right" ? "y2" : "y",
+      yaxis: axisTarget(figure, style.axis),
       hovertemplate: "%{x}: %{y:.3f}<br>rows %{customdata}<extra></extra>",
     }
   })
@@ -1067,8 +1357,15 @@ function numericSeries(spec: AnalysisSpec, result: EngineResult, column: string)
   return { values: xs, rowIds: ids }
 }
 
-/** Bars stacked or laid on their side: same data, different `orientation`. */
-function barVariant(spec: AnalysisSpec, result: EngineResult, horizontal: boolean) {
+/**
+ * Bars laid on their side: group means on x, group names on y.
+ *
+ * It used to serve the stacked kind too, with `horizontal: false` — which is
+ * how `stacked-bar` came to be a single trace of means that `barmode: "stack"`
+ * had nothing to stack. Stacking is a composition now (`stackedComposition`)
+ * and shares nothing with this, so the flag is gone.
+ */
+function horizontalBar(spec: AnalysisSpec, result: EngineResult) {
   const figure = spec.figure
   const groups = groupRows(spec, result)
   const keys = [...groups.keys()]
@@ -1077,18 +1374,15 @@ function barVariant(spec: AnalysisSpec, result: EngineResult, horizontal: boolea
   const spans = keys.map((k) =>
     errorSpan(includedValues(groups.get(k)!), figure.errorBars, descriptiveFor(result, k))
   )
-  const centres = spans.map((s) => s.centre)
-  const colours = keys.map((k, i) => styleFor(figure, k, i).colour)
-  const bars = horizontal
-    ? { x: centres, y: keys, orientation: "h" as const }
-    : { x: keys, y: centres }
   return [
     {
       type: "bar",
-      ...bars,
-      marker: { color: colours },
-      [horizontal ? "error_x" : "error_y"]: errorBarProps(spans, figure.errorBars),
-      hovertemplate: horizontal ? "%{y}: %{x:.3f}<extra></extra>" : "%{x}: %{y:.3f}<extra></extra>",
+      x: spans.map((s) => s.centre),
+      y: keys,
+      orientation: "h" as const,
+      marker: { color: keys.map((k, i) => styleFor(figure, k, i).colour) },
+      error_x: errorBarProps(spans, figure.errorBars),
+      hovertemplate: "%{y}: %{x:.3f}<extra></extra>",
       showlegend: false,
     },
   ]
@@ -1098,8 +1392,21 @@ function barVariant(spec: AnalysisSpec, result: EngineResult, horizontal: boolea
 function areaChart(spec: AnalysisSpec, result: EngineResult) {
   const figure = spec.figure
   const xCol = spec.analysis.groupColumn ?? spec.roles.find((r) => r.role === "time")?.column
-  return spec.analysis.responseColumns.map((col, i) => {
-    const style = styleFor(figure, col, i)
+  // Left-axis bands first. `tonexty` fills to the PREVIOUS TRACE in the data
+  // array, so a secondary-axis band sitting between two left-axis ones would
+  // silently become the baseline of the next. Grouping by axis keeps each
+  // stack contiguous; the sort is stable, so within an axis the column order
+  // the user chose survives.
+  const series = spec.analysis.responseColumns
+    .map((col, i) => ({ col, style: styleFor(figure, col, i) }))
+    .sort((a, b) => Number(a.style.axis === "right") - Number(b.style.axis === "right"))
+  const grounded = new Set<string>()
+  return series.map(({ col, style }) => {
+    const target = axisTarget(figure, style.axis)
+    // A band on the secondary axis is not part of the primary stack, so it
+    // rests on its own zero rather than on whatever the last band reached.
+    const first = !grounded.has(target)
+    grounded.add(target)
     // A band's outline is a shape, not a set of marks: an excluded vertex would
     // deform it, so exclusions stay out whatever the display flag says.
     const points = analysisRows(result)
@@ -1111,8 +1418,9 @@ function areaChart(spec: AnalysisSpec, result: EngineResult) {
       mode: "lines",
       // "tonexty" on every trace after the first stacks the bands, which is
       // what an area chart of parts of a whole is for.
-      fill: i === 0 ? "tozeroy" : "tonexty",
+      fill: first ? "tozeroy" : "tonexty",
       fillcolor: withAlpha(style.colour, 0.35),
+      yaxis: target,
       x: points.map((p) => p.x),
       y: points.map((p) => p.y),
       customdata: points.map((p) => p.id),
@@ -1193,12 +1501,17 @@ function qqChart(spec: AnalysisSpec, result: EngineResult) {
       lo = Math.min(lo, t * sd + mean)
       hi = Math.max(hi, t * sd + mean)
     }
+    // Q-Q's y is the observed value in the column's OWN units, so two columns
+    // measured differently genuinely need two scales — and the reference line
+    // has to follow its column onto that scale or it stops being its reference.
+    const target = axisTarget(spec.figure, style.axis)
     traces.push({
       type: "scatter",
       mode: "markers",
       x: theoretical,
       y: sorted,
       name: col,
+      yaxis: target,
       marker: { color: style.colour, size: style.pointSize },
       hovertemplate: `${col}<br>expected %{x:.3f}, observed %{y:.3f}<extra></extra>`,
     })
@@ -1207,6 +1520,7 @@ function qqChart(spec: AnalysisSpec, result: EngineResult) {
       mode: "lines",
       x: [-3, 3],
       y: [-3 * sd + mean, 3 * sd + mean],
+      yaxis: target,
       line: { color: style.colour, width: 1, dash: "dot" },
       showlegend: false,
       hoverinfo: "skip",
@@ -1538,8 +1852,10 @@ export function buildFigure(
   let data: Record<string, unknown>[]
   switch (figure.kind) {
     case "bar-scatter-error":
-    case "grouped-bar":
       data = barWithPoints(spec, result)
+      break
+    case "grouped-bar":
+      data = groupedBar(spec, result)
       break
     case "box":
       data = boxOrViolin(spec, result, "box")
@@ -1570,10 +1886,10 @@ export function buildFigure(
       data = pieComposition(spec, result)
       break
     case "stacked-bar":
-      data = barVariant(spec, result, false)
+      data = stackedComposition(spec, result)
       break
     case "horizontal-bar":
-      data = barVariant(spec, result, true)
+      data = horizontalBar(spec, result)
       break
     case "area":
       data = areaChart(spec, result)
@@ -1685,7 +2001,15 @@ export function buildFigure(
   // unconditional append put "mean ± SD" under a pie chart, a heatmap and a
   // volcano — figures with no error bar anywhere on them.
   const errorNote = ERROR_BAR_KINDS.has(figure.kind) ? ERROR_BAR_LABEL[figure.errorBars] : ""
-  const subtitleBits = [figure.subtitle, errorNote].filter(Boolean)
+  // A silent no-op is worse than a refusal. A series marked `axis: "right"` on
+  // a kind that cannot carry a second scale used to be accepted and drawn on
+  // the left, which on the page is indistinguishable from never having asked.
+  // Which kinds can, and why the rest cannot, is SECONDARY_AXIS_KINDS.
+  const axisNote =
+    figure.series.some((s) => s.axis === "right") && !SECONDARY_AXIS_KINDS.has(figure.kind)
+      ? "secondary axis not available for this chart kind"
+      : ""
+  const subtitleBits = [figure.subtitle, errorNote, axisNote].filter(Boolean)
   // Always subordinate type: with no title of its own, an untitled figure was
   // promoting "mean ± SD" to the headline at full title weight.
   const subtitleText =
@@ -1731,8 +2055,12 @@ export function buildFigure(
       : {}),
   }
 
-  if (figure.y2) {
-    layout.yaxis2 = buildAxis(figure.y2, figure, { overlaying: "y", side: "right" })
+  // The axis is created whenever a trace actually targets it, not only when the
+  // spec happens to carry a `y2`. A trace pointed at an axis Plotly was never
+  // told about is dropped from the figure altogether — the one outcome worse
+  // than ignoring the request.
+  if (figure.y2 || data.some((t) => t.yaxis === "y2")) {
+    layout.yaxis2 = buildAxis(figure.y2 ?? IMPLIED_Y2, figure, { overlaying: "y", side: "right" })
   }
 
   return { data, layout, brackets }
