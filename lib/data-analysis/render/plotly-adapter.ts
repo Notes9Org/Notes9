@@ -1,4 +1,4 @@
-import { bracketId, type AnalysisSpec } from "@/lib/data-analysis/spec/analysis-spec"
+import { bracketId, effectiveScale, type AnalysisSpec } from "@/lib/data-analysis/spec/analysis-spec"
 import type { DescriptiveRow, EngineResult } from "@/lib/data-analysis/engine/contract"
 import { PALETTE_DEFINITIONS, paletteColours, toColorscale } from "./palettes"
 import { rocCurve } from "@/lib/data-analysis/chart-transforms"
@@ -229,11 +229,16 @@ function buildAxis(
   axis: AnalysisSpec["figure"]["x"],
   figure: AnalysisSpec["figure"],
   extra: Record<string, unknown> = {},
-  categorical = false
+  categorical = false,
+  which: "x" | "y" | "y2" = "x"
 ): Record<string, unknown> {
+  // `parseSpec` normally resolves "auto" before a spec ever gets here; resolving
+  // again costs one comparison and keeps a hand-built spec (tests, a caller that
+  // skipped the parser) on the same axis the parsed one would have drawn.
+  const scale = effectiveScale(axis.scale, figure.kind, which)
   const out: Record<string, unknown> = {
     title: { text: axisTitle(axis), font: { size: figure.axisFontSize } },
-    type: axis.scale === "log10" ? "log" : categorical ? "category" : "linear",
+    type: scale === "log10" ? "log" : categorical ? "category" : "linear",
     showgrid: figure.showGridlines,
     zeroline: false,
     automargin: true,
@@ -251,7 +256,7 @@ function buildAxis(
     // Plotly expects log-axis ranges in log units; passing raw values silently
     // produces a wildly wrong scale.
     out.range =
-      axis.scale === "log10"
+      scale === "log10"
         ? [Math.log10(Math.max(axis.min, Number.EPSILON)), Math.log10(Math.max(axis.max, Number.EPSILON))]
         : [axis.min, axis.max]
   }
@@ -330,6 +335,67 @@ export function significanceStars(p: number): string {
   if (p < 0.01) return "**"
   if (p < 0.05) return "*"
   return "ns"
+}
+
+/**
+ * What the figure has to admit out loud.
+ *
+ * A control that cannot apply to the chosen kind, or that applied differently
+ * from how it was asked for, has to say so on the figure. A silent no-op is
+ * worse than a refusal: the reader believes the setting took, and there is
+ * nothing on the page that contradicts them.
+ */
+function idiomNotes(spec: AnalysisSpec, result: EngineResult): string[] {
+  const figure = spec.figure
+  const notes: string[] = []
+
+  if (figure.kind === "violin") {
+    if (figure.violinSplit && !splitLevels(spec, result)) {
+      const levelCol = secondFactor(spec)
+      notes.push(
+        levelCol
+          ? `split violin needs exactly 2 levels of ${levelCol}; drawn unsplit`
+          : "split violin needs a second factor; drawn unsplit"
+      )
+    }
+    if (!figure.violinTruncate) notes.push("density extends past the observed range")
+  } else if (figure.violinSplit || !figure.violinTruncate || !figure.violinInnerBox) {
+    notes.push("violin settings not applied: this is not a violin")
+  }
+
+  if (figure.kind === "volcano") {
+    const { hits, shown } = volcanoLabelled(spec, volcanoPoints(spec, result))
+    if (hits > shown.length) {
+      notes.push(`labelled top ${shown.length} of ${hits} significant features`)
+    }
+  }
+
+  if (figure.kind === "histogram") {
+    if (figure.histogramNorm !== "count") notes.push(figure.histogramNorm)
+  } else if (figure.histogramBins !== null || figure.histogramNorm !== "count") {
+    notes.push("bin settings not applied: this is not a histogram")
+  }
+
+  // The engine already drops a zero-dose control from a log fit and reports it.
+  // A log axis drops it from the PICTURE too, silently, so the figure repeats
+  // the same statement rather than leaving a reader to wonder where the control
+  // went. Counted off `plotData`, so it tracks whatever the engine actually saw.
+  if (effectiveScale(figure.x.scale, figure.kind, "x") === "log10") {
+    const xCol = spec.analysis.responseColumns[0]
+    const nonPositive = xCol
+      ? analysisRows(result).filter((r) => {
+          const v = Number(r.values[xCol])
+          return Number.isFinite(v) && v <= 0
+        }).length
+      : 0
+    if (nonPositive > 0) {
+      notes.push(
+        `${nonPositive} point${nonPositive === 1 ? "" : "s"} at x \u2264 0 cannot be placed on a log axis`
+      )
+    }
+  }
+
+  return notes
 }
 
 /* ── Traces ────────────────────────────────────────────────────────────────*/
@@ -896,8 +962,128 @@ function stackedComposition(spec: AnalysisSpec, result: EngineResult): Record<st
   })
 }
 
+/**
+ * The violin-shaped half of `boxOrViolin`'s trace, or nothing for a box.
+ *
+ * `spanmode` is the whole point. Plotly's default, "soft", runs the kernel a
+ * bandwidth past the extreme observations, so a violin of a concentration, a
+ * count or an elapsed time draws visible density BELOW ZERO — a claim about
+ * values the assay cannot produce, made by the renderer rather than the data.
+ * "hard" clips the estimate to the observed range, which is what makes the
+ * silhouette a statement about the sample instead of about the kernel.
+ */
+function violinShape(figure: AnalysisSpec["figure"], kind: "box" | "violin") {
+  if (kind !== "violin") return {}
+  return {
+    meanline: { visible: true },
+    points: "all",
+    spanmode: figure.violinTruncate ? "hard" : "soft",
+    ...(figure.violinInnerBox ? { box: { visible: true } } : {}),
+  }
+}
+
+/**
+ * The two levels a split violin mirrors, or null when it cannot be drawn.
+ *
+ * A split violin is two conditions reflected about one tick, so it needs a
+ * second factor with EXACTLY two levels. One level has nothing to mirror and
+ * three cannot fit on two sides; both are reported on the figure by
+ * `idiomNotes` rather than quietly falling back to a plain violin.
+ */
+function splitLevels(spec: AnalysisSpec, result: EngineResult) {
+  if (spec.figure.kind !== "violin" || !spec.figure.violinSplit) return null
+  const levelCol = secondFactor(spec)
+  if (!levelCol) return null
+  const cells = cellRows(spec, result, levelCol)
+  return cells.levelKeys.length === 2 ? { levelCol, ...cells } : null
+}
+
+/**
+ * Two half-violins per group tick, one level to each side.
+ *
+ * `scalegroup` is shared across every trace so the two sides are scaled by the
+ * same rule: half-violins normalised independently would make a group of three
+ * replicates as wide as a group of thirty, which is the comparison the reader
+ * is making.
+ */
+function splitViolin(
+  spec: AnalysisSpec,
+  split: NonNullable<ReturnType<typeof splitLevels>>
+) {
+  const figure = spec.figure
+  const traces: Record<string, unknown>[] = []
+
+  split.levelKeys.forEach((level, li) => {
+    const style = styleFor(figure, level, li)
+    const y: number[] = []
+    const x: string[] = []
+    const ids: string[] = []
+    const droppedY: number[] = []
+    const droppedX: string[] = []
+    const droppedIds: string[] = []
+
+    for (const group of split.groupKeys) {
+      const cell = split.cells.get(`${group}\x00${level}`)
+      if (!cell) continue
+      cell.y.forEach((v, k) => {
+        // Same rule as the unsplit violin: the density summarises the included
+        // replicates, the excluded ones are drawn beside it and never inside.
+        if (cell.excluded[k]) {
+          droppedY.push(v)
+          droppedX.push(group)
+          droppedIds.push(cell.rowIds[k])
+        } else {
+          y.push(v)
+          x.push(group)
+          ids.push(cell.rowIds[k])
+        }
+      })
+    }
+
+    traces.push({
+      type: "violin",
+      x,
+      y,
+      customdata: ids,
+      name: level,
+      scalegroup: "split",
+      side: li === 0 ? "negative" : "positive",
+      marker: { color: style.colour, size: style.pointSize },
+      line: { color: style.colour, width: style.lineWidth },
+      opacity: style.opacity,
+      jitter: style.jitter || 0.4,
+      pointpos: 0,
+      ...violinShape(figure, "violin"),
+      hovertemplate: `%{x} · ${level}: %{y:.3f}<br>row %{customdata}<extra></extra>`,
+    })
+
+    if (droppedY.length > 0 && figure.showExcludedPoints) {
+      traces.push({
+        type: "scatter",
+        mode: "markers",
+        x: droppedX,
+        y: droppedY,
+        customdata: droppedIds,
+        name: `${level} excluded`,
+        marker: {
+          color: EXCLUDED_COLOUR,
+          size: style.pointSize,
+          symbol: "circle-open",
+          line: { width: 1.5, color: EXCLUDED_COLOUR },
+        },
+        showlegend: false,
+        hovertemplate: "excluded: %{y:.3f}<br>row %{customdata}<extra></extra>",
+      })
+    }
+  })
+  return traces
+}
+
 function boxOrViolin(spec: AnalysisSpec, result: EngineResult, kind: "box" | "violin") {
   const figure = spec.figure
+  const split = splitLevels(spec, result)
+  if (split) return splitViolin(spec, split)
+
   const groups = groupRows(spec, result)
   const traces: Record<string, unknown>[] = []
 
@@ -919,7 +1105,7 @@ function boxOrViolin(spec: AnalysisSpec, result: EngineResult, kind: "box" | "vi
       boxpoints: "all",
       jitter: style.jitter || 0.4,
       pointpos: 0,
-      ...(kind === "violin" ? { meanline: { visible: true }, points: "all" } : {}),
+      ...violinShape(figure, kind),
       hovertemplate: "%{y:.3f}<br>row %{customdata}<extra></extra>",
     })
 
@@ -1069,19 +1255,130 @@ function lineTimecourse(spec: AnalysisSpec, result: EngineResult) {
   })
 }
 
+/**
+ * Bin count by Freedman-Diaconis, the rule that survives lab data.
+ *
+ * Sturges assumes something close to normal and under-bins the long right tails
+ * that assay readouts actually have. FD is driven by the IQR instead, so a few
+ * extreme wells widen the bins only as much as the bulk of the data says they
+ * should. It degenerates when the IQR is zero (heavily tied readings, a plate
+ * of saturated wells), and Sturges is the fallback for exactly that case.
+ */
+function freedmanDiaconisBins(sorted: number[], min: number, max: number): number {
+  const n = sorted.length
+  const quantile = (q: number) => {
+    const pos = (n - 1) * q
+    const lo = Math.floor(pos)
+    const hi = Math.ceil(pos)
+    return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo)
+  }
+  const iqr = quantile(0.75) - quantile(0.25)
+  const width = iqr > 0 ? (2 * iqr) / Math.cbrt(n) : 0
+  const bins = width > 0 ? Math.ceil((max - min) / width) : Math.ceil(Math.log2(n) + 1)
+  // Capped: an FD width that rounds to near zero on a spiky sample would
+  // otherwise ask for tens of thousands of bars.
+  return Math.min(Math.max(bins, 1), 200)
+}
+
+/**
+ * One set of bin edges shared by every response column on the figure.
+ *
+ * Per-series edges would put two overlaid distributions on two different grids,
+ * so a taller bar could mean "more rows" or just "a wider bin". A common grid
+ * is what makes the overlay a comparison.
+ */
+function binEdges(values: number[], requested: number | null): number[] {
+  if (values.length === 0) return []
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  // Every reading identical: one bin centred on it, rather than a zero-width
+  // grid that divides by zero on a density.
+  if (!(max > min)) return [min - 0.5, min + 0.5]
+  const sorted = [...values].sort((a, b) => a - b)
+  const count = requested ?? freedmanDiaconisBins(sorted, min, max)
+  const width = (max - min) / count
+  return Array.from({ length: count + 1 }, (_, i) => min + i * width)
+}
+
+/**
+ * Histograms, binned here rather than by Plotly.
+ *
+ * `type: "histogram"` bins in the browser and hands the bar back with no route
+ * to the rows underneath it, which breaks the module's Tier 0 rule that every
+ * mark carries its source row id: a reader could not click a bar back to the
+ * spreadsheet. Binning here and emitting `type: "bar"` costs a few lines and
+ * gives each bar the ids of every row inside it — the same "a mark that stands
+ * for several rows carries all of them" convention `stackedComposition` and the
+ * summarised time-course vertices already use.
+ *
+ * It also makes the normalisation explicit: `histnorm` is a Plotly-side
+ * transform we would otherwise have to trust, and a density needs the bin width
+ * the reader is being shown, not the one Plotly picked.
+ */
 function histogram(spec: AnalysisSpec, result: EngineResult) {
   const figure = spec.figure
-  return spec.analysis.responseColumns.map((col, i) => {
+  // A bin height is a number, so exclusions never enter it (§8.1).
+  const rows = analysisRows(result)
+  const columns = spec.analysis.responseColumns
+  const series = columns.map((col) => {
+    const points: { value: number; rowId: string }[] = []
+    for (const row of rows) {
+      const value = Number(row.values[col])
+      if (Number.isFinite(value)) points.push({ value, rowId: row.rowId })
+    }
+    return { col, points }
+  })
+
+  const edges = binEdges(
+    series.flatMap((s) => s.points.map((p) => p.value)),
+    figure.histogramBins
+  )
+  if (edges.length < 2) return []
+  const lastBin = edges.length - 2
+
+  return series.map(({ col, points }, i) => {
     const style = styleFor(figure, col, i)
-    // A bin height is a count, i.e. a number, so exclusions never enter it.
-    const values = analysisRows(result)
-      .map((r) => Number(r.values[col]))
-      .filter((v) => Number.isFinite(v))
+    const ids: string[][] = Array.from({ length: edges.length - 1 }, () => [])
+    for (const p of points) {
+      const raw = Math.floor((p.value - edges[0]) / (edges[1] - edges[0]))
+      // The top edge is closed, so the maximum lands in the last bin instead of
+      // in a phantom one past the end.
+      const bin = Math.min(Math.max(raw, 0), lastBin)
+      ids[bin].push(p.rowId)
+    }
+
+    const total = points.length
+    const height = (count: number, width: number) => {
+      switch (figure.histogramNorm) {
+        case "probability":
+          return total > 0 ? count / total : 0
+        case "density":
+          return count / width
+        case "probability density":
+          return total > 0 ? count / (total * width) : 0
+        default:
+          return count
+      }
+    }
+
     return {
-      type: "histogram",
-      x: values,
+      type: "bar",
+      x: ids.map((_, b) => (edges[b] + edges[b + 1]) / 2),
+      y: ids.map((bin, b) => height(bin.length, edges[b + 1] - edges[b])),
+      width: ids.map((_, b) => edges[b + 1] - edges[b]),
+      // A bar stands for every row in its bin, so it carries every one of their
+      // ids. Tier 0: no mark without a route back to the source row.
+      customdata: ids,
+      text: ids.map((bin) => `${bin.length} row${bin.length === 1 ? "" : "s"}`),
       name: col,
-      marker: { color: style.colour, opacity: style.opacity },
+      marker: {
+        color: style.colour,
+        // Overlaid series have to be see-through or the last one drawn hides
+        // the others; a single series keeps whatever opacity was asked for.
+        opacity: columns.length > 1 ? Math.min(style.opacity, 0.6) : style.opacity,
+        line: { width: 0 },
+      },
+      hovertemplate: `${col} %{x:.3g}: %{y:.4g}<br>%{text}<extra></extra>`,
     }
   })
 }
@@ -1240,13 +1537,12 @@ function sequentialFor(paletteId: string): string {
  * thresholds are drawn from the spec's alpha and the fold-change cut so the
  * lines on the figure are the ones the selection actually used.
  */
-function volcano(spec: AnalysisSpec, result: EngineResult) {
+function volcanoPoints(spec: AnalysisSpec, result: EngineResult) {
   const xCol = spec.analysis.responseColumns[0]
   const pCol = spec.analysis.responseColumns[1]
   if (!xCol || !pCol) return []
 
   const labelCol = spec.analysis.groupColumn
-  const style = styleFor(spec.figure, "volcano", 0)
   const alpha = spec.analysis.alpha
   const fcCut = spec.figure.volcanoFoldChange
 
@@ -1277,7 +1573,29 @@ function volcano(spec: AnalysisSpec, result: EngineResult) {
       }
     })
     .filter((p): p is NonNullable<typeof p> => p !== null)
+  return points
+}
 
+type VolcanoPoint = ReturnType<typeof volcanoPoints>[number]
+
+/**
+ * The significant features that get an on-plot label, most significant first.
+ *
+ * Ranked by −log10 p and broken by |effect|, which is the order a reader scans
+ * a volcano in. Excluded rows are never labelled: a name on the plot reads as a
+ * finding, and a row dropped from the analysis has not earned one.
+ */
+function volcanoLabelled(spec: AnalysisSpec, points: VolcanoPoint[]) {
+  const hits = points.filter((p) => p.hit && !p.excluded)
+  const ranked = [...hits].sort((a, b) => b.y - a.y || Math.abs(b.x) - Math.abs(a.x))
+  return { hits: hits.length, shown: ranked.slice(0, spec.figure.volcanoLabelCount) }
+}
+
+function volcano(spec: AnalysisSpec, result: EngineResult) {
+  const points = volcanoPoints(spec, result)
+  if (points.length === 0) return []
+  const style = styleFor(spec.figure, "volcano", 0)
+  const { shown } = volcanoLabelled(spec, points)
   const palette = paletteColours(spec.figure.palette)
   return [
     {
@@ -1298,6 +1616,28 @@ function volcano(spec: AnalysisSpec, result: EngineResult) {
       hovertemplate: "%{text}<br>effect %{x:.3f}<br>-log10 p %{y:.2f}<extra></extra>",
       showlegend: false,
     },
+    // The labels ARE the output of a volcano — a reader who cannot get names
+    // off it has a scatter of unnamed dots. Only the top hits get one, because
+    // twenty thousand overlapping names is the same as none; how many were
+    // labelled and how many qualified is stated in the subtitle, so the bound
+    // is visible rather than a silent truncation.
+    ...(shown.length > 0
+      ? [
+          {
+            type: "scatter",
+            mode: "text",
+            x: shown.map((p) => p.x),
+            y: shown.map((p) => p.y),
+            customdata: shown.map((p) => p.rowId),
+            text: shown.map((p) => p.label),
+            textposition: "top center",
+            textfont: { size: Math.max(spec.figure.axisFontSize - 3, 7) },
+            name: "labels",
+            hoverinfo: "skip",
+            showlegend: false,
+          },
+        ]
+      : []),
   ]
 }
 
@@ -2009,7 +2349,9 @@ export function buildFigure(
     figure.series.some((s) => s.axis === "right") && !SECONDARY_AXIS_KINDS.has(figure.kind)
       ? "secondary axis not available for this chart kind"
       : ""
-  const subtitleBits = [figure.subtitle, errorNote, axisNote].filter(Boolean)
+  const subtitleBits = [figure.subtitle, errorNote, axisNote, ...idiomNotes(spec, result)].filter(
+    Boolean
+  )
   // Always subordinate type: with no title of its own, an untitled figure was
   // promoting "mean ± SD" to the headline at full title weight.
   const subtitleText =
@@ -2047,7 +2389,14 @@ export function buildFigure(
       : { width: figure.width, height: figure.height }),
     shapes,
     annotations,
-    barmode: figure.kind === "grouped-bar" ? "group" : "stack",
+    // Overlaid histograms need "overlay" plus the per-trace opacity `histogram`
+    // sets; "stack" would add the series and draw a distribution nobody has.
+    barmode:
+      figure.kind === "histogram"
+        ? "overlay"
+        : figure.kind === "grouped-bar"
+          ? "group"
+          : "stack",
     // Forest and horizontal bars put the categories on y, so that axis is the
     // categorical one and x carries the estimate.
     ...(figure.kind === "forest" || figure.kind === "horizontal-bar"
@@ -2060,7 +2409,7 @@ export function buildFigure(
   // told about is dropped from the figure altogether — the one outcome worse
   // than ignoring the request.
   if (figure.y2 || data.some((t) => t.yaxis === "y2")) {
-    layout.yaxis2 = buildAxis(figure.y2 ?? IMPLIED_Y2, figure, { overlaying: "y", side: "right" })
+    layout.yaxis2 = buildAxis(figure.y2 ?? IMPLIED_Y2, figure, { overlaying: "y", side: "right" }, false, "y2")
   }
 
   return { data, layout, brackets }

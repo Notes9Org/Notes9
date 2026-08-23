@@ -1238,7 +1238,7 @@ describe("every chart kind the spec names can be drawn", () => {
     "bar-scatter-error", "grouped-bar", "stacked-bar", "horizontal-bar", "box", "violin",
     "xy-scatter-fit", "bubble", "line-timecourse", "area", "histogram", "ecdf", "qq",
     "heatmap", "correlation-matrix", "volcano", "roc", "bland-altman", "forest",
-    "pie-composition", "scatter-3d", "surface-3d",
+    "pie-composition", "scatter-3d", "surface-3d", "dose-response",
   ] as const
 
   function everyKind(kind: (typeof KINDS)[number], engine = xy) {
@@ -1289,13 +1289,30 @@ describe("every chart kind the spec names can be drawn", () => {
     "horizontal-bar": (f) =>
       expect(f.data.some((t) => t.type === "bar" && t.orientation === "h")).toBe(true),
     box: (f) => expect(f.data.some((t) => t.type === "box")).toBe(true),
-    violin: (f) => expect(f.data.some((t) => t.type === "violin")).toBe(true),
+    violin: (f) => {
+      expect(f.data.some((t) => t.type === "violin")).toBe(true)
+      // The idiom is not "a violin": it is a density that stops where the data
+      // stops. Plotly's default runs the kernel past the extremes, which draws
+      // density below zero for a concentration, a count or a time.
+      expect(f.data.filter((t) => t.type === "violin").every((t) => t.spanmode === "hard")).toBe(
+        true
+      )
+    },
     "line-timecourse": (f) => {
       expect(f.data.some((t) => String(t.mode).includes("lines"))).toBe(true)
       // "line/time-course WITH ERROR BARS" is the requirement verbatim.
       expect(f.data.some((t) => t.error_y !== undefined)).toBe(true)
     },
-    histogram: (f) => expect(f.data.some((t) => t.type === "histogram")).toBe(true),
+    histogram: (f) => {
+      // Binned here, not by Plotly: `type: "histogram"` hands back a bar with
+      // no route to the rows inside it, which is a Tier 0 break.
+      const bars = f.data.filter((t) => t.type === "bar")
+      expect(bars.length).toBeGreaterThan(0)
+      expect(f.layout.barmode).toBe("overlay")
+      expect(bars.every((t) => Array.isArray(t.customdata))).toBe(true)
+      // Contiguous bars: a histogram with gaps is a bar chart of categories.
+      expect(bars.every((t) => Array.isArray(t.width))).toBe(true)
+    },
     heatmap: (f) => expect(f.data.some((t) => t.type === "heatmap")).toBe(true),
     "correlation-matrix": (f) => expect(f.data.some((t) => t.type === "heatmap")).toBe(true),
     "pie-composition": (f) => expect(f.data.some((t) => t.type === "pie")).toBe(true),
@@ -1305,6 +1322,19 @@ describe("every chart kind the spec names can be drawn", () => {
     ecdf: (f) => expect(f.data.some((t) => (t.line as { shape?: string })?.shape === "hv")).toBe(true),
     roc: (f) => expect(f.data.some((t) => String(t.name).startsWith("ROC"))).toBe(true),
     area: (f) => expect(f.data.some((t) => t.fill !== undefined)).toBe(true),
+    volcano: (f) => {
+      expect(f.data.some((t) => t.mode === "markers")).toBe(true)
+      // Nothing in this fixture clears alpha, and a label trace with nothing to
+      // say would be a mark standing for no finding. The labels themselves are
+      // exercised on volcano-shaped data below.
+      expect(f.data.some((t) => t.mode === "text")).toBe(false)
+    },
+    "dose-response": (f) => {
+      // A 4PL on a linear dose axis crushes the low-dose half into the margin,
+      // which is the half the EC50 comes from.
+      expect((f.layout.xaxis as { type: string }).type).toBe("log")
+      expect(f.data.some((t) => t.mode === "markers")).toBe(true)
+    },
   }
 
   it.each(KINDS)("draws the idiom that makes it a %s", (kind) => {
@@ -1317,8 +1347,11 @@ describe("every chart kind the spec names can be drawn", () => {
   it.each(KINDS)("carries a row id back to the spreadsheet from %s", (kind) => {
     // §2's data↔figure link. Aggregate kinds (a heatmap cell, a pie slice, an
     // ECDF step) have no single source row, so they are exempt by nature.
+    // `histogram` used to sit here, which is how it shipped with no row link at
+    // all. A bar covers many rows, so it carries all of their ids — the same
+    // convention a stacked segment and a summarised time-course vertex use.
     const aggregate = new Set([
-      "heatmap", "correlation-matrix", "pie-composition", "histogram", "ecdf", "qq",
+      "heatmap", "correlation-matrix", "pie-composition", "ecdf", "qq",
       "roc", "surface-3d", "stacked-bar", "horizontal-bar", "area",
     ])
     if (aggregate.has(kind)) return
@@ -1824,5 +1857,313 @@ describe("a summarised vertex still links back to the spreadsheet", () => {
     const customdata = (trace.customdata as string[][])[0]
     expect(customdata).toEqual(["t1", "t2"])
     expect(rowIdAtPoint([{ customdata }], triplicates)).toBe("t1")
+  })
+})
+
+/* ── The four idioms the kinds were missing ───────────────────────────────
+   Each of these asserts a scientific claim about the picture, not the shape of
+   the object that produces it: where the density stops, which axis a fit lands
+   on, whether a reader can get names off the plot, whether a bar leads back to
+   rows. */
+
+describe("violin: the density stops where the data stops", () => {
+  // Times, counts and concentrations are non-negative by construction. Plotly's
+  // default spanmode runs the kernel a bandwidth past the extremes, so a violin
+  // of a quantity floored at zero draws visible density below zero.
+  const nonNegative = result({
+    plotData: [0.2, 0.4, 0.5, 0.6, 12, 0.3, 0.35, 0.45].map((v, i) => ({
+      rowId: `n${i}`,
+      values: { treatment: i % 2 ? "Drug" : "Ctrl", conc: v },
+      excluded: false,
+    })),
+  })
+  const violinSpec = (figure: Record<string, unknown> = {}) =>
+    spec({
+      analysis: {
+        test: "none",
+        groupColumn: "treatment",
+        responseColumns: ["conc"],
+      },
+      figure: { kind: "violin", x: {}, y: {}, errorBars: "none", ...figure },
+    })
+
+  it("truncates to the observed range by default", () => {
+    const violins = buildFigure(violinSpec(), nonNegative).data.filter(
+      (t) => t.type === "violin"
+    )
+    expect(violins.length).toBeGreaterThan(0)
+    for (const t of violins) expect(t.spanmode).toBe("hard")
+  })
+
+  it("lets the soft tail back for a genuinely unbounded quantity, and says so", () => {
+    const figure = buildFigure(violinSpec({ violinTruncate: false }), nonNegative)
+    expect(figure.data.filter((t) => t.type === "violin").every((t) => t.spanmode === "soft")).toBe(
+      true
+    )
+    expect((figure.layout.title as { text: string }).text).toContain(
+      "density extends past the observed range"
+    )
+  })
+
+  it("draws the median/IQR box inside the density by default, and drops it when asked", () => {
+    const withBox = buildFigure(violinSpec(), nonNegative).data.find((t) => t.type === "violin")
+    expect((withBox!.box as { visible: boolean }).visible).toBe(true)
+    const without = buildFigure(violinSpec({ violinInnerBox: false }), nonNegative).data.find(
+      (t) => t.type === "violin"
+    )
+    expect(without!.box).toBeUndefined()
+  })
+
+  it("mirrors two levels of a second factor about one tick", () => {
+    const paired = result({
+      plotData: Array.from({ length: 12 }, (_, i) => ({
+        rowId: `p${i}`,
+        values: {
+          treatment: i % 2 ? "Drug" : "Ctrl",
+          sex: i % 4 < 2 ? "F" : "M",
+          conc: 1 + (i % 5) * 0.4,
+        },
+        excluded: false,
+      })),
+    })
+    const figure = buildFigure(
+      spec({
+        analysis: {
+          test: "none",
+          groupColumn: "treatment",
+          secondFactorColumn: "sex",
+          responseColumns: ["conc"],
+        },
+        figure: { kind: "violin", x: {}, y: {}, errorBars: "none", violinSplit: true },
+      }),
+      paired
+    )
+    const violins = figure.data.filter((t) => t.type === "violin")
+    expect(violins).toHaveLength(2)
+    expect(violins.map((t) => t.side).sort()).toEqual(["negative", "positive"])
+    // Halves normalised apart would make three replicates as wide as thirty.
+    expect(new Set(violins.map((t) => t.scalegroup)).size).toBe(1)
+    // Both halves still sit over the group ticks, not over one collapsed tick.
+    expect(new Set(violins.flatMap((t) => t.x as string[]))).toEqual(new Set(["Ctrl", "Drug"]))
+  })
+
+  it("refuses a split it cannot draw out loud rather than silently drawing one violin", () => {
+    const figure = buildFigure(
+      spec({
+        analysis: {
+          test: "none",
+          groupColumn: "treatment",
+          responseColumns: ["conc"],
+        },
+        figure: { kind: "violin", x: {}, y: {}, errorBars: "none", violinSplit: true },
+      }),
+      nonNegative
+    )
+    expect(figure.data.every((t) => t.side === undefined)).toBe(true)
+    expect((figure.layout.title as { text: string }).text).toContain("split violin needs")
+  })
+
+  it("says so when violin settings are asked for on a kind that is not a violin", () => {
+    const figure = buildFigure(
+      spec({ figure: { kind: "box", x: {}, y: {}, errorBars: "none", violinSplit: true } }),
+      nonNegative
+    )
+    expect((figure.layout.title as { text: string }).text).toContain(
+      "violin settings not applied"
+    )
+  })
+})
+
+describe("dose-response: the dose axis is logarithmic unless someone says otherwise", () => {
+  const doses = result({
+    plotData: [0, 0.01, 0.1, 1, 10, 100].map((d, i) => ({
+      rowId: `d${i}`,
+      values: { dose: d, signal: 100 / (1 + Math.pow(10 / Math.max(d, 1e-6), 1)) },
+      excluded: false,
+    })),
+  })
+  const drSpec = (x: Record<string, unknown>) =>
+    spec({
+      analysis: { test: "none", groupColumn: null, responseColumns: ["dose", "signal"] },
+      figure: { kind: "dose-response", x, y: {}, errorBars: "none" },
+    })
+
+  it("defaults to log x when the spec never named a scale", () => {
+    const parsed = drSpec({})
+    // Resolved in the spec itself, not only at draw time: the chart-state round
+    // trip writes a concrete scale back on every edit, so a sentinel that only
+    // the renderer understood would be erased by the first toolbar interaction.
+    expect(parsed.figure.x.scale).toBe("log10")
+    expect((buildFigure(parsed, doses).layout.xaxis as { type: string }).type).toBe("log")
+  })
+
+  it("leaves an explicitly chosen linear axis alone", () => {
+    const parsed = drSpec({ scale: "linear" })
+    expect(parsed.figure.x.scale).toBe("linear")
+    expect((buildFigure(parsed, doses).layout.xaxis as { type: string }).type).toBe("linear")
+  })
+
+  it("does not push a log default onto any other kind", () => {
+    expect(spec().figure.x.scale).toBe("linear")
+    expect(spec().figure.y.scale).toBe("linear")
+    expect(drSpec({}).figure.y.scale).toBe("linear")
+  })
+
+  it("reports the zero-dose control the log axis cannot place", () => {
+    // The engine already drops it from the fit and says so. The axis drops it
+    // from the picture too, and that has to be said in the same place.
+    const text = (buildFigure(drSpec({}), doses).layout.title as { text: string }).text
+    expect(text).toContain("1 point at x ≤ 0 cannot be placed on a log axis")
+    // …and there is nothing to report once the axis can place it.
+    expect(
+      (buildFigure(drSpec({ scale: "linear" }), doses).layout.title as { text: string }).text
+    ).not.toContain("cannot be placed")
+  })
+})
+
+describe("volcano: the labels are the output", () => {
+  const features = (n: number) =>
+    result({
+      plotData: Array.from({ length: n }, (_, i) => ({
+        rowId: `g${i}`,
+        // Every feature clears both thresholds; significance descends with i so
+        // the ranking is checkable.
+        values: { gene: `GENE${i}`, effect: 2 + i * 0.1, p: Math.pow(10, -(20 - i * 0.1)) },
+        excluded: false,
+      })),
+    })
+  const vSpec = (figure: Record<string, unknown> = {}) =>
+    spec({
+      analysis: {
+        test: "none",
+        groupColumn: "gene",
+        responseColumns: ["effect", "p"],
+      },
+      figure: { kind: "volcano", x: {}, y: {}, errorBars: "none", ...figure },
+    })
+
+  it("labels the significant hits on the plot", () => {
+    const labels = buildFigure(vSpec(), features(4)).data.find((t) => t.mode === "text")
+    expect(labels!.text).toEqual(["GENE0", "GENE1", "GENE2", "GENE3"])
+    // A label is a mark; Tier 0 applies to it too.
+    expect(labels!.customdata).toEqual(["g0", "g1", "g2", "g3"])
+  })
+
+  it("bounds the labels and states the bound instead of truncating quietly", () => {
+    const figure = buildFigure(vSpec(), features(40))
+    const labels = figure.data.find((t) => t.mode === "text")
+    expect((labels!.text as string[]).length).toBe(10)
+    // Most significant first, so the ten shown are the ten worth showing.
+    expect((labels!.text as string[])[0]).toBe("GENE0")
+    expect((figure.layout.title as { text: string }).text).toContain(
+      "labelled top 10 of 40 significant features"
+    )
+  })
+
+  it("honours a raised bound, and says nothing when everything fits", () => {
+    const figure = buildFigure(vSpec({ volcanoLabelCount: 50 }), features(40))
+    expect((figure.data.find((t) => t.mode === "text")!.text as string[]).length).toBe(40)
+    expect((figure.layout.title as { text: string }).text).not.toContain("labelled top")
+  })
+
+  it("never labels an excluded row", () => {
+    const withExcluded = features(3)
+    withExcluded.plotData[0].excluded = true
+    const labels = buildFigure(vSpec(), withExcluded).data.find((t) => t.mode === "text")
+    expect(labels!.text).toEqual(["GENE1", "GENE2"])
+  })
+})
+
+describe("histogram: a bar resolves back to its rows", () => {
+  const readings = result({
+    plotData: Array.from({ length: 40 }, (_, i) => ({
+      rowId: `h${i}`,
+      values: { treatment: "Ctrl", od: i * 0.25, other: 2 + i * 0.25 },
+      excluded: i === 39,
+    })),
+  })
+  const hSpec = (figure: Record<string, unknown> = {}, columns = ["od"]) =>
+    spec({
+      analysis: { test: "none", groupColumn: null, responseColumns: columns },
+      figure: { kind: "histogram", x: {}, y: {}, errorBars: "none", ...figure },
+    })
+
+  it("carries every row id in the bin on the bar that covers it", () => {
+    const bars = buildFigure(hSpec(), readings).data.filter((t) => t.type === "bar")
+    expect(bars).toHaveLength(1)
+    const ids = bars[0].customdata as string[][]
+    const counts = bars[0].y as number[]
+    ids.forEach((bin, b) => expect(bin.length).toBe(counts[b]))
+    // Every included row is reachable from exactly one bar; the excluded one is
+    // in no bin, because a bin height is a number.
+    const flat = ids.flat()
+    expect(flat).toHaveLength(39)
+    expect(new Set(flat).size).toBe(39)
+    expect(flat).not.toContain("h39")
+    // …and clicking the bar gets you back to the spreadsheet.
+    expect(rowIdAtPoint([{ customdata: ids[0] }], readings)).toBe(ids[0][0])
+  })
+
+  it("honours an explicit bin count", () => {
+    const bars = buildFigure(hSpec({ histogramBins: 5 }), readings).data.filter(
+      (t) => t.type === "bar"
+    )
+    expect((bars[0].y as number[]).length).toBe(5)
+    expect((bars[0].customdata as string[][]).flat()).toHaveLength(39)
+  })
+
+  it("normalises to probability and density without losing the row link", () => {
+    const counts = buildFigure(hSpec({ histogramBins: 4 }), readings).data[0]
+    const probability = buildFigure(
+      hSpec({ histogramBins: 4, histogramNorm: "probability" }),
+      readings
+    ).data[0]
+    const density = buildFigure(
+      hSpec({ histogramBins: 4, histogramNorm: "density" }),
+      readings
+    ).data[0]
+    const width = (counts.width as number[])[0]
+    expect((probability.y as number[])[0]).toBeCloseTo((counts.y as number[])[0] / 39, 10)
+    expect((density.y as number[])[0]).toBeCloseTo((counts.y as number[])[0] / width, 10)
+    // Probabilities are a distribution: they sum to one.
+    expect((probability.y as number[]).reduce((a, b) => a + b, 0)).toBeCloseTo(1, 10)
+    expect(probability.customdata).toEqual(counts.customdata)
+  })
+
+  it("overlays several series on one grid so the comparison is honest", () => {
+    const figure = buildFigure(hSpec({ histogramBins: 8 }, ["od", "other"]), readings)
+    const bars = figure.data.filter((t) => t.type === "bar")
+    expect(bars).toHaveLength(2)
+    expect(figure.layout.barmode).toBe("overlay")
+    // One set of edges for both, or a taller bar could just mean a wider bin.
+    expect(bars[0].x).toEqual(bars[1].x)
+    expect(bars[0].width).toEqual(bars[1].width)
+    // …and the grid has to SPAN both series. `od` runs 0-9.75 and `other` runs
+    // 2-11.75; a grid cut from one of them alone shifts the other off its own
+    // edges and clamps its tail into one bar, which is a shared grid in shape
+    // only.
+    for (const t of bars) {
+      expect((t.y as number[]).filter((v) => v > 0).length).toBeGreaterThan(1)
+      expect((t.customdata as string[][]).flat()).toHaveLength(39)
+    }
+    const centres = bars[0].x as number[]
+    const widths = bars[0].width as number[]
+    const lo = centres[0] - widths[0] / 2
+    const hi = centres[centres.length - 1] + widths[widths.length - 1] / 2
+    // `od` runs 0-9.5 and `other` runs 2-11.5. Edges cut from either column
+    // alone leave the other's tail outside the grid, where it can only be
+    // clamped into the end bar — a shared grid in shape and a wrong one in fact.
+    expect(lo).toBeLessThanOrEqual(0)
+    expect(hi).toBeGreaterThanOrEqual(11.5)
+    // See-through, or the last one drawn hides the first.
+    for (const t of bars) expect((t.marker as { opacity: number }).opacity).toBeLessThan(1)
+  })
+
+  it("says so when bin settings are asked for on a kind that cannot bin", () => {
+    const figure = buildFigure(
+      spec({ figure: { kind: "box", x: {}, y: {}, errorBars: "none", histogramBins: 5 } }),
+      readings
+    )
+    expect((figure.layout.title as { text: string }).text).toContain("bin settings not applied")
   })
 })
