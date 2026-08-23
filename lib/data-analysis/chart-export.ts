@@ -212,22 +212,23 @@ function encodeTiff(image: ImageData, dpi: number, cmyk = false): Uint8Array {
   return u8
 }
 
-/** Composite a transparent PNG onto white, preserving its pixel dimensions. */
-async function flattenOntoWhite(pngUrl: string): Promise<string> {
-  const image = await urlToImageData(pngUrl)
+/**
+ * Composite a transparent raster onto white and re-encode it as `mime`.
+ *
+ * `urlToImageData` has already done the compositing (it fills white before it
+ * draws), so this only has to put the flattened pixels back through an encoder.
+ * The mime matters: `canvas.toDataURL("image/jpeg")` composites whatever alpha
+ * survives onto BLACK, so the input has to be opaque before it gets here.
+ */
+async function flattenOntoWhite(url: string, mime: string): Promise<string> {
+  const image = await urlToImageData(url)
   const canvas = document.createElement("canvas")
   canvas.width = image.width
   canvas.height = image.height
   const ctx = canvas.getContext("2d")
-  if (!ctx) return pngUrl
-  ctx.fillStyle = "#ffffff"
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
-  const tmp = document.createElement("canvas")
-  tmp.width = image.width
-  tmp.height = image.height
-  tmp.getContext("2d")?.putImageData(image, 0, 0)
-  ctx.drawImage(tmp, 0, 0)
-  return canvas.toDataURL("image/png")
+  if (!ctx) return url
+  ctx.putImageData(image, 0, 0)
+  return canvas.toDataURL(mime, mime === "image/jpeg" ? 0.95 : undefined)
 }
 
 /**
@@ -258,15 +259,36 @@ export async function exportChartImage(
   },
 ): Promise<void> {
   const { format, dpi, filename, transparent = false, colourSpace = "rgb" } = opts
-  const scale = dpi / 96
-  // Explicit dimensions win over the DPI scale, so "this journal wants 85mm at
-  // 300dpi" is expressible exactly rather than approximately.
+
+  // Plotly's `width`/`height` RE-LAY OUT the figure, and its font sizes are
+  // absolute pixels — so handing it 1004px to satisfy "85mm at 300dpi" does not
+  // enlarge the type, it shrinks it against the frame (~3pt tick labels, and
+  // ~0.8pt for 180mm at 1200dpi). `scale` is the knob that leaves the layout —
+  // and therefore the typography — exactly as it is on screen and multiplies
+  // the pixels. So a requested physical size is met by SCALING the on-screen
+  // layout up to it, never by re-laying out into it.
+  const onScreenW = gd.clientWidth
+  const onScreenH = gd.clientHeight
   const size =
-    opts.width && opts.height ? { width: opts.width, height: opts.height, scale: 1 } : { scale }
+    opts.width && opts.height && onScreenW > 0 && onScreenH > 0
+      ? { width: onScreenW, height: onScreenH, scale: opts.width / onScreenW }
+      : { scale: dpi / 96 }
 
   if (VECTOR_FORMATS.has(format)) {
+    // A vector has no resolution, so a requested width can only mean physical
+    // size — and it used to be dropped on the floor here, silently handing back
+    // an "85 mm" PDF at whatever width the screen happened to be. Convert the
+    // DPI-referenced pixel target back to CSS px (96/inch); svg-vector maps
+    // 1 px → 0.75 pt, so the page lands on exactly the millimetres requested.
+    const physical =
+      opts.width && opts.height
+        ? {
+            width: Math.round((opts.width * 96) / dpi),
+            height: Math.round((opts.height * 96) / dpi),
+          }
+        : {}
     // Plotly returns svg as a URI-encoded (not base64) data URL.
-    const url: string = await plotly.toImage(gd, { format: "svg" })
+    const url: string = await plotly.toImage(gd, { format: "svg", ...physical })
     const comma = url.indexOf(",")
     const body = url.slice(comma + 1)
     const svg = url.slice(0, comma).includes("base64") ? atob(body) : decodeURIComponent(body)
@@ -299,14 +321,16 @@ export async function exportChartImage(
     return
   }
 
-  const url: string = await plotly.toImage(gd, { format, ...size })
-  // The figure's own backgrounds are already transparent (the renderer sets
-  // both to rgba(0,0,0,0)), so PNG comes out transparent by default. An opaque
-  // export is therefore the one that needs work: flatten onto white, because a
-  // transparent PNG dropped into a manuscript renders black-on-black in more
-  // than one word processor.
+  // The figure's own backgrounds are transparent (the renderer sets both to
+  // rgba(0,0,0,0)), so EVERY opaque format needs flattening, not just PNG.
+  // Plotly's own JPEG encode is `canvas.toDataURL("image/jpeg")`, which
+  // composites transparent pixels onto BLACK in every major browser — which is
+  // why JPEG exports came out black. So always render PNG (the one raster
+  // format that carries alpha), flatten it onto white ourselves, and re-encode
+  // into the requested format. PNG keeps its alpha only when asked to.
+  const pngUrl: string = await plotly.toImage(gd, { format: "png", ...size })
   const opaqueUrl =
-    format === "png" && !transparent ? await flattenOntoWhite(url) : url
+    format === "png" && transparent ? pngUrl : await flattenOntoWhite(pngUrl, `image/${format}`)
   let bytes = dataUrlToBytes(opaqueUrl)
   if (format === "png") bytes = pngWithDpi(bytes, dpi)
   else if (format === "jpeg") bytes = jpegWithDpi(bytes, dpi)
