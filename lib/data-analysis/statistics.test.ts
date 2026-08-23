@@ -20,7 +20,13 @@ import {
   mannWhitney,
   wilcoxonSignedRank,
   kruskalWallis,
+  andersonDarling,
+  andersonDarlingP,
+  AD_MIN_N,
+  shapiroWilk,
+  FDR_METHODS,
 } from "./statistics"
+import { tCritical } from "./distributions"
 
 vdescribe("descriptives+", () => {
   it("geometric mean and skewness", () => {
@@ -363,5 +369,328 @@ vdescribe("Kruskal–Wallis", () => {
     expect(r.stat[0].value).toBeCloseTo(9.846153846153847, 10)
     expect(r.p).toBeCloseTo(0.007276706499332492, 10)
     expect(r.note).not.toContain("corrected")
+  })
+})
+
+/* ── Anderson–Darling normality ───────────────────────────────────────────────
+ * A² goldens are `scipy.stats.anderson(x, "norm").statistic` on the identical
+ * arrays; the p goldens are the D'Agostino & Stephens (1986) fit, transcribed
+ * from the published coefficients. scipy returns no p at all, which is exactly
+ * why the fit is used and why the result says so out loud.
+ */
+vdescribe("Anderson–Darling normality", () => {
+  const cases: Record<string, { x: number[]; a2: number; p: number }> = {
+    normalish: {
+      x: [4.1, 4.5, 4.3, 4.9, 5.2, 4.7, 5.0, 4.4, 4.8, 4.6],
+      a2: 0.08623033212812281,
+      p: 0.9971718414677682,
+    },
+    rightSkewed: {
+      x: [1, 1, 1, 2, 2, 3, 3, 4, 6, 10, 18, 40],
+      a2: 1.7901412349635049,
+      p: 6.408088669541492e-5,
+    },
+    uniform: { x: [1, 2, 3, 4, 5, 6, 7, 8, 9], a2: 0.1367664663147039, p: 0.9605614887337001 },
+    bimodal: {
+      x: [1, 1.1, 1.2, 1.3, 1.4, 1.5, 9, 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8, 9.9],
+      a2: 2.4448276500637256,
+      p: 1.6465039390911463e-6,
+    },
+    outlier: {
+      x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1e6],
+      a2: 3.6092848106957067,
+      p: 9.136243350447911e-10,
+    },
+    // These two exist to land A* in the fit's [0.2,0.34) and [0.34,0.6) pieces.
+    fitPiece2: { x: [6.3, 13.1, 9.8, 11.4, 9.7, 9.2, 10.9, 11.6], a2: 0.27793433189707883, p: 0.546579048373738 },
+    fitPiece3: { x: [12.7, 12.4, 9.0, 9.4, 8.9, 11.1, 9.9, 11.5], a2: 0.3371540693792081, p: 0.4021738141179188 },
+  }
+
+  it("matches scipy.stats.anderson on the A² statistic", () => {
+    for (const [label, c] of Object.entries(cases)) {
+      const r = andersonDarling(c.x)!
+      expect(r, label).not.toBeNull()
+      expect(r.stat[0].value / c.a2, label).toBeCloseTo(1, 10)
+    }
+  })
+
+  it("matches the published D'Agostino–Stephens p on every branch of the fit", () => {
+    const branches = new Set<number>()
+    for (const [label, c] of Object.entries(cases)) {
+      const n = c.x.length
+      const r = andersonDarling(c.x)!
+      expect(r.p / c.p, label).toBeCloseTo(1, 8)
+      const star = c.a2 * (1 + 0.75 / n + 2.25 / (n * n))
+      branches.add(star < 0.2 ? 0 : star < 0.34 ? 1 : star < 0.6 ? 2 : 3)
+    }
+    expect(branches).toEqual(new Set([0, 1, 2, 3]))
+    expect(andersonDarlingP(20, 30)).toBe(3.7e-24) // the ≥ 10 floor
+  })
+
+  it("agrees with the Python engine, which is the whole point of sharing the formula", () => {
+    // notes9_engine._anderson_darling on the same arrays; goldens copied from
+    // the Python suite so a drift in either engine fails here.
+    expect(andersonDarling(cases.normalish.x)!.p).toBeCloseTo(0.9971718414677682, 12)
+    expect(andersonDarling(cases.bimodal.x)!.p / 1.6465039390911463e-6).toBeCloseTo(1, 9)
+  })
+
+  it("declines below n = 8 rather than extrapolating the fit", () => {
+    expect(AD_MIN_N).toBe(8)
+    expect(andersonDarling([1, 2, 3, 4, 5, 6, 7])).toBeNull()
+    expect(andersonDarling([1, 2, 3, 4, 5, 6, 7, 8])).not.toBeNull()
+  })
+
+  it("declines on a constant column instead of dividing by a zero SD", () => {
+    expect(andersonDarling(new Array(12).fill(3))).toBeNull()
+  })
+
+  it("stays finite where a naive Φ would give NaN", () => {
+    // The 1e6 outlier puts the largest z past 3 and every other z near −0.3;
+    // with A&S-accuracy Φ the ln(1 − Φ) term loses all its digits.
+    const r = andersonDarling(cases.outlier.x)!
+    expect(Number.isFinite(r.stat[0].value)).toBe(true)
+    expect(r.p).toBeLessThan(1e-8)
+  })
+
+  it("says in the record that its p is an approximation", () => {
+    for (const x of [cases.normalish.x, cases.bimodal.x]) {
+      expect(andersonDarling(x)!.note).toContain("approximation")
+    }
+  })
+
+  it("flags the bimodal column that Shapiro–Wilk also flags", () => {
+    expect(andersonDarling(cases.bimodal.x)!.p).toBeLessThan(0.05)
+    expect(shapiroWilk(cases.bimodal.x)!.p).toBeLessThan(0.05)
+    // …and clears the one both accept, so it is not simply always significant.
+    expect(andersonDarling(cases.normalish.x)!.p).toBeGreaterThan(0.05)
+    expect(shapiroWilk(cases.normalish.x)!.p).toBeGreaterThan(0.05)
+  })
+})
+
+/* ── FDR: Benjamini–Hochberg and Benjamini–Yekutieli ─────────────────────────
+ * Goldens are statsmodels.stats.multitest.multipletests(method="fdr_bh"/"fdr_by").
+ */
+vdescribe("FDR corrections", () => {
+  const cases: { label: string; p: number[]; bh: number[]; by: number[] }[] = [
+    {
+      label: "spread",
+      p: [0.001, 0.008, 0.039, 0.041, 0.042, 0.6],
+      bh: [0.006, 0.024, 0.0504, 0.0504, 0.0504, 0.6],
+      by: [0.0147, 0.0588, 0.12347999999999999, 0.12347999999999999, 0.12347999999999999, 1.0],
+    },
+    {
+      label: "ties",
+      p: [0.01, 0.01, 0.01, 0.04, 0.04, 0.9],
+      bh: [0.02, 0.02, 0.02, 0.048, 0.048, 0.9],
+      by: [0.048999999999999995, 0.048999999999999995, 0.048999999999999995, 0.11759999999999998, 0.11759999999999998, 1.0],
+    },
+    {
+      // Raw (m/k)·p is 0.08 / 0.06 / 0.05333 / 0.05 — DEcreasing. Without the
+      // reverse cumulative minimum the smallest raw p gets the largest adjusted p.
+      label: "monotonicity",
+      p: [0.02, 0.03, 0.04, 0.05],
+      bh: [0.05, 0.05, 0.05, 0.05],
+      by: [0.10416666666666666, 0.10416666666666666, 0.10416666666666666, 0.10416666666666666],
+    },
+    { label: "single", p: [0.03], bh: [0.03], by: [0.03] },
+    {
+      label: "large",
+      p: [0.0001, 0.0002, 0.02, 0.03, 0.04, 0.05, 0.2, 0.3, 0.5, 0.9],
+      bh: [0.001, 0.001, 0.06666666666666667, 0.075, 0.08, 0.08333333333333334, 0.28571428571428575, 0.37499999999999994, 0.5555555555555556, 0.9],
+      by: [0.0029289682539682537, 0.0029289682539682537, 0.19526455026455025, 0.219672619047619, 0.2343174603174603, 0.24408068783068781, 0.8368480725623583, 1.0, 1.0, 1.0],
+    },
+    {
+      // Input order must not matter, and the output must come back in input order.
+      label: "unsorted",
+      p: [0.6, 0.001, 0.042, 0.008, 0.041, 0.039],
+      bh: [0.6, 0.006, 0.0504, 0.024, 0.0504, 0.0504],
+      by: [1.0, 0.0147, 0.12347999999999999, 0.0588, 0.12347999999999999, 0.12347999999999999],
+    },
+  ]
+
+  it("matches statsmodels fdr_bh", () => {
+    for (const c of cases) {
+      const got = pAdjust(c.p, "benjamini-hochberg")
+      got.forEach((v, i) => expect(v, `${c.label}[${i}]`).toBeCloseTo(c.bh[i], 12))
+    }
+  })
+
+  it("matches statsmodels fdr_by", () => {
+    for (const c of cases) {
+      const got = pAdjust(c.p, "benjamini-yekutieli")
+      got.forEach((v, i) => expect(v, `${c.label}[${i}]`).toBeCloseTo(c.by[i], 12))
+    }
+  })
+
+  it("enforces step-up monotonicity in rank order", () => {
+    for (const c of cases) {
+      for (const method of FDR_METHODS) {
+        const adj = pAdjust(c.p, method)
+        const byRank = c.p.map((p, i) => ({ p, a: adj[i] })).sort((x, y) => x.p - y.p)
+        for (let i = 1; i < byRank.length; i++) {
+          expect(byRank[i].a, `${c.label}/${method}`).toBeGreaterThanOrEqual(byRank[i - 1].a - 1e-15)
+        }
+      }
+    }
+  })
+
+  it("is BH times the harmonic number, and never leaves [p, 1]", () => {
+    const p = cases[4].p
+    const m = p.length
+    const c = Array.from({ length: m }, (_, i) => 1 / (i + 1)).reduce((a, b) => a + b, 0)
+    const bh = pAdjust(p, "benjamini-hochberg")
+    const by = pAdjust(p, "benjamini-yekutieli")
+    by.forEach((v, i) => expect(v).toBeCloseTo(Math.min(1, c * bh[i]), 12))
+    for (const method of FDR_METHODS) {
+      pAdjust(p, method).forEach((v, i) => {
+        expect(v).toBeGreaterThanOrEqual(p[i] - 1e-15)
+        expect(v).toBeLessThanOrEqual(1)
+      })
+    }
+  })
+
+  it("is uniformly less conservative than Holm, which is the reason to offer it", () => {
+    const p = cases[4].p
+    const bh = pAdjust(p, "benjamini-hochberg")
+    const holm = pAdjust(p, "holm")
+    bh.forEach((v, i) => expect(v).toBeLessThanOrEqual(holm[i] + 1e-15))
+    expect(bh.some((v, i) => v < holm[i] - 1e-12)).toBe(true)
+  })
+
+  it("handles the empty family", () => {
+    for (const method of FDR_METHODS) expect(pAdjust([], method)).toEqual([])
+  })
+})
+
+/* ── FDR-consistent intervals (Benjamini & Yekutieli 2005) ───────────────────
+ * The known defect this must not repeat: an adjusted p beside an interval built
+ * at the UNadjusted level, so the interval excludes zero while its own p says
+ * the comparison is not a discovery.
+ */
+vdescribe("FCR-adjusted intervals on FDR comparisons", () => {
+  const clean = [
+    { name: "ctrl", values: [5.1, 4.8, 5.4, 5.0, 5.2, 4.9] },
+    { name: "lowD", values: [6.2, 5.9, 6.5, 6.1, 6.4, 6.0] },
+    { name: "highD", values: [8.1, 7.7, 8.4, 8.0, 8.3, 7.9] },
+  ]
+  const partial = [
+    { name: "ctrl", values: [5.1, 4.8, 5.4, 5.0, 5.2, 4.9] },
+    { name: "near", values: [5.3, 5.0, 5.5, 5.2, 5.4, 5.1] },
+    { name: "far", values: [8.1, 7.7, 8.4, 8.0, 8.3, 7.9] },
+  ]
+  const none = [
+    { name: "a", values: [1, 2, 3, 4, 5, 6] },
+    { name: "b", values: [1.1, 2.2, 2.9, 4.1, 5.2, 5.8] },
+    { name: "c", values: [1.2, 2.1, 3.1, 3.9, 5.1, 6.2] },
+  ]
+
+  it("builds the interval at 1 − R·α/m, computed from R and not assumed", () => {
+    const alpha = 0.05
+    const rows = multipleComparisons(partial, { method: "benjamini-hochberg", alpha })
+    const R = rows.filter((r) => r.significant).length
+    expect([rows.length, R]).toEqual([3, 2])
+    const dfw = 18 - 3
+    const crit = tCritical((alpha * R) / rows.length, dfw)
+    expect(crit).toBeGreaterThan(tCritical(alpha, dfw)) // genuinely wider than 95%
+    for (const r of rows) {
+      if (!r.significant) continue
+      const halfWidth = (r.ciHigh - r.ciLow) / 2
+      const se = halfWidth / crit
+      expect(r.ciLow).toBeCloseTo(r.diff - crit * se, 12)
+      expect(r.ciHigh).toBeCloseTo(r.diff + crit * se, 12)
+    }
+  })
+
+  it("excludes zero for exactly the rows the FDR procedure selected", () => {
+    for (const groups of [clean, partial, none]) {
+      for (const alpha of [0.01, 0.05, 0.1]) {
+        for (const method of FDR_METHODS) {
+          const rows = multipleComparisons(groups, { method, alpha })
+          for (const r of rows) {
+            if (r.significant) {
+              expect(Number.isFinite(r.ciLow)).toBe(true)
+              expect(r.ciLow * r.ciHigh).toBeGreaterThan(0)
+            } else {
+              // NaN, the same "no interval defined" sentinel dunnTest uses.
+              expect(Number.isNaN(r.ciLow)).toBe(true)
+              expect(Number.isNaN(r.ciHigh)).toBe(true)
+            }
+          }
+        }
+      }
+    }
+  })
+
+  it("reports no interval at all when nothing is selected", () => {
+    const rows = multipleComparisons(none, { method: "benjamini-hochberg", alpha: 0.05 })
+    expect(rows.some((r) => r.significant)).toBe(false)
+    expect(rows.every((r) => Number.isNaN(r.ciLow) && Number.isNaN(r.ciHigh))).toBe(true)
+  })
+
+  it("leaves the FWER methods' intervals exactly as they were", () => {
+    // Not a fix for the known defect on those four — a guarantee this change did
+    // not silently move them.
+    const dfw = 18 - 3
+    const tc = tCritical(0.05, dfw)
+    for (const method of ["none", "bonferroni", "sidak", "holm", "holm-sidak"] as const) {
+      for (const r of multipleComparisons(partial, { method, alpha: 0.05 })) {
+        const se = (r.ciHigh - r.ciLow) / (2 * tc)
+        expect(r.ciLow).toBeCloseTo(r.diff - tc * se, 12)
+      }
+    }
+  })
+
+  it("tracks alpha instead of a hardcoded 0.05", () => {
+    const wide = multipleComparisons(clean, { method: "benjamini-hochberg", alpha: 0.01 })[0]
+    const narrow = multipleComparisons(clean, { method: "benjamini-hochberg", alpha: 0.1 })[0]
+    expect(wide.ciHigh - wide.ciLow).toBeGreaterThan(narrow.ciHigh - narrow.ciLow)
+    // Here R = m, so the FCR level collapses back to 1 − α exactly.
+    const dfw = 18 - 3
+    const se = (wide.ciHigh - wide.ciLow) / (2 * tCritical(0.01, dfw))
+    expect(wide.ciHigh - wide.ciLow).toBeCloseTo(2 * tCritical(0.01, dfw) * se, 12)
+  })
+
+  it("matches the engine's pairwise adjusted p for the same groups", () => {
+    // notes9_engine.run_anova_one_way(..., postHoc="benjamini-hochberg") on the
+    // same three groups; statsmodels fdr_bh over the raw pairwise t p-values.
+    const rows = multipleComparisons(clean, { method: "benjamini-hochberg", alpha: 0.05 })
+    const raw = rows.map((r) => r.p)
+    const expected = pAdjust(raw, "benjamini-hochberg")
+    rows.forEach((r, i) => expect(r.pAdj).toBeCloseTo(expected[i], 15))
+  })
+
+  it("applies the same rule on the vs-control option, not just all-pairs", () => {
+    // `control` is user-selectable and changes m from 3 pairs to 2, which changes
+    // both the BH adjustment and the FCR level derived from it.
+    const alpha = 0.05
+    const rows = multipleComparisons(partial, { method: "benjamini-hochberg", alpha, control: "ctrl" })
+    expect(rows.length).toBe(2)
+    expect(rows.map((r) => r.pAdj)).toEqual(pAdjust(rows.map((r) => r.p), "benjamini-hochberg"))
+    const R = rows.filter((r) => r.significant).length
+    expect(R).toBe(1) // ctrl vs far separates, ctrl vs near does not
+    const crit = tCritical((alpha * R) / rows.length, 18 - 3)
+    for (const r of rows) {
+      if (r.significant) {
+        const se = (r.ciHigh - r.ciLow) / (2 * crit)
+        expect(r.ciLow).toBeCloseTo(r.diff - crit * se, 12)
+        expect(r.ciLow * r.ciHigh).toBeGreaterThan(0)
+      } else {
+        expect(Number.isNaN(r.ciLow)).toBe(true)
+      }
+    }
+  })
+
+  it("passes FDR corrections through Dunn's test as well", () => {
+    const d = dunnTest(
+      [
+        { name: "A", values: [1, 2, 3, 4] },
+        { name: "B", values: [5, 6, 7, 8] },
+        { name: "C", values: [9, 10, 11, 12] },
+      ],
+      "benjamini-hochberg",
+    )
+    expect(d.length).toBe(3)
+    const expected = pAdjust(d.map((c) => c.p), "benjamini-hochberg")
+    d.forEach((c, i) => expect(c.pAdj).toBeCloseTo(expected[i], 15))
   })
 })

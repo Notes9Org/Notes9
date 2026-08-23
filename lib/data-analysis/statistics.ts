@@ -19,6 +19,7 @@ import {
   studentizedRangeUpperP,
   studentizedRangeCritical,
   hypergeometricPmf,
+  normalLogCdf,
 } from "./distributions"
 
 export type TestResult = {
@@ -253,6 +254,77 @@ export function shapiroWilk(input: number[]): TestResult | null {
 }
 
 /* ── t-tests ─────────────────────────────────────────────────────────────── */
+/**
+ * Minimum n for the Anderson–Darling p-value approximation. R's `nortest::ad.test`
+ * refuses below 8; extrapolating the fit past the range it was built on is worse
+ * than declining.
+ */
+export const AD_MIN_N = 8
+
+/**
+ * p for the Anderson–Darling A², D'Agostino & Stephens (1986) table 4.9.
+ *
+ * The fit is to the modified statistic A* = A²(1 + 0.75/n + 2.25/n²) — the same
+ * modification `scipy.stats.anderson` applies to its critical-value table. It is
+ * an APPROXIMATION and every caller says so. Kept identical, branch for branch,
+ * to `_ad_pvalue` in notes9_engine.py so the two engines cannot disagree.
+ */
+export function andersonDarlingP(a2: number, n: number): number {
+  const a = a2 * (1 + 0.75 / n + 2.25 / (n * n))
+  let p: number
+  if (a < 0.2) p = 1 - Math.exp(-13.436 + 101.14 * a - 223.73 * a * a)
+  else if (a < 0.34) p = 1 - Math.exp(-8.318 + 42.796 * a - 59.938 * a * a)
+  else if (a < 0.6) p = Math.exp(0.9177 - 4.279 * a - 1.38 * a * a)
+  else if (a < 10) p = Math.exp(1.2937 - 5.709 * a + 0.0186 * a * a)
+  else p = 3.7e-24 // the fit's floor; below it the tail is not resolvable
+  return Math.max(0, Math.min(1, p))
+}
+
+/**
+ * Anderson–Darling test for normality — the third test the requirement names,
+ * beside Shapiro–Wilk and D'Agostino–Pearson.
+ *
+ * Weights the squared gap between the empirical and fitted normal CDFs by
+ * 1/(F(1−F)), which makes it the sensitive one in the tails — where the outlier
+ * that invalidates a t-test lives. Shapiro–Wilk is stronger against a shifted or
+ * skewed centre; run both, they fail on different departures.
+ *
+ * The statistic matches `scipy.stats.anderson(x, "norm").statistic` to 1e-13.
+ * The p-value does not come from scipy, which returns none — see
+ * `andersonDarlingP`, and the `note` on the returned result.
+ */
+export function andersonDarling(input: number[]): TestResult | null {
+  const x = input.filter((v) => isFinite(v)).sort((a, b) => a - b)
+  const n = x.length
+  if (n < AD_MIN_N) return null
+  const s = stdev(x)
+  if (!(s > 0)) return null
+  const m = mean(x)
+
+  // A² = −n − (1/n) Σ (2i−1)[ln Φ(z_i) + ln(1 − Φ(z_{n+1−i}))], standardised by
+  // the SAMPLE mean and SD — the case where both parameters are estimated,
+  // which is the only case a real column is ever in.
+  let sum = 0
+  for (let i = 0; i < n; i++) {
+    const zi = (x[i] - m) / s
+    const zj = (x[n - 1 - i] - m) / s
+    sum += (2 * (i + 1) - 1) * (normalLogCdf(zi) + normalLogCdf(-zj))
+  }
+  const A2 = -n - sum / n
+  const p = andersonDarlingP(A2, n)
+  return {
+    name: "Anderson–Darling normality",
+    stat: [{ label: "A²", value: A2 }],
+    p,
+    df: `n = ${n}`,
+    note:
+      (p < 0.05
+        ? "Data deviate from normal in the tails, consider a non-parametric test. "
+        : "No significant deviation from normality. ") +
+      "p is the D'Agostino & Stephens (1986) analytic approximation to the A² null distribution, not an exact tail probability.",
+  }
+}
+
 export function oneSampleT(xs: number[], mu0: number, tail: Tail = "two"): TestResult | null {
   const x = xs.filter(isFinite)
   const n = x.length
@@ -738,7 +810,22 @@ export function chiSquareTest(observed: number[][]): TestResult | null {
 }
 
 /* ── Multiple-comparison correction ──────────────────────────────────────── */
-export type CorrectionMethod = "none" | "bonferroni" | "sidak" | "holm" | "holm-sidak"
+export type CorrectionMethod =
+  | "none"
+  | "bonferroni"
+  | "sidak"
+  | "holm"
+  | "holm-sidak"
+  | "benjamini-hochberg"
+  | "benjamini-yekutieli"
+
+/**
+ * The two corrections that control the false discovery rate rather than the
+ * family-wise error rate — the right default once the comparison count is in the
+ * hundreds (omics, marker panels), where FWER control leaves no power.
+ */
+export const FDR_METHODS = ["benjamini-hochberg", "benjamini-yekutieli"] as const
+export const isFdr = (m: CorrectionMethod) => (FDR_METHODS as readonly string[]).includes(m)
 
 /** Adjust a set of raw p-values for multiple comparisons (order preserved). */
 export function pAdjust(pvals: number[], method: CorrectionMethod): number[] {
@@ -763,6 +850,26 @@ export function pAdjust(pvals: number[], method: CorrectionMethod): number[] {
         prev = Math.max(prev, clamp(a)) // step-down monotonicity
         adj[o.i] = prev
       })
+      return adj
+    }
+    case "benjamini-hochberg":
+    case "benjamini-yekutieli": {
+      // Benjamini–Hochberg (1995): adjusted p₍ᵢ₎ = min over k ≥ i of (m/k)·p₍ₖ₎,
+      // i.e. the reverse cumulative minimum walking DOWN from the largest p —
+      // the mirror image of Holm's step-down running maximum above.
+      // Benjamini–Yekutieli (2001) multiplies by the harmonic number
+      // c(m) = Σ 1/i, the price of dropping BH's positive-dependence assumption.
+      const c =
+        method === "benjamini-yekutieli"
+          ? Array.from({ length: m }, (_, i) => 1 / (i + 1)).reduce((a, b) => a + b, 0)
+          : 1
+      const order = pvals.map((p, i) => ({ p, i })).sort((a, b) => a.p - b.p)
+      const adj = new Array(m).fill(0)
+      let prev = 1
+      for (let rank = m - 1; rank >= 0; rank--) {
+        prev = Math.min(prev, clamp((c * m * order[rank].p) / (rank + 1))) // step-up monotonicity
+        adj[order[rank].i] = prev
+      }
       return adj
     }
   }
@@ -820,17 +927,38 @@ export function multipleComparisons(
     return { a, b, diff: mi - mj, se, t, p: tTwoSidedP(t, dfw) }
   })
   const adj = pAdjust(raw.map((r) => r.p), method)
-  return raw.map((r, i) => ({
-    a: g[r.a].name,
-    b: g[r.b].name,
-    diff: r.diff,
-    t: r.t,
-    p: r.p,
-    pAdj: adj[i],
-    ciLow: r.diff - tc * r.se,
-    ciHigh: r.diff + tc * r.se,
-    significant: adj[i] < alpha,
-  }))
+  const sig = adj.map((p) => p < alpha)
+
+  // An FDR-adjusted p beside a plain 1−α interval contradicts itself: the p says
+  // "not a discovery" while the interval, built at the uncorrected level,
+  // excludes zero. Benjamini & Yekutieli (2005) give the matching interval —
+  // select the R rows the FDR procedure rejects, then build intervals at level
+  // 1 − R·α/m for exactly those R parameters. The false coverage-statement rate
+  // over the selected set is then at most α, and the pairing is exact rather
+  // than thematic: a selected row has raw p ≤ rank·α/m ≤ R·α/m, so its interval
+  // excludes zero precisely when the row was selected.
+  //
+  // Unselected rows get NaN, the same "no interval defined" sentinel dunnTest
+  // already uses: FCR theory constructs intervals only over the selected set,
+  // and re-issuing the uncorrected one there is the defect this avoids.
+  const R = sig.filter(Boolean).length
+  const fdr = isFdr(method)
+  const fcrCrit = fdr && R > 0 ? tCritical((alpha * R) / raw.length, dfw) : NaN
+
+  return raw.map((r, i) => {
+    const crit = fdr ? (sig[i] ? fcrCrit : NaN) : tc
+    return {
+      a: g[r.a].name,
+      b: g[r.b].name,
+      diff: r.diff,
+      t: r.t,
+      p: r.p,
+      pAdj: adj[i],
+      ciLow: r.diff - crit * r.se,
+      ciHigh: r.diff + crit * r.se,
+      significant: sig[i],
+    }
+  })
 }
 
 /* ── Welch's ANOVA (does not assume equal variances) ─────────────────────── */
