@@ -508,7 +508,8 @@ describe("error bars mean what the label says", () => {
   // Reference values computed with numpy/scipy over the same six numbers.
   const VALUES = [12.1, 13.4, 11.8, 14.2, 12.9, 13.1]
 
-  function barError(errorBars: string): number {
+  /** The bar's centre and the two distances the whiskers actually reach. */
+  function barGeometry(errorBars: string): { centre: number; minus: number; plus: number } {
     const figure = buildFigure(
       spec({ figure: { kind: "bar-scatter-error", x: {}, y: {}, errorBars } }),
       result({
@@ -520,22 +521,66 @@ describe("error bars mean what the label says", () => {
       })
     )
     const bar = figure.data.find((t) => t.type === "bar") as {
-      error_y: { array: number[] }
+      y: number[]
+      error_y?: { symmetric: boolean; array: number[]; arrayminus: number[] }
     }
-    return bar.error_y.array[0]
+    return {
+      centre: bar.y[0],
+      minus: bar.error_y?.arrayminus[0] ?? 0,
+      plus: bar.error_y?.array[0] ?? 0,
+    }
   }
 
+  function barError(errorBars: string): number {
+    return barGeometry(errorBars).plus
+  }
+
+  const MEAN = 12.916666666666666
+  // Sorted: 11.8 12.1 12.9 13.1 13.4 14.2 → median 13.0, Q1 12.3, Q3 13.325.
+  const MEDIAN = 13
   it.each([
-    ["sd", 0.8750238091998789],
-    ["sem", 0.35722697422102806],
-    ["ci90", 0.7198296333147602],
-    ["ci95", 0.9182811711318968],
-    ["ci99", 1.4403902376419822],
-    ["range", 1.2833333333333332],
-    ["iqr", 1.0249999999999986],
-    ["mad", 0.9636900000000005],
-  ])("matches the reference value for %s", (kind, expected) => {
-    expect(barError(kind)).toBeCloseTo(expected, 10)
+    ["sd", MEAN, 0.8750238091998789, 0.8750238091998789],
+    ["sem", MEAN, 0.35722697422102806, 0.35722697422102806],
+    ["ci90", MEAN, 0.7198296333147602, 0.7198296333147602],
+    ["ci95", MEAN, 0.9182811711318968, 0.9182811711318968],
+    ["ci99", MEAN, 1.4403902376419822, 1.4403902376419822],
+    // Asymmetric: the lower whisker is the true minimum, not a mirror of the max.
+    ["range", MEAN, MEAN - 11.8, 14.2 - MEAN],
+    // Centred on the MEDIAN, spanning Q1..Q3 exactly once — the label says
+    // "median, IQR", so mean ± (Q3−Q1) was both the wrong centre and twice the
+    // stated span.
+    ["iqr", MEDIAN, MEDIAN - 12.3, 13.325 - MEDIAN],
+    // "median ± MAD": symmetric, but about the median.
+    ["mad", MEDIAN, 0.9636900000000005, 0.9636900000000005],
+  ])("draws %s where its label says it is", (kind, centre, minus, plus) => {
+    const g = barGeometry(kind as string)
+    expect(g.centre).toBeCloseTo(centre as number, 10)
+    expect(g.minus).toBeCloseTo(minus as number, 10)
+    expect(g.plus).toBeCloseTo(plus as number, 10)
+  })
+
+  it("spans exactly the interquartile range, once", () => {
+    const g = barGeometry("iqr")
+    expect(g.minus + g.plus).toBeCloseTo(1.0249999999999986, 10)
+  })
+
+  it("reaches the true minimum and maximum for range", () => {
+    const g = barGeometry("range")
+    expect(g.centre - g.minus).toBeCloseTo(Math.min(...VALUES), 10)
+    expect(g.centre + g.plus).toBeCloseTo(Math.max(...VALUES), 10)
+  })
+
+  it("marks every bar's error object asymmetric so arrayminus is honoured", () => {
+    for (const kind of ["sd", "range", "iqr", "mad"]) {
+      const figure = buildFigure(
+        spec({ figure: { kind: "bar-scatter-error", x: {}, y: {}, errorBars: kind } }),
+        result()
+      )
+      const bar = figure.data.find((t) => t.type === "bar") as {
+        error_y: { symmetric: boolean }
+      }
+      expect(bar.error_y.symmetric).toBe(false)
+    }
   })
 
   it("uses the t distribution for confidence intervals, not 1.96", () => {
@@ -738,7 +783,8 @@ describe("volcano", () => {
       { rowId: "g1", values: { gene: "TP53", lfc: 2.4, p: 0.0001 }, excluded: false },
       { rowId: "g2", values: { gene: "MYC", lfc: -1.8, p: 0.002 }, excluded: false },
       { rowId: "g3", values: { gene: "ACTB", lfc: 0.1, p: 0.9 }, excluded: false },
-      // p = 0 would be -log10(0) = Infinity, which cannot be plotted.
+      // p = 0 is an underflow, not a missing value: the strongest hit in the
+      // set. It must stay on the figure, clamped, not silently vanish.
       { rowId: "g4", values: { gene: "BAD", lfc: 5, p: 0 }, excluded: false },
     ],
   })
@@ -754,10 +800,28 @@ describe("volcano", () => {
     expect(y[1]).toBeCloseTo(2.69897, 4)
   })
 
-  it("drops a p of zero rather than plotting infinity", () => {
+  it("clamps an underflowed p rather than dropping the strongest hit", () => {
     const trace = buildFigure(vSpec, features).data[0]
     expect((trace.y as number[]).every((v) => Number.isFinite(v))).toBe(true)
-    expect(trace.x).toHaveLength(3)
+    // All four features present, including BAD at p = 0.
+    expect(trace.x).toHaveLength(4)
+    const y = trace.y as number[]
+    // Clamped to the smallest positive p in the set (0.0001), so it lands at
+    // the top of the figure instead of off it.
+    expect(y[3]).toBeCloseTo(4, 10)
+    expect(y[3]).toBeGreaterThanOrEqual(Math.max(...y.slice(0, 3)))
+  })
+
+  it("falls back to the float floor when every p underflowed", () => {
+    const allZero = result({
+      plotData: [
+        { rowId: "z1", values: { gene: "A", lfc: 3, p: 0 }, excluded: false },
+        { rowId: "z2", values: { gene: "B", lfc: -3, p: 0 }, excluded: false },
+      ],
+    })
+    const y = buildFigure(vSpec, allZero).data[0].y as number[]
+    expect(y).toHaveLength(2)
+    expect(y.every(Number.isFinite)).toBe(true)
   })
 
   it("colours only the points past both cut-offs", () => {
@@ -780,7 +844,7 @@ describe("volcano", () => {
 
   it("keeps the feature name for the hover", () => {
     const trace = buildFigure(vSpec, features).data[0]
-    expect(trace.text).toEqual(["TP53", "MYC", "ACTB"])
+    expect(trace.text).toEqual(["TP53", "MYC", "ACTB", "BAD"])
   })
 })
 
@@ -842,8 +906,8 @@ describe("every chart kind the spec names can be drawn", () => {
     "pie-composition", "scatter-3d", "surface-3d",
   ] as const
 
-  it.each(KINDS)("builds traces for %s", (kind) => {
-    const figure = buildFigure(
+  function everyKind(kind: (typeof KINDS)[number], engine = xy) {
+    return buildFigure(
       spec({
         analysis: {
           test: "none",
@@ -853,10 +917,109 @@ describe("every chart kind the spec names can be drawn", () => {
         },
         figure: { kind, x: {}, y: {}, errorBars: "sd" },
       }),
-      xy
+      engine
     )
+  }
+
+  /**
+   * What each kind must actually PUT ON THE PAGE.
+   *
+   * "the trace array is non-empty" was the whole of this assertion, which is
+   * why a bar chart that drew no points, a line chart with no error bars and a
+   * pie captioned "mean ± SD" all passed it. Each entry below names the idiom
+   * that makes the kind that kind.
+   */
+  const IDIOM: Partial<Record<(typeof KINDS)[number], (f: ReturnType<typeof buildFigure>) => void>> = {
+    "bar-scatter-error": (f) => {
+      expect(f.data.some((t) => t.type === "bar")).toBe(true)
+      // The individual replicates over the bars, not the bars alone.
+      expect(f.data.some((t) => t.type === "scatter" && t.mode === "markers")).toBe(true)
+    },
+    "grouped-bar": (f) => expect(f.data.some((t) => t.type === "bar")).toBe(true),
+    "stacked-bar": (f) => expect(f.data.some((t) => t.type === "bar")).toBe(true),
+    "horizontal-bar": (f) =>
+      expect(f.data.some((t) => t.type === "bar" && t.orientation === "h")).toBe(true),
+    box: (f) => expect(f.data.some((t) => t.type === "box")).toBe(true),
+    violin: (f) => expect(f.data.some((t) => t.type === "violin")).toBe(true),
+    "line-timecourse": (f) => {
+      expect(f.data.some((t) => String(t.mode).includes("lines"))).toBe(true)
+      // "line/time-course WITH ERROR BARS" is the requirement verbatim.
+      expect(f.data.some((t) => t.error_y !== undefined)).toBe(true)
+    },
+    histogram: (f) => expect(f.data.some((t) => t.type === "histogram")).toBe(true),
+    heatmap: (f) => expect(f.data.some((t) => t.type === "heatmap")).toBe(true),
+    "correlation-matrix": (f) => expect(f.data.some((t) => t.type === "heatmap")).toBe(true),
+    "pie-composition": (f) => expect(f.data.some((t) => t.type === "pie")).toBe(true),
+    "scatter-3d": (f) => expect(f.data.some((t) => t.type === "scatter3d")).toBe(true),
+    "surface-3d": (f) => expect(f.data.some((t) => t.type === "surface")).toBe(true),
+    forest: (f) => expect(f.data.some((t) => t.error_x !== undefined)).toBe(true),
+    ecdf: (f) => expect(f.data.some((t) => (t.line as { shape?: string })?.shape === "hv")).toBe(true),
+    roc: (f) => expect(f.data.some((t) => String(t.name).startsWith("ROC"))).toBe(true),
+    area: (f) => expect(f.data.some((t) => t.fill !== undefined)).toBe(true),
+  }
+
+  it.each(KINDS)("draws the idiom that makes it a %s", (kind) => {
+    const figure = everyKind(kind)
     expect(figure.data.length, `${kind} produced no traces`).toBeGreaterThan(0)
     expect(figure.layout).toBeTruthy()
+    IDIOM[kind]?.(figure)
+  })
+
+  it.each(KINDS)("carries a row id back to the spreadsheet from %s", (kind) => {
+    // §2's data↔figure link. Aggregate kinds (a heatmap cell, a pie slice, an
+    // ECDF step) have no single source row, so they are exempt by nature.
+    const aggregate = new Set([
+      "heatmap", "correlation-matrix", "pie-composition", "histogram", "ecdf", "qq",
+      "roc", "surface-3d", "stacked-bar", "horizontal-bar", "area",
+    ])
+    if (aggregate.has(kind)) return
+    const figure = everyKind(kind)
+    expect(figure.data.some((t) => t.customdata !== undefined), kind).toBe(true)
+  })
+
+  it.each(KINDS)("only claims error bars in the %s subtitle when it draws them", (kind) => {
+    const figure = everyKind(kind)
+    const title = (figure.layout.title as { text: string }).text
+    const claims = title.includes("mean ± SD")
+    const draws = figure.data.some((t) => t.error_y !== undefined || t.error_x !== undefined)
+    // errorBars defaults to "sd", so the subtitle used to read "mean ± SD" on a
+    // pie chart, a heatmap and a volcano alike.
+    expect(claims, `${kind}: subtitle says "mean ± SD"`).toBe(claims && draws)
+  })
+
+  it.each(KINDS)("never lets showExcludedPoints move a number on a %s", (kind) => {
+    // §8.1: the flag is a display filter. Whatever it is set to, every value
+    // the figure computes has to come out identical.
+    const withExcluded = result({
+      plotData: xy.plotData.map((r, i) => ({ ...r, excluded: i === 1 })),
+    })
+    const shown = buildFigure(
+      spec({
+        analysis: {
+          test: "none", groupColumn: "treatment", secondFactorColumn: "treatment",
+          responseColumns: ["a", "b", "c"],
+        },
+        figure: { kind, x: {}, y: {}, errorBars: "sd", showExcludedPoints: true },
+      }),
+      withExcluded
+    )
+    const hidden = buildFigure(
+      spec({
+        analysis: {
+          test: "none", groupColumn: "treatment", secondFactorColumn: "treatment",
+          responseColumns: ["a", "b", "c"],
+        },
+        figure: { kind, x: {}, y: {}, errorBars: "sd", showExcludedPoints: false },
+      }),
+      withExcluded
+    )
+    // Every aggregate the figure states: bar heights, whiskers, cell means,
+    // slice totals, curve vertices. Marker-only traces differ by design.
+    const stats = (f: ReturnType<typeof buildFigure>) =>
+      f.data
+        .filter((t) => t.mode !== "markers" && t.type !== "scatter3d")
+        .map((t) => JSON.stringify([t.type, t.z, t.values, t.error_y, t.error_x]))
+    expect(stats(hidden), kind).toEqual(stats(shown))
   })
 
   it("puts categories on the y axis for horizontal kinds", () => {
@@ -973,5 +1136,318 @@ describe("reading pointer events back (§2 Tier 0)", () => {
     expect(bracketMoveFromRelayout({ "shapes[0].y0": 5 }, undefined)).toBeNull()
     // A sideways drag leaves y0 alone: nothing moved, so nothing is recorded.
     expect(bracketMoveFromRelayout({ "shapes[1].x0": 3, "shapes[1].y0": 120 }, brackets)).toBeNull()
+  })
+})
+
+/**
+ * The defects in this block all share one shape: the figure asserted something
+ * the numbers beside it did not support. Each test names the contradiction.
+ */
+describe("the figure agrees with the statistics beside it", () => {
+  /** Three replicates per group, one of them excluded in Control. */
+  const withOutlier = result({
+    plotData: [
+      { rowId: "r1", values: { treatment: "Control", viability: 10 }, excluded: false },
+      { rowId: "r2", values: { treatment: "Control", viability: 12 }, excluded: false },
+      { rowId: "r3", values: { treatment: "Control", viability: 200 }, excluded: true },
+      { rowId: "r4", values: { treatment: "Drug", viability: 50 }, excluded: false },
+      { rowId: "r5", values: { treatment: "Drug", viability: 54 }, excluded: false },
+    ],
+  })
+
+  function bars(engine: EngineResult, overrides: Record<string, unknown> = {}) {
+    const figure = buildFigure(
+      spec({
+        analysis: { test: "none", groupColumn: "treatment", responseColumns: ["viability"] },
+        figure: { kind: "bar-scatter-error", x: {}, y: {}, errorBars: "sd", ...overrides },
+      }),
+      engine
+    )
+    return figure.data.find((t) => t.type === "bar") as { y: number[] }
+  }
+
+  it("leaves an excluded replicate out of the bar it is excluded from", () => {
+    // 11, not 74: averaging the excluded 200 in is how the results table's mean
+    // moved while the bar beside it did not.
+    expect(bars(withOutlier).y[0]).toBeCloseTo(11, 10)
+    expect(bars(withOutlier).y[1]).toBeCloseTo(52, 10)
+  })
+
+  it("still draws the excluded replicate, greyed", () => {
+    const figure = buildFigure(
+      spec({
+        analysis: { test: "none", groupColumn: "treatment", responseColumns: ["viability"] },
+        figure: { kind: "bar-scatter-error", x: {}, y: {}, errorBars: "sd" },
+      }),
+      withOutlier
+    )
+    const points = figure.data.filter((t) => t.mode === "markers")
+    const ys = points.flatMap((t) => t.y as number[])
+    expect(ys).toContain(200)
+    const symbols = points.flatMap((t) => (t.marker as { symbol: string[] }).symbol)
+    expect(symbols).toContain("circle-open")
+  })
+
+  it("hides the excluded mark when asked, without moving the bar", () => {
+    const hidden = bars(withOutlier, { showExcludedPoints: false })
+    expect(hidden.y[0]).toBeCloseTo(11, 10)
+    const figure = buildFigure(
+      spec({
+        analysis: { test: "none", groupColumn: "treatment", responseColumns: ["viability"] },
+        figure: {
+          kind: "bar-scatter-error", x: {}, y: {}, errorBars: "sd", showExcludedPoints: false,
+        },
+      }),
+      withOutlier
+    )
+    expect(figure.data.filter((t) => t.mode === "markers").flatMap((t) => t.y as number[]))
+      .not.toContain(200)
+  })
+
+  it("prefers the engine's descriptives over re-deriving them", () => {
+    // A mean the renderer could not possibly compute from plotData, so a bar
+    // drawn at it proves the descriptive row is what was read.
+    const withDescriptives = result({
+      ...withOutlier,
+      descriptives: [
+        { column: "Control", group: null, n: 2, mean: 999, sd: 1, sem: 1, median: 999,
+          q1: 998, q3: 1000, iqr: 2, min: 997, max: 1001, cv: 0, geometricMean: null,
+          skewness: null, kurtosis: null, ci95Low: 990, ci95High: 1008 },
+      ] as EngineResult["descriptives"],
+    })
+    expect(bars(withDescriptives).y[0]).toBe(999)
+    // ...and the interval the engine reported, not one recomputed beside it.
+    const ci = buildFigure(
+      spec({
+        analysis: { test: "none", groupColumn: "treatment", responseColumns: ["viability"] },
+        figure: { kind: "bar-scatter-error", x: {}, y: {}, errorBars: "ci95" },
+      }),
+      withDescriptives
+    ).data.find((t) => t.type === "bar") as { error_y: { array: number[]; arrayminus: number[] } }
+    expect(ci.error_y.arrayminus[0]).toBeCloseTo(9, 10)
+    expect(ci.error_y.array[0]).toBeCloseTo(9, 10)
+  })
+
+  it("keeps an excluded replicate out of the box's quartiles", () => {
+    const figure = buildFigure(
+      spec({
+        analysis: { test: "none", groupColumn: "treatment", responseColumns: ["viability"] },
+        figure: { kind: "box", x: {}, y: {}, errorBars: "none" },
+      }),
+      withOutlier
+    )
+    const box = figure.data.find((t) => t.type === "box" && t.name === "Control") as {
+      y: number[]
+    }
+    expect(box.y).toEqual([10, 12])
+    // Present, but visually distinct and outside the distribution.
+    const grey = figure.data.find((t) => t.name === "Control excluded") as {
+      y: number[]
+      marker: { color: string; symbol: string }
+    }
+    expect(grey.y).toEqual([200])
+    expect(grey.marker.symbol).toBe("circle-open")
+    expect(grey.marker.color).not.toBe(
+      (box as unknown as { marker: { color: string } }).marker.color
+    )
+  })
+
+  it("keeps an excluded replicate out of a violin too", () => {
+    const figure = buildFigure(
+      spec({
+        analysis: { test: "none", groupColumn: "treatment", responseColumns: ["viability"] },
+        figure: { kind: "violin", x: {}, y: {}, errorBars: "none" },
+      }),
+      withOutlier
+    )
+    const violin = figure.data.find((t) => t.type === "violin" && t.name === "Control") as {
+      y: number[]
+    }
+    expect(violin.y).toEqual([10, 12])
+  })
+
+  it("does not merge two heatmap cells whose factor levels contain spaces", () => {
+    // "Plate A" x "1" and "Plate" x "A 1" are the same string once joined by a
+    // space. A collision-proof delimiter keeps them apart.
+    const plates = result({
+      plotData: [
+        { rowId: "p1", values: { row: "Plate A", col: "1", v: 10 }, excluded: false },
+        { rowId: "p2", values: { row: "Plate", col: "A 1", v: 90 }, excluded: false },
+      ],
+    })
+    const trace = buildFigure(
+      spec({
+        analysis: {
+          test: "none", groupColumn: "row", secondFactorColumn: "col", responseColumns: ["v"],
+        },
+        figure: { kind: "heatmap", x: {}, y: {}, errorBars: "none" },
+      }),
+      plates
+    ).data[0] as { z: (number | null)[][]; y: string[]; x: string[] }
+    const cell = (r: string, c: string) => trace.z[trace.y.indexOf(r)][trace.x.indexOf(c)]
+    expect(cell("Plate A", "1")).toBe(10)
+    expect(cell("Plate", "A 1")).toBe(90)
+    // Averaged together the pair would both read 50.
+    expect(cell("Plate A", "1")).not.toBe(cell("Plate", "A 1"))
+  })
+
+  it("keeps an excluded row out of the heatmap cell mean whatever the flag says", () => {
+    const cells = result({
+      plotData: [
+        { rowId: "h1", values: { row: "A", col: "1", v: 10 }, excluded: false },
+        { rowId: "h2", values: { row: "A", col: "1", v: 90 }, excluded: true },
+      ],
+    })
+    for (const showExcludedPoints of [true, false]) {
+      const trace = buildFigure(
+        spec({
+          analysis: {
+            test: "none", groupColumn: "row", secondFactorColumn: "col", responseColumns: ["v"],
+          },
+          figure: { kind: "heatmap", x: {}, y: {}, errorBars: "none", showExcludedPoints },
+        }),
+        cells
+      ).data[0] as { z: number[][] }
+      expect(trace.z[0][0], `showExcludedPoints=${showExcludedPoints}`).toBe(10)
+    }
+  })
+
+  it("draws an ellipse annotation as a shape Plotly understands", () => {
+    const figure = buildFigure(
+      spec({
+        analysis: { test: "none", groupColumn: "treatment", responseColumns: ["viability"] },
+        figure: {
+          kind: "bar-scatter-error", x: {}, y: {}, errorBars: "none",
+          annotations: [
+            {
+              kind: "shape", id: "e1", shape: "ellipse",
+              x1: 0, y1: 0, x2: 1, y2: 1, colour: "#000000",
+            },
+          ],
+        },
+      }),
+      result()
+    )
+    const shapes = figure.layout.shapes as Record<string, unknown>[]
+    // "ellipse" is not in Plotly's circle/rect/line/path, so it drew nothing.
+    expect(shapes.some((s) => s.type === "circle")).toBe(true)
+    expect(shapes.some((s) => s.type === "ellipse")).toBe(false)
+  })
+
+  it("summarises replicates at a shared timepoint into one vertex with whiskers", () => {
+    const triplicates = result({
+      plotData: [
+        { rowId: "t1", values: { day: 1, signal: 10 }, excluded: false },
+        { rowId: "t2", values: { day: 1, signal: 12 }, excluded: false },
+        { rowId: "t3", values: { day: 1, signal: 14 }, excluded: false },
+        { rowId: "t4", values: { day: 2, signal: 20 }, excluded: false },
+        { rowId: "t5", values: { day: 2, signal: 22 }, excluded: false },
+        { rowId: "t6", values: { day: 2, signal: 24 }, excluded: false },
+      ],
+    })
+    const trace = buildFigure(
+      spec({
+        analysis: { test: "none", groupColumn: "day", responseColumns: ["signal"] },
+        figure: { kind: "line-timecourse", x: {}, y: {}, errorBars: "sd" },
+      }),
+      triplicates
+    ).data[0] as {
+      x: number[]
+      y: number[]
+      error_y: { array: number[]; arrayminus: number[] }
+    }
+    // Two vertices, not six: a six-vertex zigzag is what "no aggregation" drew.
+    expect(trace.x).toEqual([1, 2])
+    expect(trace.y).toEqual([12, 22])
+    expect(trace.error_y.array[0]).toBeCloseTo(2, 10)
+    expect(trace.error_y.arrayminus[0]).toBeCloseTo(2, 10)
+  })
+
+  it("centres a timecourse on the median under an IQR label", () => {
+    const skewed = result({
+      plotData: [
+        { rowId: "s1", values: { day: 1, signal: 1 }, excluded: false },
+        { rowId: "s2", values: { day: 1, signal: 2 }, excluded: false },
+        { rowId: "s3", values: { day: 1, signal: 99 }, excluded: false },
+      ],
+    })
+    const trace = buildFigure(
+      spec({
+        analysis: { test: "none", groupColumn: "day", responseColumns: ["signal"] },
+        figure: { kind: "line-timecourse", x: {}, y: {}, errorBars: "iqr" },
+      }),
+      skewed
+    ).data[0] as { y: number[] }
+    expect(trace.y[0]).toBe(2)
+  })
+
+  it("labels a fit's confidence band from alpha, and hides it when untoggled", () => {
+    const fitted = result({
+      curveFit: {
+        model: "4PL",
+        parameters: [],
+        rSquared: 0.99,
+        curve: { x: [1, 2], y: [1, 2] },
+        confidenceBand: { x: [1, 2], lower: [0, 1], upper: [2, 3] },
+      } as unknown as EngineResult["curveFit"],
+    })
+    const build = (alpha: number, showConfidenceBands: boolean) =>
+      buildFigure(
+        spec({
+          analysis: { test: "none", alpha, groupColumn: null, responseColumns: ["a", "b"] },
+          figure: {
+            kind: "dose-response", x: {}, y: {}, errorBars: "none", showConfidenceBands,
+          },
+        }),
+        fitted
+      ).data
+    expect(build(0.05, true).some((t) => t.name === "95% CI")).toBe(true)
+    expect(build(0.01, true).some((t) => t.name === "99% CI")).toBe(true)
+    // The schema says this flag governs the fit's band as well as KM's.
+    expect(build(0.05, false).some((t) => String(t.name).endsWith("CI"))).toBe(false)
+  })
+
+  it("labels a Kaplan-Meier band from alpha too", () => {
+    const survival = result({
+      survival: {
+        groups: [
+          {
+            label: "Arm A", n: 3, time: [1, 2], survival: [1, 0.5],
+            lower: [0.9, 0.3], upper: [1, 0.7], censoredTimes: [],
+          },
+        ],
+      } as unknown as EngineResult["survival"],
+    })
+    const build = (alpha: number) =>
+      buildFigure(
+        spec({
+          analysis: { test: "kaplan-meier", alpha, groupColumn: null, responseColumns: ["t"] },
+          figure: { kind: "kaplan-meier", x: {}, y: {}, errorBars: "none" },
+        }),
+        survival
+      ).data
+    expect(build(0.05).some((t) => t.name === "Arm A 95% CI")).toBe(true)
+    expect(build(0.1).some((t) => t.name === "Arm A 90% CI")).toBe(true)
+  })
+})
+
+describe("a summarised vertex still links back to the spreadsheet", () => {
+  it("resolves a time-course mean to one of its replicates", () => {
+    const triplicates = result({
+      plotData: [
+        { rowId: "t1", values: { day: 1, signal: 10 }, excluded: false },
+        { rowId: "t2", values: { day: 1, signal: 12 }, excluded: false },
+      ],
+    })
+    const trace = buildFigure(
+      spec({
+        analysis: { test: "none", groupColumn: "day", responseColumns: ["signal"] },
+        figure: { kind: "line-timecourse", x: {}, y: {}, errorBars: "sd" },
+      }),
+      triplicates
+    ).data[0]
+    const customdata = (trace.customdata as string[][])[0]
+    expect(customdata).toEqual(["t1", "t2"])
+    expect(rowIdAtPoint([{ customdata }], triplicates)).toBe("t1")
   })
 })

@@ -1,5 +1,5 @@
 import { bracketId, type AnalysisSpec } from "@/lib/data-analysis/spec/analysis-spec"
-import type { EngineResult } from "@/lib/data-analysis/engine/contract"
+import type { DescriptiveRow, EngineResult } from "@/lib/data-analysis/engine/contract"
 import { PALETTE_DEFINITIONS, paletteColours, toColorscale } from "./palettes"
 import { rocCurve } from "@/lib/data-analysis/chart-transforms"
 
@@ -130,6 +130,19 @@ function axisTitle(axis: AnalysisSpec["figure"]["x"]): string {
  * names supplied as tick labels instead (see `categoryTicks`).
  */
 const CATEGORICAL_X = new Set<AnalysisSpec["figure"]["kind"]>(["box", "violin"])
+
+/**
+ * Chart kinds that actually draw error bars, and so may claim them in the
+ * subtitle. Box and violin show their spread natively and are labelled by their
+ * own geometry; everything absent here draws no whisker at all.
+ */
+const ERROR_BAR_KINDS = new Set<AnalysisSpec["figure"]["kind"]>([
+  "bar-scatter-error",
+  "grouped-bar",
+  "stacked-bar",
+  "horizontal-bar",
+  "line-timecourse",
+])
 
 /** Chart kinds drawn at integer x positions with group names as tick labels. */
 const NUMBERED_X = new Set<AnalysisSpec["figure"]["kind"]>([
@@ -283,49 +296,160 @@ function groupRows(spec: AnalysisSpec, result: EngineResult) {
   return groups
 }
 
-function errorValue(
+/**
+ * The rows a mark may be DRAWN for.
+ *
+ * `showExcludedPoints` is a display filter and nothing else. Hiding an excluded
+ * replicate must never move a number on the figure (§8.1), so anything that
+ * aggregates — a bar's mean, a box's quartiles, a heatmap cell, a pie slice, an
+ * ECDF — reads `analysisRows` instead, which drops exclusions unconditionally.
+ * The flag used to be honoured by seven of the twenty chart kinds and, in the
+ * heatmap, decided whether an excluded value entered the cell mean.
+ */
+function drawableRows(spec: AnalysisSpec, result: EngineResult) {
+  return result.plotData.filter((r) => !r.excluded || spec.figure.showExcludedPoints)
+}
+
+/** The rows a computed statistic may see. Exclusions never count, ever. */
+function analysisRows(result: EngineResult) {
+  return result.plotData.filter((r) => !r.excluded)
+}
+
+/**
+ * "95% CI" derived from the analysis alpha rather than assumed.
+ *
+ * A hardcoded "95% CI" beside an interval computed at alpha = 0.01 is the same
+ * class of defect as a mislabelled error bar: the figure states a number the
+ * geometry does not support.
+ */
+function ciLabel(alpha: number): string {
+  return `${Number((100 * (1 - alpha)).toFixed(1))}% CI`
+}
+
+/** The values in a group that a computed statistic is allowed to see (§8.1). */
+function includedValues(g: { y: number[]; excluded: boolean[] }): number[] {
+  return g.y.filter((_, i) => !g.excluded[i])
+}
+
+/**
+ * The engine's own summary for one group, when it computed one.
+ *
+ * Matched on either field because the engine names a per-group summary in
+ * `column` (its payload is keyed by group) and a per-column summary there too
+ * with `group` null. The renderer asks about one response column at a time, so
+ * either match identifies the same summary.
+ */
+function descriptiveFor(result: EngineResult, key: string): DescriptiveRow | undefined {
+  return result.descriptives.find((d) => d.group === key || d.column === key)
+}
+
+/**
+ * Where a group's bar sits and how far its whiskers reach, as the ASYMMETRIC
+ * pair Plotly's `error_y` wants.
+ *
+ * A single scalar is drawn symmetrically about the trace's own y, which for a
+ * bar is the mean, so three of the eight modes drew a figure that contradicted
+ * the label printed beside it: `iqr` was centred on the mean and spanned
+ * 2×(Q3−Q1) under a label reading "median, IQR"; `mad` was centred on the mean
+ * under "median ± MAD"; `range` mirrored the maximum, so the lower whisker was
+ * not the minimum. The label is rendered into the figure and survives export,
+ * so the centre and the span have to agree with it exactly: iqr and mad centre
+ * on the median, everything else on the mean.
+ *
+ * `d` is the engine's descriptive row for the group. It is preferred over
+ * recomputation so the bar and the results table cannot drift apart — exclude
+ * an outlier and both move together. `DescriptiveRow` carries no MAD and only
+ * a 95% interval, so `mad`, `ci90` and `ci99` are still derived here, from the
+ * INCLUDED values only.
+ */
+function errorSpan(
   values: number[],
-  kind: AnalysisSpec["figure"]["errorBars"]
-): number | null {
+  kind: AnalysisSpec["figure"]["errorBars"],
+  d?: DescriptiveRow
+): { centre: number; minus: number; plus: number } {
   const n = values.length
-  if (n === 0 || kind === "none") return null
-  const mean = values.reduce((a, b) => a + b, 0) / n
   const sorted = [...values].sort((a, b) => a - b)
   const quantile = (p: number) => {
+    if (sorted.length === 0) return Number.NaN
     const idx = (sorted.length - 1) * p
     const lo = Math.floor(idx)
     const hi = Math.ceil(idx)
     return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo)
   }
+  const mean = d?.mean ?? (n > 0 ? values.reduce((a, b) => a + b, 0) / n : 0)
+  const flat = { centre: mean, minus: 0, plus: 0 }
+  if (kind === "none" || (n === 0 && !d)) return flat
 
-  if (kind === "range") return Math.max(...values) - mean
-  if (kind === "iqr") return quantile(0.75) - quantile(0.25)
+  if (kind === "iqr") {
+    const median = d?.median ?? quantile(0.5)
+    const q1 = d?.q1 ?? quantile(0.25)
+    const q3 = d?.q3 ?? quantile(0.75)
+    return Number.isFinite(median) && Number.isFinite(q1) && Number.isFinite(q3)
+      ? { centre: median, minus: median - q1, plus: q3 - median }
+      : flat
+  }
   if (kind === "mad") {
     // Median absolute deviation, scaled to be comparable with an SD on normal
     // data. Reported unscaled would make a robust bar look artificially small
     // beside the SD bars it is meant to replace.
-    const median = quantile(0.5)
+    const median = d?.median ?? quantile(0.5)
+    if (n === 0 || !Number.isFinite(median)) return flat
     const deviations = values.map((v) => Math.abs(v - median)).sort((a, b) => a - b)
     const mid = (deviations.length - 1) / 2
     const mad =
       deviations.length % 2
         ? deviations[mid]
         : (deviations[Math.floor(mid)] + deviations[Math.ceil(mid)]) / 2
-    return mad * 1.4826
+    return { centre: median, minus: mad * 1.4826, plus: mad * 1.4826 }
+  }
+  if (kind === "range") {
+    const lo = d?.min ?? sorted[0]
+    const hi = d?.max ?? sorted[sorted.length - 1]
+    return Number.isFinite(lo) && Number.isFinite(hi)
+      ? { centre: mean, minus: mean - lo, plus: hi - mean }
+      : flat
+  }
+  // The engine's interval, when it is the one being asked for. Recomputing a
+  // 95% CI the engine already reported is how the figure and the table come to
+  // disagree about the same number.
+  if (kind === "ci95" && d?.ci95Low != null && d?.ci95High != null) {
+    return { centre: mean, minus: mean - d.ci95Low, plus: d.ci95High - mean }
   }
 
-  if (n < 2) return 0
-  const sd = Math.sqrt(values.reduce((acc, v) => acc + (v - mean) ** 2, 0) / (n - 1))
-  if (kind === "sd") return sd
-  const sem = sd / Math.sqrt(n)
-  if (kind === "sem") return sem
+  const count = d?.n ?? n
+  if (count < 2) return flat
+  const sd =
+    d?.sd ?? Math.sqrt(values.reduce((acc, v) => acc + (v - mean) ** 2, 0) / (n - 1))
+  if (kind === "sd") return { centre: mean, minus: sd, plus: sd }
+  const sem = d?.sem ?? sd / Math.sqrt(count)
+  if (kind === "sem") return { centre: mean, minus: sem, plus: sem }
 
   // Confidence intervals use the t distribution, not 1.96. At bench n the
   // normal approximation is materially too narrow, with n = 3 the true
   // multiplier is 4.30, so a "95% CI" drawn at 1.96 would be less than half
   // the interval it claims to be.
   const level = kind === "ci90" ? 0.9 : kind === "ci99" ? 0.99 : 0.95
-  return sem * tCritical(n - 1, level)
+  const half = sem * tCritical(count - 1, level)
+  return { centre: mean, minus: half, plus: half }
+}
+
+/** Plotly's asymmetric `error_y`/`error_x` object, or nothing when flat. */
+function errorBarProps(
+  spans: { minus: number; plus: number }[],
+  kind: AnalysisSpec["figure"]["errorBars"]
+): Record<string, unknown> | undefined {
+  if (kind === "none") return undefined
+  return {
+    type: "data",
+    // Symmetric: false is what makes the drawn geometry match the label. With
+    // it omitted Plotly ignores `arrayminus` and mirrors `array`.
+    symmetric: false,
+    array: spans.map((s) => s.plus),
+    arrayminus: spans.map((s) => s.minus),
+    visible: true,
+    thickness: 1.4,
+    width: 5,
+  }
 }
 
 /**
@@ -402,13 +526,13 @@ function barWithPoints(spec: AnalysisSpec, result: EngineResult): Record<string,
   const groups = groupRows(spec, result)
   const keys = [...groups.keys()]
 
-  const means: number[] = []
-  const errors: number[] = []
-  for (const k of keys) {
-    const vals = groups.get(k)!.y
-    means.push(vals.reduce((a, b) => a + b, 0) / Math.max(vals.length, 1))
-    errors.push(errorValue(vals, figure.errorBars) ?? 0)
-  }
+  // The bar reads the engine's own descriptives where they exist, and falls
+  // back to the group's INCLUDED values otherwise. Averaging `g.y` wholesale
+  // was how excluding an outlier moved the results table without moving the
+  // bar the table sits beside.
+  const spans = keys.map((k) =>
+    errorSpan(includedValues(groups.get(k)!), figure.errorBars, descriptiveFor(result, k))
+  )
 
   const barStyle = styleFor(figure, keys[0] ?? "Series", 0)
   const traces: Record<string, unknown>[] = [
@@ -417,16 +541,15 @@ function barWithPoints(spec: AnalysisSpec, result: EngineResult): Record<string,
       // Integer positions, matching the numbered axis the layout builds for
       // this chart kind. The group names return as that axis's tick labels.
       x: keys.map((_, i) => i),
-      y: means,
+      // The centre the label names: the median under "median, IQR" or
+      // "median ± MAD", the mean everywhere else.
+      y: spans.map((s) => s.centre),
       name: ERROR_BAR_LABEL[figure.errorBars] || "mean",
       marker: {
         color: keys.map((k, i) => styleFor(figure, k, i).colour),
         opacity: barStyle.opacity,
       },
-      error_y:
-        figure.errorBars === "none"
-          ? undefined
-          : { type: "data", array: errors, visible: true, thickness: 1.4, width: 5 },
+      error_y: errorBarProps(spans, figure.errorBars),
       // %{x} would print the numeric position, so the group name rides along as
       // customdata. Not `text`: Plotly paints a bar's `text` onto the bar, which
       // duplicated every group name across the middle of the chart.
@@ -439,7 +562,15 @@ function barWithPoints(spec: AnalysisSpec, result: EngineResult): Record<string,
   // Individual points over the bars, carrying their row ids. Jitter is applied
   // in category space so replicates stop superimposing.
   for (const [i, key] of keys.entries()) {
-    const g = groups.get(key)!
+    const all = groups.get(key)!
+    // Purely visual: the bar above was already computed without the exclusions,
+    // so hiding their marks cannot move it.
+    const show = all.y.map((_, k) => !all.excluded[k] || figure.showExcludedPoints)
+    const g = {
+      y: all.y.filter((_, k) => show[k]),
+      rowIds: all.rowIds.filter((_, k) => show[k]),
+      excluded: all.excluded.filter((_, k) => show[k]),
+    }
     const style = styleFor(figure, key, i)
     const jitter = style.jitter || 0.12
     traces.push({
@@ -478,13 +609,19 @@ function barWithPoints(spec: AnalysisSpec, result: EngineResult): Record<string,
 function boxOrViolin(spec: AnalysisSpec, result: EngineResult, kind: "box" | "violin") {
   const figure = spec.figure
   const groups = groupRows(spec, result)
-  return [...groups.entries()].map(([key, g], i) => {
+  const traces: Record<string, unknown>[] = []
+
+  for (const [i, [key, g]] of [...groups.entries()].entries()) {
     const style = styleFor(figure, key, i)
-    return {
+    // The box summarises the INCLUDED replicates only. It read `g.y` whole, so
+    // an excluded replicate sat inside the quartiles it was excluded from and
+    // was drawn in the series colour, indistinguishable from a kept one.
+    const keep = g.y.filter((_, k) => !g.excluded[k])
+    traces.push({
       type: kind,
-      y: g.y,
-      x: g.y.map(() => key),
-      customdata: g.rowIds,
+      y: keep,
+      x: keep.map(() => key),
+      customdata: g.rowIds.filter((_, k) => !g.excluded[k]),
       name: key,
       marker: { color: style.colour, size: style.pointSize },
       line: { color: style.colour, width: style.lineWidth },
@@ -494,8 +631,31 @@ function boxOrViolin(spec: AnalysisSpec, result: EngineResult, kind: "box" | "vi
       pointpos: 0,
       ...(kind === "violin" ? { meanline: { visible: true }, points: "all" } : {}),
       hovertemplate: "%{y:.3f}<br>row %{customdata}<extra></extra>",
+    })
+
+    // Drawn, greyed, outside the distribution (§8.1). A separate trace because
+    // a box's own points are the ones it summarises, by construction.
+    const dropped = g.y.filter((_, k) => g.excluded[k])
+    if (dropped.length > 0 && figure.showExcludedPoints) {
+      traces.push({
+        type: "scatter",
+        mode: "markers",
+        x: dropped.map(() => key),
+        y: dropped,
+        customdata: g.rowIds.filter((_, k) => g.excluded[k]),
+        name: `${key} excluded`,
+        marker: {
+          color: EXCLUDED_COLOUR,
+          size: style.pointSize,
+          symbol: "circle-open",
+          line: { width: 1.5, color: EXCLUDED_COLOUR },
+        },
+        showlegend: false,
+        hovertemplate: "excluded: %{y:.3f}<br>row %{customdata}<extra></extra>",
+      })
     }
-  })
+  }
+  return traces
 }
 
 function doseResponse(spec: AnalysisSpec, result: EngineResult) {
@@ -511,7 +671,7 @@ function doseResponse(spec: AnalysisSpec, result: EngineResult) {
     const ys: number[] = []
     const ids: string[] = []
     const excluded: boolean[] = []
-    for (const row of result.plotData) {
+    for (const row of drawableRows(spec, result)) {
       const x = Number(row.values[xCol])
       const y = Number(row.values[yCol])
       if (!Number.isFinite(x) || !Number.isFinite(y)) continue
@@ -537,8 +697,10 @@ function doseResponse(spec: AnalysisSpec, result: EngineResult) {
   }
 
   if (fit) {
-    // The 95% band is drawn first so the fitted line sits on top of it.
-    if (fit.confidenceBand) {
+    // The band is drawn first so the fitted line sits on top of it. Gated on
+    // showConfidenceBands, which the schema says governs the fit's band as well
+    // as Kaplan-Meier's: unticking it used to leave this one on screen.
+    if (fit.confidenceBand && figure.showConfidenceBands) {
       traces.push({
         type: "scatter",
         mode: "lines",
@@ -547,7 +709,7 @@ function doseResponse(spec: AnalysisSpec, result: EngineResult) {
         fill: "toself",
         fillcolor: "rgba(213,94,0,0.13)",
         line: { width: 0 },
-        name: "95% CI",
+        name: ciLabel(spec.analysis.alpha),
         hoverinfo: "skip",
       })
     }
@@ -564,6 +726,16 @@ function doseResponse(spec: AnalysisSpec, result: EngineResult) {
   return traces
 }
 
+/**
+ * Line / time-course, one vertex per TIMEPOINT with error bars.
+ *
+ * It plotted one vertex per raw row and drew no error bars at all, so
+ * triplicates at six timepoints came out as an eighteen-vertex zigzag rather
+ * than the six summarised points the requirement ("line/time-course with error
+ * bars") asks for. Replicates at a shared x are now summarised the same way a
+ * bar is, by `errorSpan`, so the whiskers here mean exactly what the whiskers
+ * on a bar chart mean and the subtitle labels both correctly.
+ */
 function lineTimecourse(spec: AnalysisSpec, result: EngineResult) {
   const figure = spec.figure
   const xCol = spec.analysis.groupColumn ?? spec.analysis.responseColumns[0]
@@ -571,28 +743,38 @@ function lineTimecourse(spec: AnalysisSpec, result: EngineResult) {
 
   return series.map((col, i) => {
     const style = styleFor(figure, col, i)
-    const xs: (number | string)[] = []
-    const ys: number[] = []
-    const ids: string[] = []
-    for (const row of result.plotData) {
+    // Exclusions never enter the summary; the flag only decides whether their
+    // marks appear, and a summarised vertex has no individual mark to grey.
+    const at = new Map<string, { x: number | string; ys: number[]; ids: string[] }>()
+    for (const row of analysisRows(result)) {
       const y = Number(row.values[col])
       if (!Number.isFinite(y)) continue
-      xs.push((row.values[xCol ?? ""] as number | string) ?? "")
-      ys.push(y)
-      ids.push(row.rowId)
+      const x = (row.values[xCol ?? ""] as number | string) ?? ""
+      const bucket = at.get(String(x)) ?? { x, ys: [], ids: [] }
+      bucket.ys.push(y)
+      bucket.ids.push(row.rowId)
+      at.set(String(x), bucket)
     }
+    // Numeric timepoints sort numerically; anything else keeps the order the
+    // data supplied, because "Day 10" must not sort before "Day 2".
+    const points = [...at.values()]
+    if (points.every((p) => typeof p.x === "number")) {
+      points.sort((a, b) => (a.x as number) - (b.x as number))
+    }
+    const spans = points.map((p) => errorSpan(p.ys, figure.errorBars))
     return {
       type: "scatter",
       mode: style.lineStyle === "none" ? "markers" : "lines+markers",
-      x: xs,
-      y: ys,
-      customdata: ids,
+      x: points.map((p) => p.x),
+      y: spans.map((s) => s.centre),
+      error_y: errorBarProps(spans, figure.errorBars),
+      customdata: points.map((p) => p.ids),
       name: col,
       line: { color: style.colour, width: style.lineWidth, dash: style.lineStyle },
       marker: { color: style.colour, size: style.pointSize, symbol: style.pointShape },
       opacity: style.opacity,
       yaxis: style.axis === "right" ? "y2" : "y",
-      hovertemplate: "%{x}: %{y:.3f}<br>row %{customdata}<extra></extra>",
+      hovertemplate: "%{x}: %{y:.3f}<br>rows %{customdata}<extra></extra>",
     }
   })
 }
@@ -601,7 +783,8 @@ function histogram(spec: AnalysisSpec, result: EngineResult) {
   const figure = spec.figure
   return spec.analysis.responseColumns.map((col, i) => {
     const style = styleFor(figure, col, i)
-    const values = result.plotData
+    // A bin height is a count, i.e. a number, so exclusions never enter it.
+    const values = analysisRows(result)
       .map((r) => Number(r.values[col]))
       .filter((v) => Number.isFinite(v))
     return {
@@ -641,7 +824,7 @@ function kaplanMeier(spec: AnalysisSpec, result: EngineResult) {
         line: { width: 0, shape: "hv" },
         hoverinfo: "skip",
         showlegend: false,
-        name: `${curve.label} 95% CI`,
+        name: `${curve.label} ${ciLabel(spec.analysis.alpha)}`,
       })
     }
     traces.push({
@@ -705,15 +888,16 @@ function heatmap(spec: AnalysisSpec, result: EngineResult) {
   const colLevels: string[] = []
   const cells = new Map<string, number[]>()
 
-  for (const row of result.plotData) {
-    if (row.excluded && !spec.figure.showExcludedPoints) continue
+  // A cell mean is a number. It read the display flag, so ticking "show
+  // excluded points" silently changed what the cells averaged.
+  for (const row of analysisRows(result)) {
     const r = String(row.values[rowCol] ?? "-")
     const c = String(row.values[colCol] ?? "-")
     const v = Number(row.values[valueCol])
     if (!Number.isFinite(v)) continue
     if (!rowLevels.includes(r)) rowLevels.push(r)
     if (!colLevels.includes(c)) colLevels.push(c)
-    const key = `${r} ${c}`
+    const key = `${r}\x00${c}`
     const bucket = cells.get(key) ?? []
     bucket.push(v)
     cells.set(key, bucket)
@@ -721,13 +905,13 @@ function heatmap(spec: AnalysisSpec, result: EngineResult) {
 
   const z = rowLevels.map((r) =>
     colLevels.map((c) => {
-      const bucket = cells.get(`${r} ${c}`)
+      const bucket = cells.get(`${r}\x00${c}`)
       if (!bucket || bucket.length === 0) return null
       return bucket.reduce((a, b) => a + b, 0) / bucket.length
     })
   )
   const counts = rowLevels.map((r) =>
-    colLevels.map((c) => cells.get(`${r} ${c}`)?.length ?? 0)
+    colLevels.map((c) => cells.get(`${r}\x00${c}`)?.length ?? 0)
   )
 
   return [
@@ -776,11 +960,23 @@ function volcano(spec: AnalysisSpec, result: EngineResult) {
   const alpha = spec.analysis.alpha
   const fcCut = spec.figure.volcanoFoldChange
 
-  const points = result.plotData
+  const rows = drawableRows(spec, result)
+  // Underflowed p-values arrive as exactly 0 routinely in genomics, and they
+  // are the STRONGEST hits. Dropping them deleted the top of the volcano with
+  // no warning, so they are clamped to the smallest positive p actually
+  // present — or the float floor when every p underflowed — which keeps them
+  // on the figure, at the top, without inventing a magnitude for them.
+  const positives = rows
+    .map((row) => Number(row.values[pCol]))
+    .filter((p) => Number.isFinite(p) && p > 0)
+  const pFloor = positives.length > 0 ? Math.min(...positives) : Number.MIN_VALUE
+
+  const points = rows
     .map((row) => {
       const x = Number(row.values[xCol])
-      const p = Number(row.values[pCol])
-      if (!Number.isFinite(x) || !Number.isFinite(p) || p <= 0) return null
+      const raw = Number(row.values[pCol])
+      if (!Number.isFinite(x) || !Number.isFinite(raw) || raw < 0) return null
+      const p = raw > 0 ? raw : pFloor
       return {
         x,
         y: -Math.log10(p),
@@ -829,8 +1025,9 @@ function pieComposition(spec: AnalysisSpec, result: EngineResult) {
   if (!labelCol) return []
 
   const totals = new Map<string, number>()
-  for (const row of result.plotData) {
-    if (row.excluded && !spec.figure.showExcludedPoints) continue
+  // A slice is a total, so exclusions stay out of it whatever the display flag
+  // says; a pie has no individual mark the flag could grey instead.
+  for (const row of analysisRows(result)) {
     const key = String(row.values[labelCol] ?? "-")
     const add = valueCol ? Number(row.values[valueCol]) : 1
     if (!Number.isFinite(add)) continue
@@ -859,8 +1056,9 @@ function pieComposition(spec: AnalysisSpec, result: EngineResult) {
 function numericSeries(spec: AnalysisSpec, result: EngineResult, column: string) {
   const xs: number[] = []
   const ids: string[] = []
-  for (const row of result.plotData) {
-    if (row.excluded && !spec.figure.showExcludedPoints) continue
+  // Feeds the ECDF, the Q-Q quantiles and the correlation matrix — all derived
+  // curves, so exclusions never enter them regardless of the display flag.
+  for (const row of analysisRows(result)) {
     const v = Number(row.values[column])
     if (!Number.isFinite(v)) continue
     xs.push(v)
@@ -874,24 +1072,22 @@ function barVariant(spec: AnalysisSpec, result: EngineResult, horizontal: boolea
   const figure = spec.figure
   const groups = groupRows(spec, result)
   const keys = [...groups.keys()]
-  const means = keys.map((k) => {
-    const vals = groups.get(k)!.y
-    return vals.reduce((a, b) => a + b, 0) / Math.max(vals.length, 1)
-  })
-  const errors = keys.map((k) => errorValue(groups.get(k)!.y, figure.errorBars) ?? 0)
+  // Same source of truth as `barWithPoints`: the engine's descriptives first,
+  // the included values otherwise. Never the raw group, exclusions and all.
+  const spans = keys.map((k) =>
+    errorSpan(includedValues(groups.get(k)!), figure.errorBars, descriptiveFor(result, k))
+  )
+  const centres = spans.map((s) => s.centre)
   const colours = keys.map((k, i) => styleFor(figure, k, i).colour)
   const bars = horizontal
-    ? { x: means, y: keys, orientation: "h" as const }
-    : { x: keys, y: means }
+    ? { x: centres, y: keys, orientation: "h" as const }
+    : { x: keys, y: centres }
   return [
     {
       type: "bar",
       ...bars,
       marker: { color: colours },
-      [horizontal ? "error_x" : "error_y"]:
-        figure.errorBars === "none"
-          ? undefined
-          : { type: "data", array: errors, visible: true, thickness: 1.4, width: 5 },
+      [horizontal ? "error_x" : "error_y"]: errorBarProps(spans, figure.errorBars),
       hovertemplate: horizontal ? "%{y}: %{x:.3f}<extra></extra>" : "%{x}: %{y:.3f}<extra></extra>",
       showlegend: false,
     },
@@ -904,8 +1100,9 @@ function areaChart(spec: AnalysisSpec, result: EngineResult) {
   const xCol = spec.analysis.groupColumn ?? spec.roles.find((r) => r.role === "time")?.column
   return spec.analysis.responseColumns.map((col, i) => {
     const style = styleFor(figure, col, i)
-    const points = result.plotData
-      .filter((r) => !r.excluded || figure.showExcludedPoints)
+    // A band's outline is a shape, not a set of marks: an excluded vertex would
+    // deform it, so exclusions stay out whatever the display flag says.
+    const points = analysisRows(result)
       .map((r) => ({ x: xCol ? Number(r.values[xCol]) : 0, y: Number(r.values[col]), id: r.rowId }))
       .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y))
       .sort((a, b) => a.x - b.x)
@@ -932,7 +1129,7 @@ function bubbleChart(spec: AnalysisSpec, result: EngineResult) {
   const [xCol, yCol, sizeCol] = spec.analysis.responseColumns
   if (!xCol || !yCol) return []
   const style = styleFor(figure, yCol, 0)
-  const rows = result.plotData.filter((r) => !r.excluded || figure.showExcludedPoints)
+  const rows = drawableRows(spec, result)
   const sizes = sizeCol ? rows.map((r) => Number(r.values[sizeCol])) : []
   const maxSize = sizes.length > 0 ? Math.max(...sizes.filter(Number.isFinite)) : 0
   return [
@@ -1094,7 +1291,7 @@ function blandAltmanChart(spec: AnalysisSpec, result: EngineResult) {
   const [aCol, bCol] = spec.analysis.responseColumns
   if (!aCol || !bCol) return []
   const style = styleFor(spec.figure, aCol, 0)
-  const rows = result.plotData.filter((r) => !r.excluded || spec.figure.showExcludedPoints)
+  const rows = drawableRows(spec, result)
   const pts = rows
     .map((r) => ({ a: Number(r.values[aCol]), b: Number(r.values[bCol]), id: r.rowId }))
     .filter((p) => Number.isFinite(p.a) && Number.isFinite(p.b))
@@ -1116,7 +1313,9 @@ function blandAltmanChart(spec: AnalysisSpec, result: EngineResult) {
 function rocChart(spec: AnalysisSpec, result: EngineResult) {
   const [truthCol, scoreCol] = spec.analysis.responseColumns
   if (!truthCol || !scoreCol) return []
-  const rows = result.plotData.filter((r) => !r.excluded || spec.figure.showExcludedPoints)
+  // The curve and its AUC are computed, so the display flag must not reach
+  // them: showing an excluded row used to move the reported AUC.
+  const rows = analysisRows(result)
   const truth = rows.map((r) => Number(r.values[truthCol]))
   const score = rows.map((r) => Number(r.values[scoreCol]))
   const style = styleFor(spec.figure, scoreCol, 0)
@@ -1152,7 +1351,7 @@ function forestChart(spec: AnalysisSpec, result: EngineResult) {
   const labelCol = spec.analysis.groupColumn
   if (!estCol || !loCol || !hiCol) return []
   const style = styleFor(spec.figure, estCol, 0)
-  const rows = result.plotData.filter((r) => !r.excluded || spec.figure.showExcludedPoints)
+  const rows = drawableRows(spec, result)
   const items = rows
     .map((r) => ({
       label: labelCol ? String(r.values[labelCol] ?? r.rowId) : r.rowId,
@@ -1191,7 +1390,10 @@ function forestChart(spec: AnalysisSpec, result: EngineResult) {
 function threeD(spec: AnalysisSpec, result: EngineResult, surface: boolean) {
   const [xCol, yCol, zCol] = spec.analysis.responseColumns
   if (!xCol || !yCol || !zCol) return []
-  const rows = result.plotData.filter((r) => !r.excluded || spec.figure.showExcludedPoints)
+  // The scatter is marks, so the display flag governs it. The surface is a
+  // computed grid — hiding a row there removed a whole gridline and reshaped
+  // the surface, which is the flag moving a number.
+  const rows = surface ? analysisRows(result) : drawableRows(spec, result)
   const style = styleFor(spec.figure, zCol, 0)
   if (surface) {
     // A surface needs a grid; the rows are gathered into one keyed by x and y.
@@ -1463,7 +1665,10 @@ export function buildFigure(
       })
     } else {
       shapes.push({
-        type: a.shape === "line" ? "line" : a.shape,
+        // Plotly's shape types are circle/rect/line/path only, so the schema's
+        // "ellipse" was handed straight through and silently drew nothing. A
+        // circle stretched by its bounding box IS an ellipse in Plotly.
+        type: a.shape === "ellipse" ? "circle" : a.shape,
         x0: a.x1,
         y0: a.y1,
         x1: a.x2,
@@ -1476,7 +1681,10 @@ export function buildFigure(
   // The error-bar choice is stated on the figure (§2), appended to the title so
   // it survives export. It is not decoration: a bar chart whose error bars are
   // unlabelled is uninterpretable.
-  const errorNote = ERROR_BAR_LABEL[figure.errorBars]
+  // Only where bars are actually drawn. `errorBars` defaults to "sd", so an
+  // unconditional append put "mean ± SD" under a pie chart, a heatmap and a
+  // volcano — figures with no error bar anywhere on them.
+  const errorNote = ERROR_BAR_KINDS.has(figure.kind) ? ERROR_BAR_LABEL[figure.errorBars] : ""
   const subtitleBits = [figure.subtitle, errorNote].filter(Boolean)
   // Always subordinate type: with no title of its own, an untitled figure was
   // promoting "mean ± SD" to the headline at full title weight.
@@ -1545,7 +1753,11 @@ export function rowIdAtPoint(
   points: { customdata?: unknown }[] | undefined | null,
   result: EngineResult | null
 ): string | null {
-  const raw = points?.[0]?.customdata
+  const point = points?.[0]?.customdata
+  // A summarised vertex — a time-course mean over its replicates — stands for
+  // several rows, so it carries all of their ids. The link opens the first;
+  // returning null there would make the aggregated kinds un-hit-testable.
+  const raw = Array.isArray(point) ? point[0] : point
   if (typeof raw !== "string" || raw.length === 0) return null
   return result?.plotData.some((row) => row.rowId === raw) ? raw : null
 }
