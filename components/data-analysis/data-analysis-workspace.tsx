@@ -227,6 +227,17 @@ import {
 import { hashTable } from "@/lib/data-analysis/workspace/bootstrap"
 import { snapshotToTable } from "@/lib/data-analysis/workspace/snapshot-table"
 import { deriveAiGate } from "@/lib/data-analysis/workspace/ai-gate"
+import {
+  usedDatasetGrid,
+  usedDatasetToCsv,
+  usedDatasetFileName,
+} from "@/lib/data-analysis/workspace/used-dataset"
+import {
+  fetchEngineSource,
+  generatePythonScript,
+  pythonScriptFileName,
+} from "@/lib/data-analysis/codegen/python"
+import { UsedRowsTable } from "@/components/data-analysis/used-rows-table"
 import { ATTACHMENT_MAX_FILE_SIZE } from "@/lib/attachment-types"
 
 function buildSnapshotFromAoa(aoa: (string | number)[][], sheetName: string, fileName: string): UniverWorkbookSnapshot {
@@ -246,6 +257,18 @@ function buildSnapshotFromAoa(aoa: (string | number)[][], sheetName: string, fil
 /** Download any JSON payload as a file. Shared by the two export paths. */
 function downloadJson(payload: unknown, fileName: string) {
   const blob = new Blob([JSON.stringify(payload)], { type: "application/json" })
+  const a = document.createElement("a")
+  a.href = URL.createObjectURL(blob)
+  a.download = fileName
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+}
+
+/** Download any text payload as a file. Same mechanics as `downloadJson`. */
+function downloadText(text: string, fileName: string, mime: string) {
+  const blob = new Blob([text], { type: mime })
   const a = document.createElement("a")
   a.href = URL.createObjectURL(blob)
   a.download = fileName
@@ -3099,6 +3122,64 @@ export function DataAnalysisWorkspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveSnapshot, title])
 
+  /**
+   * The dataset the figure was built from (§2 Tier 0), not the raw workbook.
+   *
+   * `plotData` is the resolver's own record of which rows, with which values,
+   * reached the engine — post-filter, post-transform, post-collapse, with the
+   * excluded points kept and marked. A reader given the raw file instead cannot
+   * reproduce the figure beside it, and nothing in the file says why.
+   */
+  const exportUsedDataset = useCallback(
+    (format: "csv" | "xlsx") => {
+      const plotData = engineResult?.plotData
+      if (!plotData?.length) {
+        toast.error("Run the analysis first; there are no computed rows to export")
+        return
+      }
+      const name = usedDatasetFileName(title, format)
+      if (format === "csv") {
+        downloadText(usedDatasetToCsv(plotData), name, "text/csv;charset=utf-8")
+      } else {
+        const wb = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(
+          wb,
+          XLSX.utils.aoa_to_sheet(usedDatasetGrid(plotData)),
+          "Used data"
+        )
+        XLSX.writeFile(wb, name)
+      }
+      toast.success(`Exported ${plotData.length} rows as used`)
+    },
+    [engineResult, title]
+  )
+
+  /**
+   * Reproducible code (§2 Tier 0), the one Tier 0 requirement with no partial
+   * form: a script that replays the analysis FROM THE RAW FILE. The engine
+   * source is fetched rather than bundled so the script carries exactly the
+   * bytes this deploy's worker runs.
+   */
+  const exportReproducibleCode = useCallback(async () => {
+    if (!derivedSpec) {
+      toast.error("There is no analysis to export yet")
+      return
+    }
+    try {
+      const engineSource = await fetchEngineSource()
+      downloadText(
+        generatePythonScript({ spec: derivedSpec, table: specTable, engineSource }),
+        pythonScriptFileName(title),
+        "text/x-python;charset=utf-8"
+      )
+      toast.success("Reproducible Python exported")
+    } catch (err) {
+      toast.error(
+        `Could not build the script: ${err instanceof Error ? err.message : String(err)}`
+      )
+    }
+  }, [derivedSpec, specTable, title])
+
   /* ── The saved analysis (§3A) ──────────────────────────────────────────────
      Everything below turns the workspace into something that survives a reload
      without a download: a server draft that autosaves, numbered revisions that
@@ -4234,6 +4315,9 @@ export function DataAnalysisWorkspace({
       content: askConsole,
     },
     { id: "settings", label: "Chart settings", content: <div className="p-4">{settingsForPhase}</div> },
+    /* §2 Tier 0: the rows the figure used, post-transform. The sheet on the
+       left is the RAW file; this is what the engine actually computed on. */
+    { id: "used-rows", label: "Rows used", content: <UsedRowsTable plotData={engineResult?.plotData} /> },
   ]
 
   /**
@@ -4605,8 +4689,22 @@ export function DataAnalysisWorkspace({
                 <ChartLine className="mr-2 h-4 w-4" /> Save chart to data files
               </DropdownMenuItem>
             )}
+            {/* Two datasets, named apart. "Used" is what the figure was built
+                from — post-filter, post-transform, exclusions marked — and is
+                what a reader needs to reproduce it. "Raw file" is the workbook
+                as attached, which is still worth having and is no longer the
+                thing that comes out when someone asks to export the data. */}
+            <DropdownMenuItem disabled={!engineResult} onClick={() => exportUsedDataset("csv")}>
+              <DownloadSimple className="mr-2 h-4 w-4" /> Export used data (.csv)
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled={!engineResult} onClick={() => exportUsedDataset("xlsx")}>
+              <DownloadSimple className="mr-2 h-4 w-4" /> Export used data (.xlsx)
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled={!derivedSpec} onClick={exportReproducibleCode}>
+              <DownloadSimple className="mr-2 h-4 w-4" /> Export code (.py)
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => downloadSnapshotAsXlsxFile(liveSnapshot, "analysis.xlsx")}>
-              <DownloadSimple className="mr-2 h-4 w-4" /> Export data (.xlsx)
+              <DownloadSimple className="mr-2 h-4 w-4" /> Export raw file (.xlsx)
             </DropdownMenuItem>
             <DropdownMenuItem onClick={exportAnalysisFile}>
               <DownloadSimple className="mr-2 h-4 w-4" /> Export analysis (.n9a)
