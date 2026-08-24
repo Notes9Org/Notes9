@@ -445,8 +445,12 @@ describe("bar labels live on the axis, not on the bars", () => {
   it("does not stamp text onto the bars", () => {
     const figure = buildFigure(spec(), result())
     const bar = figure.data.find((t) => t.type === "bar")!
-    expect(bar.text).toBeUndefined()
-    expect(bar.customdata).toEqual(["Control", "Treated"])
+    // The name is back on `text` because customdata now carries the bar's rows
+    // (T0.34), so the guard is `textposition`, which is what actually stops
+    // Plotly painting it, and the hover reading the name from there.
+    expect(bar.text).toEqual(["Control", "Treated"])
+    expect(bar.textposition).toBe("none")
+    expect(bar.hovertemplate).toContain("%{text}")
   })
 })
 
@@ -1269,6 +1273,10 @@ describe("every chart kind the spec names can be drawn", () => {
       expect(f.data.some((t) => t.type === "bar")).toBe(true)
       // The individual replicates over the bars, not the bars alone.
       expect(f.data.some((t) => t.type === "scatter" && t.mode === "markers")).toBe(true)
+      // The bar is an AGGREGATING mark, so it carries the rows it aggregated —
+      // the group name it used to carry there could never open anything.
+      const bars = f.data.filter((t) => t.type === "bar")
+      expect(bars.every((t) => (t.customdata as unknown[]).every(Array.isArray))).toBe(true)
     },
     // `everyKind` names one column for both factors, which is a one-factor
     // design described twice, so the honest drawing is the single-factor bar
@@ -1277,6 +1285,8 @@ describe("every chart kind the spec names can be drawn", () => {
     "grouped-bar": (f) => {
       expect(f.data.some((t) => t.type === "bar")).toBe(true)
       expect(f.data.some((t) => t.type === "scatter" && t.mode === "markers")).toBe(true)
+      const bars = f.data.filter((t) => t.type === "bar")
+      expect(bars.every((t) => (t.customdata as unknown[]).every(Array.isArray))).toBe(true)
     },
     "stacked-bar": (f) => {
       // One trace per component, or `barmode: "stack"` has nothing to stack.
@@ -1288,9 +1298,21 @@ describe("every chart kind the spec names can be drawn", () => {
     },
     "horizontal-bar": (f) =>
       expect(f.data.some((t) => t.type === "bar" && t.orientation === "h")).toBe(true),
-    box: (f) => expect(f.data.some((t) => t.type === "box")).toBe(true),
+    box: (f) => {
+      expect(f.data.some((t) => t.type === "box")).toBe(true)
+      // Slot 0 of a box trace is the whole row set, because that is the slot
+      // Plotly reads for a click on the BODY (one box per trace here).
+      for (const t of f.data.filter((x) => x.type === "box")) {
+        expect(Array.isArray((t.customdata as unknown[])[0])).toBe(true)
+        // The per-point hover label lives on `text` now, indexed by point.
+        expect(String(t.hovertemplate)).toContain("%{text}")
+      }
+    },
     violin: (f) => {
       expect(f.data.some((t) => t.type === "violin")).toBe(true)
+      for (const t of f.data.filter((x) => x.type === "violin")) {
+        expect(Array.isArray((t.customdata as unknown[])[0])).toBe(true)
+      }
       // The idiom is not "a violin": it is a density that stops where the data
       // stops. Plotly's default runs the kernel past the extremes, which draws
       // density below zero for a concentration, a count or a time.
@@ -1939,12 +1961,21 @@ describe("violin: the density stops where the data stops", () => {
       paired
     )
     const violins = figure.data.filter((t) => t.type === "violin")
-    expect(violins).toHaveLength(2)
-    expect(violins.map((t) => t.side).sort()).toEqual(["negative", "positive"])
+    // One trace per (level, group) — two levels over two groups. It used to be
+    // one trace per level holding both groups' violins, which drew the same
+    // picture but made a body click resolve to a row from the wrong group
+    // (T0.34): Plotly indexes a body's customdata by its position in its trace.
+    expect(violins).toHaveLength(4)
+    expect(new Set(violins.map((t) => t.side))).toEqual(new Set(["negative", "positive"]))
     // Halves normalised apart would make three replicates as wide as thirty.
     expect(new Set(violins.map((t) => t.scalegroup)).size).toBe(1)
     // Both halves still sit over the group ticks, not over one collapsed tick.
     expect(new Set(violins.flatMap((t) => t.x as string[]))).toEqual(new Set(["Ctrl", "Drug"]))
+    // Splitting the traces must not split the legend: one entry per LEVEL.
+    expect(violins.filter((t) => t.showlegend !== false)).toHaveLength(2)
+    expect(new Set(violins.map((t) => t.legendgroup))).toEqual(
+      new Set(violins.map((t) => t.name))
+    )
   })
 
   it("refuses a split it cannot draw out loud rather than silently drawing one violin", () => {
@@ -2165,5 +2196,395 @@ describe("histogram: a bar resolves back to its rows", () => {
       readings
     )
     expect((figure.layout.title as { text: string }).text).toContain("bin settings not applied")
+  })
+})
+
+/* ── T0.34: an aggregating mark resolves to the rows behind it ─────────────*/
+
+describe("aggregating marks resolve to their row set", () => {
+  /** What a Plotly click hands `rowIdAtPoint` for the mark at `index`. */
+  function clickAt(trace: Record<string, unknown>, index: number) {
+    return [{ customdata: (trace.customdata as unknown[])[index] }]
+  }
+
+  it("resolves a bar body to the rows it averaged", () => {
+    const r = result()
+    const figure = buildFigure(spec(), r)
+    const bar = figure.data.find((t) => t.type === "bar")!
+    // Two groups in the fixture, and each bar stands for the rows it averaged.
+    const included = r.plotData.filter((row) => !row.excluded)
+    expect((bar.customdata as string[][]).map((ids) => ids.length)).toEqual([
+      included.filter((row) => row.values.treatment === "Control").length,
+      included.filter((row) => row.values.treatment === "Treated").length,
+    ])
+    expect((bar.customdata as string[][]).flat()).toHaveLength(included.length)
+    // The whole set is reachable, and every id in it is a real row.
+    const behind = (bar.customdata as string[][])[0]
+    expect(behind.every((id) => r.plotData.some((row) => row.rowId === id))).toBe(true)
+    // And the click itself resolves rather than returning null.
+    expect(rowIdAtPoint(clickAt(bar, 0), r)).toBe(behind[0])
+    expect(rowIdAtPoint(clickAt(bar, 1), r)).toBe((bar.customdata as string[][])[1][0])
+  })
+
+  it("leaves excluded replicates out of the bar's row set", () => {
+    const r = result({
+      plotData: result().plotData.map((row, i) => ({ ...row, excluded: i === 0 })),
+    })
+    const bar = buildFigure(spec({ figure: { kind: "bar-scatter-error", x: {}, y: {} } }), r)
+      .data.find((t) => t.type === "bar")!
+    const excludedId = r.plotData.find((row) => row.excluded)!.rowId
+    // The bar did not average it, so the bar does not claim it. It is still on
+    // the figure with its own id, greyed, as its own mark.
+    expect((bar.customdata as string[][]).flat()).not.toContain(excludedId)
+    const marks = buildFigure(spec(), r).data.filter((t) => t.mode === "markers")
+    expect(marks.flatMap((t) => t.customdata as string[])).toContain(excludedId)
+  })
+
+  it("resolves a grouped-bar sub-bar to its own cell", () => {
+    const twoWay = result({
+      plotData: Array.from({ length: 12 }, (_, i) => ({
+        rowId: `g${i}`,
+        values: { treatment: i % 2 ? "Drug" : "Ctrl", sex: i % 4 < 2 ? "F" : "M", conc: 1 + i },
+        excluded: false,
+      })),
+    })
+    const figure = buildFigure(
+      spec({
+        analysis: {
+          test: "none",
+          groupColumn: "treatment",
+          secondFactorColumn: "sex",
+          responseColumns: ["conc"],
+        },
+        figure: { kind: "grouped-bar", x: {}, y: {}, errorBars: "sd" },
+      }),
+      twoWay
+    )
+    const bars = figure.data.filter((t) => t.type === "bar")
+    expect(bars.length).toBeGreaterThan(0)
+    for (const bar of bars) {
+      for (const [i] of (bar.customdata as string[][]).entries()) {
+        const ids = (bar.customdata as string[][])[i]
+        if (ids.length === 0) continue
+        // Every id in one sub-bar's set comes from ONE cell: same primary group
+        // and same second-factor level. A set that mixed cells would be the bar
+        // claiming rows it did not average.
+        const rows = ids.map((id) => twoWay.plotData.find((row) => row.rowId === id)!)
+        expect(new Set(rows.map((row) => row.values.treatment)).size).toBe(1)
+        expect(new Set(rows.map((row) => row.values.sex)).size).toBe(1)
+        expect(rowIdAtPoint(clickAt(bar, i), twoWay)).toBe(ids[0])
+      }
+    }
+  })
+
+  it("resolves a box body to its rows without breaking the points inside it", () => {
+    const r = result()
+    const figure = buildFigure(spec({ figure: { kind: "box", x: {}, y: {}, errorBars: "none" } }), r)
+    const box = figure.data.find((t) => t.type === "box")!
+    const ids = box.text as string[]
+    // Slot 0 is the whole set: that is the slot Plotly reads for a body click.
+    expect((box.customdata as unknown[])[0]).toEqual(ids)
+    expect(rowIdAtPoint(clickAt(box, 0), r)).toBe(ids[0])
+    // Every point still resolves to ITS OWN row, slot 0 included.
+    ids.forEach((id, k) => expect(rowIdAtPoint(clickAt(box, k), r)).toBe(id))
+  })
+
+  it("resolves each half of a split violin to its own group", () => {
+    const paired = result({
+      plotData: Array.from({ length: 12 }, (_, i) => ({
+        rowId: `p${i}`,
+        values: {
+          treatment: i % 2 ? "Drug" : "Ctrl",
+          sex: i % 4 < 2 ? "F" : "M",
+          conc: 1 + (i % 5) * 0.4,
+        },
+        excluded: false,
+      })),
+    })
+    const figure = buildFigure(
+      spec({
+        analysis: {
+          test: "none",
+          groupColumn: "treatment",
+          secondFactorColumn: "sex",
+          responseColumns: ["conc"],
+        },
+        figure: { kind: "violin", x: {}, y: {}, errorBars: "none", violinSplit: true },
+      }),
+      paired
+    )
+    for (const violin of figure.data.filter((t) => t.type === "violin")) {
+      const group = (violin.x as string[])[0]
+      const level = violin.name as string
+      const behind = (violin.customdata as unknown[])[0] as string[]
+      expect(Array.isArray(behind)).toBe(true)
+      // The body's set is exactly this half's cell — the case that used to hand
+      // back a row from whichever group happened to sit at that index.
+      for (const id of behind) {
+        const row = paired.plotData.find((x) => x.rowId === id)!
+        expect(row.values.treatment).toBe(group)
+        expect(row.values.sex).toBe(level)
+      }
+      expect(rowIdAtPoint(clickAt(violin, 0), paired)).toBe(behind[0])
+    }
+  })
+})
+
+/* ── T0.25: the spec's series opacity, with the idiom's value as default ────*/
+
+describe("series opacity", () => {
+  const styled = (opacity: number, key: string) => ({
+    series: [{ key, colour: null, opacity }],
+  })
+
+  it("keeps each kind's own opacity when the series does not ask", () => {
+    const overlay = buildFigure(spec(), result()).data.find(
+      (t) => t.type === "scatter" && t.mode === "markers"
+    )!
+    expect((overlay.marker as { opacity: number }).opacity).toBe(0.75)
+
+    const bubble = buildFigure(
+      spec({
+        analysis: { test: "none", groupColumn: "treatment", responseColumns: ["a", "b", "c"] },
+        figure: { kind: "bubble", x: {}, y: {} },
+      }),
+      result()
+    ).data[0]
+    expect((bubble.marker as { opacity: number }).opacity).toBe(0.7)
+
+    const threeD = buildFigure(
+      spec({
+        analysis: { test: "none", groupColumn: "treatment", responseColumns: ["a", "b", "c"] },
+        figure: { kind: "scatter-3d", x: {}, y: {} },
+      }),
+      result()
+    ).data.find((t) => t.type === "scatter3d")!
+    expect((threeD.marker as { opacity: number }).opacity).toBe(0.85)
+  })
+
+  it("honours the series opacity where it used to be hardcoded", () => {
+    const overlay = buildFigure(
+      spec({ figure: { kind: "bar-scatter-error", x: {}, y: {}, ...styled(0.2, "Control") } }),
+      result()
+    ).data.find((t) => t.type === "scatter" && t.mode === "markers")!
+    expect((overlay.marker as { opacity: number }).opacity).toBe(0.2)
+
+    const bubble = buildFigure(
+      spec({
+        analysis: { test: "none", groupColumn: "treatment", responseColumns: ["a", "b", "c"] },
+        figure: { kind: "bubble", x: {}, y: {}, ...styled(0.35, "b") },
+      }),
+      result()
+    ).data[0]
+    expect((bubble.marker as { opacity: number }).opacity).toBe(0.35)
+
+    const threeD = buildFigure(
+      spec({
+        analysis: { test: "none", groupColumn: "treatment", responseColumns: ["a", "b", "c"] },
+        figure: { kind: "scatter-3d", x: {}, y: {}, ...styled(0.45, "c") },
+      }),
+      result()
+    ).data.find((t) => t.type === "scatter3d")!
+    expect((threeD.marker as { opacity: number }).opacity).toBe(0.45)
+  })
+})
+
+/* ── Axis breaks: drawn, or said out loud ──────────────────────────────────*/
+
+describe("axis breaks", () => {
+  const broken = (overrides: Record<string, unknown> = {}) =>
+    spec({
+      figure: {
+        kind: "bar-scatter-error",
+        x: {},
+        y: { breaks: [[60, 90]] },
+        errorBars: "sd",
+        ...overrides,
+      },
+    })
+
+  const subtitle = (f: ReturnType<typeof buildFigure>) =>
+    String((f.layout.title as { text: string }).text)
+
+  it("cuts the y axis into a subplot pair on one shared x", () => {
+    const f = buildFigure(broken(), result())
+    const lower = f.layout.yaxis as { domain: number[]; autorangeoptions: { maxallowed: number } }
+    const upper = f.layout.yaxis2 as { domain: number[]; autorangeoptions: { minallowed: number } }
+    expect(lower.domain[0]).toBe(0)
+    expect(lower.autorangeoptions.maxallowed).toBe(60)
+    expect(upper.domain[1]).toBe(1)
+    expect(upper.autorangeoptions.minallowed).toBe(90)
+    // A gap, not an overlap: the two segments must not touch.
+    expect(upper.domain[0]).toBeGreaterThan(lower.domain[1])
+    // One logical x, so the halves of a bar line up by construction.
+    expect((f.layout.xaxis2 as { matches: string }).matches).toBe("x")
+    expect((f.layout.xaxis2 as { showticklabels: boolean }).showticklabels).toBe(false)
+    // And the cut is marked, or the figure is just a convenient scale.
+    const marks = (f.layout.shapes as { yref?: string }[]).filter((sh) => sh.yref === "paper")
+    expect(marks.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it("draws the same traces above the cut, and no more than the axes declared", () => {
+    const plain = buildFigure(spec(), result())
+    const f = buildFigure(broken(), result())
+    expect(f.data).toHaveLength(plain.data.length * 2)
+    // The upper copy is the same data, so it carries the same row ids and a
+    // click above the cut opens the same row as a click below it.
+    const upper = f.data.filter((t) => t.yaxis === "y2")
+    expect(upper).toHaveLength(plain.data.length)
+    expect(upper.every((t) => t.showlegend === false)).toBe(true)
+    expect(upper.map((t) => t.customdata)).toEqual(plain.data.map((t) => t.customdata))
+    // The tested invariant: no trace may target an axis the layout did not make.
+    const declared = new Set(
+      Object.keys(f.layout)
+        .filter((k) => /^[xy]axis\d*$/.test(k))
+        .map((k) => k.replace("axis", ""))
+    )
+    for (const t of f.data) {
+      if (t.yaxis) expect(declared.has(String(t.yaxis))).toBe(true)
+      if (t.xaxis) expect(declared.has(String(t.xaxis))).toBe(true)
+    }
+    // Nothing to apologise for when it was drawn.
+    expect(subtitle(f)).not.toContain("axis break requested")
+  })
+
+  it("re-anchors a significance bracket that sits above the cut", () => {
+    const withTest = result({
+      test: {
+        test: "One-way ANOVA",
+        statistic: 200,
+        df: "1, 4",
+        pValue: 0.0001,
+        effectSizes: [],
+        assumptions: [],
+        pairwise: [
+          {
+            groupA: "Control",
+            groupB: "Treated",
+            meanDifference: 39,
+            ciLow: 30,
+            ciHigh: 48,
+            pValue: 0.00001,
+            pAdjusted: 0.00002,
+            correctionMethod: "tukey",
+            significant: true,
+          },
+        ],
+        terms: [],
+        groupSizes: { Control: 3, Treated: 3 },
+        reportSentence: "One-way ANOVA, F(1, 4) = 200, p < 0.001",
+      },
+    })
+    const plain = buildFigure(spec(), withTest)
+    const bracketY = (plain.brackets ?? [])[0]?.y
+    expect(bracketY).toBeGreaterThan(0)
+    // Cut below the bracket, so the bracket belongs to the upper segment.
+    const f = buildFigure(
+      spec({
+        figure: {
+          kind: "bar-scatter-error",
+          x: {},
+          y: { breaks: [[bracketY! * 0.4, bracketY! * 0.6]] },
+          errorBars: "sd",
+        },
+      }),
+      withTest
+    )
+    const bracket = (f.layout.shapes as Record<string, unknown>[])[0]
+    expect(bracket.yref).toBe("y2")
+    expect(bracket.xref).toBe("x2")
+    // Real data units on both sides of the cut, which is why the drag still
+    // reports an offset the spec can store.
+    expect(bracketMoveFromRelayout({ "shapes[0].y0": bracketY! + 5 }, f.brackets)).toEqual({
+      id: bracketId("Control", "Treated"),
+      offsetY: 5,
+    })
+    const star = (f.layout.annotations as Record<string, unknown>[]).find(
+      (a) => typeof a.text === "string" && a.text.includes("*")
+    )!
+    expect(star.yref).toBe("y2")
+  })
+
+  it("says so instead of dropping the request it cannot draw", () => {
+    // A kind with no continuous y to cut.
+    const pie = buildFigure(
+      spec({
+        figure: { kind: "pie-composition", x: {}, y: { breaks: [[1, 2]] }, errorBars: "none" },
+      }),
+      result()
+    )
+    expect(subtitle(pie)).toContain("axis break requested but not applied")
+    expect(pie.layout.yaxis2).toBeUndefined()
+
+    // An axis this renderer does not cut.
+    const onX = buildFigure(spec({ figure: { kind: "bar-scatter-error", x: { breaks: [[1, 2]] }, y: {} } }), result())
+    expect(subtitle(onX)).toContain("x axis breaks are not drawn")
+    expect(onX.layout.xaxis2).toBeUndefined()
+
+    // More than the one cut the subplot pair can draw.
+    const two = buildFigure(broken({ y: { breaks: [[10, 20], [60, 90]] } }), result())
+    expect(subtitle(two)).toContain("only one break at a time")
+    expect(two.layout.yaxis2).toBeUndefined()
+
+    // A backwards interval, which is a request with nothing in it.
+    const empty = buildFigure(broken({ y: { breaks: [[90, 60]] } }), result())
+    expect(subtitle(empty)).toContain("the interval is empty")
+    expect(empty.layout.yaxis2).toBeUndefined()
+
+    // A log axis already does the compressing a break is asked for.
+    const log = buildFigure(broken({ y: { breaks: [[60, 90]], scale: "log10" } }), result())
+    expect(subtitle(log)).toContain("logarithmic")
+    expect(log.layout.yaxis2).toBeUndefined()
+  })
+
+  it("still names the axis it did not cut when it cut the other one", () => {
+    // The y break is drawn AND the x request is reported. A drawn break must not
+    // be allowed to swallow an undrawn one — that is the same silent no-op with
+    // a figure in front of it.
+    const f = buildFigure(
+      spec({
+        figure: {
+          kind: "bar-scatter-error",
+          x: { breaks: [[1, 2]] },
+          y: { breaks: [[60, 90]] },
+          errorBars: "sd",
+        },
+      }),
+      result()
+    )
+    expect(f.layout.yaxis2).toBeDefined()
+    expect(subtitle(f)).toContain("x axis breaks are not drawn")
+  })
+
+  it("refuses the break rather than collide with a second y scale", () => {
+    // line-timecourse can carry BOTH a right-hand series and a break, and the
+    // upper segment of a break IS y2, so drawing both would put the right-hand
+    // series into the top half of a broken axis — a figure that looks finished
+    // and means something else.
+    const f = buildFigure(
+      spec({
+        analysis: { test: "none", groupColumn: "treatment", responseColumns: ["a", "b"] },
+        figure: {
+          kind: "line-timecourse",
+          x: {},
+          y: { breaks: [[2, 6]] },
+          errorBars: "none",
+          series: [{ key: "b", axis: "right" }],
+        },
+      }),
+      result()
+    )
+    expect(subtitle(f)).toContain("already uses a second y axis")
+    expect(f.layout.xaxis2).toBeUndefined()
+    // y2 is still the right-hand scale the series asked for, not a break half.
+    expect((f.layout.yaxis2 as { overlaying?: string }).overlaying).toBe("y")
+    expect(f.data.some((t) => t.yaxis === "y2")).toBe(true)
+  })
+
+  it("leaves a figure with no break asked for exactly as it was", () => {
+    const f = buildFigure(spec(), result())
+    expect(f.layout.yaxis2).toBeUndefined()
+    expect(f.layout.xaxis2).toBeUndefined()
+    expect(subtitle(f)).not.toContain("axis break")
   })
 })
