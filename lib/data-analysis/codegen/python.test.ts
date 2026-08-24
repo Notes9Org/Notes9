@@ -267,6 +267,35 @@ describeIf("generated Python reproduces the engine", () => {
     })
   }, RUNS_PYTHON)
 
+  it("collapses replicates the same way the resolver does, identifiers included", () => {
+    // The generated script carries its own copy of the collapse. If the two
+    // drift, the paper's supplementary script quietly corrupts data the app
+    // handled correctly, so the mirror is checked, not assumed: a numeric
+    // subject ID must not be averaged, and a disagreeing operator must be
+    // reported by BOTH sides in the same words.
+    const rows: (string | number)[][] = [
+      ["A", 1, "Ana", 10],
+      ["A", 2, "Bo", 12],
+      ["B", 3, "Ana", 20],
+      ["B", 4, "Ana", 24],
+    ]
+    const { file, table } = csvTable("collapse-ids.csv", ["arm", "subject", "operator", "value"], rows)
+    const s = spec(
+      { test: "descriptives", responseColumns: ["value"] },
+      { transforms: [{ kind: "collapseReplicates", by: ["arm"], statistic: "mean" }] }
+    )
+    const { json, report } = scriptResult(s, table, file)
+    expectSameNumbers(json, engineReference(s, table))
+    // subject 1 and 2 are different people; their mean, 1.5, is nobody.
+    expect(report).not.toContain("1.5")
+    expect(report).toContain('disagreed on "subject"')
+    expect(report).toContain('disagreed on "operator"')
+    const outcome = resolvePayload(s, table)
+    expect(outcome.ok).toBe(true)
+    if (!outcome.ok) return
+    for (const w of outcome.warnings) expect(report).toContain(w)
+  }, RUNS_PYTHON)
+
   it("carries an FDR correction through to the engine unchanged", () => {
     const rows: (string | number)[][] = []
     const means: Record<string, number> = { A: 10, B: 10.4, C: 21 }

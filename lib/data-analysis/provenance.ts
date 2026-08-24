@@ -101,6 +101,10 @@ function describeTransform(t: AnalysisSpec["transforms"][number]): string {
       // The column names themselves are not listed: a 96-well fold would bury
       // the rest of the card under twelve labels that say nothing a reader needs.
       return `${t.columns.length} wide columns folded into ${t.namesTo}/${t.valuesTo}`
+    case "pivotWider":
+      // Same reason as above for not listing the levels: the count is unknown
+      // until the data is read, and this card is written from the spec alone.
+      return `${t.namesFrom} spread wide, one column per level, filled from ${t.valuesFrom}`
   }
 }
 

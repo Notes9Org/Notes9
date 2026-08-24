@@ -154,7 +154,22 @@ export const Transform = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("collapseReplicates"),
     by: z.array(z.string().max(256)).min(1),
-    statistic: z.enum(["mean", "median"]),
+    statistic: z.enum(["mean", "median", "sd", "sem"]),
+    /**
+     * The measurement columns to collapse. ADDITIVE and optional: a spec saved
+     * before this field existed omits it and defaults to `[]`, in which case
+     * the resolver falls back to `analysis.responseColumns`. Naming the
+     * measurements matters because "parses as a number" is not the same
+     * question as "is a measurement": a numeric subject/well/plate ID that is
+     * averaged turns subjects 1, 2, 3 into subject 2.
+     */
+    columns: z.array(z.string().max(256)).default([]),
+    /**
+     * Column receiving the group size. Replicate n belongs in the table, not
+     * only in the concatenated row id, because SD and SEM are unreadable
+     * without it. ADDITIVE: defaults to "n" for specs saved before it existed.
+     */
+    countTo: z.string().max(256).default("n"),
   }),
   z.object({
     kind: z.literal("calculatedColumn"),
@@ -177,6 +192,24 @@ export const Transform = z.discriminatedUnion("kind", [
     namesTo: z.string().max(256),
     /** New column carrying its value. */
     valuesTo: z.string().max(256),
+  }),
+  /**
+   * Long → wide, the inverse of `pivotLonger`. Rows that agree on every column
+   * except the two named here become one row, with one new column per level of
+   * `namesFrom`. Needed because half the instruments in a lab emit long and
+   * half the readers (and every heatmap) want wide, and because a folded table
+   * has to be unfoldable or the fold is destructive.
+   *
+   * Like `pivotLonger` this changes the row count and the column set, so it
+   * belongs at the FRONT of the transform list: exclusions and downstream
+   * column references are written against whichever shape follows it.
+   */
+  z.object({
+    kind: z.literal("pivotWider"),
+    /** Column whose distinct values become the new column names. */
+    namesFrom: z.string().max(256),
+    /** Column whose values fill those new columns. */
+    valuesFrom: z.string().max(256),
   }),
 ])
 export type Transform = z.infer<typeof Transform>
