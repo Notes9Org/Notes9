@@ -205,6 +205,211 @@ const IMPLIED_Y2: AnalysisSpec["figure"]["x"] = {
   breaks: [],
 }
 
+/* ── Axis breaks ───────────────────────────────────────────────────────────*/
+
+/**
+ * Chart kinds whose y is a continuous cartesian scale, so a break can cut it.
+ *
+ * Everything else is a refusal on purpose: forest and horizontal-bar carry the
+ * value on x; ECDF, ROC and Kaplan-Meier put a bounded probability on y; qq
+ * already owns the second axis; heatmap, correlation-matrix, pie and the 3-D
+ * kinds have no cartesian y to cut. Each of those is named in the subtitle
+ * rather than accepted and ignored.
+ */
+const BREAKABLE_Y_KINDS = new Set<AnalysisSpec["figure"]["kind"]>([
+  "bar-scatter-error",
+  "grouped-bar",
+  "stacked-bar",
+  "box",
+  "violin",
+  "xy-scatter-fit",
+  "bubble",
+  "line-timecourse",
+  "area",
+  "dose-response",
+  "histogram",
+  "bland-altman",
+])
+
+/** Where the plot area is cut, in paper units, and how wide the cut is. */
+const BREAK_SEAM = 0.52
+const BREAK_GAP = 0.06
+
+type AxisBreak = { lo: number; hi: number }
+
+/**
+ * The y-axis break to draw, or the sentence that says it was asked for and is
+ * not on the figure.
+ *
+ * `AxisSpec.breaks` was declared, accepted by `axis.set`, validated and saved,
+ * and never rendered — so a researcher who asked for a broken axis was told the
+ * change had been applied and got the same figure back. Every path out of this
+ * function is either a break that gets drawn or a note that says it did not,
+ * because a silent no-op is worse than a refusal.
+ *
+ * Plotly has no native broken axis for a numeric scale: `rangebreaks` is
+ * coerced only when the axis type is "date" (verified against the bundled
+ * plotly.js 3.7 — the rangebreaks defaults are inside an `axType === "date"`
+ * branch), so setting it on a linear axis is itself a silent no-op. The two
+ * remaining choices are a transformed coordinate space or a subplot pair; this
+ * renderer takes the subplot pair, and `applyAxisBreak` says why.
+ */
+function planAxisBreak(
+  figure: AnalysisSpec["figure"],
+  data: Record<string, unknown>[]
+): { plan: AxisBreak | null; note: string } {
+  // A plan AND a note, not one or the other: a figure asking for a break on
+  // both axes gets the y one drawn and still has to be told about the x one.
+  // Returning a union let the drawn break swallow the undrawn request, which
+  // is the same silent no-op with an extra step.
+  const unread: string[] = []
+  if (figure.x.breaks.length > 0) unread.push("x axis breaks are not drawn")
+  if ((figure.y2?.breaks.length ?? 0) > 0) unread.push("y2 axis breaks are not drawn")
+
+  const refuse = (why: string) => ({
+    plan: null,
+    note: `axis break requested but not applied: ${[why, ...unread].join("; ")}`,
+  })
+  const silence = () => ({
+    plan: null,
+    note: unread.length > 0 ? `axis break requested but not applied: ${unread.join("; ")}` : "",
+  })
+
+  if (figure.y.breaks.length === 0) return silence()
+  if (figure.y.breaks.length > 1) return refuse("only one break at a time is drawn")
+  const [lo, hi] = figure.y.breaks[0]
+  if (!Number.isFinite(lo) || !Number.isFinite(hi) || hi <= lo) {
+    return refuse("the interval is empty")
+  }
+  if (!BREAKABLE_Y_KINDS.has(figure.kind)) {
+    return refuse(`${figure.kind} has no continuous y axis to cut`)
+  }
+  if (effectiveScale(figure.y.scale, figure.kind, "y") === "log10") {
+    // A log axis already compresses the range a break is there to compress, and
+    // the two together are read wrong far more often than either alone.
+    return refuse("the y axis is logarithmic")
+  }
+  if (figure.y2 || data.some((t) => t.yaxis === "y2")) {
+    // The upper segment IS y2 here. A figure that already has a right-hand
+    // scale would need a third axis and a second overlay to keep both.
+    return refuse("the figure already uses a second y axis")
+  }
+  return { plan: { lo, hi }, note: silence().note }
+}
+
+/**
+ * Draws the break as a subplot pair: two y axes stacked on one logical x, the
+ * lower one autoranged up to `lo` and the upper one down from `hi`, with the
+ * same traces on both and a pair of slashes across the seam.
+ *
+ * THE TRADE-OFF, against the other usual approach (squeeze the break out of the
+ * data and re-label the ticks): a transformed coordinate space is one function
+ * and no layout work, but it makes every number Plotly derives from the data
+ * wrong in a way nothing on the figure shows — box and violin quartiles and
+ * kernel densities, histogram bin edges, and error-bar lengths, which are not
+ * linear under a piecewise squeeze — and it corrupts the significance-bracket
+ * drag, because `bracketMoveFromRelayout` reads `shapes[i].y0` straight back
+ * out of the relayout patch and would record a transformed offset into the
+ * saved spec as though it were data units. Silently wrong numbers in a figure
+ * that reports p-values is exactly the failure this file exists to avoid.
+ *
+ * The subplot pair costs a duplicate of every trace and a busier layout, and
+ * it can only draw ONE cut — but the data stays raw, so every statistic Plotly
+ * computes is the statistic it would have computed unbroken, and the brackets
+ * keep dragging in real units. Marks above the cut are re-anchored to the upper
+ * axis rather than left to clip out of the figure.
+ *
+ * ponytail: the seam is a fixed 50/50 split of the plot area, not one weighted
+ * by each segment's data span; weight it here if a lopsided break reads badly.
+ */
+function applyAxisBreak(
+  layout: Record<string, unknown>,
+  data: Record<string, unknown>[],
+  shapes: Record<string, unknown>[],
+  annotations: Record<string, unknown>[],
+  brk: AxisBreak
+): void {
+  const lowerTop = BREAK_SEAM - BREAK_GAP / 2
+  const upperBottom = BREAK_SEAM + BREAK_GAP / 2
+  const ya = layout.yaxis as Record<string, unknown>
+  const xa = layout.xaxis as Record<string, unknown>
+
+  // `autorangeoptions` rather than an explicit range: the segments stay
+  // autoranged, so neither one has to be told the data extent this file does
+  // not have in one place.
+  layout.yaxis = {
+    ...ya,
+    anchor: "x",
+    domain: [0, lowerTop],
+    autorange: true,
+    autorangeoptions: { maxallowed: brk.lo },
+  }
+  layout.yaxis2 = {
+    ...ya,
+    // One axis title, on the lower segment. Two would print the label twice.
+    title: { text: "" },
+    anchor: "x2",
+    domain: [upperBottom, 1],
+    autorange: true,
+    autorangeoptions: { minallowed: brk.hi },
+  }
+  layout.xaxis = { ...xa, anchor: "y", domain: [0, 1] }
+  layout.xaxis2 = {
+    ...xa,
+    anchor: "y2",
+    domain: [0, 1],
+    // The upper segment is the same x: `matches` keeps the two halves of a bar
+    // literally aligned instead of aligned by eye, and the tick labels and the
+    // title stay on the bottom copy only.
+    matches: "x",
+    showticklabels: false,
+    title: { text: "" },
+  }
+
+  // The upper segment draws the SAME traces, clipped to the other side of the
+  // cut. Nothing is recomputed, so nothing can disagree between the halves; the
+  // duplicate keeps its customdata, so a click above the break resolves to the
+  // same row as a click below it.
+  for (const trace of [...data]) {
+    data.push({ ...trace, xaxis: "x2", yaxis: "y2", showlegend: false })
+  }
+
+  // Significance brackets and any annotation placed above the cut belong to the
+  // upper segment. Left on the lower axis they would sit past its range and
+  // vanish — a break that silently ate the p-value stars.
+  const above = (v: unknown) => typeof v === "number" && v >= brk.hi
+  for (const shape of shapes) {
+    if (shape.yref !== undefined && shape.yref !== "y") continue
+    if (!above(shape.y0) || !above(shape.y1)) continue
+    shape.yref = "y2"
+    if (shape.xref === "x") shape.xref = "x2"
+  }
+  for (const ann of annotations) {
+    if (ann.yref !== undefined && ann.yref !== "y") continue
+    if (!above(ann.y)) continue
+    if (ann.ayref === "y" && !above(ann.ay)) continue
+    ann.yref = "y2"
+    if (ann.xref === "x") ann.xref = "x2"
+    if (ann.ayref === "y") ann.ayref = "y2"
+    if (ann.axref === "x") ann.axref = "x2"
+  }
+
+  // The mark that says "this axis is cut". Without it a broken axis is just a
+  // figure with a suspiciously convenient scale.
+  for (const y of [lowerTop, upperBottom]) {
+    shapes.push({
+      type: "line",
+      xref: "paper",
+      yref: "paper",
+      x0: -0.014,
+      x1: 0.014,
+      y0: y - 0.014,
+      y1: y + 0.014,
+      line: { color: "#9aa0a6", width: 1 },
+    })
+  }
+}
+
 /** Chart kinds drawn at integer x positions with group names as tick labels. */
 const NUMBERED_X = new Set<AnalysisSpec["figure"]["kind"]>([
   "bar-scatter-error",
@@ -277,6 +482,44 @@ function styleFor(figure: AnalysisSpec["figure"], key: string, index: number) {
     lineWidth: style?.lineWidth ?? 2,
     axis: style?.axis ?? "left",
   }
+}
+
+/**
+ * The opacity a series asked for, or the idiom's own value when it did not ask.
+ *
+ * `SeriesStyle.opacity` defaults to 1 in the schema, so "nobody set an opacity"
+ * and "somebody set 1" arrive here as the same number. The renderer already
+ * reads `jitter` that way -- the schema's neutral default means "use whatever
+ * this chart kind does" -- and reading opacity the same way is what lets these
+ * kinds honour the field without redrawing every figure already saved at their
+ * hardcoded value.
+ *
+ * ponytail: the ceiling is that a series cannot ask these kinds for a literal
+ * 1.0; making `opacity` nullable in the spec would lift it, and this function is
+ * the only place that would change.
+ */
+function seriesOpacity(style: { opacity: number }, whenUnset: number): number {
+  return style.opacity === 1 ? whenUnset : style.opacity
+}
+
+/**
+ * `customdata` for a trace whose body is ONE aggregating mark over `rowIds`.
+ *
+ * Plotly hands a click on a box or violin BODY the trace's customdata at the
+ * body's index within the trace, and a click on one of that trace's own points
+ * the customdata at the point's index (plotly.js `makeEventData`, which reads
+ * `pointData.index`; the box hover sets it to the body index for a body and to
+ * the datum index for a point). One array has to serve both, so slot 0 does
+ * double duty: it holds the whole row set -- which is what a body click reads,
+ * these traces carrying exactly one body each -- and `rowIdAtPoint` unwraps it
+ * to the first id, which is point 0's own row, so that point still resolves to
+ * itself. Every later slot is just that point's id.
+ *
+ * The per-point hover label moves to `text`, which box and violin traces index
+ * by point (plotly.js merges `text[i]` into each point's calc data as `tx`).
+ */
+function bodyCustomdata(rowIds: string[]): (string | string[])[] {
+  return rowIds.map((id, k) => (k === 0 ? rowIds : id))
 }
 
 /**
@@ -724,11 +967,20 @@ function barWithPoints(spec: AnalysisSpec, result: EngineResult): Record<string,
         opacity: barStyle.opacity,
       },
       error_y: errorBarProps(spans, figure.errorBars),
-      // %{x} would print the numeric position, so the group name rides along as
-      // customdata. Not `text`: Plotly paints a bar's `text` onto the bar, which
-      // duplicated every group name across the middle of the chart.
-      customdata: keys,
-      hovertemplate: "%{customdata}: %{y:.3f}<extra></extra>",
+      // A bar is one mark standing for the rows it averaged, so it carries all
+      // of their ids -- the convention the binned histogram set, and what lets a
+      // click on the bar body open the six rows behind it (T0.34). The group
+      // name it used to carry there moved to `text`, with `textposition: "none"`
+      // so Plotly does not paint every name across the middle of the chart.
+      // Excluded replicates are left out: the bar did not average them, they are
+      // drawn as their own greyed marks, and each still carries its own id.
+      customdata: keys.map((k) => {
+        const g = groups.get(k)!
+        return g.rowIds.filter((_, j) => !g.excluded[j])
+      }),
+      text: keys,
+      textposition: "none",
+      hovertemplate: "%{text}: %{y:.3f}<extra></extra>",
       showlegend: false,
     },
   ]
@@ -769,7 +1021,7 @@ function barWithPoints(spec: AnalysisSpec, result: EngineResult): Record<string,
           width: g.excluded.map((e) => (e ? 1.5 : 0)),
           color: g.excluded.map((e) => (e ? EXCLUDED_COLOUR : style.colour)),
         },
-        opacity: 0.75,
+        opacity: seriesOpacity(style, 0.75),
         size: style.pointSize,
         symbol: g.excluded.map((e) => (e ? "circle-open" : style.pointShape)),
       },
@@ -834,10 +1086,17 @@ function groupedBar(spec: AnalysisSpec, result: EngineResult): Record<string, un
       name: level,
       marker: { color: style.colour, opacity: style.opacity },
       error_y: errorBarProps(spans, figure.errorBars),
-      // %{x} is the numeric tick, so the group name rides along as customdata,
-      // exactly as the single-factor bar does.
-      customdata: groupKeys,
-      hovertemplate: `%{customdata} · ${level}: %{y:.3f}<extra></extra>`,
+      // Each sub-bar stands for the rows of one cell, so it carries all of their
+      // ids and a click on it opens that cell (T0.34). The group name it used to
+      // carry there moved to `text` — %{x} is the numeric tick — with
+      // `textposition: "none"` so Plotly does not paint it onto the bar.
+      customdata: groupKeys.map((g) => {
+        const cell = cells.get(`${g}\x00${level}`)
+        return cell ? cell.rowIds.filter((_, k) => !cell.excluded[k]) : []
+      }),
+      text: groupKeys,
+      textposition: "none",
+      hovertemplate: `%{text} · ${level}: %{y:.3f}<extra></extra>`,
     })
   }
 
@@ -881,7 +1140,7 @@ function groupedBar(spec: AnalysisSpec, result: EngineResult): Record<string, un
           width: excluded.map((e) => (e ? 1.5 : 0)),
           color: excluded.map((e) => (e ? EXCLUDED_COLOUR : style.colour)),
         },
-        opacity: 0.75,
+        opacity: seriesOpacity(style, 0.75),
         size: style.pointSize,
         symbol: excluded.map((e) => (e ? "circle-open" : style.pointShape)),
       },
@@ -1015,16 +1274,26 @@ function splitViolin(
 
   split.levelKeys.forEach((level, li) => {
     const style = styleFor(figure, level, li)
-    const y: number[] = []
-    const x: string[] = []
-    const ids: string[] = []
     const droppedY: number[] = []
     const droppedX: string[] = []
     const droppedIds: string[] = []
+    // The legend names the LEVEL, not the group, so only the first violin drawn
+    // for a level carries an entry and the rest join it by `legendgroup`.
+    let legendDone = false
 
+    // One trace per (level, group), where this used to be one trace per level
+    // holding every group's violin. Both draw the same picture — `scalegroup`
+    // normalises the widths across traces, which is what it is for — but the
+    // one-body-per-trace shape is what makes a body click resolvable: Plotly
+    // indexes the customdata of a body click by the body's position IN ITS
+    // TRACE, so a trace holding G violins handed violin 3 the id of point 3,
+    // a row from whichever group happened to sit there. That is a wrong row
+    // reported confidently, which is worse than the null it replaced.
     for (const group of split.groupKeys) {
       const cell = split.cells.get(`${group}\x00${level}`)
       if (!cell) continue
+      const y: number[] = []
+      const ids: string[] = []
       cell.y.forEach((v, k) => {
         // Same rule as the unsplit violin: the density summarises the included
         // replicates, the excluded ones are drawn beside it and never inside.
@@ -1034,28 +1303,31 @@ function splitViolin(
           droppedIds.push(cell.rowIds[k])
         } else {
           y.push(v)
-          x.push(group)
           ids.push(cell.rowIds[k])
         }
       })
-    }
 
-    traces.push({
-      type: "violin",
-      x,
-      y,
-      customdata: ids,
-      name: level,
-      scalegroup: "split",
-      side: li === 0 ? "negative" : "positive",
-      marker: { color: style.colour, size: style.pointSize },
-      line: { color: style.colour, width: style.lineWidth },
-      opacity: style.opacity,
-      jitter: style.jitter || 0.4,
-      pointpos: 0,
-      ...violinShape(figure, "violin"),
-      hovertemplate: `%{x} · ${level}: %{y:.3f}<br>row %{customdata}<extra></extra>`,
-    })
+      traces.push({
+        type: "violin",
+        x: y.map(() => group),
+        y,
+        customdata: bodyCustomdata(ids),
+        text: ids,
+        name: level,
+        legendgroup: level,
+        showlegend: !legendDone,
+        scalegroup: "split",
+        side: li === 0 ? "negative" : "positive",
+        marker: { color: style.colour, size: style.pointSize },
+        line: { color: style.colour, width: style.lineWidth },
+        opacity: style.opacity,
+        jitter: style.jitter || 0.4,
+        pointpos: 0,
+        ...violinShape(figure, "violin"),
+        hovertemplate: `%{x} · ${level}: %{y:.3f}<br>row %{text}<extra></extra>`,
+      })
+      legendDone = true
+    }
 
     if (droppedY.length > 0 && figure.showExcludedPoints) {
       traces.push({
@@ -1093,11 +1365,15 @@ function boxOrViolin(spec: AnalysisSpec, result: EngineResult, kind: "box" | "vi
     // an excluded replicate sat inside the quartiles it was excluded from and
     // was drawn in the series colour, indistinguishable from a kept one.
     const keep = g.y.filter((_, k) => !g.excluded[k])
+    const keptIds = g.rowIds.filter((_, k) => !g.excluded[k])
     traces.push({
       type: kind,
       y: keep,
       x: keep.map(() => key),
-      customdata: g.rowIds.filter((_, k) => !g.excluded[k]),
+      // The body stands for every row it summarised; the points inside it stand
+      // for one each. `bodyCustomdata` is how one array serves both (T0.34).
+      customdata: bodyCustomdata(keptIds),
+      text: keptIds,
       name: key,
       marker: { color: style.colour, size: style.pointSize },
       line: { color: style.colour, width: style.lineWidth },
@@ -1106,7 +1382,7 @@ function boxOrViolin(spec: AnalysisSpec, result: EngineResult, kind: "box" | "vi
       jitter: style.jitter || 0.4,
       pointpos: 0,
       ...violinShape(figure, kind),
-      hovertemplate: "%{y:.3f}<br>row %{customdata}<extra></extra>",
+      hovertemplate: "%{y:.3f}<br>row %{text}<extra></extra>",
     })
 
     // Drawn, greyed, outside the distribution (§8.1). A separate trace because
@@ -1789,7 +2065,7 @@ function bubbleChart(spec: AnalysisSpec, result: EngineResult) {
       customdata: rows.map((r) => r.rowId),
       marker: {
         color: style.colour,
-        opacity: 0.7,
+        opacity: seriesOpacity(style, 0.7),
         // Area, not diameter: encoding the value as radius exaggerates it by
         // the square, which is the classic bubble-chart lie.
         size: sizeCol && maxSize > 0
@@ -2074,7 +2350,7 @@ function threeD(spec: AnalysisSpec, result: EngineResult, surface: boolean) {
       y: rows.map((r) => Number(r.values[yCol])),
       z: rows.map((r) => Number(r.values[zCol])),
       customdata: rows.map((r) => r.rowId),
-      marker: { color: style.colour, size: Math.max(3, style.pointSize - 2), opacity: 0.85 },
+      marker: { color: style.colour, size: Math.max(3, style.pointSize - 2), opacity: seriesOpacity(style, 0.85) },
       name: zCol,
     },
   ]
@@ -2349,9 +2625,17 @@ export function buildFigure(
     figure.series.some((s) => s.axis === "right") && !SECONDARY_AXIS_KINDS.has(figure.kind)
       ? "secondary axis not available for this chart kind"
       : ""
-  const subtitleBits = [figure.subtitle, errorNote, axisNote, ...idiomNotes(spec, result)].filter(
-    Boolean
-  )
+  // Planned before the layout is built (it reads the traces as the kind drew
+  // them) and applied after (it rewrites the axes the layout declares), so the
+  // note is available to the subtitle either way.
+  const { plan: breakPlan, note: breakNote } = planAxisBreak(figure, data)
+  const subtitleBits = [
+    figure.subtitle,
+    errorNote,
+    axisNote,
+    breakNote,
+    ...idiomNotes(spec, result),
+  ].filter(Boolean)
   // Always subordinate type: with no title of its own, an untitled figure was
   // promoting "mean ± SD" to the headline at full title weight.
   const subtitleText =
@@ -2410,6 +2694,14 @@ export function buildFigure(
   // than ignoring the request.
   if (figure.y2 || data.some((t) => t.yaxis === "y2")) {
     layout.yaxis2 = buildAxis(figure.y2 ?? IMPLIED_Y2, figure, { overlaying: "y", side: "right" }, false, "y2")
+  }
+
+  // Last, because it duplicates the traces onto a y2 of its own: running before
+  // the block above would have that block overwrite the upper segment's axis
+  // with a right-hand overlay. `planAxisBreak` refuses whenever the figure
+  // already has a second scale, so the two can never both fire.
+  if (breakPlan) {
+    applyAxisBreak(layout, data, shapes, annotations, breakPlan)
   }
 
   return { data, layout, brackets }
