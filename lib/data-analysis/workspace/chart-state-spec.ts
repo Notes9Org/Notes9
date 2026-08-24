@@ -29,6 +29,7 @@ import {
 import type { SpecMutation } from "@/lib/data-analysis/spec/mutations"
 import type { Table } from "@/lib/data-analysis/engine/resolver"
 import { defaultGroupColumn, inferDesign, inferRoles, legalTests, type TestCapability } from "@/lib/data-analysis/semantic/infer"
+import { applyRecord, rolesFromRecord, type ExperimentRecord } from "@/lib/data-analysis/semantic/record"
 import { hashTable, recallRowIds } from "./bootstrap"
 
 /** Every chart type the workspace offers, mapped onto a figure kind. */
@@ -241,10 +242,23 @@ export function recommendTestForChart(
 export function specFromChartState(
   state: ChartState,
   table: Table,
-  meta: { fileName: string; sheet?: string | null } = { fileName: "analysis.xlsx" }
+  meta: { fileName: string; sheet?: string | null } = { fileName: "analysis.xlsx" },
+  /**
+   * The notes9 experiment record for the open sheet, when the workspace knows
+   * which experiment it came from. Absent, everything below infers from the
+   * file exactly as before; present, the roles it establishes are not
+   * re-guessed and the design it declares is cross-checked against the file.
+   */
+  record?: ExperimentRecord | null
 ): AnalysisSpec {
-  const roles = inferRoles(table).map(({ rationale: _r, ...role }) => role)
-  const { rationale: _d, ...design } = inferDesign(table, roles)
+  const known = record ? rolesFromRecord(table, record) : []
+  const roles = inferRoles(table, known).map(({ rationale: _r, ...role }) => role)
+  const { rationale: _d, ...fileDesign } = inferDesign(
+    table,
+    roles,
+    record?.design ?? undefined
+  )
+  const design = record ? applyRecord(table, roles, fileDesign, record) : fileDesign
 
   // What the user mapped wins over what was inferred: they chose these columns
   // in the rail, and re-guessing them would fight the choice.

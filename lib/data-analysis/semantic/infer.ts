@@ -175,27 +175,52 @@ export interface InferredRole extends ColumnRole {
 }
 
 /**
- * Does every value of `key` appear exactly once within every level of `factor`?
+ * Does every value of `key` appear within every level of `factor`?
  *
  * That is the structural fingerprint of a subject measured under each
  * condition, and it is what separates a repeated-measures design from a
  * between-subjects one with a coincidentally repeating id.
+ *
+ * A duplicated (key, factor) cell does NOT break the crossing. The same subject
+ * measured twice under one condition is a TECHNICAL REPLICATE, which is the
+ * ordinary bench case, not a malformed design. This used to return false on the
+ * first repeat, so any dataset carrying technical replicates was reported
+ * unpaired and dropped onto an independent-samples test — the wrong test, on
+ * data that is emphatically not independent, for exactly the designs that most
+ * need the right one. The repeat count is returned instead, because it is the
+ * evidence for `replicateType` rather than a reason to give up.
  */
-function crossesFactor(table: Table, key: string, factor: string): boolean {
+function crossingOf(
+  table: Table,
+  key: string,
+  factor: string
+): { crossed: boolean; maxPerCell: number } {
+  const none = { crossed: false, maxPerCell: 0 }
   const seen = new Map<string, Set<string>>()
+  const perCell = new Map<string, number>()
   for (const row of table.rows) {
     const k = row.values[key]
     const f = row.values[factor]
-    if (k === null || k === undefined || f === null || f === undefined) return false
-    const set = seen.get(String(k)) ?? new Set<string>()
-    if (set.has(String(f))) return false // duplicated cell: not a clean crossing
-    set.add(String(f))
-    seen.set(String(k), set)
+    if (k === null || k === undefined || f === null || f === undefined) return none
+    const ks = String(k)
+    const fs = String(f)
+    const set = seen.get(ks) ?? new Set<string>()
+    set.add(fs)
+    seen.set(ks, set)
+    const cell = `${ks}\u0000${fs}`
+    perCell.set(cell, (perCell.get(cell) ?? 0) + 1)
   }
-  if (seen.size < 2) return false
+  if (seen.size < 2) return none
   const levels = new Set(table.rows.map((r) => String(r.values[factor])))
-  if (levels.size < 2) return false
-  return [...seen.values()].every((set) => set.size === levels.size)
+  if (levels.size < 2) return none
+  const crossed = [...seen.values()].every((set) => set.size === levels.size)
+  let maxPerCell = 0
+  for (const n of perCell.values()) if (n > maxPerCell) maxPerCell = n
+  return { crossed, maxPerCell }
+}
+
+function crossesFactor(table: Table, key: string, factor: string): boolean {
+  return crossingOf(table, key, factor).crossed
 }
 
 export function inferRoles(table: Table, existing: ColumnRole[] = []): InferredRole[] {
@@ -266,12 +291,23 @@ export function inferRoles(table: Table, existing: ColumnRole[] = []): InferredR
       }
     }
 
-    // Structure can promote an id column to `subject`: if its values recur once
-    // per level of a grouping column, it is tracking something across
-    // conditions, which is exactly what a subject does.
+    // Structure can promote an id column to `subject`: if its values recur
+    // across every level of a grouping column, it is tracking something
+    // through the conditions, which is exactly what a subject does.
+    //
+    // The candidate must also be FINER-GRAINED than the factor it crosses.
+    // Without that, a 2-level "group" crossing a 2-level "time" promotes one
+    // of two genuine factors to "subject" and turns a crossed factorial design
+    // into a fake repeated-measures one. A real subject column has many units
+    // spread over a few conditions (8 mice x 2 timepoints), never the reverse.
     if ((role === "ignore" || role === "group") && profile.cardinality > 1) {
       const factors = profiles.filter(
-        (p) => p.column !== profile.column && p.type === "categorical" && p.cardinality >= 2 && p.cardinality <= 12
+        (p) =>
+          p.column !== profile.column &&
+          p.type === "categorical" &&
+          p.cardinality >= 2 &&
+          p.cardinality <= 12 &&
+          p.cardinality < profile.cardinality
       )
       if (factors.some((f) => crossesFactor(table, profile.column, f.column))) {
         role = "subject"
@@ -305,13 +341,237 @@ export function inferDesign(
   roles: ColumnRole[],
   existing?: DesignDeclaration
 ): InferredDesign {
-  if (existing && existing.source !== "inferred") {
+  // The user's own declaration is final and is not argued with: they are the
+  // one authority above the record, and re-checking it against the file would
+  // only produce noise about a choice already made deliberately.
+  if (existing && existing.source === "user") {
+    return { ...existing, rationale: "Set by you." }
+  }
+
+  const fromFile = designFromFile(table, roles)
+
+  // The record is the higher authority for DESIGN, but it can be stale or
+  // simply wrong, and the researcher is the one who has to decide. So the file
+  // is still read, and where the two disagree the disagreement itself is the
+  // output: both sides named, no winner picked quietly (§6.2).
+  if (existing && existing.source === "project-record") {
+    const mismatch = describeDesignMismatch(existing, fromFile)
     return {
       ...existing,
-      rationale: existing.source === "user" ? "Set by you." : "From the experiment record.",
+      recordMismatch: mismatch,
+      rationale: mismatch
+        ? `From the experiment record. ${mismatch}`
+        : "From the experiment record, and the file agrees.",
     }
   }
 
+  return fromFile
+}
+
+/**
+ * Where a record-declared design and a file-derived one disagree, in words.
+ *
+ * Both sides are always named. A caller must be able to show the researcher
+ * what the record says AND what the file looks like, because the product's
+ * rule is that ambiguity becomes a question, never a silent guess. `null`
+ * means the two agree on everything worth reporting.
+ */
+export function describeDesignMismatch(
+  record: DesignDeclaration,
+  file: DesignDeclaration
+): string | null {
+  const notes: string[] = []
+
+  if (record.paired !== file.paired) {
+    notes.push(
+      `The experiment record says the measurements are ${record.paired ? "paired" : "unpaired"}, but the file looks ${file.paired ? "paired" : "unpaired"}.`
+    )
+  }
+  if (record.repeatedMeasures !== file.repeatedMeasures) {
+    notes.push(
+      `The record ${record.repeatedMeasures ? "declares" : "does not declare"} repeated measures; the file ${file.repeatedMeasures ? "looks like" : "does not look like"} a repeated-measures design.`
+    )
+  }
+  if (
+    record.subjectColumn !== file.subjectColumn &&
+    (record.subjectColumn !== null || file.subjectColumn !== null)
+  ) {
+    notes.push(
+      `The record tracks subjects in ${record.subjectColumn ? `"${record.subjectColumn}"` : "no column"}; the file's subject column reads as ${file.subjectColumn ? `"${file.subjectColumn}"` : "none"}.`
+    )
+  }
+  if (
+    record.replicateType !== file.replicateType &&
+    record.replicateType !== "unknown" &&
+    file.replicateType !== "unknown"
+  ) {
+    notes.push(
+      `The record calls the replicates ${record.replicateType}; the file's structure reads as ${file.replicateType}.`
+    )
+  }
+
+  return joinNotes(notes)
+}
+
+/** Mismatch notes as one field-safe string (`recordMismatch` caps at 512). */
+export function joinNotes(notes: string[]): string | null {
+  if (notes.length === 0) return null
+  let out = notes.join(" ")
+  if (out.length > 512) out = `${out.slice(0, 509)}...`
+  return out
+}
+
+/**
+ * Which columns nest inside which, outermost first.
+ *
+ * Nesting is a containment fact, not a naming one: a column B is nested in a
+ * column A when every value of B occurs under exactly one value of A (wells
+ * within a plate, aliquots within a donor). That is checked structurally, so
+ * it works on sheets that never say the word "plate", and it refuses to claim
+ * nesting for two columns that merely correlate.
+ *
+ * Only grouping-ish columns are considered, because nesting a response inside
+ * a subject is true and useless. A column that is constant, or that is unique
+ * per row, carries no containment and is skipped.
+ *
+ * ponytail: O(pairs x rows) over grouping columns only, which is a handful on
+ * any real sheet. If a sheet ever arrives with hundreds of factor columns,
+ * index the values once instead of rescanning per pair.
+ */
+function inferNesting(table: Table, roles: ColumnRole[]): string[] {
+  // Nesting describes the SAMPLING hierarchy — the units the measurements were
+  // organised into — not the factors the experimenter manipulated. A treatment
+  // and a timepoint are crossed with that hierarchy, never a level of it, and
+  // admitting them lets any finer column "nest" in whichever factor it happens
+  // to sit under, which is a containment fact but not a clustering one.
+  const NESTABLE = new Set(["subject", "group", "replicate"])
+  const candidates = roles
+    .filter((r) => NESTABLE.has(r.role))
+    .map((r) => r.column)
+    .filter((c) => table.columns.includes(c))
+  if (candidates.length < 2) return []
+
+  const valuesOf = new Map<string, string[]>()
+  for (const c of candidates) {
+    valuesOf.set(
+      c,
+      table.rows.map((r) => {
+        const v = r.values[c]
+        return v === null || v === undefined ? "" : String(v)
+      })
+    )
+  }
+
+  const distinct = (c: string) => new Set(valuesOf.get(c)!.filter((v) => v !== "")).size
+
+  /** Every non-empty value of `inner` sits under exactly one value of `outer`. */
+  const nestsIn = (inner: string, outer: string): boolean => {
+    const iv = valuesOf.get(inner)!
+    const ov = valuesOf.get(outer)!
+    const parent = new Map<string, string>()
+    let seen = 0
+    for (let i = 0; i < iv.length; i++) {
+      if (iv[i] === "" || ov[i] === "") continue
+      seen++
+      const had = parent.get(iv[i])
+      if (had === undefined) parent.set(iv[i], ov[i])
+      else if (had !== ov[i]) return false
+    }
+    // Containment with nothing to contain is not a hierarchy: require the
+    // inner column to be genuinely finer-grained than the outer one.
+    return seen > 0 && parent.size > 1 && distinct(outer) > 1 && parent.size > distinct(outer)
+  }
+
+  // Only levels that actually CLUSTER rows can nest. A column with one row per
+  // value is the observation itself, not a level above it, and it would
+  // otherwise "nest" in every factor it happens to sit under — true as
+  // containment, empty as structure. Nesting exists to flag the dependence
+  // that clustering induces, so a level that clusters nothing is not one.
+  const clustering = candidates.filter(
+    (c) => distinct(c) >= 2 && distinct(c) < table.rows.length
+  )
+
+  const pairs: [string, string][] = []
+  for (const inner of clustering) {
+    for (const outer of clustering) {
+      if (outer === inner) continue
+      if (nestsIn(inner, outer)) pairs.push([outer, inner])
+    }
+  }
+  if (pairs.length === 0) return []
+
+  // Report the chain outermost first: a column that nests in nothing is the
+  // top, and each level below it is one that nests in the level above.
+  const inners = new Set(pairs.map(([, i]) => i))
+  const chain: string[] = []
+  const roots = [...new Set(pairs.map(([o]) => o))].filter((o) => !inners.has(o))
+  const walk = (node: string) => {
+    if (chain.includes(node)) return
+    chain.push(node)
+    for (const [o, i] of pairs) if (o === node) walk(i)
+  }
+  for (const root of roots) walk(root)
+  // A cycle (mutually one-to-one columns) leaves nothing rooted; that is not a
+  // hierarchy, so report none rather than an arbitrary order.
+  return chain.length > 1 ? chain : []
+}
+
+/**
+ * Technical, biological, both, or not knowable — from structure, not a name.
+ *
+ * A column literally called "Biological replicate" used to be reported as
+ * TECHNICAL, because the old rule was `replicate ? "technical" : "biological"`:
+ * the presence of any replicate column meant technical, and its name was never
+ * read. That inverts the answer on the one sheet that states it outright.
+ *
+ * The order here is: what the sheet says in words, then what its shape shows.
+ * Repeated (subject, condition) cells are the signature of technical
+ * replication — the same biological unit measured more than once under one
+ * condition — while distinct subjects within a condition are biological
+ * replication. A sheet can carry both, and "mixed" is the honest answer then.
+ */
+function inferReplicateType(
+  table: Table,
+  roles: ColumnRole[],
+  subject: string | null,
+  factor: string | null
+): DesignDeclaration["replicateType"] {
+  const replicateColumns = roles.filter((r) => r.role === "replicate").map((r) => r.column)
+  const named = replicateColumns.map((c) => c.toLowerCase())
+  const saysTechnical = named.some((n) => /\b(technical|tech)\b/.test(n))
+  const saysBiological = named.some((n) => /\b(biological|biologic|bio)\b/.test(n))
+  // The sheet's own words win: a column that names its replicate type is a
+  // declaration, not a hint, and it is the only thing here that can tell the
+  // two apart when the shapes happen to coincide.
+  if (saysTechnical && saysBiological) return "mixed"
+  if (saysTechnical) return "technical"
+  if (saysBiological) return "biological"
+
+  if (!subject || !factor) return "unknown"
+  const { maxPerCell } = crossingOf(table, subject, factor)
+  if (maxPerCell === 0) return "unknown"
+
+  const technical = maxPerCell > 1
+  // More than one subject inside a single condition is biological replication.
+  const perLevel = new Map<string, Set<string>>()
+  for (const row of table.rows) {
+    const f = row.values[factor]
+    const s = row.values[subject]
+    if (f === null || f === undefined || s === null || s === undefined) continue
+    const set = perLevel.get(String(f)) ?? new Set<string>()
+    set.add(String(s))
+    perLevel.set(String(f), set)
+  }
+  const biological = [...perLevel.values()].some((s) => s.size > 1)
+
+  if (technical && biological) return "mixed"
+  if (technical) return "technical"
+  if (biological) return "biological"
+  return "unknown"
+}
+
+/** The design the file's own bytes imply, with no record consulted. */
+function designFromFile(table: Table, roles: ColumnRole[]): InferredDesign {
   const subject = roles.find((r) => r.role === "subject")?.column ?? null
   const factor =
     roles.find((r) => r.role === "treatment")?.column ??
@@ -323,8 +583,8 @@ export function inferDesign(
     paired: false,
     repeatedMeasures: false,
     subjectColumn: subject,
-    nesting: [],
-    replicateType: "unknown",
+    nesting: inferNesting(table, roles),
+    replicateType: inferReplicateType(table, roles, subject, factor),
     source: "inferred",
     recordMismatch: null,
   }
@@ -352,12 +612,10 @@ export function inferDesign(
 
   // Two levels measured on the same subjects is paired; more than two is
   // repeated measures. The distinction picks the test, so it is not cosmetic.
-  const replicate = roles.find((r) => r.role === "replicate")
   return {
     ...base,
     paired: levels === 2,
     repeatedMeasures: levels > 2,
-    replicateType: replicate ? "technical" : "biological",
     rationale:
       levels === 2
         ? `Every "${subject}" appears in both levels of "${factor}", so the measurements are paired.`
