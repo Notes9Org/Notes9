@@ -52,7 +52,26 @@ export type EnginePayload = PayloadBase &
     | { shape: "long"; long: { y: number; f1: string; f2?: string; subject?: string }[]; interaction: boolean }
     | { shape: "xy"; x: number[]; y: number[]; forceIntercept: boolean }
     | { shape: "contingency"; table: number[][]; rowLevels: string[]; colLevels: string[] }
-    | { shape: "curve"; x: number[]; y: number[]; model: string; weighting: string; sharedParameters: string[]; confidenceBands: boolean; unknowns: { label: string; signal: number }[] }
+    | {
+        shape: "curve"
+        x: number[]
+        y: number[]
+        model: string
+        weighting: string
+        sharedParameters: string[]
+        confidenceBands: boolean
+        unknowns: { label: string; signal: number }[]
+        /**
+         * Present only when `analysis.nonlinear.datasetColumn` is set (T0.20).
+         * The engine fits these jointly, sharing whatever `sharedParameters`
+         * names. Absent means one curve, which is what every payload built
+         * before this field existed meant. `x`/`y`/`rowIds` above stay the
+         * concatenation in this same order.
+         */
+        datasets?: { label: string; x: number[]; y: number[]; rowIds: string[] }[]
+        /** The column the datasets were split on, for the provenance record. */
+        datasetColumn?: string
+      }
     | { shape: "survival"; durations: number[]; events: number[]; groups: string[] | null }
   )
 
@@ -523,16 +542,213 @@ function applyTransform(
 
 /* ── The resolver ──────────────────────────────────────────────────────────*/
 
-export function resolvePayload(spec: AnalysisSpec, table: Table): ResolveOutcome {
+/* ── Cross-file join (T0.6) ────────────────────────────────────────────────
+   Joins the right table onto the left on one or more key columns.
+
+   ROW IDENTITY, which is the part that matters. Exclusions are stored against
+   row ids (§8.1) and are re-resolved on every open, so a join must not reshuffle
+   identity gratuitously:
+
+     - a left row matching AT MOST ONE right row KEEPS ITS OWN rowId. That is the
+       1:1 case — a plate map, a sample sheet, a metadata table — and it means
+       attaching one to a working analysis leaves every exclusion already filed
+       against those rows resolving exactly as before.
+     - a left row that fans out to N > 1 right rows becomes N rows with ids
+       `${leftRowId}<US>${rightRowId}`, the same convention `pivotLonger` uses,
+       because one id can no longer name one row. That is reported, since any
+       exclusion filed before the fan-out now names a row that no longer exists
+       and step 3 will count it as orphaned.
+
+   Both branches are deterministic under a fixed pair of version hashes, and the
+   cardinality that selects between them cannot change without one of those
+   hashes changing — which already invalidates the results under Law 4. So the
+   ids a spec produces are a function of (spec, left hash, right hash), which is
+   exactly what reproducibility requires.
+
+   Keys are compared on their string form. A well id that arrived as the number 3
+   from an instrument export and as the text "3" from a hand-typed map is the
+   same well, and refusing to join them would make the feature useless for the
+   case it exists to serve. */
+/**
+ * Separator for fan-out join ids and composite keys. Deliberately NOT the "␟"
+ * that `pivotLonger` uses: `pivotWider` undoes a fold by stripping the last
+ * "␟" from an id, and a join id must not be silently unwound by a widen that
+ * had nothing to do with the join.
+ */
+const JOIN_ID_SEPARATOR = "\u22c8"
+
+function joinKeyOf(values: Record<string, number | string | null>, columns: string[]): string | null {
+  const parts: string[] = []
+  for (const c of columns) {
+    const v = values[c]
+    // A null key joins to nothing. Treating null as a joinable value would make
+    // every unkeyed row on one side match every unkeyed row on the other.
+    if (v === null || v === undefined) return null
+    const t = String(v).trim()
+    if (t === "") return null
+    parts.push(t)
+  }
+  return parts.join(JOIN_ID_SEPARATOR)
+}
+
+function applyJoin(
+  left: Table,
+  join: AnalysisSpec["joins"] extends (infer J)[] | undefined ? J : never,
+  tables: ReadonlyMap<string, Table> | undefined,
+  warnings: string[],
+): { ok: true; table: Table } | { ok: false; blocked: PreconditionFailure } {
+  const name = join.right.fileName
+  const key = join.right.fileId
+  const right = key === null ? undefined : tables?.get(key)
+  if (!right) {
+    return {
+      ok: false,
+      blocked: {
+        code: "join-source-missing",
+        message: `"${name}" is joined into this analysis but its rows were not supplied, so the join could not run.`,
+        fix: "Open the file in this project, or remove the join.",
+      },
+    }
+  }
+
+  const leftKeys = join.on.map((k) => k.left)
+  const rightKeys = join.on.map((k) => k.right)
+  const missingLeft = leftKeys.filter((c) => !left.columns.includes(c))
+  const missingRight = rightKeys.filter((c) => !right.columns.includes(c))
+  if (missingLeft.length || missingRight.length) {
+    return {
+      ok: false,
+      blocked: {
+        code: "join-column-missing",
+        message:
+          `The join onto "${name}" names ` +
+          [
+            missingLeft.length ? `${missingLeft.join(", ")} on this file` : "",
+            missingRight.length ? `${missingRight.join(", ")} on "${name}"` : "",
+          ].filter(Boolean).join(" and ") +
+          ", which no longer exist.",
+        fix: "Pick key columns that are present on both files.",
+      },
+    }
+  }
+
+  // Which right columns to bring, and under what name. A collision never
+  // overwrites the left column: the analysis was built against the left file.
+  const wanted = join.columns.length
+    ? join.columns.filter((c) => right.columns.includes(c))
+    : right.columns.filter((c) => !rightKeys.includes(c))
+  const unknownWanted = join.columns.filter((c) => !right.columns.includes(c))
+  if (unknownWanted.length) {
+    warnings.push(`"${name}" no longer has ${unknownWanted.join(", ")}; ${unknownWanted.length === 1 ? "that column was" : "those columns were"} not joined in.`)
+  }
+  const renamed = new Map<string, string>()
+  const renamedPairs: string[] = []
+  for (const c of wanted) {
+    let target = c
+    if (left.columns.includes(c)) {
+      target = `${c}${join.suffix}`
+      let n = 2
+      while (left.columns.includes(target) || renamed.has(target)) { target = `${c}${join.suffix}${n}`; n += 1 }
+      renamedPairs.push(`${c} → ${target}`)
+    }
+    renamed.set(c, target)
+  }
+  if (renamedPairs.length) {
+    warnings.push(`Joining "${name}" renamed ${renamedPairs.join(", ")} to avoid overwriting a column of the same name on this file.`)
+  }
+
+  const index = new Map<string, TableRow[]>()
+  let rightUnkeyed = 0
+  for (const r of right.rows) {
+    const k = joinKeyOf(r.values, rightKeys)
+    if (k === null) { rightUnkeyed += 1; continue }
+    const at = index.get(k)
+    if (at) at.push(r)
+    else index.set(k, [r])
+  }
+  if (rightUnkeyed > 0) {
+    warnings.push(`${rightUnkeyed} row${rightUnkeyed === 1 ? "" : "s"} in "${name}" ${rightUnkeyed === 1 ? "has" : "have"} a blank key and could not be joined to anything.`)
+  }
+
+  const nulls: Record<string, null> = {}
+  for (const target of renamed.values()) nulls[target] = null
+
+  const rows: TableRow[] = []
+  let unmatched = 0
+  let fannedRows = 0
+  let fannedOut = 0
+  for (const l of left.rows) {
+    const k = joinKeyOf(l.values, leftKeys)
+    const hits = k === null ? undefined : index.get(k)
+    if (!hits || hits.length === 0) {
+      unmatched += 1
+      if (join.type === "inner") continue
+      rows.push({ rowId: l.rowId, values: { ...l.values, ...nulls } })
+      continue
+    }
+    if (hits.length === 1) {
+      // 1:1, the common case. The id is untouched, so exclusions survive.
+      const values: Record<string, number | string | null> = { ...l.values }
+      for (const [src, target] of renamed) values[target] = hits[0].values[src] ?? null
+      rows.push({ rowId: l.rowId, values })
+      continue
+    }
+    fannedRows += 1
+    fannedOut += hits.length
+    for (const r of hits) {
+      const values: Record<string, number | string | null> = { ...l.values }
+      for (const [src, target] of renamed) values[target] = r.values[src] ?? null
+      rows.push({ rowId: `${l.rowId}${JOIN_ID_SEPARATOR}${r.rowId}`, values })
+    }
+  }
+
+  if (unmatched > 0) {
+    warnings.push(
+      join.type === "inner"
+        ? `${unmatched} row${unmatched === 1 ? "" : "s"} dropped by the inner join onto "${name}": no matching key.`
+        : `${unmatched} row${unmatched === 1 ? "" : "s"} had no match in "${name}"; the joined columns are empty for ${unmatched === 1 ? "it" : "them"}.`,
+    )
+  }
+  if (fannedRows > 0) {
+    warnings.push(
+      `${fannedRows} row${fannedRows === 1 ? "" : "s"} matched more than one row in "${name}" and became ${fannedOut}. ` +
+        `Those rows have new ids, so any exclusion recorded against them before the join no longer resolves.`,
+    )
+  }
+
+  return { ok: true, table: { columns: [...left.columns, ...renamed.values()], rows } }
+}
+
+export function resolvePayload(
+  spec: AnalysisSpec,
+  table: Table,
+  /**
+   * Right-hand tables for `spec.joins`, keyed by `join.right.fileId` (T0.6).
+   * Omitted, which is every caller written before joins existed, means a spec
+   * carrying joins cannot resolve and says so rather than running on the left
+   * table alone.
+   */
+  joinTables?: ReadonlyMap<string, Table>,
+): ResolveOutcome {
   const warnings: string[] = []
   const blocked: PreconditionFailure[] = []
   const test = spec.analysis.test
 
+  /* 0, join across files in the same project (§T0.6). Before filters and before
+     transforms, because both must be able to name the columns a join brought
+     in — filtering on a plate map's `treatment` is the whole point. */
+  let joined: Table = table
+  for (const join of spec.joins ?? []) {
+    const outcome = applyJoin(joined, join, joinTables, warnings)
+    if (!outcome.ok) return { ok: false, blocked: [outcome.blocked] }
+    joined = outcome.table
+  }
+
   /* 1, filter */
-  let rows = table.rows.filter((r) =>
+  let rows = joined.rows.filter((r) =>
     spec.filters.every((f) => matches(r.values[f.column], f.op, f.value))
   )
-  const filteredOut = table.rows.length - rows.length
+  const filteredOut = joined.rows.length - rows.length
   if (filteredOut > 0) warnings.push(`${filteredOut} row${filteredOut === 1 ? "" : "s"} removed by filters.`)
 
   /* 2, transform, in order. Two kinds reference a named level, which has to be
@@ -634,7 +850,7 @@ export function resolvePayload(spec: AnalysisSpec, table: Table): ResolveOutcome
       // pre-transform column list would report "nothing numeric" about a table
       // that is entirely numeric.
       const available = [
-        ...new Set([...table.columns, ...included.flatMap((r) => Object.keys(r.values))]),
+        ...new Set([...joined.columns, ...included.flatMap((r) => Object.keys(r.values))]),
       ]
       const cols = spec.analysis.responseColumns.length
         ? spec.analysis.responseColumns
@@ -927,54 +1143,118 @@ export function resolvePayload(spec: AnalysisSpec, table: Table): ResolveOutcome
       }
       const nl = spec.analysis.nonlinear
       if (!nl) { blocked.push({ code: "no-model", message: "No curve model selected.", fix: "Choose 4PL, 3PL or another model." }); break }
-      const x: number[] = []
-      const y: number[] = []
-      const ids: string[] = []
-      let nonPositive = 0
+
+      /* One curve per level of `datasetColumn`, or a single curve over
+         everything when it is null (T0.20). Levels are kept in FIRST-APPEARANCE
+         order rather than sorted, so the engine's per-dataset results come back
+         in the order the rows are in and the labels are stable across re-runs. */
+      const dsCol = nl.datasetColumn ?? null
+      const buckets: { label: string; rows: typeof included }[] = []
+      const bucketIndex = new Map<string, number>()
+      let unlabelled = 0
       for (const r of included) {
-        const xv = toNumber(r.values[xCol])
-        const yv = toNumber(r.values[yCol])
-        if (xv === null || yv === null) continue
-        // Log-x models cannot take zero or negative concentrations. Dropping a
-        // blank silently would shift the fitted bottom, so it is counted.
-        if (xv <= 0) { nonPositive++; continue }
-        x.push(xv); y.push(yv); ids.push(r.rowId)
+        let label = ""
+        if (dsCol !== null) {
+          const raw = r.values[dsCol]
+          if (raw === null || raw === undefined || String(raw).trim() === "") { unlabelled++; continue }
+          label = String(raw)
+        }
+        let at = bucketIndex.get(label)
+        if (at === undefined) { at = buckets.length; bucketIndex.set(label, at); buckets.push({ label, rows: [] }) }
+        buckets[at].rows.push(r)
       }
+      if (unlabelled > 0) {
+        warnings.push(
+          `${unlabelled} row${unlabelled === 1 ? "" : "s"} had no value in "${dsCol}" and could not be assigned to a curve; ` +
+            `they are not in any dataset and did not contribute to the fit.`,
+        )
+      }
+      if (buckets.length === 0) {
+        blocked.push({ code: "no-rows", message: dsCol === null ? "No rows to fit." : `No row carries a value in "${dsCol}", so there is no curve to fit.` })
+        break
+      }
+
+      const minPoints = nl.model === "3pl" ? 3 : nl.model === "5pl" ? 5 : 4
+      const sets: { label: string; x: number[]; y: number[]; rowIds: string[] }[] = []
+      let nonPositive = 0
+      let failed = false
+      for (const bucket of buckets) {
+        const bx: number[] = []
+        const by: number[] = []
+        const bids: string[] = []
+        for (const r of bucket.rows) {
+          const xv = toNumber(r.values[xCol])
+          const yv = toNumber(r.values[yCol])
+          if (xv === null || yv === null) continue
+          // Log-x models cannot take zero or negative concentrations. Dropping a
+          // blank silently would shift the fitted bottom, so it is counted.
+          if (xv <= 0) { nonPositive++; continue }
+          bx.push(xv); by.push(yv); bids.push(r.rowId)
+        }
+        // Named per dataset, because "too few points" is unactionable when the
+        // user cannot tell WHICH curve is short.
+        const where = dsCol === null ? "" : ` for "${bucket.label}"`
+        if (bx.length < minPoints) {
+          blocked.push({ code: "too-few-points", message: `A ${nl.model.toUpperCase()} fit${where} needs at least ${minPoints} points; ${bx.length} available.` })
+          failed = true
+          continue
+        }
+        // Points are not the constraint, DISTINCT concentrations are. Replicates
+        // at one dose buy precision, not identifiability: a model with `minPoints`
+        // free parameters fitted through two doses is under-determined, and the
+        // optimiser reports that as an OverflowError from deep inside the solver
+        // rather than as anything a bench scientist can act on.
+        const levels = new Set(bx).size
+        if (levels < minPoints) {
+          blocked.push({
+            code: "too-few-concentrations",
+            message: `A ${nl.model.toUpperCase()} fit${where} estimates ${minPoints} parameters and needs at least ${minPoints} different concentrations; these ${bx.length} points cover only ${levels}.`,
+            fix: "Add more concentration levels, extra replicates at the same concentration do not constrain the curve.",
+          })
+          failed = true
+          continue
+        }
+        sets.push({ label: bucket.label, x: bx, y: by, rowIds: bids })
+      }
+      // A dataset that cannot be fitted blocks the whole request rather than
+      // being dropped: a global fit missing one of its curves shares its
+      // parameters across different data than the user asked for, and that
+      // substitution would not be visible in the numbers that came back.
+      if (failed) break
       if (nonPositive > 0) {
         warnings.push(`${nonPositive} point${nonPositive === 1 ? "" : "s"} with concentration ≤ 0 excluded from the log-scale fit.`)
       }
-      const minPoints = nl.model === "3pl" ? 3 : nl.model === "5pl" ? 5 : 4
-      if (x.length < minPoints) {
-        blocked.push({ code: "too-few-points", message: `A ${nl.model.toUpperCase()} fit needs at least ${minPoints} points; ${x.length} available.` })
-        break
+      // `sharedParameters` only has something to act on across two or more
+      // curves. Saying so is the difference between a global fit and a global
+      // fit that quietly ran as an ordinary one.
+      if (nl.sharedParameters.length > 0 && sets.length < 2) {
+        warnings.push(
+          `Shared parameters (${nl.sharedParameters.join(", ")}) were requested but there is only one curve to fit, so nothing was shared. ` +
+            (dsCol === null
+              ? "Name a dataset column to split the rows into several curves."
+              : `"${dsCol}" holds only one distinct value in the included rows.`),
+        )
       }
-      // Points are not the constraint, DISTINCT concentrations are. Replicates
-      // at one dose buy precision, not identifiability: a model with `minPoints`
-      // free parameters fitted through two doses is under-determined, and the
-      // optimiser reports that as an OverflowError from deep inside the solver
-      // rather than as anything a bench scientist can act on.
-      const levels = new Set(x).size
-      if (levels < minPoints) {
-        blocked.push({
-          code: "too-few-concentrations",
-          message: `A ${nl.model.toUpperCase()} fit estimates ${minPoints} parameters and needs at least ${minPoints} different concentrations; these ${x.length} points cover only ${levels}.`,
-          fix: "Add more concentration levels, extra replicates at the same concentration do not constrain the curve.",
-        })
-        break
-      }
+
+      const multi = dsCol !== null
       return {
         ok: true,
         warnings,
         payload: {
           ...base,
           shape: "curve",
-          x, y,
+          // Flat arrays stay the concatenation across datasets, in dataset
+          // order, so `x[i]`/`y[i]`/`rowIds[i]` still describe one point for any
+          // consumer that does not read `datasets`.
+          x: sets.flatMap((d) => d.x),
+          y: sets.flatMap((d) => d.y),
           model: nl.model,
           weighting: nl.weighting,
           sharedParameters: nl.sharedParameters,
           confidenceBands: nl.confidenceBands,
           unknowns: [],
-          rowIds: ids,
+          rowIds: sets.flatMap((d) => d.rowIds),
+          ...(multi ? { datasetColumn: dsCol, datasets: sets } : {}),
         },
       }
     }

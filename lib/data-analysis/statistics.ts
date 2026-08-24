@@ -1246,7 +1246,16 @@ export function dagostinoPearson(input: number[]): TestResult | null {
   }
 }
 
-/* ── Grubbs' outlier test (two-sided, single outlier) ────────────────────── */
+/* ── Grubbs' outlier test (two-sided, single outlier) ──────────────────────
+   The UNIVARIATE outlier test: is one value extreme within a single sample?
+   It needs no model and answers nothing about a fitted curve.
+
+   Its counterpart is `routOutliers` in ./curve-fitting, which is ROUT
+   (Motulsky & Brown 2006). ROUT asks the other question — which points lie
+   further from a FITTED MODEL than the scatter of the others explains — and
+   its parameter is a false discovery rate Q, not a significance level α.
+   The two are not interchangeable, and the exclusion record keys its params
+   to whichever method actually ran (§8.1). */
 export function grubbs(input: number[], alpha = 0.05): (TestResult & { outlier: number | null }) | null {
   const x = input.filter(isFinite)
   const n = x.length
