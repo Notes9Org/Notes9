@@ -11,7 +11,7 @@
  * expose `predict` (x→y), `interpolate` (y→x where invertible) and `predictSE`
  * (for confidence/prediction bands).
  */
-import { tInv } from "./distributions"
+import { tInv, tTwoSidedP } from "./distributions"
 
 export type FitModel =
   | "linear"
@@ -606,4 +606,259 @@ export function endpointTitre(dilutions: number[], signals: number[], cutoff: nu
     }
   }
   return NaN
+}
+
+/* ── ROUT outlier identification (T0.10) ───────────────────────────────────
+   Motulsky & Brown 2006, "Detecting outliers when fitting data with nonlinear
+   regression", BMC Bioinformatics 7:123.
+
+   SCOPE. ROUT is a CURVE-FIT outlier method. It asks "which points lie further
+   from THIS FITTED MODEL than the scatter of the other points can explain", and
+   every quantity in it — the residuals, the scale, the degrees of freedom — is
+   defined against a fitted model. It is therefore NOT a drop-in for Grubbs
+   (`grubbsTest` in ./statistics), which asks whether one value is extreme within
+   a single univariate sample and needs no model at all. Handing ROUT a bare
+   column is not a degraded ROUT, it is a different question, so this function
+   refuses any model that is not in the nonlinear catalog rather than quietly
+   falling back to something univariate.
+
+   The method, in the paper's own order:
+
+     1. Fit robustly, minimising the Lorentzian merit  Σ ln(1 + (R/RSDR)²)
+        (Eq. 8/14) instead of Σ R². Because the paper's gradient and Hessian
+        (Eq. 15/16) differ from least squares by exactly the factor 1/(1 + RR²),
+        this is iteratively reweighted least squares with w = 1/(1 + RR²), which
+        is what the loop below does with the existing `fitLM`.
+     2. RSDR = P68(|residuals|) · √(N/(N−K))   (Eq. 1), P68 being the 68.27th
+        percentile with proportional interpolation, K the number of fitted
+        parameters. Note: NOT the MAD/0.6745 estimator; the authors rejected it
+        because RSDR has to match Sy.x = √(SS/(N−K)) rather than the residual SD.
+        RSDR is recomputed every iteration — that adaptivity IS the method.
+     3. Test only the outermost points, i running from int(0.70·N) to N over the
+        residuals ranked by |R| ascending, with
+             αᵢ = Q·(N − (i−1))/N            (Eq. 17)
+             tᵢ = |Rᵢ| / RSDR                (Eq. 18), two-tailed, N−K df
+        At the FIRST i with Pᵢ < αᵢ, that point and every point further from the
+        curve are outliers. Eq. 17 is Benjamini–Hochberg written in the reversed
+        index: residual rank i is p-value rank N−i+1, so Q·(N−i+1)/N is the usual
+        BH threshold and the "first i" rule is BH's "largest passing p-rank".
+     4. Q is the false discovery rate, not a p-value threshold. 1% is the paper's
+        recommendation and this function's default.
+
+   WHAT THIS DOES NOT DO. It does not remove anything. It returns the indices it
+   identified plus the per-point arithmetic behind each call, so the caller can
+   file a §8.1 exclusion naming the method and Q. Step 5 of the paper — refit by
+   ordinary least squares on the survivors — is the engine re-running the spec
+   once those exclusions exist, which is what already happens for any exclusion.
+
+   DEVIATIONS, stated rather than hidden:
+     - The paper's prose says "the 30% of residuals furthest from the curve" but
+       its procedure says "loop i = int(0.70·N) to N", which is N − int(0.70·N) +
+       1 points, marginally more than 30% for most N. The procedure is followed
+       literally, since that is the specified algorithm and it is the direction
+       that tests more points rather than fewer.
+     - "Proportional interpolation" for P68 is taken as linear interpolation at
+       position (N−1)·0.6827 over the sorted absolute residuals. The paper does
+       not pin a percentile convention; a different one shifts RSDR by well under
+       a percent and is reported in `rsdr` either way.
+     - Robust fitting is unweighted, as the paper specifies. `WeightMode` is not
+       accepted here on purpose. */
+
+/** Motulsky & Brown's recommended false discovery rate. */
+export const ROUT_DEFAULT_Q = 0.01
+
+export type RoutOptions = {
+  /** Nonlinear model to fit. Defaults to 4PL, the dose-response workhorse. */
+  model?: FitModel
+  /** False discovery rate Q, in (0,1). Defaults to 1%. */
+  Q?: number
+  /** Starting parameters. Defaults to the model's own initial guess. */
+  p0?: number[]
+  /** Cap on robust-fit iterations. */
+  maxIterations?: number
+}
+
+export type RoutTestedPoint = {
+  /** Index into the x/y arrays that were passed IN, not into the cleaned pairs. */
+  index: number
+  x: number
+  y: number
+  /** Rank by |residual| ascending, 1-based, as in the paper's loop variable i. */
+  rank: number
+  residual: number
+  /** |residual| / RSDR (Eq. 18). */
+  t: number
+  /** Two-tailed p from t on N−K df. */
+  p: number
+  /** Benjamini–Hochberg threshold at this rank (Eq. 17). */
+  alpha: number
+  outlier: boolean
+}
+
+export type RoutResult = {
+  method: "ROUT"
+  model: FitModel
+  /** The Q that actually ran, for the §8.1 record. */
+  Q: number
+  /** Points that survived cleaning and were fitted. */
+  n: number
+  /** Fitted parameters K. */
+  k: number
+  df: number
+  rsdr: number
+  /** Parameters of the ROBUST fit, not of a least-squares fit. */
+  robustParams: number[]
+  paramNames: string[]
+  /** Indices into the input arrays, ascending. */
+  outlierIndices: number[]
+  /** Every point the loop examined, closest to the curve first. */
+  tested: RoutTestedPoint[]
+  robustFitConverged: boolean
+  warnings: string[]
+}
+
+/** Percentile with proportional (linear) interpolation over a SORTED array. */
+function percentileLinear(sorted: number[], pct: number): number {
+  const n = sorted.length
+  if (n === 0) return NaN
+  if (n === 1) return sorted[0]
+  const pos = ((n - 1) * pct) / 100
+  const lo = Math.floor(pos)
+  const hi = Math.ceil(pos)
+  if (lo === hi) return sorted[lo]
+  return sorted[lo] + (pos - lo) * (sorted[hi] - sorted[lo])
+}
+
+/** RSDR, Eq. 1. */
+function robustSdOfResiduals(residuals: number[], k: number): number {
+  const n = residuals.length
+  if (n <= k) return NaN
+  const abs = residuals.map(Math.abs).sort((a, b) => a - b)
+  return percentileLinear(abs, 68.27) * Math.sqrt(n / (n - k))
+}
+
+/**
+ * ROUT. Returns null when the request is not a curve fit ROUT can answer:
+ * an unknown or linear-in-parameters model, a Q outside (0,1), or fewer points
+ * than parameters. Never returns a partial or substituted result.
+ */
+export function routOutliers(x: number[], y: number[], opts: RoutOptions = {}): RoutResult | null {
+  const model = opts.model ?? "4pl"
+  const Q = opts.Q ?? ROUT_DEFAULT_Q
+  if (!Number.isFinite(Q) || Q <= 0 || Q >= 1) return null
+
+  // Linear-in-parameters models are fitted by a different path and are not in
+  // this catalog; refusing here is what keeps ROUT from being offered as a
+  // general-purpose univariate outlier test.
+  const def = NONLINEAR[model]
+  if (!def) return null
+
+  const warnings: string[] = []
+  const idx: number[] = []
+  const xs: number[] = []
+  const ys: number[] = []
+  let nonFinite = 0
+  let nonPositiveX = 0
+  for (let i = 0; i < Math.min(x.length, y.length); i++) {
+    const xv = x[i]
+    const yv = y[i]
+    if (!Number.isFinite(xv) || !Number.isFinite(yv)) {
+      nonFinite += 1
+      continue
+    }
+    if (def.logX && xv <= 0) {
+      nonPositiveX += 1
+      continue
+    }
+    idx.push(i)
+    xs.push(xv)
+    ys.push(yv)
+  }
+  if (nonFinite > 0) warnings.push(`${nonFinite} point${nonFinite === 1 ? "" : "s"} skipped: x or y was not a finite number.`)
+  if (nonPositiveX > 0) {
+    warnings.push(
+      `${nonPositiveX} point${nonPositiveX === 1 ? "" : "s"} skipped: ${model.toUpperCase()} is fitted on log₁₀(x) and x was zero or negative. ` +
+        `Those points were not tested for outlier status.`,
+    )
+  }
+
+  const n = xs.length
+  const p0 = opts.p0 ?? def.guess(xs, ys)
+  const k = p0.length
+  if (n <= k) return null
+
+  const residualsAt = (p: number[]) => ys.map((yv, i) => yv - def.fn(xs[i], p))
+
+  /* Step 1, robust fit. IRLS with Lorentzian weights, rescaling by the current
+     RSDR each pass, exactly the paper's "recompute the goodness of fit of the
+     prior iteration using the new value of RSDR". */
+  let params = p0.slice()
+  let rsdr = robustSdOfResiduals(residualsAt(params), k)
+  let converged = false
+  const maxIterations = opts.maxIterations ?? 100
+  for (let it = 0; it < maxIterations; it++) {
+    if (!Number.isFinite(rsdr) || rsdr <= 0) break
+    const r = residualsAt(params)
+    const w = r.map((ri) => 1 / (1 + (ri / rsdr) ** 2))
+    const step = fitLM(xs, ys, w, def.fn, params)
+    if (!step) break
+    const next = step.params
+    if (next.some((v) => !Number.isFinite(v))) break
+    const nextRsdr = robustSdOfResiduals(residualsAt(next), k)
+    if (!Number.isFinite(nextRsdr) || nextRsdr <= 0) break
+    const dScale = Math.abs(nextRsdr - rsdr) / Math.max(1, rsdr)
+    let dParam = 0
+    for (let j = 0; j < k; j++) dParam = Math.max(dParam, Math.abs(next[j] - params[j]) / Math.max(1, Math.abs(params[j])))
+    params = next
+    rsdr = nextRsdr
+    if (dScale <= 1e-12 && dParam <= 1e-12) {
+      converged = true
+      break
+    }
+  }
+  if (!Number.isFinite(rsdr) || rsdr <= 0) {
+    warnings.push("No outliers could be identified: the robust scale estimate (RSDR) is zero or undefined, so no residual is comparable to any other.")
+    return {
+      method: "ROUT", model, Q, n, k, df: n - k, rsdr: Number.isFinite(rsdr) ? rsdr : Number.NaN,
+      robustParams: params, paramNames: def.paramNames, outlierIndices: [], tested: [],
+      robustFitConverged: converged, warnings,
+    }
+  }
+  if (!converged) {
+    warnings.push(`The robust fit did not converge within ${maxIterations} iterations; RSDR and the residuals below are from the last iteration reached.`)
+  }
+
+  /* Steps 3–4, FDR on the outermost residuals. */
+  const res = residualsAt(params)
+  const order = res
+    .map((_, i) => i)
+    .sort((a, b) => Math.abs(res[a]) - Math.abs(res[b]) || a - b)
+  const df = n - k
+  const start = Math.max(1, Math.trunc(0.7 * n))
+  const tested: RoutTestedPoint[] = []
+  let cut = -1
+  for (let i = start; i <= n; i++) {
+    const j = order[i - 1]
+    const alpha = (Q * (n - (i - 1))) / n
+    const t = Math.abs(res[j]) / rsdr
+    const p = tTwoSidedP(t, df)
+    tested.push({ index: idx[j], x: xs[j], y: ys[j], rank: i, residual: res[j], t, p, alpha, outlier: false })
+    if (cut < 0 && p < alpha) cut = i
+  }
+  const outlierIndices: number[] = []
+  if (cut > 0) {
+    for (const point of tested) {
+      if (point.rank >= cut) {
+        point.outlier = true
+        outlierIndices.push(point.index)
+      }
+    }
+    outlierIndices.sort((a, b) => a - b)
+  }
+
+  return {
+    method: "ROUT", model, Q, n, k, df, rsdr,
+    robustParams: params, paramNames: def.paramNames,
+    outlierIndices, tested, robustFitConverged: converged, warnings,
+  }
 }

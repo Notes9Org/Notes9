@@ -1980,6 +1980,120 @@ def test_global_fit_excludes_zero_dose_points_per_dataset_and_names_the_dataset(
 
 
 
+
+# ══ T0.20 — the payload the TS resolver now emits for a global fit ════════════
+# The engine's global fit was already verified against a stacked curve_fit above.
+# What was missing was anything that could BUILD that payload: the resolver could
+# only ever emit one x/y pair. These pin the contract between the two sides, so a
+# rename on either end fails here rather than silently fitting one curve.
+
+def _resolver_shaped_payload(**over):
+    """Exactly the dict `resolvePayload` produces for shape:"curve" with
+    `analysis.nonlinear.datasetColumn` set — including the keys the engine does
+    not read, because the engine must not choke on them."""
+    sets = [{"label": d["label"], "x": list(d["x"]), "y": list(d["y"]),
+             "rowIds": [f"{d['label']}-{i}" for i in range(len(d["x"]))]}
+            for d in GLOBAL_SETS]
+    p = {**GLOBAL_BASE,
+         "shape": "curve",
+         "x": [v for d in sets for v in d["x"]],
+         "y": [v for d in sets for v in d["y"]],
+         "rowIds": [v for d in sets for v in d["rowIds"]],
+         "sharedParameters": SHARED3,
+         "confidenceBands": True,
+         "unknowns": [],
+         "datasetColumn": "compound",
+         "datasets": sets}
+    p.update(over)
+    return p
+
+
+def test_engine_accepts_the_resolver_multi_dataset_payload_verbatim():
+    out = eng.run_dose_response(_resolver_shaped_payload())
+    cf = out["curveFit"]
+    assert cf["converged"] is True, out
+    assert len(cf["datasets"]) == 2
+    # Per-dataset labels round-trip in the order the resolver supplied them.
+    assert [d["label"] for d in cf["datasets"]] == ["cmpdA", "cmpdB"]
+    # Extra keys the engine does not read (rowIds, datasetColumn, shape) are inert.
+    plain = eng.run_dose_response({**GLOBAL_BASE, "datasets": GLOBAL_SETS,
+                                   "sharedParameters": SHARED3})["curveFit"]
+    for a, b in zip(cf["datasets"], plain["datasets"]):
+        assert close(a["ec50"], b["ec50"], 1e-12), (a["ec50"], b["ec50"])
+
+
+def test_flat_x_y_in_the_multi_dataset_payload_are_ignored_not_fitted():
+    """The resolver sends `x`/`y` as the concatenation so consumers that ignore
+    `datasets` still see every point. The engine must fit the DATASETS, not the
+    concatenation — fitting a stacked x/y as one curve would be a silent
+    substitution with no warning attached."""
+    p = _resolver_shaped_payload()
+    # Corrupt the flat arrays. If the engine read them, the fit would move.
+    p["x"] = [1.0] * len(p["x"])
+    p["y"] = [0.0] * len(p["y"])
+    out = eng.run_dose_response(p)
+    gold = eng.run_dose_response(_resolver_shaped_payload())
+    for a, b in zip(out["curveFit"]["datasets"], gold["curveFit"]["datasets"]):
+        assert close(a["ec50"], b["ec50"], 1e-12)
+
+
+def test_dataset_order_is_preserved_not_sorted():
+    """The resolver orders datasets by first appearance in the data. If the
+    engine sorted them, a caller mapping results back by index would attribute
+    cmpdA's EC50 to cmpdB."""
+    fwd = eng.run_dose_response(_resolver_shaped_payload())["curveFit"]
+    rev_sets = list(reversed(GLOBAL_SETS))
+    rev = eng.run_dose_response({**GLOBAL_BASE, "datasets": rev_sets,
+                                 "sharedParameters": SHARED3})["curveFit"]
+    assert [d["label"] for d in rev["datasets"]] == ["cmpdB", "cmpdA"]
+    assert close(rev["datasets"][0]["ec50"], fwd["datasets"][1]["ec50"], 1e-6)
+    assert close(rev["datasets"][1]["ec50"], fwd["datasets"][0]["ec50"], 1e-6)
+
+
+def test_single_dataset_payload_still_fits_one_curve():
+    """`datasetColumn` null is the pre-existing meaning and must not regress."""
+    one = eng.run_dose_response({**GLOBAL_BASE, "x": _GX.tolist(), "y": GLOBAL_A})
+    boxed = eng.run_dose_response({**GLOBAL_BASE,
+                                   "datasets": [GLOBAL_SETS[0]], "sharedParameters": []})
+    assert one["curveFit"]["converged"] is True
+    # A one-element `datasets` list is an ordinary single fit, and comes back in
+    # the ordinary single-fit shape rather than as a global fit of one curve.
+    assert "datasets" not in boxed["curveFit"]
+    assert close(one["curveFit"]["ec50"], boxed["curveFit"]["ec50"], 1e-6)
+
+
+# ══ T0.10 — ROUT's published worked example (Motulsky & Brown 2006, Table 1) ══
+# ROUT itself is implemented in lib/data-analysis/curve-fitting.ts, next to the
+# fitter it needs, and is verified there against scipy. What belongs here is the
+# arithmetic of the paper's own worked example, because it is the one golden that
+# comes from the authors rather than from a re-derivation: 13 points, 3 fitted
+# parameters, 10 df, RSDR 78.24, residual −395.21 at X=3, Q=1%.
+
+def test_rout_paper_table_1_arithmetic():
+    t = 395.21 / 78.24                       # Eq. 18
+    assert abs(t - 5.05) < 0.005, t
+    p = 2.0 * stats.t.sf(t, 10)              # two-tailed, N−K df
+    assert abs(p - 0.0005) < 5e-5, p
+    alpha_13 = 0.01 * (13 - (13 - 1)) / 13   # Eq. 17 at i = N
+    assert abs(alpha_13 - 0.0008) < 5e-5, alpha_13
+    assert p < alpha_13                      # the paper flags this point at Q=1%
+    # At Q=5% the paper additionally flags i = N−1, threshold 0.0077.
+    alpha_12 = 0.05 * (13 - (12 - 1)) / 13
+    assert abs(alpha_12 - 0.0077) < 5e-5, alpha_12
+
+
+def test_rout_eq17_is_benjamini_hochberg_in_reversed_index():
+    """Eq. 17 is BH written over residual ranks instead of p-value ranks. Residual
+    rank i (ascending |R|) is p-value rank N−i+1 (ascending p), so Q·(N−(i−1))/N
+    must equal the ordinary BH threshold Q·j/N at j = N−i+1. If these ever drift
+    apart, ROUT stops controlling the FDR at Q and the exclusion record says a
+    rate the method did not deliver."""
+    for N in (5, 10, 13, 12, 47):
+        for i in range(1, N + 1):
+            j = N - i + 1
+            assert close(0.01 * (N - (i - 1)) / N, 0.01 * j / N, 1e-15), (N, i)
+
+
 if __name__ == "__main__":
     import sys
     tests = [(k, v) for k, v in sorted(globals().items()) if k.startswith("test_")]

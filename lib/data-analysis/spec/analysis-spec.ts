@@ -58,6 +58,73 @@ export const DatasetRef = z.object({
 })
 export type DatasetRef = z.infer<typeof DatasetRef>
 
+/* ── Cross-file join (T0.6) ────────────────────────────────────────────────
+   "Join across files in the same project." This is DATASET level, not a
+   Transform, and the reason is provenance rather than taste. A Transform is a
+   pure row operation over the table already in hand; it carries no file id and
+   no version hash, and it is applied by `applyTransform(rows, t)`, which has no
+   way to reach a second file. A join pulls in another FILE, and Law 4 (a result
+   is reproducible from spec + data version) means every file a number depends
+   on must be pinned by its own hash. So each join carries a full DatasetRef for
+   its right-hand side, and the joins sit beside `dataset`, not inside
+   `transforms`.
+
+   ORDER. The resolver applies joins as step 0, before row filters and before
+   transforms, because filters and transforms must be able to name the columns
+   the join brought in (that is the whole point of joining a plate map).
+
+   ROW IDENTITY. Exclusions are recorded against row ids (§8.1) and have to
+   resolve again on the next open, so a join may not reshuffle identity for
+   free. Two rules, both deterministic given the two version hashes:
+
+     - a left row matching AT MOST ONE right row keeps its own rowId unchanged.
+       This is the 1:1 case, which is what a plate map, a sample sheet, or a
+       metadata table is, and it means attaching one to a working analysis does
+       not orphan the exclusions already recorded against it.
+     - a left row that fans out to N > 1 right rows yields one row per match
+       with id `${leftRowId}<US>${rightRowId}`, the same convention pivotLonger
+       already uses, because a single id can no longer name a single row. The
+       resolver warns when this happens, since any exclusion recorded before the
+       fan-out now names a row that no longer exists.
+
+   Cardinality cannot change under a fixed pair of version hashes, so the branch
+   between those two rules is itself stable: the same spec against the same two
+   snapshots always produces the same ids. */
+
+export const DatasetJoin = z.object({
+  /** The file being joined in, pinned by its own hash exactly as `dataset` is. */
+  right: DatasetRef,
+  /**
+   * Key columns, left name paired with right name. A multi-column key matches
+   * on the whole tuple. Values are compared in their string form, so a well
+   * number that arrived as a number on one side and as text on the other still
+   * meets, which is the single most common shape of this join in practice.
+   */
+  on: z
+    .array(z.object({ left: z.string().max(256), right: z.string().max(256) }))
+    .min(1)
+    .max(8),
+  /**
+   * "left" keeps unmatched left rows with nulls in the right columns; "inner"
+   * drops them. Either way the resolver reports the count in `warnings`, because
+   * a table that silently shrank is the kind of invisible substitution §3.2
+   * forbids.
+   */
+  type: z.enum(["inner", "left"]).default("left"),
+  /**
+   * Right columns to bring in. Empty, the default, means every right column
+   * except the ones used as keys.
+   */
+  columns: z.array(z.string().max(256)).default([]),
+  /**
+   * Appended to a right column's name when it would otherwise collide with a
+   * left column. Never overwrite the left column: the left table is the one the
+   * analysis was built against.
+   */
+  suffix: z.string().min(1).max(64).default("_r"),
+})
+export type DatasetJoin = z.infer<typeof DatasetJoin>
+
 /* ── Semantic layer (L2) ───────────────────────────────────────────────────
    Variable roles and the design declaration. Populated in priority order from
    the notes9 project record, then inference, then the user (§3.3 L2). The
@@ -381,6 +448,21 @@ export const AnalysisConfig = z.object({
       weighting: z.enum(["none", "1/Y", "1/Y^2"]).default("none"),
       /** Share parameters across datasets, Prism's global fit. */
       sharedParameters: z.array(z.string().max(64)).default([]),
+      /**
+       * Column whose distinct values split the included rows into SEPARATE
+       * CURVES for a global fit (T0.20). Null, the default and the meaning of
+       * every spec written before this field existed, is one curve over all
+       * rows.
+       *
+       * `sharedParameters` was always here but had nothing to share ACROSS,
+       * because the payload could only ever carry one x/y pair. With this set
+       * the resolver emits `datasets: [{ label, x, y }, ...]`, one entry per
+       * level ordered by FIRST APPEARANCE in the data (not by a Set's iteration
+       * order and not alphabetically), so the engine's per-dataset results come
+       * back in an order the caller can predict and the labels are stable
+       * across re-runs.
+       */
+      datasetColumn: z.string().max(256).nullable().optional(),
       constraints: z.record(z.string(), z.object({ min: z.number().nullable(), max: z.number().nullable() })).default({}),
       confidenceBands: z.boolean().default(true),
       /** Interpolate unknowns from the fitted standard curve. */
@@ -511,8 +593,52 @@ export const SignificanceBracket = z.object({
   derived: z.boolean().default(true),
   /** Render as stars or the numeric p. */
   display: z.enum(["stars", "p-value", "both"]).default("stars"),
+
+  /* ── Style overrides (T0.27) ────────────────────────────────────────────
+     Every field below is a SPARSE OVERRIDE and is OPTIONAL, absence meaning "use
+     the figure's style tokens". That is what keeps restyling compatible with
+     regeneration: when the analysis changes, brackets are re-derived from the
+     new post-hoc result and only the fields the user actually set are carried
+     across, exactly as `offsetY` already is. A bracket that has never been
+     restyled carries none of them and is therefore indistinguishable from a fresh one, so
+     regeneration has nothing to preserve and nothing to fight.
+
+     Storing a concrete colour on every derived bracket instead would freeze the
+     palette at the moment of generation: changing the figure theme afterwards
+     would leave the brackets behind, and the "user restyled this" signal would
+     be lost because every bracket would look restyled. */
+
+  /** Line and label colour. Null uses the figure's foreground token. */
+  colour: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional(),
+  /** Bracket stroke width in px. Absent uses the figure default. */
+  lineWidth: z.number().min(0.25).max(10).nullable().optional(),
+  /** Label size in px. Absent uses `style.tickFontSize`. */
+  fontSize: z.number().min(6).max(36).nullable().optional(),
+  /** Height of the downward end ticks in px. Absent uses the figure default. */
+  capLength: z.number().min(0).max(40).nullable().optional(),
+  /**
+   * Suppress this bracket without deleting it. Deleting a DERIVED bracket does
+   * not work, the next recompute regenerates it; hiding is the only stable way
+   * to say "not this comparison" and survive regeneration.
+   */
+  hidden: z.boolean().optional(),
 })
 export type SignificanceBracket = z.infer<typeof SignificanceBracket>
+
+/**
+ * The style fields a user may have overridden on a bracket. When brackets are
+ * re-derived after an analysis change, copy exactly these (plus `offsetY`) from
+ * the old bracket with the same pair key onto the new one; everything else is a
+ * property of the fresh post-hoc result and must NOT be carried over.
+ */
+export const BRACKET_STYLE_FIELDS = [
+  "display",
+  "colour",
+  "lineWidth",
+  "fontSize",
+  "capLength",
+  "hidden",
+] as const satisfies readonly (keyof SignificanceBracket)[]
 
 /**
  * A bracket's identity is the comparison it spans.
@@ -681,6 +807,12 @@ export type ExportSettings = z.infer<typeof ExportSettings>
 export const AnalysisSpec = z.object({
   schemaVersion: z.literal(ANALYSIS_SPEC_SCHEMA_VERSION),
   dataset: DatasetRef,
+  /**
+   * Other files in the same project joined onto `dataset` (T0.6). Applied by
+   * the resolver BEFORE filters and transforms. Empty is the default and the
+   * meaning of every spec written before this field existed.
+   */
+  joins: z.array(DatasetJoin).optional(),
   roles: z.array(ColumnRole).default([]),
   design: DesignDeclaration,
   filters: z.array(RowFilter).default([]),
