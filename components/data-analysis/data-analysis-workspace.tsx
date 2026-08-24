@@ -140,6 +140,8 @@ import {
   type ChartState,
   type RailControlKey,
 } from "@/lib/data-analysis/workspace/chart-state-spec"
+import { fetchExperimentRecord } from "@/lib/data-analysis/workspace/experiment-record"
+import type { ExperimentRecord } from "@/lib/data-analysis/semantic/record"
 import { legalTests } from "@/lib/data-analysis/semantic/infer"
 import { MovedExclusionsBanner, ReopenBanner } from "@/components/data-analysis/workspace/reopen-banner"
 import {
@@ -1054,6 +1056,12 @@ export function DataAnalysisWorkspace({
    * saved, reopened, reproduced, dropped into a figure panel, and checked
    * against the data version it was computed from.
    */
+  // The experiment record is the higher authority for roles and design (S6.2).
+  // Fetched in an effect below rather than during render: first paint must not
+  // wait on the network, and the record is null for pasted/typed/uploaded sheets
+  // that have no experiment behind them.
+  const [experimentRecord, setExperimentRecord] = useState<ExperimentRecord | null>(null)
+
   const derivedSpec = useMemo(() => {
     try {
       const fromRail = specFromChartState(
@@ -1066,7 +1074,8 @@ export function DataAnalysisWorkspace({
           filters: dataFilters, transforms: dataTransforms, exclusions: dataExclusions,
         },
         specTable,
-        { fileName: sheetFileName }
+        { fileName: sheetFileName },
+        experimentRecord
       )
       // The last step of the derivation, not a step after it: the approved AI
       // edits with no control behind them are re-stated here on every render,
@@ -1215,6 +1224,17 @@ export function DataAnalysisWorkspace({
   const gateRef = useRef<RecomputeGate>(emptyGate())
   /** The library file behind the sheet, when it came from one. Drift is measured against it. */
   const [sourceFile, setSourceFile] = useState<{ id: string; experimentId: string } | null>(null)
+
+  useEffect(() => {
+    let live = true
+    fetchExperimentRecord(sourceFile?.experimentId ?? null).then((r) => {
+      if (live) setExperimentRecord(r)
+    })
+    return () => {
+      live = false
+    }
+  }, [sourceFile?.experimentId])
+
   useEffect(() => {
     // ADR-025: "the spec changed" is not the gate — "the researcher approved
     // an analysis" is. `analysisApproved` is false for every load path
