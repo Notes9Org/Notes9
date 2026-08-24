@@ -253,11 +253,9 @@ export function specFromChartState(
 ): AnalysisSpec {
   const known = record ? rolesFromRecord(table, record) : []
   const roles = inferRoles(table, known).map(({ rationale: _r, ...role }) => role)
-  const { rationale: _d, ...fileDesign } = inferDesign(
-    table,
-    roles,
-    record?.design ?? undefined
-  )
+  // The file's own reading, kept independent of the record so `applyRecord`
+  // has something real to compare the record against.
+  const { rationale: _d, ...fileDesign } = inferDesign(table, roles)
   const design = record ? applyRecord(table, roles, fileDesign, record) : fileDesign
 
   // What the user mapped wins over what was inferred: they chose these columns

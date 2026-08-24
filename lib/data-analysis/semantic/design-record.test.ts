@@ -248,6 +248,36 @@ describe("a genuine mismatch is reported with both sides named", () => {
     expect(out.recordMismatch).toContain("S4")
   })
 
+  it("still compares record against FILE when routed through specFromTable", () => {
+    // Regression: bootstrap used to hand the record's design to inferDesign AND
+    // to applyRecord, so the design was compared against itself and a real
+    // record/file disagreement always came back empty.
+    const unpaired = table(
+      ["Subject", "Arm", "Value"],
+      [
+        { Subject: "P1", Arm: "A", Value: 1 },
+        { Subject: "P2", Arm: "A", Value: 2 },
+        { Subject: "P3", Arm: "B", Value: 3 },
+        { Subject: "P4", Arm: "B", Value: 4 },
+      ]
+    )
+    const rec = record({
+      design: {
+        paired: true,
+        repeatedMeasures: false,
+        subjectColumn: "Subject",
+        nesting: [],
+        replicateType: "biological",
+        source: "project-record",
+        recordMismatch: null,
+      },
+    })
+    const spec = specFromTable(unpaired, meta, { record: rec })
+    expect(spec.design.recordMismatch).toBeTruthy()
+    expect(spec.design.recordMismatch).toContain("paired")
+    expect(spec.design.recordMismatch).toContain("unpaired")
+  })
+
   it("flags a declared replicate count the file does not carry", () => {
     const rec = record({ subjects: ["M1", "M2", "M3", "M4"], replicates: 3 })
     const roles = inferRoles(TECH_REPS).map(({ rationale: _r, ...r }) => r)

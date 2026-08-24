@@ -149,8 +149,11 @@ export function specFromTable(
 
   const roles = inferRoles(table, known)
   const plainRoles = roles.map(({ rationale: _r, ...role }) => role)
-  const design = inferDesign(table, plainRoles, options.record?.design ?? undefined)
-  const { rationale: _d, ...fileDesign } = design
+  // Deliberately NOT given the record's design: this must stay the file's own
+  // reading, so `applyRecord` has two independent sides to compare. Handing it
+  // the record here would make the design its own control and the
+  // record-vs-file disagreement would silently always come back empty.
+  const { rationale: _d, ...fileDesign } = inferDesign(table, plainRoles)
   // The record is the higher authority for design, but the file is still read
   // and any disagreement is reported with both sides named, never resolved
   // quietly in favour of one.
