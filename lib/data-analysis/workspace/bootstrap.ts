@@ -21,6 +21,7 @@ import {
   parseUnit,
   profileTable,
 } from "@/lib/data-analysis/semantic/infer"
+import { applyRecord, rolesFromRecord, type ExperimentRecord } from "@/lib/data-analysis/semantic/record"
 import type { AnalysisPipeline } from "./pipelines"
 
 export interface SheetMeta {
@@ -115,6 +116,13 @@ export interface BootstrapOptions {
   test?: TestKind
   /** Roles the project record already knows; never re-guessed (§6.2). */
   knownRoles?: AnalysisSpec["roles"]
+  /**
+   * The notes9 experiment record for this sheet, when the workspace knows
+   * which experiment it belongs to. Supplies `knownRoles` on its own and
+   * cross-checks the file-derived design against what the project recorded,
+   * which is what makes test selection project-driven rather than shape-driven.
+   */
+  record?: ExperimentRecord | null
   title?: string
 }
 
@@ -130,10 +138,28 @@ export function specFromTable(
   meta: SheetMeta,
   options: BootstrapOptions = {}
 ): AnalysisSpec {
-  const roles = inferRoles(table, options.knownRoles ?? [])
+  // Roles the record establishes are locked before inference runs, so they are
+  // never re-guessed (§6.2). An explicit `knownRoles` still wins over them: it
+  // is what a caller has already settled.
+  const fromRecord = options.record ? rolesFromRecord(table, options.record) : []
+  const known = [...(options.knownRoles ?? [])]
+  for (const role of fromRecord) {
+    if (!known.some((k) => k.column === role.column)) known.push(role)
+  }
+
+  const roles = inferRoles(table, known)
   const plainRoles = roles.map(({ rationale: _r, ...role }) => role)
-  const design = inferDesign(table, plainRoles)
-  const { rationale: _d, ...plainDesign } = design
+  // Deliberately NOT given the record's design: this must stay the file's own
+  // reading, so `applyRecord` has two independent sides to compare. Handing it
+  // the record here would make the design its own control and the
+  // record-vs-file disagreement would silently always come back empty.
+  const { rationale: _d, ...fileDesign } = inferDesign(table, plainRoles)
+  // The record is the higher authority for design, but the file is still read
+  // and any disagreement is reported with both sides named, never resolved
+  // quietly in favour of one.
+  const plainDesign = options.record
+    ? applyRecord(table, plainRoles, fileDesign, options.record)
+    : fileDesign
 
   const groupColumn = defaultGroupColumn(plainRoles)
   const responseColumns = plainRoles.filter((r) => r.role === "response").map((r) => r.column)
