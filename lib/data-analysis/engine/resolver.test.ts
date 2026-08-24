@@ -409,6 +409,199 @@ describe("transforms and exclusions", () => {
     expect(out.payload.x).toEqual([1, 10, 100, 1000])
     expect(out.warnings.join(" ")).toContain("concentration ≤ 0")
   })
+
+  /* ── Replicate collapse: what it must not lose ───────────────────────────*/
+
+  it("does not average a numeric identifier that is not a measurement", () => {
+    // subject is a numeric ID, not a reading. Averaging it produces subject 2,
+    // a subject who was never enrolled. Only `v` may collapse.
+    const t = table([
+      { arm: "Ctrl", subject: 1, v: 10 }, { arm: "Ctrl", subject: 2, v: 12 },
+      { arm: "Ctrl", subject: 3, v: 14 },
+      { arm: "Drug", subject: 4, v: 20 }, { arm: "Drug", subject: 5, v: 22 },
+      { arm: "Drug", subject: 6, v: 24 },
+    ])
+    const out = resolvePayload(
+      spec(
+        { test: "descriptives", responseColumns: ["v"] },
+        { transforms: [{ kind: "collapseReplicates", by: ["arm"], statistic: "mean" }] }
+      ),
+      t
+    )
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+    const subjects = out.payload.plotRows.map((r) => r.values.subject)
+    expect(subjects).not.toContain(2)
+    expect(subjects).not.toContain(5)
+    // The three subjects in an arm disagree, so no single ID survives, and the
+    // collapse says so rather than printing the first one.
+    expect(subjects).toEqual([null, null])
+    expect(out.warnings.join(" ")).toContain('disagreed on "subject"')
+  })
+
+  it("refuses to carry a disagreeing non-numeric column silently", () => {
+    const t = table([
+      { sample: "S1", operator: "Ana", plate: "P1", v: 10 },
+      { sample: "S1", operator: "Bo", plate: "P1", v: 12 },
+      { sample: "S2", operator: "Ana", plate: "P2", v: 20 },
+      { sample: "S2", operator: "Ana", plate: "P2", v: 22 },
+    ])
+    const out = resolvePayload(
+      spec(
+        { test: "descriptives", responseColumns: ["v"] },
+        { transforms: [{ kind: "collapseReplicates", by: ["sample"], statistic: "mean" }] }
+      ),
+      t
+    )
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+    // S1 disagreed on operator → empty + warned. S2 agreed → kept.
+    expect(out.payload.plotRows.map((r) => r.values.operator)).toEqual([null, "Ana"])
+    // plate agreed within each group, so it is untouched.
+    expect(out.payload.plotRows.map((r) => r.values.plate)).toEqual(["P1", "P2"])
+    const w = out.warnings.join(" ")
+    expect(w).toContain('disagreed on "operator"')
+    expect(w).toContain("Ana, Bo")
+    expect(w).not.toContain('disagreed on "plate"')
+  })
+
+  it("emits the replicate count as a real column", () => {
+    const t = table([
+      { sample: "S1", v: 10 }, { sample: "S1", v: 12 }, { sample: "S1", v: 14 },
+      { sample: "S2", v: 20 }, { sample: "S2", v: 22 },
+    ])
+    const out = resolvePayload(
+      spec(
+        { test: "descriptives", responseColumns: ["v"] },
+        { transforms: [{ kind: "collapseReplicates", by: ["sample"], statistic: "mean" }] }
+      ),
+      t
+    )
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+    expect(out.payload.plotRows.map((r) => r.values.n)).toEqual([3, 2])
+  })
+
+  it("collapses to SD and to SEM, and leaves a lone replicate's spread empty", () => {
+    const t = table([
+      { sample: "S1", v: 10 }, { sample: "S1", v: 14 },
+      { sample: "S2", v: 7 },
+    ])
+    const sd = resolvePayload(
+      spec(
+        { test: "descriptives", responseColumns: ["v"] },
+        { transforms: [{ kind: "collapseReplicates", by: ["sample"], statistic: "sd" }] }
+      ),
+      t
+    )
+    expect(sd.ok).toBe(true)
+    if (!sd.ok) return
+    // Sample SD of {10, 14} is sqrt(8) ≈ 2.828; n=1 has no spread to report.
+    expect(sd.payload.plotRows.map((r) => r.values.v)).toEqual([Math.sqrt(8), null])
+    expect(sd.payload.plotRows.map((r) => r.values.n)).toEqual([2, 1])
+
+    const sem = resolvePayload(
+      spec(
+        { test: "descriptives", responseColumns: ["v"] },
+        { transforms: [{ kind: "collapseReplicates", by: ["sample"], statistic: "sem" }] }
+      ),
+      t
+    )
+    expect(sem.ok).toBe(true)
+    if (!sem.ok) return
+    expect(sem.payload.plotRows.map((r) => r.values.v)).toEqual([Math.sqrt(8) / Math.sqrt(2), null])
+  })
+
+  /* ── Long → wide ─────────────────────────────────────────────────────────*/
+
+  it("spreads a long table wide", () => {
+    const t = table([
+      { subject: "s1", timepoint: "t0", value: 1 },
+      { subject: "s1", timepoint: "t1", value: 2 },
+      { subject: "s2", timepoint: "t0", value: 3 },
+      { subject: "s2", timepoint: "t1", value: 4 },
+    ])
+    const out = resolvePayload(
+      spec(
+        { test: "descriptives", responseColumns: ["t0", "t1"] },
+        { transforms: [{ kind: "pivotWider", namesFrom: "timepoint", valuesFrom: "value" }] }
+      ),
+      t
+    )
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+    expect(out.payload.plotRows.map((r) => r.values)).toEqual([
+      { subject: "s1", t0: 1, t1: 2 },
+      { subject: "s2", t0: 3, t1: 4 },
+    ])
+  })
+
+  it("fills a level a group never measured with an explicit null", () => {
+    const t = table([
+      { subject: "s1", timepoint: "t0", value: 1 },
+      { subject: "s1", timepoint: "t1", value: 2 },
+      { subject: "s2", timepoint: "t0", value: 3 },
+    ])
+    const out = resolvePayload(
+      spec(
+        { test: "descriptives", responseColumns: ["t0", "t1"] },
+        { transforms: [{ kind: "pivotWider", namesFrom: "timepoint", valuesFrom: "value" }] }
+      ),
+      t
+    )
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+    expect(out.payload.plotRows[1].values).toEqual({ subject: "s2", t0: 3, t1: null })
+  })
+
+  it("warns rather than dropping when two long rows collide on the same cell", () => {
+    const t = table([
+      { subject: "s1", timepoint: "t0", value: 1 },
+      { subject: "s1", timepoint: "t0", value: 99 },
+      { subject: "s1", timepoint: "t1", value: 2 },
+    ])
+    const out = resolvePayload(
+      spec(
+        { test: "descriptives", responseColumns: ["t0", "t1"] },
+        { transforms: [{ kind: "pivotWider", namesFrom: "timepoint", valuesFrom: "value" }] }
+      ),
+      t
+    )
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+    expect(out.payload.plotRows[0].values).toEqual({ subject: "s1", t0: 1, t1: 2 })
+    expect(out.warnings.join(" ")).toContain('more than one row with "timepoint" = t0')
+  })
+
+  it("round-trips wide → long → wide back to the original rows AND row ids", () => {
+    // The resolver documents that transform order is significant. A reshape is
+    // the one pair that must commute with itself: if folding is not reversible
+    // the fold is destructive, and an exclusion recorded against a pre-fold row
+    // must still match after the trip back.
+    const wide = table([
+      { subject: "s1", t0: 1, t1: 2 },
+      { subject: "s2", t0: 3, t1: 4 },
+    ])
+    const out = resolvePayload(
+      spec(
+        { test: "descriptives", responseColumns: ["t0", "t1"] },
+        {
+          transforms: [
+            { kind: "pivotLonger", columns: ["t0", "t1"], namesTo: "timepoint", valuesTo: "value" },
+            { kind: "pivotWider", namesFrom: "timepoint", valuesFrom: "value" },
+          ],
+        }
+      ),
+      wide
+    )
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+    expect(out.payload.plotRows.map((r) => r.values)).toEqual([
+      { subject: "s1", t0: 1, t1: 2 },
+      { subject: "s2", t0: 3, t1: 4 },
+    ])
+    expect(out.payload.plotRows.map((r) => r.rowId)).toEqual(["r1", "r2"])
+  })
 })
 
 describe("an analysis with no test chosen still resolves", () => {

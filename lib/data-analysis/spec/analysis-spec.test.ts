@@ -163,6 +163,33 @@ describe("migrateSpec (§3A.6: never fail to open)", () => {
     expect(migrated.notes.length).toBeGreaterThan(0)
   })
 
+  it("still parses a collapseReplicates saved before columns/countTo existed", () => {
+    // The two new fields are additive: an already-saved spec omits them and
+    // must keep opening, picking up the documented defaults.
+    const result = parseSpec({
+      ...minimalSpec(),
+      transforms: [{ kind: "collapseReplicates", by: ["sample"], statistic: "mean" }],
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    const t = result.spec.transforms[0]
+    expect(t.kind).toBe("collapseReplicates")
+    if (t.kind !== "collapseReplicates") return
+    expect(t.columns).toEqual([])
+    expect(t.countTo).toBe("n")
+  })
+
+  it("accepts sd and sem as collapse statistics, and the pivotWider reshape", () => {
+    const result = parseSpec({
+      ...minimalSpec(),
+      transforms: [
+        { kind: "pivotWider", namesFrom: "timepoint", valuesFrom: "value" },
+        { kind: "collapseReplicates", by: ["sample"], statistic: "sem", columns: ["v"] },
+      ],
+    })
+    expect(result.ok).toBe(true)
+  })
+
   it("reports issues rather than throwing, so the AI repair loop can run", () => {
     // §6.6: invalid specs are rejected and repaired, never rendered.
     const result = parseSpec({ schemaVersion: 1, dataset: {} })

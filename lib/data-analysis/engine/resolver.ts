@@ -116,6 +116,49 @@ function median(sorted: number[]): number {
 }
 
 /**
+ * The replicate-collapse statistic over one group's finite readings.
+ *
+ * SD is the SAMPLE deviation (n-1): technical replicates are a sample of the
+ * measurement process, not its population. A single replicate has no spread,
+ * and reporting 0 there would claim a perfect agreement that was never
+ * measured, so it returns null and the emitted `n` column says why.
+ */
+function collapseStat(
+  vals: number[],
+  statistic: Extract<Transform, { kind: "collapseReplicates" }>["statistic"]
+): number | null {
+  if (statistic === "median") {
+    // The shared helper, not an inline pick of the upper-middle value: on an
+    // even count, two technical replicates being the common case, picking
+    // sorted[n/2] returns the larger reading rather than the midpoint,
+    // biasing every collapsed row upward.
+    return median([...vals].sort((a, b) => a - b))
+  }
+  const mean = vals.reduce((a, b) => a + b, 0) / vals.length
+  if (statistic === "mean") return mean
+  if (vals.length < 2) return null
+  const sd = Math.sqrt(vals.reduce((a, v) => a + (v - mean) ** 2, 0) / (vals.length - 1))
+  return statistic === "sem" ? sd / Math.sqrt(vals.length) : sd
+}
+
+/**
+ * The row id for one widened group.
+ *
+ * `pivotLonger` extends an id with `␟<column>`. Widening strips that suffix
+ * again when every member of the group carries the same stem, so a re-entrant
+ * wide → long → wide returns the ORIGINAL ids: the round trip is an identity
+ * on identity, and exclusions recorded against the pre-fold rows still match.
+ * Anything else concatenates the way `collapseReplicates` does.
+ */
+function widenRowId(group: TableRow[]): string {
+  const stems = new Set(
+    group.map((r) => (r.rowId.includes("␟") ? r.rowId.slice(0, r.rowId.lastIndexOf("␟")) : r.rowId))
+  )
+  const [stem] = [...stems]
+  return stems.size === 1 && stem ? stem : group.map((r) => r.rowId).join("+")
+}
+
+/**
  * The mean of `column` over the rows belonging to a named LEVEL.
  *
  * Two transforms reference a level rather than a column, `foldChange.baseline`
@@ -260,7 +303,13 @@ function applyMissingValues(rows: TableRow[], spec: AnalysisSpec, warnings: stri
  * `reference` is the level mean the caller resolved for the two transforms that
  * name a level (see `resolveReference`); null for every other kind.
  */
-function applyTransform(rows: TableRow[], t: Transform, reference: number | null): TableRow[] {
+function applyTransform(
+  rows: TableRow[],
+  t: Transform,
+  reference: number | null,
+  spec: AnalysisSpec,
+  warnings: string[]
+): TableRow[] {
   const num = (r: TableRow, c: string) => toNumber(r.values[c])
 
   switch (t.kind) {
@@ -355,6 +404,46 @@ function applyTransform(rows: TableRow[], t: Transform, reference: number | null
         })
       )
     }
+    case "pivotWider": {
+      // Long → wide, the inverse of pivotLonger. Rows agreeing on every column
+      // except namesFrom/valuesFrom become one row with a column per level.
+      // Like pivotLonger it changes the row count and the column set, so it
+      // belongs at the front of the transform list.
+      const allCols = Object.keys(rows[0]?.values ?? {})
+      const carried = allCols.filter((c) => c !== t.namesFrom && c !== t.valuesFrom)
+      // Every level gets a cell in every output row so the table stays
+      // rectangular; a level a group never measured is an explicit null the
+      // missing-value path can see, not an absent key nothing downstream reads.
+      const levels = [...new Set(rows.map((r) => toLabel(r.values[t.namesFrom])))]
+      const buckets = new Map<string, TableRow[]>()
+      for (const r of rows) {
+        const key = carried.map((c) => toLabel(r.values[c])).join("␟")
+        const list = buckets.get(key) ?? []
+        list.push(r)
+        buckets.set(key, list)
+      }
+      return [...buckets.values()].map((group) => {
+        const values: Record<string, number | string | null> = {}
+        for (const c of carried) values[c] = group[0].values[c]
+        for (const l of levels) values[l] = null
+        const filled = new Set<string>()
+        for (const r of group) {
+          const l = toLabel(r.values[t.namesFrom])
+          // Two rows sharing a key AND a level are replicates, and one cell
+          // cannot hold both. Widening is not the place to average them, so
+          // keep the first and say so rather than dropping one in silence.
+          if (filled.has(l)) {
+            warnings.push(
+              `Long → wide found more than one row with "${t.namesFrom}" = ${l} that agreed on every other column (${group.map((x) => x.rowId).join(", ")}); only the first value was kept. Collapse the replicates first if they are replicates.`
+            )
+            continue
+          }
+          filled.add(l)
+          values[l] = r.values[t.valuesFrom] ?? null
+        }
+        return { rowId: widenRowId(group), values }
+      })
+    }
     case "baselineSubtract": {
       // An explicit `blankValue` wins. Otherwise `t.blankGroup` is a LEVEL
       // the wells labelled "Blank", and the subtrahend is that level's mean,
@@ -376,24 +465,51 @@ function applyTransform(rows: TableRow[], t: Transform, reference: number | null
         list.push(r)
         buckets.set(key, list)
       }
-      const numericCols = Object.keys(rows[0]?.values ?? {}).filter((c) =>
-        rows.some((r) => toNumber(r.values[c]) !== null)
-      )
+      const allCols = Object.keys(rows[0]?.values ?? {})
+      // WHICH columns are measurements is a semantic question, not "does this
+      // parse as a number". Collapsing every numeric column averages a numeric
+      // subject/well/plate ID into an identifier naming nobody: subjects 1, 2,
+      // 3 become subject 2. Prefer the transform's explicit list, then the
+      // declared response columns, and guess only as a last resort, out loud,
+      // because a guess here is a guess about what the data means.
+      const declared = t.columns.length ? t.columns : spec.analysis.responseColumns
+      const measured = declared.length
+        ? declared.filter((c) => allCols.includes(c))
+        : allCols.filter((c) => !t.by.includes(c) && rows.some((r) => toNumber(r.values[c]) !== null))
+      if (!declared.length && measured.length > 0) {
+        warnings.push(
+          `Replicate collapse had no measurement columns declared, so it collapsed every numeric column outside the grouping keys (${measured.join(", ")}). A numeric identifier in that list was averaged; name the measurement columns on the transform to stop that.`
+        )
+      }
+      if (allCols.includes(t.countTo)) {
+        warnings.push(
+          `Replicate collapse overwrote the existing column "${t.countTo}" with the replicate count; rename it on the transform to keep the original.`
+        )
+      }
+      const carried = allCols.filter((c) => !measured.includes(c) && c !== t.countTo)
       return [...buckets.values()].map((group) => {
-        const first = group[0]
-        const values: Record<string, number | string | null> = { ...first.values }
-        for (const c of numericCols) {
-          const vals = group.map((r) => toNumber(r.values[c])).filter((v): v is number => v !== null)
-          if (vals.length === 0) continue
-          values[c] =
-            t.statistic === "median"
-              ? // The shared helper, not an inline pick of the upper-middle value:
-                // on an even count, two technical replicates being the common
-                // case, picking sorted[n/2] returns the larger reading rather
-                // than the midpoint, biasing every collapsed row upward.
-                median([...vals].sort((a, b) => a - b))
-              : vals.reduce((a, b) => a + b, 0) / vals.length
+        const values: Record<string, number | string | null> = { ...group[0].values }
+        // Non-measurement columns are NOT free to inherit from group[0].
+        // Replicates that disagree on operator, plate or comment have no single
+        // value to carry, and printing one researcher's name over another's is
+        // the same failure as a silently filled hole: say what was discarded
+        // and leave the cell empty, as the missing-value path does.
+        for (const c of carried) {
+          const seen = [...new Set(group.map((r) => toLabel(r.values[c])))]
+          if (seen.length > 1) {
+            values[c] = null
+            warnings.push(
+              `Replicate group ${group.map((r) => r.rowId).join("+")} disagreed on "${c}" (${seen.join(", ")}); the collapsed row leaves it empty rather than keeping the first replicate's value.`
+            )
+          }
         }
+        for (const c of measured) {
+          const vals = group.map((r) => toNumber(r.values[c])).filter((v): v is number => v !== null)
+          values[c] = vals.length === 0 ? null : collapseStat(vals, t.statistic)
+        }
+        // n is a column, not a fact recoverable only by counting the "+"s in a
+        // row id. SD and SEM are unreadable without it.
+        values[t.countTo] = group.length
         return { rowId: group.map((r) => r.rowId).join("+"), values }
       })
     }
@@ -434,7 +550,7 @@ export function resolvePayload(spec: AnalysisSpec, table: Table): ResolveOutcome
       if (!ref.ok) return { ok: false, blocked: [ref.blocked] }
       reference = ref.value
     }
-    rows = applyTransform(rows, t, reference)
+    rows = applyTransform(rows, t, reference, spec, warnings)
   }
 
   /* 3, exclusions: partitioned, never dropped. Both sides are kept so the

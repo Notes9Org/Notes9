@@ -92,6 +92,36 @@ def _median(sorted_vals):
     return (sorted_vals[mid - 1] + sorted_vals[mid]) / 2
 
 
+def _collapse_stat(vals, statistic):
+    """Replicate-collapse statistic. SD is the SAMPLE deviation (n-1); one
+    replicate has no spread, and 0 would claim an agreement never measured, so
+    it is None and the emitted n column says why."""
+    if statistic == "median":
+        return _median(sorted(vals))
+    mean = sum(vals) / len(vals)
+    if statistic == "mean":
+        return mean
+    if len(vals) < 2:
+        return None
+    sd = (sum((v - mean) ** 2 for v in vals) / (len(vals) - 1)) ** 0.5
+    return sd / (len(vals) ** 0.5) if statistic == "sem" else sd
+
+
+def _widen_row_id(group):
+    """pivotLonger extends an id with the folded column; widening strips that
+    suffix again when the whole group shares a stem, so wide -> long -> wide
+    returns the ORIGINAL ids and exclusions against them still match."""
+    stems = set()
+    for r in group:
+        rid = r["rowId"]
+        stems.add(rid.rsplit("␟", 1)[0] if "␟" in rid else rid)
+    if len(stems) == 1:
+        stem = next(iter(stems))
+        if stem:
+            return stem
+    return "+".join(r["rowId"] for r in group)
+
+
 class PipelineError(Exception):
     """A precondition the resolver would have blocked on."""
 
@@ -135,7 +165,7 @@ def _resolve_reference(rows, spec, level, column):
     return sum(vals) / len(vals)
 
 
-def _apply_transform(rows, t, reference, warnings):
+def _apply_transform(rows, t, reference, warnings, spec):
     kind = t["kind"]
 
     def num(r, c):
@@ -226,19 +256,85 @@ def _apply_transform(rows, t, reference, warnings):
         for r in rows:
             key = "␟".join(_label(r["values"].get(c)) for c in t["by"])
             buckets.setdefault(key, []).append(r)
-        first_keys = list(rows[0]["values"].keys()) if rows else []
-        numeric_cols = [c for c in first_keys
-                        if any(_num(r["values"].get(c)) is not None for r in rows)]
+        all_cols = list(rows[0]["values"].keys()) if rows else []
+        # WHICH columns are measurements is a semantic question, not "does this
+        # parse as a number": averaging every numeric column turns subjects
+        # 1, 2, 3 into subject 2.
+        declared = t.get("columns") or spec["analysis"].get("responseColumns") or []
+        if declared:
+            measured = [c for c in declared if c in all_cols]
+        else:
+            measured = [c for c in all_cols
+                        if c not in t["by"]
+                        and any(_num(r["values"].get(c)) is not None for r in rows)]
+            if measured:
+                warnings.append(
+                    "Replicate collapse had no measurement columns declared, so it "
+                    "collapsed every numeric column outside the grouping keys "
+                    f'({", ".join(measured)}). A numeric identifier in that list was '
+                    "averaged; name the measurement columns on the transform to stop that.")
+        count_to = t.get("countTo") or "n"
+        if count_to in all_cols:
+            warnings.append(
+                f'Replicate collapse overwrote the existing column "{count_to}" with the '
+                "replicate count; rename it on the transform to keep the original.")
+        carried = [c for c in all_cols if c not in measured and c != count_to]
         out = []
         for group in buckets.values():
             values = dict(group[0]["values"])
-            for c in numeric_cols:
+            # Replicates that disagree on operator, plate or comment have no
+            # single value to carry; keeping the first row's would print one
+            # researcher's name over another's.
+            for c in carried:
+                seen = []
+                for r in group:
+                    lab = _label(r["values"].get(c))
+                    if lab not in seen:
+                        seen.append(lab)
+                if len(seen) > 1:
+                    values[c] = None
+                    warnings.append(
+                        f'Replicate group {"+".join(r["rowId"] for r in group)} disagreed on '
+                        f'"{c}" ({", ".join(seen)}); the collapsed row leaves it empty rather '
+                        "than keeping the first replicate's value.")
+            for c in measured:
                 vals = [v for v in (_num(r["values"].get(c)) for r in group) if v is not None]
-                if not vals:
-                    continue
-                values[c] = (_median(sorted(vals)) if t["statistic"] == "median"
-                             else sum(vals) / len(vals))
+                values[c] = _collapse_stat(vals, t["statistic"]) if vals else None
+            values[count_to] = len(group)
             out.append({"rowId": "+".join(r["rowId"] for r in group), "values": values})
+        return out
+
+    if kind == "pivotWider":
+        # Long -> wide, the inverse of pivotLonger.
+        all_cols = list(rows[0]["values"].keys()) if rows else []
+        carried = [c for c in all_cols if c not in (t["namesFrom"], t["valuesFrom"])]
+        levels = []
+        for r in rows:
+            lab = _label(r["values"].get(t["namesFrom"]))
+            if lab not in levels:
+                levels.append(lab)
+        buckets = {}
+        for r in rows:
+            key = "␟".join(_label(r["values"].get(c)) for c in carried)
+            buckets.setdefault(key, []).append(r)
+        out = []
+        for group in buckets.values():
+            values = {c: group[0]["values"].get(c) for c in carried}
+            for l in levels:
+                values[l] = None
+            filled = set()
+            for r in group:
+                l = _label(r["values"].get(t["namesFrom"]))
+                if l in filled:
+                    warnings.append(
+                        f'Long to wide found more than one row with "{t["namesFrom"]}" = {l} '
+                        "that agreed on every other column "
+                        f'({", ".join(x["rowId"] for x in group)}); only the first value was '
+                        "kept. Collapse the replicates first if they are replicates.")
+                    continue
+                filled.add(l)
+                values[l] = r["values"].get(t["valuesFrom"])
+            out.append({"rowId": _widen_row_id(group), "values": values})
         return out
 
     if kind == "calculatedColumn":
@@ -326,7 +422,7 @@ def resolve_payload(spec, table):
             reference = _resolve_reference(rows, spec, t["baseline"], t["column"])
         elif t["kind"] == "baselineSubtract" and t.get("blankValue") is None and t.get("blankGroup"):
             reference = _resolve_reference(rows, spec, t["blankGroup"], t["column"])
-        rows = _apply_transform(rows, t, reference, warnings)
+        rows = _apply_transform(rows, t, reference, warnings, spec)
 
     # 3, exclusions: partitioned, never dropped
     excluded_ids = {e["rowId"] for e in spec.get("exclusions", [])}
