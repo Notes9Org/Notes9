@@ -46,8 +46,27 @@ export type SnapshotTable = {
    * them up without every caller being rewritten to pass them.
    */
   rowIds: string[]
+  /**
+   * The sheet these rows were read from, or `null` when nothing was read.
+   *
+   * The analysed sheet used to be implicit — sheet 1, or whichever later sheet
+   * the fallback scan happened to land on — while the grid beside it showed
+   * whatever tab the user had clicked. Naming it here is what lets the
+   * workspace SAY which sheet the figure is made of instead of leaving the
+   * reader to assume it is the one on screen.
+   */
+  sheetName: string | null
   /** Non-null explains why the table is empty. Never set just because there are 0 rows. */
   parseError: string | null
+}
+
+/** The sheets this workbook offers, in tab order. `[]` if it cannot be parsed. */
+export function snapshotSheetNames(snapshot: UniverWorkbookSnapshot): string[] {
+  try {
+    return snapshotToXlsxWorkbook(snapshot).SheetNames ?? []
+  } catch {
+    return []
+  }
 }
 
 function errorMessage(err: unknown): string {
@@ -95,22 +114,57 @@ function detectedReadSheet(grid: Grid): { columns: string[]; rows: Row[]; rowIds
   return { columns: table.columns, rows: rememberRowIds(rows, rowIds), rowIds }
 }
 
-export function snapshotToTable(snapshot: UniverWorkbookSnapshot): SnapshotTable {
+function failed(parseError: string): SnapshotTable {
+  return { columns: [], rows: [], rowIds: [], sheetName: null, parseError }
+}
+
+/**
+ * Read the sheet an analysis is about.
+ *
+ * `sheetName` is a PIN, not a hint. Passed, that sheet is read and only that
+ * sheet: if it has no header the table is empty and says why, rather than
+ * quietly moving to a neighbour. The fallback scan below is the opposite kind
+ * of thing — it exists for the case where nobody has chosen, and choosing is
+ * exactly what a pin has done.
+ *
+ * Omitted (or `null`), the behaviour is unchanged from before the sheet picker
+ * existed, which is what keeps analyses saved before it byte-identical: they
+ * carry no pin, so they resolve through the same scan, to the same sheet, with
+ * the same columns and row ids.
+ */
+export function snapshotToTable(
+  snapshot: UniverWorkbookSnapshot,
+  sheetName?: string | null
+): SnapshotTable {
   let wb: XLSX.WorkBook
   try {
     wb = snapshotToXlsxWorkbook(snapshot)
   } catch (err) {
-    return {
-      columns: [],
-      rows: [],
-      rowIds: [],
-      parseError: `Could not read this file: ${errorMessage(err)}`,
-    }
+    return failed(`Could not read this file: ${errorMessage(err)}`)
   }
 
   const sheetNames = wb.SheetNames ?? []
-  if (sheetNames.length === 0) {
-    return { columns: [], rows: [], rowIds: [], parseError: "This file has no sheets." }
+  if (sheetNames.length === 0) return failed("This file has no sheets.")
+
+  if (sheetName != null) {
+    const ws = sheetNames.includes(sheetName) ? wb.Sheets[sheetName] : undefined
+    if (!ws) {
+      // A renamed or deleted sheet must not silently re-point the analysis at
+      // a different one; the columns would still resolve and the numbers would
+      // be about something else.
+      return failed(
+        `This analysis reads the sheet named “${sheetName}”, which is not in this file. Choose the sheet to analyse.`
+      )
+    }
+    try {
+      const grid = sheetToGrid(ws)
+      const found = detectedReadSheet(grid)
+      if (found) return { ...found, sheetName, parseError: null }
+      const rationale = detectHeader(grid).rationale
+      return failed(`No header row was found on “${sheetName}”.${rationale ? ` ${rationale}` : ""}`)
+    } catch (err) {
+      return failed(`Could not read “${sheetName}”: ${errorMessage(err)}`)
+    }
   }
 
   // Sheet 1 first, then later sheets: an empty first sheet means the data lives
@@ -122,20 +176,16 @@ export function snapshotToTable(snapshot: UniverWorkbookSnapshot): SnapshotTable
     try {
       const grid = sheetToGrid(ws)
       const found = detectedReadSheet(grid)
-      if (found) return { ...found, parseError: null }
+      if (found) return { ...found, sheetName: name, parseError: null }
       lastRationale = detectHeader(grid).rationale
     } catch (err) {
       lastRationale = errorMessage(err)
     }
   }
 
-  return {
-    columns: [],
-    rows: [],
-    rowIds: [],
-    parseError:
-      sheetNames.length > 1
-        ? `No header row was found on any of the ${sheetNames.length} sheets in this file.`
-        : `No header row was found on this sheet.${lastRationale ? ` ${lastRationale}` : ""}`,
-  }
+  return failed(
+    sheetNames.length > 1
+      ? `No header row was found on any of the ${sheetNames.length} sheets in this file.`
+      : `No header row was found on this sheet.${lastRationale ? ` ${lastRationale}` : ""}`
+  )
 }

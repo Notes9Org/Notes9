@@ -31,6 +31,34 @@ import {
   bracketMoveFromRelayout,
   rowIdAtPoint,
 } from "@/lib/data-analysis/render/plotly-adapter"
+import { usedDatasetColumns } from "@/lib/data-analysis/workspace/used-dataset"
+
+/** How many of the row's own columns the hover readout names before eliding. */
+const HOVER_COLUMNS = 4
+
+/**
+ * The hovered point, as the row's VALUES rather than its id.
+ *
+ * "Row 41" answers a question nobody asked. What the pointer is for is "what
+ * is this mark made of", and the answer is the post-transform row the resolver
+ * built it from — the same row the "Rows used" panel lists, so hovering and
+ * clicking describe the same thing in the same words.
+ */
+function hoverText(result: EngineResult | null, rowId: string): string {
+  const row = result?.plotData.find((r) => r.rowId === rowId)
+  if (!row) return `Row ${rowId}`
+  const columns = usedDatasetColumns(result?.plotData ?? []).slice(2)
+  const shown = columns
+    .slice(0, HOVER_COLUMNS)
+    .map((c) => {
+      const v = row.values[c]
+      return `${c} ${v === null || v === undefined ? "—" : v}`
+    })
+    .join(", ")
+  const more = columns.length > HOVER_COLUMNS ? ` +${columns.length - HOVER_COLUMNS} more` : ""
+  const state = row.excluded ? " · excluded" : ""
+  return shown ? `Row ${rowId}${state} · ${shown}${more}` : `Row ${rowId}${state}`
+}
 
 /** The slice of the Plotly API this component uses. */
 interface PlotlyApi {
@@ -260,8 +288,9 @@ export function FigureCanvas({
         </div>
       )}
       {hovered && (
-        <p className="pointer-events-none absolute bottom-1 right-2 max-w-[60%] truncate text-[11px] text-muted-foreground/70">
-          Row {hovered}
+        <p className="pointer-events-none absolute bottom-1 right-2 max-w-[70%] truncate text-[11px] text-muted-foreground/70">
+          {hoverText(result, hovered)}
+          {onSelectRow ? " · click to show the row" : ""}
           {onExcludeRow ? " · right-click to exclude it" : ""}
         </p>
       )}
