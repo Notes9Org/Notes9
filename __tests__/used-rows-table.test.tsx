@@ -63,3 +63,54 @@ describe("UsedRowsTable", () => {
     expect(within(table).getByText(/rows the figure used/i)).toBeInTheDocument()
   })
 })
+
+describe("UsedRowsTable · revealing the row a mark was clicked on", () => {
+  it("pages to the highlighted row instead of silently doing nothing", () => {
+    // 450 rows, 200 to a page: row-814 is index 812, on page 5 of the
+    // underlying data but page 1 is what the reader is looking at. A highlight
+    // that does not turn the page marks a row nobody can see.
+    const { rerender } = render(<UsedRowsTable plotData={makeRows(450)} />)
+    expect(screen.getByText("Page 1 of 3")).toBeInTheDocument()
+
+    // rowId of index 300 (rows start at row-2) -> "row-302", page 2.
+    rerender(<UsedRowsTable plotData={makeRows(450)} highlight={{ rowId: "row-302" }} />)
+    expect(screen.getByText("Page 2 of 3")).toBeInTheDocument()
+    expect(screen.getByText(/showing 201–400/)).toBeInTheDocument()
+    expect(screen.getByRole("rowheader", { name: "row-302" })).toBeInTheDocument()
+  })
+
+  it("marks the highlighted row in words and in semantics, not by colour alone", () => {
+    render(<UsedRowsTable plotData={makeRows(5)} highlight={{ rowId: "row-4" }} />)
+
+    const marked = screen.getByRole("rowheader", { name: "row-4" }).closest("tr")
+    expect(marked).not.toBeNull()
+    expect(marked).toHaveAttribute("aria-current", "true")
+    // The word is in the row itself, so the state is readable with styling off.
+    expect(within(marked as HTMLElement).getByText(/used · selected/)).toBeInTheDocument()
+    // Exactly one row is marked.
+    expect(screen.getAllByText(/· selected/)).toHaveLength(1)
+    expect(screen.getByRole("status")).toHaveTextContent(/Row row-4 selected from the figure/)
+  })
+
+  it("re-pages to the same row after the reader has paged away", () => {
+    // Clicking the SAME mark twice is a real flow: the id has not changed, so
+    // a bare-string prop would not fire and the reader would be left on
+    // whatever page they had browsed to.
+    const rows = makeRows(450)
+    const first = { rowId: "row-302" }
+    const { rerender } = render(<UsedRowsTable plotData={rows} highlight={first} />)
+    expect(screen.getByText("Page 2 of 3")).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole("button", { name: "Previous" }))
+    expect(screen.getByText("Page 1 of 3")).toBeInTheDocument()
+
+    rerender(<UsedRowsTable plotData={rows} highlight={{ rowId: "row-302" }} />)
+    expect(screen.getByText("Page 2 of 3")).toBeInTheDocument()
+  })
+
+  it("leaves the reader where they are when the row is not in this result", () => {
+    render(<UsedRowsTable plotData={makeRows(450)} highlight={{ rowId: "row-9999" }} />)
+    expect(screen.getByText("Page 1 of 3")).toBeInTheDocument()
+    expect(screen.getByRole("status")).toHaveTextContent(/not among the rows this figure used/)
+  })
+})

@@ -236,7 +236,7 @@ import {
   type UniverWorkbookSnapshot,
 } from "@/lib/spreadsheet-workbook"
 import { hashTable } from "@/lib/data-analysis/workspace/bootstrap"
-import { snapshotToTable } from "@/lib/data-analysis/workspace/snapshot-table"
+import { snapshotSheetNames, snapshotToTable } from "@/lib/data-analysis/workspace/snapshot-table"
 import { deriveAiGate } from "@/lib/data-analysis/workspace/ai-gate"
 import {
   usedDatasetGrid,
@@ -248,7 +248,7 @@ import {
   generatePythonScript,
   pythonScriptFileName,
 } from "@/lib/data-analysis/codegen/python"
-import { UsedRowsTable } from "@/components/data-analysis/used-rows-table"
+import { UsedRowsTable, type UsedRowHighlight } from "@/components/data-analysis/used-rows-table"
 import { ATTACHMENT_MAX_FILE_SIZE } from "@/lib/attachment-types"
 
 function buildSnapshotFromAoa(aoa: (string | number)[][], sheetName: string, fileName: string): UniverWorkbookSnapshot {
@@ -890,7 +890,26 @@ export function DataAnalysisWorkspace({
     setMountKey((k) => k + 1)
   }, [])
 
-  const table = useMemo(() => snapshotToTable(liveSnapshot), [liveSnapshot])
+  /**
+   * Which sheet the analysis reads. `null` means "whichever the detector
+   * finds", which is what every analysis saved before the picker existed
+   * carries, and what a fresh file starts on.
+   *
+   * It has to be state here rather than a signal out of the grid: `Univer`'s
+   * `SheetSelection` reports cells, not the active tab, so there is no
+   * active-sheet event to follow. The consequence is that the shown tab and
+   * the analysed sheet CAN differ — which is why the toolbar names the
+   * analysed one out loud instead of letting the grid imply it.
+   */
+  const [analysisSheet, setAnalysisSheet] = useState<string | null>(null)
+  const sheetNames = useMemo(() => snapshotSheetNames(liveSnapshot), [liveSnapshot])
+  const table = useMemo(
+    () => snapshotToTable(liveSnapshot, analysisSheet),
+    [liveSnapshot, analysisSheet]
+  )
+  /** A click on a mark, as the row for the "Rows used" panel to reveal. */
+  const [selectedRow, setSelectedRow] = useState<UsedRowHighlight | null>(null)
+  const [usedRowsOpen, setUsedRowsOpen] = useState(false)
 
   const sheetFileName =
     typeof liveSnapshot.name === "string" && liveSnapshot.name ? liveSnapshot.name : "analysis.xlsx"
@@ -907,13 +926,15 @@ export function DataAnalysisWorkspace({
   const grid = useMemo<(string | number)[][]>(() => {
     try {
       const wb = snapshotToXlsxWorkbook(liveSnapshot)
-      const ws = wb.Sheets[wb.SheetNames[0]]
+      // The plate mirrors the sheet the analysis reads, not sheet 1 — those
+      // were the same thing only for as long as nothing could choose.
+      const ws = wb.Sheets[table.sheetName ?? wb.SheetNames[0]]
       if (!ws) return []
       return XLSX.utils.sheet_to_json<(string | number)[]>(ws, { header: 1, blankrows: true })
     } catch {
       return []
     }
-  }, [liveSnapshot])
+  }, [liveSnapshot, table.sheetName])
 
   // Data-aware tabs: Chart + Statistics always show; Standard curve / Plate
   // appear only when the data looks like a dose-response/ELISA or a microplate.
@@ -2423,6 +2444,13 @@ export function DataAnalysisWorkspace({
     setLiveSnapshot(snap)
     setMountSnapshot(snap)
     setMountKey((k) => k + 1)
+    // A new workbook has new sheets; a pin from the previous one either names
+    // nothing here or, worse, names something unrelated. Back to the detector,
+    // and to `null` in the config a save would write. Callers that restore a
+    // saved analysis run `applyConfig` straight after this and put their own
+    // pin back.
+    setAnalysisSheet(null)
+    setSelectedRow(null)
     // Anything that is not the blank starting sheet is a dataset, whoever loaded
     // it — import, library, template, reopen, or a tab switch restoring one.
     // This is the single place all six paths pass through, so it is the only
@@ -2516,6 +2544,11 @@ export function DataAnalysisWorkspace({
     aiOverlay,
     plate: { format: plateModel.format, originRow: plateModel.originRow, originCol: plateModel.originCol, roleOverrides: plateModel.roleOverrides, annOverrides: plateModel.annOverrides },
     phase,
+    // Which sheet the saved columns and row ids are ABOUT. Without it a
+    // reopened analysis re-runs the detector against a workbook that may have
+    // grown a sheet since (the statistics writer appends one), and resolves
+    // its column names against different data under the same names.
+    analysisSheet,
   })
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const applyConfig = useCallback((c: any) => {
@@ -2570,6 +2603,14 @@ export function DataAnalysisWorkspace({
     if (rail.subtitle !== undefined) setSubtitle(rail.subtitle)
     setCaption(rail.caption ?? null)
     if (rail.legendPos !== undefined) setLegendPos(rail.legendPos as "bottom" | "right" | "top")
+    // Present-or-absent, not total. An analysis saved BEFORE the sheet picker
+    // existed carries no `analysisSheet`, and the right reading of that
+    // silence is "however it read before" — the detector — not "sheet 1 by
+    // decree". Templates carry none either, and a template is about the
+    // figure, not about which sheet you are looking at.
+    if ("analysisSheet" in c) {
+      setAnalysisSheet(typeof c.analysisSheet === "string" ? c.analysisSheet : null)
+    }
     if (typeof c.hlines === "string") setHlines(c.hlines)
     if (typeof c.vlines === "string") setVlines(c.vlines)
     if (typeof c.chartH === "number") setChartH(c.chartH)
@@ -3057,18 +3098,37 @@ export function DataAnalysisWorkspace({
      the same typed mutation a control or an assistant patch would produce.
 
      Scoped to the analysis that is open, because a layout panel can show a
-     different one and this page only owns the open spec. ponytail: no
-     `onSelectRow` here -- the sheet is a Univer instance with no imperative
-     "select this row" entry point, so a click would have nowhere to land.
-     Wire it when SheetHost grows one. */
+     different one and this page only owns the open spec.
+
+     `onSelectRow` was left off while the only candidate landing place was the
+     sheet -- a Univer instance with no imperative "select this row" entry
+     point, so a click had nowhere to go. It has one now: the "Rows used" panel
+     renders `EngineResult.plotData` with an addressable row per `rowId`, which
+     is a better target than the sheet ever was (it is the POST-transform row
+     the mark was actually built from, not the raw line it came from). */
+  const revealRow = useCallback(
+    (rowId: string) => {
+      setSelectedRow({ rowId })
+      // In the chart/stats/curve phases the panel lives in the right dock, which
+      // may be shut or showing another tab; in the workspace phase it is the
+      // section under the canvas. Both are addressed, so the row is revealed
+      // wherever the reader happens to be.
+      setUsedRowsOpen(true)
+      setDockOpen("right", true)
+      docks.setActivePanelId("used-rows")
+    },
+    [setDockOpen, docks.setActivePanelId]
+  )
+
   const figureInteraction = useMemo(
     () => ({
       pipelineId: activeAnalysisId,
+      onSelectRow: revealRow,
       onExcludeRow: beginExclusion,
       onMoveBracket: (id: string, offsetY: number) =>
         applySpecMutation({ kind: "figure.moveBracket", id, offsetY }),
     }),
-    [activeAnalysisId, beginExclusion, applySpecMutation]
+    [activeAnalysisId, revealRow, beginExclusion, applySpecMutation]
   )
 
   const confirmExclusion = useCallback(
@@ -4518,7 +4578,11 @@ export function DataAnalysisWorkspace({
     { id: "settings", label: "Chart settings", content: <div className="p-4">{settingsForPhase}</div> },
     /* §2 Tier 0: the rows the figure used, post-transform. The sheet on the
        left is the RAW file; this is what the engine actually computed on. */
-    { id: "used-rows", label: "Rows used", content: <UsedRowsTable plotData={engineResult?.plotData} /> },
+    {
+      id: "used-rows",
+      label: "Rows used",
+      content: <UsedRowsTable plotData={engineResult?.plotData} highlight={selectedRow} />,
+    },
   ]
 
   /**
@@ -4985,7 +5049,34 @@ export function DataAnalysisWorkspace({
         >
           <X className="h-4 w-4" />
         </Button>
-        <span className="ml-auto text-xs text-muted-foreground">{table.rows.length} rows · {table.columns.length} cols</span>
+        {/* Which sheet the figure, the statistics and the standard curve are
+            made of. It lives in the toolbar rather than beside the grid
+            because it is true in every phase, including the ones that do not
+            render a grid at all, and because the grid is exactly the thing
+            that cannot be trusted to imply it: Univer owns the visible tab and
+            reports no active-sheet change, so a reader who clicks tab 2 sees
+            tab 2 and — until they change this — gets tab 1 analysed.
+            Native `select`: one control, keyboard and screen reader for free. */}
+        {sheetNames.length > 1 && (
+          <label className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
+            Analysing
+            <select
+              value={analysisSheet ?? ""}
+              onChange={(e) => setAnalysisSheet(e.target.value === "" ? null : e.target.value)}
+              className="max-w-[12rem] rounded border border-border bg-background px-1.5 py-0.5 text-xs text-foreground"
+            >
+              <option value="">
+                {table.sheetName ? `Auto (${table.sheetName})` : "Auto"}
+              </option>
+              {sheetNames.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <span className={cn("text-xs text-muted-foreground", sheetNames.length > 1 ? "ml-1.5" : "ml-auto")}>{table.rows.length} rows · {table.columns.length} cols</span>
         {/* Same control the lab-note and protocol editors carry: an icon-only
             ghost button at the far right of the toolbar, using the platform's
             ArrowsOut / ArrowsIn pair rather than a labelled outline button. */}
@@ -5032,6 +5123,27 @@ export function DataAnalysisWorkspace({
             interaction={figureInteraction}
             className="flex-1"
           />
+          {/* The landing place for a click on a mark. The right dock that holds
+              this panel in the other phases is not rendered here, so without a
+              copy under the canvas a click in the workspace figure would
+              highlight a row on a screen the reader cannot see.
+              `details` rather than a dock: it is one disclosure, and the
+              element already carries the open/closed semantics. */}
+          <details
+            open={usedRowsOpen}
+            onToggle={(e) => setUsedRowsOpen((e.currentTarget as HTMLDetailsElement).open)}
+            className="mt-1.5 rounded-2xl border border-border/60 bg-card/80"
+          >
+            <summary className="cursor-pointer px-4 py-2.5 text-[12.5px] font-medium">
+              Rows used
+              {engineResult?.plotData?.length
+                ? ` · ${engineResult.plotData.length.toLocaleString()}`
+                : ""}
+            </summary>
+            <div className="h-[320px] border-t">
+              <UsedRowsTable plotData={engineResult?.plotData} highlight={selectedRow} />
+            </div>
+          </details>
         </div>
       )}
 

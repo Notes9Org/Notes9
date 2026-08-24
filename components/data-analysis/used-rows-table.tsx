@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import { cn } from "@/lib/utils"
 import type { EngineResult } from "@/lib/data-analysis/engine/contract"
@@ -33,11 +33,25 @@ function cellText(value: number | string | null | undefined): string {
   return typeof value === "number" ? String(value) : value
 }
 
+/**
+ * A click on a mark in the figure, as the row it landed on.
+ *
+ * An object rather than a bare id so that clicking the SAME mark twice is a
+ * new request: the caller stores a fresh object per click, and this table
+ * re-pages and re-scrolls to it even when the id has not changed. A bare
+ * string could not tell "clicked again" from "still selected", and the second
+ * click on a row the user had since paged away from would do nothing.
+ */
+export type UsedRowHighlight = { rowId: string }
+
 export function UsedRowsTable({
   plotData,
+  highlight,
   className,
 }: {
   plotData: EngineResult["plotData"] | null | undefined
+  /** The row a figure click selected. Paged to, scrolled to, and marked. */
+  highlight?: UsedRowHighlight | null
   className?: string
 }) {
   const rows: PlotRow[] = useMemo(() => plotData ?? [], [plotData])
@@ -45,6 +59,23 @@ export function UsedRowsTable({
   const [page, setPage] = useState(0)
 
   const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE))
+
+  // Where the selected row actually is, or -1 when the figure's row is not in
+  // this result (a stale selection after a spec edit). -1 means "leave the
+  // reader where they are": jumping to page 1 to show nothing is worse.
+  const highlightRowId = highlight?.rowId ?? null
+  const highlightIndex = useMemo(
+    () => (highlightRowId === null ? -1 : rows.findIndex((r) => r.rowId === highlightRowId)),
+    [rows, highlightRowId]
+  )
+
+  // The panel holds 200 rows at a time, so revealing row 812 means turning to
+  // its page first. Without this a click on a mark from any page but the first
+  // highlights a row nobody can see.
+  useEffect(() => {
+    if (highlightIndex >= 0) setPage(Math.floor(highlightIndex / PAGE_SIZE))
+  }, [highlight, highlightIndex])
+
   // A spec edit can shrink the data under a page that is already scrolled past
   // the end; clamp on render rather than resetting in an effect, which would
   // paint an empty table for one frame first.
@@ -52,6 +83,14 @@ export function UsedRowsTable({
   const start = current * PAGE_SIZE
   const window = rows.slice(start, start + PAGE_SIZE)
   const excluded = rows.reduce((n, r) => n + (r.excluded ? 1 : 0), 0)
+
+  const highlightRef = useRef<HTMLTableRowElement | null>(null)
+  useEffect(() => {
+    // `scrollIntoView` is missing in jsdom and on very old engines; an
+    // un-scrolled highlight is still a correct highlight, so this is optional
+    // rather than guarded by a feature test.
+    highlightRef.current?.scrollIntoView?.({ block: "nearest" })
+  }, [highlight, current])
 
   if (rows.length === 0) {
     return (
@@ -76,6 +115,16 @@ export function UsedRowsTable({
           {Math.min(start + PAGE_SIZE, rows.length).toLocaleString()}
         </span>
       </div>
+
+      {/* Announced, not just drawn: a click on a mark is a jump in a table the
+          reader may not be looking at, and on another page at that. */}
+      <p role="status" aria-live="polite" className="sr-only">
+        {highlightRowId === null
+          ? ""
+          : highlightIndex >= 0
+            ? `Row ${highlightRowId} selected from the figure, on page ${current + 1} of ${pageCount}.`
+            : `Row ${highlightRowId} is not among the rows this figure used.`}
+      </p>
 
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full border-collapse text-[11.5px]">
@@ -103,14 +152,22 @@ export function UsedRowsTable({
             </tr>
           </thead>
           <tbody>
-            {window.map((row) => (
+            {window.map((row) => {
+              const selected = row.rowId === highlightRowId
+              return (
               <tr
                 key={row.rowId}
+                ref={selected ? highlightRef : undefined}
+                aria-current={selected ? "true" : undefined}
                 className={cn(
                   "border-b border-border/40",
                   // Excluded rows are dimmed, never hidden, and the state column
                   // says so in words: colour alone is not a readable signal.
-                  row.excluded && "text-muted-foreground line-through decoration-1"
+                  row.excluded && "text-muted-foreground line-through decoration-1",
+                  // Same rule for the figure selection: a ring and a tint carry
+                  // it for sighted readers, the "selected" word in the state
+                  // column and `aria-current` carry it for everyone else.
+                  selected && "bg-[var(--n9-accent,#965034)]/[0.10] font-medium text-foreground"
                 )}
               >
                 <th
@@ -121,6 +178,7 @@ export function UsedRowsTable({
                 </th>
                 <td className="px-2 py-1 whitespace-nowrap">
                   {row.excluded ? "excluded" : "used"}
+                  {selected ? " · selected" : ""}
                 </td>
                 {columns.map((c) => (
                   <td key={c} className="px-2 py-1 whitespace-nowrap tabular-nums">
@@ -128,7 +186,8 @@ export function UsedRowsTable({
                   </td>
                 ))}
               </tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
       </div>

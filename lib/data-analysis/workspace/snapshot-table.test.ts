@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest"
 import * as XLSX from "xlsx"
 import { buildSpreadsheetWorkbookSnapshot } from "@/lib/spreadsheet-workbook"
-import { snapshotToTable } from "./snapshot-table"
+import { snapshotSheetNames, snapshotToTable } from "./snapshot-table"
 import { tableFromChartRows } from "./chart-state-spec"
 import { hashTable } from "./bootstrap"
 
@@ -130,3 +130,114 @@ function legacyRead(aoa: (string | number)[][]): {
   })
   return { columns: header, rows }
 }
+
+/* ── Which sheet is analysed ───────────────────────────────────────────────── */
+
+/** A two-sheet workbook whose sheets carry DIFFERENT columns and values, so
+ *  "which sheet was read" is answerable from the result and not just asserted. */
+function twoSheetSnapshot() {
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(
+    wb,
+    XLSX.utils.aoa_to_sheet([
+      ["Treatment", "Viability"],
+      ["Vehicle", 91],
+      ["Drug", 47],
+    ]),
+    "Screen A"
+  )
+  XLSX.utils.book_append_sheet(
+    wb,
+    XLSX.utils.aoa_to_sheet([
+      ["Dose", "Response"],
+      [1, 10],
+      [3, 30],
+      [9, 90],
+    ]),
+    "Screen B"
+  )
+  return buildSpreadsheetWorkbookSnapshot("two-sheets.xlsx", wb)
+}
+
+describe("the analysed sheet is chosen, not assumed", () => {
+  const snapshot = twoSheetSnapshot()
+
+  it("reads sheet 1 and says so when nothing is pinned", () => {
+    const t = snapshotToTable(snapshot)
+    expect(t.sheetName).toBe("Screen A")
+    expect(t.columns).toEqual(["Treatment", "Viability"])
+  })
+
+  it("analyses a DIFFERENT sheet when one is pinned", () => {
+    // The bug this closes: the grid showed sheet 2 and the chart, the
+    // statistics and the standard curve all computed from sheet 1. Pinning has
+    // to change the numbers, not just a label.
+    const t = snapshotToTable(snapshot, "Screen B")
+    expect(t.sheetName).toBe("Screen B")
+    expect(t.columns).toEqual(["Dose", "Response"])
+    expect(t.rows).toEqual([
+      { Dose: 1, Response: 10 },
+      { Dose: 3, Response: 30 },
+      { Dose: 9, Response: 90 },
+    ])
+    expect(t.rowIds).toEqual(["row-2", "row-3", "row-4"])
+    expect(t.parseError).toBeNull()
+  })
+
+  it("leaves an unpinned read byte-identical to the pre-picker reading", () => {
+    // The backward-compatibility contract for analyses saved before the picker
+    // existed: they carry no pin, so they must resolve exactly as they did.
+    const before = snapshotToTable(snapshot)
+    const { sheetName: _s, ...rest } = before
+    expect(rest).toEqual({
+      columns: ["Treatment", "Viability"],
+      rows: [
+        { Treatment: "Vehicle", Viability: 91 },
+        { Treatment: "Drug", Viability: 47 },
+      ],
+      rowIds: ["row-2", "row-3"],
+      parseError: null,
+    })
+  })
+})
+
+describe("a pin is a decision, not a hint", () => {
+  it("does NOT fall through to another sheet when the pinned one has no header", () => {
+    // The existing later-sheet scan is a fallback for "nobody chose". Letting
+    // it fire under a pin would silently re-point a saved analysis at data it
+    // was never about — the exact failure the pin exists to stop.
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([[], []]), "Blank")
+    XLSX.utils.book_append_sheet(
+      wb,
+      XLSX.utils.aoa_to_sheet([
+        ["Dose", "Response"],
+        [1, 10],
+      ]),
+      "Real"
+    )
+    const snapshot = buildSpreadsheetWorkbookSnapshot("mixed.xlsx", wb)
+
+    // Unpinned, the scan legitimately walks past the blank sheet.
+    expect(snapshotToTable(snapshot).sheetName).toBe("Real")
+
+    // Pinned to the blank one, it stops there and says why.
+    const pinned = snapshotToTable(snapshot, "Blank")
+    expect(pinned.columns).toEqual([])
+    expect(pinned.rows).toEqual([])
+    expect(pinned.parseError).toMatch(/Blank/)
+  })
+
+  it("refuses to analyse a substitute when the pinned sheet is gone", () => {
+    const gone = snapshotToTable(twoSheetSnapshot(), "Screen C")
+    expect(gone.columns).toEqual([])
+    expect(gone.sheetName).toBeNull()
+    expect(gone.parseError).toMatch(/Screen C/)
+  })
+})
+
+describe("snapshotSheetNames", () => {
+  it("lists the sheets in tab order for the picker", () => {
+    expect(snapshotSheetNames(twoSheetSnapshot())).toEqual(["Screen A", "Screen B"])
+  })
+})
