@@ -36,6 +36,7 @@ import {
   Palette,
   Ruler,
   TextAa,
+  TextT,
   FolderOpen,
   FloppyDisk,
   SquaresFour,
@@ -83,7 +84,7 @@ import { describe as describeStats } from "@/lib/data-analysis/statistics"
 import { normalInv } from "@/lib/data-analysis/distributions"
 import { rocCurve, kaplanMeier, blandAltman } from "@/lib/data-analysis/chart-transforms"
 import { useStandardCurve } from "@/components/data-analysis/standard-curve-panel"
-import { usePlate, usePlateModel } from "@/components/data-analysis/plate-view"
+import { plateLayoutFromSheet, usePlate, usePlateModel } from "@/components/data-analysis/plate-view"
 import { TemplatesDialog } from "@/components/data-analysis/templates-dialog"
 import { SaveChartDialog } from "@/components/data-analysis/save-chart-dialog"
 import { detectDataKind } from "@/lib/data-analysis/detect"
@@ -106,7 +107,7 @@ import {
   resultsSheetToMarkdown,
 } from "@/lib/data-analysis/export/results-sheet-text"
 import { useAuthUser } from "@/components/auth/auth-provider"
-import { Exclusion, parseSpec } from "@/lib/data-analysis/spec/analysis-spec"
+import { DesignDeclaration, Exclusion, parseSpec } from "@/lib/data-analysis/spec/analysis-spec"
 import {
   emptyGate,
   engineDisplayAfter,
@@ -149,6 +150,11 @@ import {
   isWorkbookUnreadableReason,
   type WorkbookUnreadableReason,
 } from "@/components/data-analysis/workspace/library-dialog"
+import { isPhaseVisible } from "@/components/data-analysis/workspace/phase-visibility"
+import { labelForColumn, suggestAxes, unitForColumn } from "@/components/data-analysis/workspace/axis-suggestion"
+import { AnnotationsPanel } from "@/components/data-analysis/workspace/annotations-panel"
+import { AspectRatioField, JitterField } from "@/components/data-analysis/workspace/figure-controls"
+import { RolesPanel } from "@/components/data-analysis/workspace/roles-panel"
 import {
   RevisionHistoryDialog,
   SaveAnalysisDialog,
@@ -810,6 +816,9 @@ function SheetHost({
   )
 }
 
+/** The `DesignDeclaration` schema's own defaults, for a sheet with no spec yet. */
+const DEFAULT_DESIGN: DesignDeclaration = DesignDeclaration.parse({ source: "inferred" })
+
 type Phase = "chart" | "stats" | "curve" | "plate" | "workspace"
 
 const PHASES: { id: Phase; label: string; Icon: React.ComponentType<{ className?: string; weight?: "regular" | "bold" | "fill" }> }[] = [
@@ -952,10 +961,16 @@ export function DataAnalysisWorkspace({
   const [yKeys, setYKeys] = useState<string[]>([])
   const [zKey, setZKey] = useState("")
   const [sizeKey, setSizeKey] = useState("")
-  const [title, setTitle] = useState("ELISA standard curve")
-  const [xLabel, setXLabel] = useState("Concentration")
-  const [xUnit, setXUnit] = useState("pg/mL")
-  const [yLabel, setYLabel] = useState("OD₄₅₀")
+  /* T0.4: these were "ELISA standard curve" / "Concentration" / "pg/mL" /
+     "OD₄₅₀", and nothing reset them per dataset, so a bacterial growth sheet
+     rendered titled "ELISA standard curve" with a y axis labelled "OD₄₅₀". They
+     start empty now and `autoAxisText` below fills them from the columns the
+     researcher actually chose, and from the units inference detected. A typed
+     label wins and is never overwritten. */
+  const [title, setTitle] = useState("")
+  const [xLabel, setXLabel] = useState("")
+  const [xUnit, setXUnit] = useState("")
+  const [yLabel, setYLabel] = useState("")
   const [yUnit, setYUnit] = useState("")
   const [yLog, setYLog] = useState(false)
   /** A log x is what a dose-response needs; concentration spans decades. */
@@ -1121,18 +1136,25 @@ export function DataAnalysisWorkspace({
    */
   const columnRoleOffer = useMemo<PrepOffer | null>(() => {
     if (xKey || yKeys.length > 0) return null
-    if (table.columns.length === 0) return null
-    const x = table.columns[0]
-    const y = numericCols.filter((c) => c !== x).slice(0, 2)
-    if (y.length === 0) return null
+    const suggestion = suggestAxes(table, derivedSpec?.roles ?? [], numericCols)
+    if (!suggestion) return null
     return {
       id: "column-roles",
       kind: "column-roles",
-      summary: `Plot "${x}" against ${y.map((c) => `"${c}"`).join(" and ")}`,
-      evidence: `"${x}" is the sheet's leftmost column and ${y.length === 1 ? "is" : "are"} the first ${y.length} numeric column${y.length === 1 ? "" : "s"} after it — the conventional axis guess, not yet chosen.`,
-      apply: [{ kind: "analysis.setColumns", group: x, response: y }],
+      summary: `Plot "${suggestion.x}" against ${suggestion.y.map((c) => `"${c}"`).join(" and ")}`,
+      evidence: suggestion.evidence,
+      /* T0.4: the labels and the detected units ride along with the columns.
+         Accepting the offer used to choose the axes and leave the figure
+         titled with whatever the rail's defaults happened to be — which were
+         ELISA strings, on every sheet. `axis.set` carries label AND unit
+         because the spec holds them on one path. */
+      apply: [
+        { kind: "analysis.setColumns", group: suggestion.x, response: suggestion.y },
+        { kind: "axis.set", axis: "x", patch: { label: suggestion.xLabel, unit: suggestion.xUnit || null } },
+        { kind: "axis.set", axis: "y", patch: { label: suggestion.yLabel, unit: suggestion.yUnit || null } },
+      ],
     }
-  }, [table, numericCols, xKey, yKeys])
+  }, [table, numericCols, xKey, yKeys, derivedSpec])
 
   /**
    * ADR-025: `recommendTestForChart` used to decide `analysis.test` outright
@@ -1160,35 +1182,14 @@ export function DataAnalysisWorkspace({
 
   const visiblePhases = useMemo(
     () =>
-      PHASES.filter((p) => {
-        // The plate map is hidden for now. The model behind it still runs, the
-        // standard curve reads the plate layout to know which wells are
-        // standards, so this hides the tab, it does not remove the feature.
-        if (p.id === "plate") return false
-        /**
-         * Standard curve is the one phase with a structural precondition: it
-         * needs standards (a known concentration against a signal) before it
-         * can fit anything, so offering it on a sheet that has none is offering
-         * a dead end. Three independent signals earn it:
-         *
-         *   structure, a concentration-like column beside a signal column, or
-         *               a numeric column whose ratios form a serial dilution;
-         *   intent    - the chart or the test already asks for a fit, so the
-         *               panel that performs it should be reachable;
-         *   memory    - pinned, and pinning sticks (§Tier 1.3).
-         */
-        if (p.id === "curve") {
-          return (
-            detected.standardCurve ||
-            derivedSpec?.figure.kind === "dose-response" ||
-            derivedSpec?.analysis.test === "nonlinear-regression" ||
-            curvePinned
-          )
-        }
-        // Everything else is offered outright. Hiding a view you have used
-        // because the next sheet looks different is worse than one tab too many.
-        return true
-      }),
+      PHASES.filter((p) =>
+        isPhaseVisible(p.id, {
+          detected,
+          figureKind: derivedSpec?.figure.kind ?? null,
+          testKind: derivedSpec?.analysis.test ?? null,
+          curvePinned,
+        }),
+      ),
     [detected, derivedSpec, curvePinned],
   )
   useEffect(() => {
@@ -1286,6 +1287,25 @@ export function DataAnalysisWorkspace({
   const xAxisLabel = [xLabel, xUnit && `(${xUnit})`].filter(Boolean).join(" ")
   const yAxisLabel = [yLabel, yUnit && `(${yUnit})`].filter(Boolean).join(" ")
   const rows = useMemo(() => table.rows.filter((r) => r[xKey] !== "" && r[xKey] != null), [table.rows, xKey])
+
+  /**
+   * Where a new annotation lands: the middle of the plotted data.
+   *
+   * Annotations are in DATA coordinates, so (0, 0) would drop a note off the
+   * side of a plot of concentrations in the hundreds. The midpoint puts it
+   * somewhere the researcher can see and then move.
+   */
+  const annotationOrigin = useMemo(() => {
+    const mid = (values: number[]) => {
+      const nums = values.filter((v) => Number.isFinite(v))
+      if (nums.length === 0) return 0
+      return (Math.min(...nums) + Math.max(...nums)) / 2
+    }
+    return {
+      x: mid(rows.map((r) => Number(r[xKey]))),
+      y: mid(yKeys.flatMap((k) => rows.map((r) => Number(r[k])))),
+    }
+  }, [rows, xKey, yKeys])
 
   const isDark = typeof document !== "undefined" && document.documentElement.classList.contains("dark")
   const ink = isDark ? "#e9e2d7" : "#2c2418"
@@ -1672,7 +1692,7 @@ export function DataAnalysisWorkspace({
     (el: ChartElement, detail?: { series?: string }) => {
       const section: Record<ChartElement, string> = {
         title: "cs-title", xaxis: "cs-axes", yaxis: "cs-axes",
-        series: "cs-series", legend: "cs-toggles", annotation: "cs-toggles",
+        series: "cs-series", legend: "cs-toggles", annotation: "cs-error",
       }
       if (el === "series" && detail?.series) setEditSeries(detail.series)
       // Clicking a chart element jumps to its control, so the settings dock has
@@ -1802,6 +1822,27 @@ export function DataAnalysisWorkspace({
   // Feature hooks (called unconditionally; each renders lazily where placed).
   // The plate model is shared so the plate layout drives the standard curve.
   const plateModel = usePlateModel(grid)
+  /**
+   * T0.2: seed the plate from the detection that is already on screen.
+   *
+   * `usePlateModel`'s `init` is read once, at first render, when the sheet has
+   * not arrived yet — so passing it there would seed every plate from an empty
+   * grid. This runs when the DATASET changes instead, which is the only moment
+   * a re-seed is right: after that the format and the start row are the
+   * researcher's, and a cell edit must not undo them.
+   */
+  const { setFormat: setPlateFormat, setOriginRow: setPlateOriginRow, setOriginCol: setPlateOriginCol } = plateModel
+  useEffect(() => {
+    if (!detected.plate) return
+    const layout = plateLayoutFromSheet(grid, detected)
+    setPlateFormat(layout.format)
+    setPlateOriginRow(layout.originRow)
+    setPlateOriginCol(layout.originCol)
+    // `gridRef` deliberately absent: re-seeding on every keystroke would fight
+    // the origin spinner. `sheetFileName` and the sheet name together are what
+    // "a different dataset" means here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sheetFileName, analysisSheet, detected.plate, detected.plateFormat, setPlateFormat, setPlateOriginRow, setPlateOriginCol])
   const stats = useStatsPanel(table, numericCols)
   const curve = useStandardCurve(table, numericCols, plateModel)
   const plate = usePlate(plateModel)
@@ -1980,6 +2021,61 @@ export function DataAnalysisWorkspace({
     },
     [recordEdit]
   )
+
+  /**
+   * T0.4: the axis titles and the DETECTED UNITS follow the chosen columns.
+   *
+   * `figure.x.unit` used to come only from a rail text box, so the unit
+   * `profileColumn` had already parsed out of "Concentration (pg/mL)" and
+   * `inferRoles` had already stored on `ColumnRole.unit` never reached the
+   * figure. It does now, through the same `axis.set` mutation the label text
+   * box emits, so it is recorded, undoable and defensible against a later AI
+   * patch like any other edit.
+   *
+   * A label the researcher has typed is never overwritten: the rule is "still
+   * empty, or still exactly what we last wrote here". That is the same
+   * sticky-manual-edit rule the caption follows, kept in a ref rather than a
+   * flag per input so the nine label call sites did not have to grow a
+   * bookkeeping argument each.
+   */
+  const autoAxisText = useRef({ xKey: "", yKey: "", xLabel: "", xUnit: "", yLabel: "", yUnit: "" })
+  useEffect(() => {
+    const roles = derivedSpec?.roles ?? []
+    const auto = autoAxisText.current
+    /* Keyed on the COLUMN having changed, not only on the text differing: if
+       anything downstream ever normalised a label (a trim, a case fold) an
+       effect that re-fired on "still not equal" would be an infinite render
+       loop. One fill per column choice cannot loop. */
+    if (xKey && auto.xKey !== xKey) {
+      auto.xKey = xKey
+      const label = labelForColumn(xKey)
+      const unit = unitForColumn(roles, xKey)
+      const takeLabel = xLabel === "" || xLabel === auto.xLabel
+      const takeUnit = xUnit === "" || xUnit === auto.xUnit
+      if ((takeLabel && label !== xLabel) || (takeUnit && unit !== xUnit)) {
+        const nextLabel = takeLabel ? label : xLabel
+        const nextUnit = takeUnit ? unit : xUnit
+        auto.xLabel = nextLabel
+        auto.xUnit = nextUnit
+        railEdit("xLabel", { xLabel: nextLabel, xUnit: nextUnit }, () => { setXLabel(nextLabel); setXUnit(nextUnit) })
+      }
+    }
+    const yCol = yKeys[0]
+    if (yCol && auto.yKey !== yCol) {
+      auto.yKey = yCol
+      const label = labelForColumn(yCol)
+      const unit = unitForColumn(roles, yCol)
+      const takeLabel = yLabel === "" || yLabel === auto.yLabel
+      const takeUnit = yUnit === "" || yUnit === auto.yUnit
+      if ((takeLabel && label !== yLabel) || (takeUnit && unit !== yUnit)) {
+        const nextLabel = takeLabel ? label : yLabel
+        const nextUnit = takeUnit ? unit : yUnit
+        auto.yLabel = nextLabel
+        auto.yUnit = nextUnit
+        railEdit("yLabel", { yLabel: nextLabel, yUnit: nextUnit }, () => { setYLabel(nextLabel); setYUnit(nextUnit) })
+      }
+    }
+  }, [xKey, yKeys, xLabel, xUnit, yLabel, yUnit, derivedSpec, railEdit])
 
   /* Merged over the CURRENT configuration rather than restored wholesale: a
      control turned by hand after the commit is not part of what is being
@@ -2498,6 +2594,12 @@ export function DataAnalysisWorkspace({
     // the effect keyed on `aiGate.canPropose` sends the stated intent for
     // them as soon as there is something to propose against.
     const isNewDataset = !internal && snap.name !== EMPTY_SHEET_NAME
+    /* T0.4: a different sheet gets its own axis text. Without this the labels
+       and units of the PREVIOUS dataset stayed on the figure — which is how
+       the ELISA defaults survived onto every sheet anyone ever opened. Callers
+       that restore a saved analysis run `applyConfig` straight after this, so
+       a reopened figure still gets its own stored labels back. */
+    if (isNewDataset) { autoAxisText.current = { xKey: "", yKey: "", xLabel: "", xUnit: "", yLabel: "", yUnit: "" }; setTitle(""); setXLabel(""); setXUnit(""); setYLabel(""); setYUnit("") }
     const hasUnappliedIntent = pendingIntentRef.current !== null && pendingIntentRef.current.appliedToDatasetId === null
     if (isNewDataset && !hasUnappliedIntent) {
       setTurns([
@@ -3030,13 +3132,25 @@ export function DataAnalysisWorkspace({
       the same way `executeProposal` does. One code path for "this pipeline
       step is gone," whether a patch, a control or a chip's × removed it. */
   const applySpecMutation = useCallback(
-    (mutation: SpecMutation) => {
-      if (!derivedSpec) return
+    /* A LIST, not a mutation, because more than one can be a single edit: an
+       accepted axis offer chooses the columns AND names the axes, and the
+       plate/roles panels can move two fields at once.
+       Applying them one call at a time was wrong and had been all along —
+       every call reads `derivedSpec` and `buildConfigRef` from the render it
+       was made in, so the second mutation's `before` still had the first
+       mutation's field at its old value and `applyConfig` put it back. One
+       history, one commit, is what makes a multi-step edit one edit. */
+    (input: SpecMutation | SpecMutation[]) => {
+      const mutations = Array.isArray(input) ? input : [input]
+      if (!derivedSpec || mutations.length === 0) return
       // Through `dispatchMutation` rather than bare `applyMutation` so a hand
       // edit arrives as the same described, origin-tagged `AppliedMutation` an
       // assistant patch does. That is the whole reason one undo stack and one
       // provenance list can cover both without knowing which is which.
-      const dispatched = dispatchMutation(initHistory(derivedSpec), mutation, "user")
+      const dispatched = mutations.reduce(
+        (history, mutation) => dispatchMutation(history, mutation, "user"),
+        initHistory(derivedSpec)
+      )
       const applied = dispatched.past.map((entry) => entry.applied)
       // Through `splitApprovedMutations` rather than `railEditsFromSpec` alone,
       // because the rail cannot hold every field: a dragged significance
@@ -3061,7 +3175,7 @@ export function DataAnalysisWorkspace({
    */
   const onAcceptOffer = useCallback(
     (offer: PrepOffer) => {
-      for (const mutation of offer.apply) applySpecMutation(mutation)
+      applySpecMutation(offer.apply)
     },
     [applySpecMutation]
   )
@@ -4225,6 +4339,19 @@ export function DataAnalysisWorkspace({
         </Field>
       )}
       </div>
+      {/* T0.4: inference reached the spec and never reached the researcher.
+          `roles.set` and `design.set` were applied and described but nothing
+          outside the AI path emitted one, so a mis-inferred role was
+          uncorrectable. */}
+      <div id="cs-roles" className={cn(!showRail("cs-roles") && "!hidden", "scroll-mt-3 space-y-3 border-t border-border pt-3 transition-shadow", flashId === "cs-roles" && "rounded-lg ring-2 ring-[var(--n9-accent,#965034)]/40")}>
+        <SectionLabel><TableIcon className="h-3.5 w-3.5" /> Column roles</SectionLabel>
+        <RolesPanel
+          columns={table.columns}
+          roles={derivedSpec?.roles ?? []}
+          design={derivedSpec?.design ?? DEFAULT_DESIGN}
+          onMutate={applySpecMutation}
+        />
+      </div>
       <div id="cs-title" className={cn(!showRail("cs-title") && "!hidden", "scroll-mt-3 space-y-4 rounded-lg transition-shadow", flashId === "cs-title" && "ring-2 ring-[var(--n9-accent,#965034)]/40")}>
         <Field label="Chart title"><Input className="h-9" value={title} onChange={(e) => railEdit("title", { title: e.target.value }, () => setTitle(e.target.value))} /></Field>
         <Field label="Subtitle"><Input className="h-9" value={subtitle} onChange={(e) => railEdit("subtitle", { subtitle: e.target.value }, () => setSubtitle(e.target.value))} placeholder="optional" /></Field>
@@ -4279,6 +4406,25 @@ export function DataAnalysisWorkspace({
           <Field label="Reference line, X"><Input className="h-9" value={vlines} onChange={(e) => setVlines(e.target.value)} placeholder="e.g. 10" /></Field>
         </div>
         <RangeRow label="Canvas height" value={chartH} min={320} max={820} step={20} onChange={setChartH} />
+        {/* T0.25: the exported figure's shape. The slider above sizes the
+            preview box on this page; this sizes the figure itself, which is
+            what a journal asks for. */}
+        <AspectRatioField
+          width={derivedSpec?.figure.width ?? 720}
+          height={derivedSpec?.figure.height ?? 520}
+          onMutate={applySpecMutation}
+        />
+        {/* T0.28: free-text and arrow annotations render and were promptable
+            with no hand control at all — this section has been called "Error
+            bars and annotations" the whole time. */}
+        <div className="border-t border-border pt-3">
+          <SectionLabel><TextT className="h-3.5 w-3.5" /> Annotations</SectionLabel>
+          <AnnotationsPanel
+            annotations={derivedSpec?.figure.annotations ?? []}
+            origin={annotationOrigin}
+            onMutate={applySpecMutation}
+          />
+        </div>
       </div>
 
       {/* Per-series style inspector */}
@@ -4314,6 +4460,16 @@ export function DataAnalysisWorkspace({
             <Field label="Marker">
               <MarkerPicker value={curStyle.marker ?? "circle"} onChange={(v) => setStyle(editKey, { marker: v })} />
             </Field>
+            {/* T0.25: jitter has no home on `ChartState`, so it cannot go
+                through `setStyle` — that mutation is derived from the rail's
+                own series record and would drop the field on the next edit.
+                It goes to the spec directly and rides the overlay, the same
+                road a dragged bracket takes. */}
+            <JitterField
+              seriesKey={editKey}
+              value={derivedSpec?.figure.series.find((s) => s.key === editKey)?.jitter ?? 0}
+              onMutate={applySpecMutation}
+            />
             <div className="flex items-center justify-between gap-2 pt-0.5">
               <span className="text-xs text-muted-foreground">Y axis (dual-axis)</span>
               <div className="inline-flex rounded-md border border-border bg-background p-0.5 text-xs">
@@ -4621,6 +4777,14 @@ export function DataAnalysisWorkspace({
         loadingFileId={loadingFileId}
         fileErrors={fileErrors}
         onSelect={loadLibraryFile}
+        /* T0.1: a file from a connected local folder takes the same road an
+           uploaded one does — `onImport` is the single ingest path, so the
+           provenance record, the parse errors and the reopen banner are all
+           the ones that already exist. */
+        onOpenLocalFile={(file) => {
+          setLibraryOpen(false)
+          void onImport(file)
+        }}
       />
 
       {/* ADR-018, AC-6: the only confirmation in this feature, guarding the
@@ -5308,6 +5472,7 @@ function PaneHeader({ Icon, title, children }: { Icon: React.ComponentType<{ cla
 const RAIL_SECTIONS: { id: string; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "cs-type", label: "Chart type", Icon: FnIcon },
   { id: "cs-data", label: "Data and axes assignment", Icon: TableIcon },
+  { id: "cs-roles", label: "Column roles and design", Icon: TableIcon },
   { id: "cs-title", label: "Text, titles, labels and typography", Icon: TextAa },
   { id: "cs-palette", label: "Colour, palette and series style", Icon: Palette },
   { id: "cs-toggles", label: "Display", Icon: SlidersHorizontal },
