@@ -54,6 +54,39 @@ function heatColor(t: number): string {
    `samples` and `blank` are derived once and consumed by both. */
 export type PlateModel = ReturnType<typeof usePlateModel>
 
+/**
+ * The layout a freshly-loaded sheet implies, from the same detection the tab
+ * strip already reads.
+ *
+ * T0.2: `PlateModelInit` existed and had no caller, so every sheet booted at
+ * 96-well with `originRow = 0`. Two things were wrong with that. A 384-well
+ * plate came up as 96 even though `detectDataKind` had already said 384. And
+ * the grid the model is handed is built with `{ header: 1 }`, i.e. it INCLUDES
+ * the header row — so on any sheet with column names, well A1 landed on a
+ * header string, read as empty, and the whole plate sat one row too high.
+ *
+ * Pure, and separate from the hook, because "which row does the plate start
+ * on" is the part that was silently wrong and is worth a test rather than a
+ * spinner the researcher has to notice and correct.
+ */
+export function plateLayoutFromSheet(
+  grid: (string | number)[][],
+  detected: { plate?: boolean; plateFormat?: PlateFormat | null },
+): { format: PlateFormat; originRow: number; originCol: number } {
+  const format: PlateFormat = detected.plateFormat === 384 ? 384 : 96
+  // A first row with no numbers in it is a header, not readings. Guard the
+  // empty sheet: `every` on an empty row is vacuously true and would push the
+  // origin down a row for no reason.
+  const first = grid[0] ?? []
+  const headerRow = grid.length > 1 && first.length > 0 && first.every((c) => typeof c !== "number")
+  const originRow = headerRow ? 1 : 0
+  // The same argument one axis over: a plate reader writes "A", "B", "C" down
+  // the left, and reading that column as well 1 shifts every reading across.
+  const dataRow = grid[originRow] ?? []
+  const labelCol = dataRow.length > 1 && typeof dataRow[0] !== "number" && dataRow.slice(1).some((c) => typeof c === "number")
+  return { format, originRow, originCol: labelCol ? 1 : 0 }
+}
+
 export type PlateModelInit = {
   format?: PlateFormat
   originRow?: number
