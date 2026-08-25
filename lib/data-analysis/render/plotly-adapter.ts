@@ -2419,7 +2419,7 @@ function significanceLayer(spec: AnalysisSpec, result: EngineResult) {
       x1: at(pair.groupB),
       y0: y,
       y1: y,
-      line: { color: "#444", width: 1 },
+      line: { color: custom?.colour ?? "#444", width: custom?.lineWidth ?? 1 },
     })
     const a = at(pair.groupA)
     const b = at(pair.groupB)
@@ -2438,7 +2438,7 @@ function significanceLayer(spec: AnalysisSpec, result: EngineResult) {
             ? `${significanceStars(pair.pAdjusted)} (p = ${pair.pAdjusted.toPrecision(2)})`
             : significanceStars(pair.pAdjusted),
       showarrow: false,
-      font: { size: Math.max(spec.figure.axisFontSize - 1, 8) },
+      font: { size: custom?.fontSize ?? Math.max(spec.figure.axisFontSize - 1, 8) },
       xanchor: "center",
       xshift: 0,
     })
