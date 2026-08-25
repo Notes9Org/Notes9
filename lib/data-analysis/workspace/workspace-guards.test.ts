@@ -23,7 +23,7 @@ import {
 import { applyOverlay } from "@/lib/data-analysis/workspace/spec-prompt"
 import { buildDataSnapshot } from "@/lib/data-analysis/workspace/saved-analysis-session"
 import { bracketMoveFromRelayout } from "@/lib/data-analysis/render/plotly-adapter"
-import { parseSpec, type AnalysisSpec } from "@/lib/data-analysis/spec/analysis-spec"
+import { bracketId, parseSpec, type AnalysisSpec } from "@/lib/data-analysis/spec/analysis-spec"
 import type { AppliedMutation } from "@/lib/data-analysis/spec/mutations"
 import type { Table } from "@/lib/data-analysis/engine/resolver"
 
@@ -166,6 +166,45 @@ describe("reopenFromSpec — rail + overlay reproduces the STORED spec (§3A.3 r
   it("holds the same on the null-config path, where the whole rail comes from the spec", () => {
     const stored = twoWaySpec()
     const reopen = reopenFromSpec(stored, null, table, FILE)
+    expect(whatTheWorkspaceWouldShow(reopen.config)).toEqual(stored)
+    expect(reopen.unrestored).toEqual([])
+  })
+
+  /**
+   * T0.27. `residueMutations` rebuilt every stored bracket from `offsetY` alone,
+   * so a bracket the researcher had restyled came back grey, at default width,
+   * with its caps and its hidden flag gone — and `unrestored` said nothing,
+   * because the residue was measured against what the residue itself produced.
+   * The rail has no bracket control at all, so the whole row is residue.
+   */
+  const styledBracketSpec = (): AnalysisSpec => {
+    const base = railDerived()
+    return {
+      ...base,
+      figure: {
+        ...base.figure,
+        brackets: [
+          {
+            id: bracketId("Control", "Treated"),
+            fromGroup: "Control",
+            toGroup: "Treated",
+            offsetY: 17,
+            derived: false,
+            display: "p-value",
+            colour: "#ff0000",
+            lineWidth: 3,
+            fontSize: 18,
+            capLength: 7,
+            hidden: false,
+          },
+        ],
+      },
+    }
+  }
+
+  it("reopens a restyled significance bracket with its style intact", () => {
+    const stored = styledBracketSpec()
+    const reopen = reopenFromSpec(stored, railConfig, table, FILE)
     expect(whatTheWorkspaceWouldShow(reopen.config)).toEqual(stored)
     expect(reopen.unrestored).toEqual([])
   })

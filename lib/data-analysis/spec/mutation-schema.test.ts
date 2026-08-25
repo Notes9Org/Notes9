@@ -46,6 +46,11 @@ const VALID_EXAMPLES: Record<SpecMutation["kind"], SpecMutation> = {
   },
   "figure.removeAnnotation": { kind: "figure.removeAnnotation", id: "a1" },
   "figure.moveBracket": { kind: "figure.moveBracket", id: "b1", offsetY: 5 },
+  "figure.setBracketStyle": {
+    kind: "figure.setBracketStyle",
+    id: "b1",
+    patch: { colour: "#ff0000", lineWidth: 2, fontSize: 14, capLength: 6, hidden: false, display: "both" },
+  },
   "figure.setShowExcluded": { kind: "figure.setShowExcluded", value: true },
   "axis.set": { kind: "axis.set", axis: "y", patch: { label: "Viability (%)", scale: "log10" } },
   "figure.setErrorBars": { kind: "figure.setErrorBars", value: "sd" },

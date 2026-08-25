@@ -153,6 +153,7 @@ import {
 import { isPhaseVisible } from "@/components/data-analysis/workspace/phase-visibility"
 import { labelForColumn, suggestAxes, unitForColumn } from "@/components/data-analysis/workspace/axis-suggestion"
 import { AnnotationsPanel } from "@/components/data-analysis/workspace/annotations-panel"
+import { BracketsPanel } from "@/components/data-analysis/workspace/brackets-panel"
 import { AspectRatioField, JitterField } from "@/components/data-analysis/workspace/figure-controls"
 import { RolesPanel } from "@/components/data-analysis/workspace/roles-panel"
 import {
@@ -4422,6 +4423,16 @@ export function DataAnalysisWorkspace({
           <AnnotationsPanel
             annotations={derivedSpec?.figure.annotations ?? []}
             origin={annotationOrigin}
+            onMutate={applySpecMutation}
+          />
+          {/* T0.27: the bracket style fields are read by the adapter and were
+              reachable from nowhere -- `figure.moveBracket` carries a position
+              and nothing else, so "restyled" was a thing the figure could be
+              described as and never be. */}
+          <SectionLabel><TextT className="h-3.5 w-3.5" /> Significance brackets</SectionLabel>
+          <BracketsPanel
+            result={engineResult}
+            brackets={derivedSpec?.figure.brackets ?? []}
             onMutate={applySpecMutation}
           />
         </div>
