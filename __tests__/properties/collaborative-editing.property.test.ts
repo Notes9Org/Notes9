@@ -18,8 +18,19 @@ import {
   getExtensionConfig,
 } from "../../lib/collaboration/extension-config";
 
+import { canAccessDocument } from "../../collaboration-server/src/database.js";
+
+// SEC-002: onAuthenticate now asks canAccessDocument whether this user may
+// open this paper, which is a Supabase round-trip. Mocked so these properties
+// stay about the token logic they were written to characterise — a property
+// run 100 times against a live database is not a property test.
+vi.mock("../../collaboration-server/src/database.js", () => ({
+  canAccessDocument: vi.fn(),
+}));
+
 const TEST_SECRET = "test-jwt-secret-for-property-tests";
 const WRONG_SECRET = "completely-different-wrong-secret";
+const TEST_DOC = "11111111-1111-4111-8111-111111111111";
 
 /**
  * Property 1: JWT Authentication Correctness
@@ -33,10 +44,14 @@ const WRONG_SECRET = "completely-different-wrong-secret";
 describe("Property 1: JWT Authentication Correctness", () => {
   beforeEach(() => {
     vi.stubEnv("JWT_SECRET", TEST_SECRET);
+    // These properties characterise token handling, so authorization is held
+    // fixed at "allowed". The deny branch is covered in the unit suite.
+    vi.mocked(canAccessDocument).mockResolvedValue(true);
   });
 
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.clearAllMocks();
   });
 
   // --- Arbitraries ---
@@ -71,12 +86,12 @@ describe("Property 1: JWT Authentication Correctness", () => {
 
   // --- Property Tests ---
 
-  it("valid tokens with correct signature and unexpired are always accepted", () => {
-    fc.assert(
-      fc.property(validPayloadArb, (payload) => {
+  it("valid tokens with correct signature and unexpired are always accepted", async () => {
+    await fc.assert(
+      fc.asyncProperty(validPayloadArb, async (payload) => {
         const token = jwt.sign(payload, TEST_SECRET, { expiresIn: "1h" });
 
-        const result = onAuthenticate({ token });
+        const result = await onAuthenticate({ token, documentName: TEST_DOC });
 
         // Must return a valid UserContext
         expect(result).toBeDefined();
@@ -88,30 +103,34 @@ describe("Property 1: JWT Authentication Correctness", () => {
     );
   });
 
-  it("tokens signed with a wrong secret are always rejected", () => {
-    fc.assert(
-      fc.property(validPayloadArb, (payload) => {
+  it("tokens signed with a wrong secret are always rejected", async () => {
+    await fc.assert(
+      fc.asyncProperty(validPayloadArb, async (payload) => {
         const token = jwt.sign(payload, WRONG_SECRET, { expiresIn: "1h" });
 
-        expect(() => onAuthenticate({ token })).toThrow();
+        await expect(
+          onAuthenticate({ token, documentName: TEST_DOC })
+        ).rejects.toThrow();
       }),
       { numRuns: 100 }
     );
   });
 
-  it("expired tokens are always rejected regardless of payload", () => {
-    fc.assert(
-      fc.property(validPayloadArb, (payload) => {
+  it("expired tokens are always rejected regardless of payload", async () => {
+    await fc.assert(
+      fc.asyncProperty(validPayloadArb, async (payload) => {
         // Create a token that expired 1 hour ago
         const token = jwt.sign(payload, TEST_SECRET, { expiresIn: "-1h" });
 
-        expect(() => onAuthenticate({ token })).toThrow("Token has expired");
+        await expect(
+          onAuthenticate({ token, documentName: TEST_DOC })
+        ).rejects.toThrow("Token has expired");
       }),
       { numRuns: 100 }
     );
   });
 
-  it("malformed/random strings are always rejected", () => {
+  it("malformed/random strings are always rejected", async () => {
     // Generate arbitrary strings that are NOT valid JWTs
     const malformedTokenArb = fc.oneof(
       // Completely random strings
@@ -124,18 +143,20 @@ describe("Property 1: JWT Authentication Correctness", () => {
       fc.constantFrom(".", "..", "...", "abc.def.ghi", "null", "undefined")
     );
 
-    fc.assert(
-      fc.property(malformedTokenArb, (token) => {
+    await fc.assert(
+      fc.asyncProperty(malformedTokenArb, async (token) => {
         // Skip empty strings since those are caught by a different check
         if (token.length === 0) return;
 
-        expect(() => onAuthenticate({ token })).toThrow();
+        await expect(
+          onAuthenticate({ token, documentName: TEST_DOC })
+        ).rejects.toThrow();
       }),
       { numRuns: 100 }
     );
   });
 
-  it("a token is accepted if and only if it has valid signature AND is not expired", () => {
+  it("a token is accepted if and only if it has valid signature AND is not expired", async () => {
     // Discriminated union: generate tokens that are either valid, wrong-signed, or expired
     const tokenCaseArb = fc.oneof(
       // Case 1: Valid signature + not expired → should be accepted
@@ -158,15 +179,17 @@ describe("Property 1: JWT Authentication Correctness", () => {
       }))
     );
 
-    fc.assert(
-      fc.property(tokenCaseArb, ({ kind, token, payload }) => {
+    await fc.assert(
+      fc.asyncProperty(tokenCaseArb, async ({ kind, token, payload }) => {
         if (kind === "valid") {
           // Valid + unexpired → accepted
-          const result = onAuthenticate({ token });
+          const result = await onAuthenticate({ token, documentName: TEST_DOC });
           expect(result.userId).toBe(payload.sub);
         } else {
           // Invalid signature or expired → rejected
-          expect(() => onAuthenticate({ token })).toThrow();
+          await expect(
+            onAuthenticate({ token, documentName: TEST_DOC })
+          ).rejects.toThrow();
         }
       }),
       { numRuns: 100 }
