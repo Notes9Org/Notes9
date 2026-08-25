@@ -71,6 +71,25 @@ const VALID_EXAMPLES: Record<SpecMutation["kind"], SpecMutation> = {
     kind: "data.setFilters",
     filters: [{ column: "viability", op: "gt", value: 0 }],
   },
+  "data.setJoins": {
+    kind: "data.setJoins",
+    joins: [
+      {
+        right: {
+          fileId: "3f2504e0-4f89-41d3-9a0c-0305e82c3301",
+          fileName: "plate-map.csv",
+          sheet: "Sheet1",
+          versionHash: "fnv1a64:0011223344556677",
+          rowCount: 96,
+          columnCount: 3,
+        },
+        on: [{ left: "Well", right: "Well" }],
+        type: "left",
+        columns: [],
+        suffix: "_r",
+      },
+    ],
+  },
   "data.excludeRow": {
     kind: "data.excludeRow",
     exclusion: {

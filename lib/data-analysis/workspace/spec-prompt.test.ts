@@ -277,6 +277,27 @@ describe("splitApprovedMutations reproduces the approved spec exactly", () => {
     "data.setFilters": [
       { kind: "data.setFilters", filters: [{ column: "treatment", op: "eq", value: "drug" }] },
     ],
+    "data.setJoins": [
+      {
+        kind: "data.setJoins",
+        joins: [
+          {
+            right: {
+              fileId: "3f2504e0-4f89-41d3-9a0c-0305e82c3301",
+              fileName: "plate-map.csv",
+              sheet: "Sheet1",
+              versionHash: "fnv1a64:0011223344556677",
+              rowCount: 96,
+              columnCount: 3,
+            },
+            on: [{ left: "Well", right: "Well" }],
+            type: "left",
+            columns: [],
+            suffix: "_r",
+          },
+        ],
+      },
+    ],
     "data.excludeRow": [
       {
         kind: "data.excludeRow",

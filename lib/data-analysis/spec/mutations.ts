@@ -2,6 +2,7 @@ import type {
   AnalysisSpec,
   Annotation,
   BRACKET_STYLE_FIELDS,
+  DatasetJoin,
   Exclusion,
   FigureKind,
   RowFilter,
@@ -78,6 +79,7 @@ export type SpecMutation =
   | { kind: "data.addTransform"; transform: Transform }
   | { kind: "data.removeTransform"; index: number }
   | { kind: "data.setFilters"; filters: RowFilter[] }
+  | { kind: "data.setJoins"; joins: DatasetJoin[] }
   | { kind: "data.excludeRow"; exclusion: Exclusion }
   | { kind: "data.restoreRow"; rowId: string }
   /* Roles and design, the semantic layer (L2). */
@@ -211,6 +213,12 @@ export function describeMutation(m: SpecMutation): string {
       return "Transform removed"
     case "data.setFilters":
       return `Filters updated (${m.filters.length})`
+    case "data.setJoins":
+      // Names the file, because "1 join" in the history tells the researcher
+      // nothing about which of their files the numbers now depend on.
+      return m.joins.length === 0
+        ? "Join removed"
+        : `Joined ${m.joins.map((j) => j.right.fileName ?? j.right.fileId).join(", ")}`
     case "data.excludeRow":
       // The reason is part of the description on purpose: §8.1 wants the record
       // to carry WHY, everywhere it appears, not only in the provenance card.
@@ -426,6 +434,8 @@ export function applyMutation(spec: AnalysisSpec, m: SpecMutation): AnalysisSpec
       return { ...spec, transforms: spec.transforms.filter((_, i) => i !== m.index) }
     case "data.setFilters":
       return { ...spec, filters: m.filters }
+    case "data.setJoins":
+      return { ...spec, joins: m.joins }
     case "data.excludeRow": {
       // §8.1 records are append-only. An exclusion names a person, a reason, a
       // method and a time, and the spec holds the only copy; replacing it in

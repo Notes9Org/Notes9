@@ -6,6 +6,7 @@ import {
   AxisSpec,
   BRACKET_STYLE_FIELDS,
   ColumnRole,
+  DatasetJoin,
   DesignDeclaration,
   ErrorBarKind,
   Exclusion,
@@ -142,6 +143,10 @@ export const SpecMutationSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("data.addTransform"), transform: Transform }),
   z.object({ kind: z.literal("data.removeTransform"), index: z.number().int().nonnegative() }),
   z.object({ kind: z.literal("data.setFilters"), filters: z.array(RowFilter) }),
+  // Bounded like the filter list: a spec carrying an unbounded number of joins
+  // is a spec that resolves by chaining table scans, and the rail only ever
+  // authors one at a time.
+  z.object({ kind: z.literal("data.setJoins"), joins: z.array(DatasetJoin).max(4) }),
   z.object({ kind: z.literal("data.excludeRow"), exclusion: Exclusion }),
   z.object({ kind: z.literal("data.restoreRow"), rowId: z.string().max(128) }),
   /* Roles and design. */

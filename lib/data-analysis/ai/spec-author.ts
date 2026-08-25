@@ -124,6 +124,20 @@ export const FORBIDDEN_MUTATION_KINDS = new Set<string>([
   // Splitting the kind so the assistant could have the cosmetic half would be
   // an abstraction bought only to widen the model's reach.
   "figure.setBracketStyle",
+  // A join reads as data prep, and `data.addTransform` is allowed, so this
+  // looks like it belongs on the other list. Two things put it here.
+  //
+  // An `inner` join DROPS every left row without a match: that is excluding
+  // rows, reached through a different door, and S8.1 keeps excluding rows in
+  // human hands regardless of which door. And a wrong key fans one left row out
+  // to N matched rows, which -- per `DatasetJoin`'s own comment -- orphans every
+  // exclusion already recorded against the row that no longer exists. Neither
+  // outcome should be reachable by an assistant that misread which column is
+  // the plate well.
+  //
+  // The user picks the file and the key in the rail; the assistant can explain
+  // what a join would do, and cannot perform one.
+  "data.setJoins",
 ])
 
 /* ── Guardrails (§7 adversarial set, §8.1) ─────────────────────────────────*/
