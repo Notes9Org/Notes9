@@ -428,6 +428,25 @@ export const NonlinearModel = z.enum([
   "semi-log",
 ])
 
+/**
+ * Parameters a global fit can share across curves, per model (T0.20).
+ *
+ * MIRRORS `_DR_MODELS` in `public/data-analysis-engine/notes9_engine.py` --
+ * names and order both. The engine is the source of truth; this copy exists
+ * only so the UI can offer checkboxes without a round-trip, and
+ * `analysis-spec.nonlinear-parameters.test.ts` fails if the two drift apart.
+ *
+ * Models absent from this map (Michaelis-Menten, the exponentials, ...) are not
+ * missing by oversight: the dose-response family is what §T0.20 asks to share
+ * parameters across, and offering a checkbox the engine would ignore is worse
+ * than offering none.
+ */
+export const NONLINEAR_SHARED_PARAMETERS: Readonly<Record<string, readonly string[]>> = {
+  "3pl": ["bottom", "top", "logEC50"],
+  "4pl": ["bottom", "top", "logEC50", "hillSlope"],
+  "5pl": ["bottom", "top", "logEC50", "hillSlope", "asymmetry"],
+}
+
 export const AnalysisConfig = z.object({
   test: TestKind.default("none"),
   postHoc: PostHocKind.default("none"),

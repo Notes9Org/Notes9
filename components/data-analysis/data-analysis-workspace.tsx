@@ -107,7 +107,7 @@ import {
   resultsSheetToMarkdown,
 } from "@/lib/data-analysis/export/results-sheet-text"
 import { useAuthUser } from "@/components/auth/auth-provider"
-import { DesignDeclaration, Exclusion, parseSpec } from "@/lib/data-analysis/spec/analysis-spec"
+import { DesignDeclaration, Exclusion, NONLINEAR_SHARED_PARAMETERS, parseSpec } from "@/lib/data-analysis/spec/analysis-spec"
 import {
   emptyGate,
   engineDisplayAfter,
@@ -4338,6 +4338,76 @@ export function DataAnalysisWorkspace({
             {numericCols.map((c) => (<option key={c} value={c}>{c}</option>))}
           </NativeSelect>
         </Field>
+      )}
+
+      {/* T0.20 global fit. The resolver has emitted `datasets: [...]` for a
+          nonlinear spec carrying `datasetColumn` since Wave 6, and the engine
+          has honoured `sharedParameters` for longer than that — but nothing on
+          screen could set either, so every dose-response ran as one pooled
+          curve no matter how many the data held. This is the control that was
+          missing, and it dispatches the typed mutation rather than rail state:
+          splitting curves and sharing parameters both change the NUMBERS, and
+          §L5 puts anything that recomputes on the spec. */}
+      {derivedSpec?.analysis.test === "nonlinear-regression" && (
+        <>
+          <Field label="Separate curves by">
+            <NativeSelect
+              value={derivedSpec.analysis.nonlinear?.datasetColumn ?? ""}
+              onChange={(v) =>
+                applySpecMutation({
+                  kind: "analysis.setNonlinear",
+                  patch: {
+                    datasetColumn: v || null,
+                    // Going back to one curve clears the sharing too. A shared
+                    // parameter with nothing to share across is not a harmless
+                    // leftover: it would come back the moment a column was
+                    // picked again, silently constraining a fit the user never
+                    // asked to constrain.
+                    ...(v ? {} : { sharedParameters: [] }),
+                  },
+                })
+              }
+            >
+              <option value="">One curve over all rows</option>
+              {table.columns.map((c) => (<option key={c} value={c}>{c}</option>))}
+            </NativeSelect>
+          </Field>
+
+          {derivedSpec.analysis.nonlinear?.datasetColumn &&
+            (NONLINEAR_SHARED_PARAMETERS[derivedSpec.analysis.nonlinear.model]?.length ?? 0) > 0 && (
+              <Field label="Share across curves">
+                <div className="flex flex-wrap gap-x-3 gap-y-1.5">
+                  {NONLINEAR_SHARED_PARAMETERS[derivedSpec.analysis.nonlinear.model].map((param) => {
+                    const shared = derivedSpec.analysis.nonlinear?.sharedParameters ?? []
+                    const on = shared.includes(param)
+                    return (
+                      <label key={param} className="flex items-center gap-1.5 text-[12.5px]">
+                        <input
+                          type="checkbox"
+                          checked={on}
+                          onChange={() =>
+                            applySpecMutation({
+                              kind: "analysis.setNonlinear",
+                              patch: {
+                                sharedParameters: on
+                                  ? shared.filter((p) => p !== param)
+                                  : [...shared, param],
+                              },
+                            })
+                          }
+                        />
+                        {param}
+                      </label>
+                    )
+                  })}
+                </div>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  A shared parameter is fitted once across every curve instead of
+                  separately per curve.
+                </p>
+              </Field>
+            )}
+        </>
       )}
       </div>
       {/* T0.4: inference reached the spec and never reached the researcher.
