@@ -70,7 +70,12 @@ const REASON_LABEL: Record<ExclusionReasonKind, string> = {
   other: "Other",
 }
 
-function describeTransform(t: AnalysisSpec["transforms"][number]): string {
+/**
+ * Exported so the preparation receipt in `workspace/data-quality.ts` renders a
+ * transform the same way the card does. Two descriptions of one transform is
+ * two chances to disagree about what was done to the data.
+ */
+export function describeTransform(t: AnalysisSpec["transforms"][number]): string {
   switch (t.kind) {
     case "log10":
       return `log₁₀(${t.column})`
@@ -105,6 +110,17 @@ function describeTransform(t: AnalysisSpec["transforms"][number]): string {
       // Same reason as above for not listing the levels: the count is unknown
       // until the data is read, and this card is written from the spec alone.
       return `${t.namesFrom} spread wide, one column per level, filled from ${t.valuesFrom}`
+    case "coerceNumeric": {
+      // The tokens ARE listed, unlike pivotLonger's columns. A reader checking
+      // whether "<LOD" was treated as zero or as missing cannot answer that
+      // from a count, and it changes the n.
+      const parts: string[] = []
+      if (t.tokensToMissing.length) {
+        parts.push(`${t.tokensToMissing.map((s) => `"${s}"`).join(", ")} read as missing`)
+      }
+      if (t.stripSuffix !== null) parts.push(`unit "${t.stripSuffix.trim()}" removed`)
+      return `${t.column} coerced to numeric${parts.length ? ` — ${parts.join("; ")}` : ""}`
+    }
   }
 }
 

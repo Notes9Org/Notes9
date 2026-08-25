@@ -332,6 +332,24 @@ function applyTransform(
   const num = (r: TableRow, c: string) => toNumber(r.values[c])
 
   switch (t.kind) {
+    case "coerceNumeric": {
+      // Coerced tokens become null so the analysis's declared missing-value
+      // strategy disposes of them, rather than a second silent path here.
+      const tokens = new Set(t.tokensToMissing)
+      return rows.map((r) => {
+        const raw = r.values[t.column]
+        if (raw === null || raw === undefined || raw === "") return r
+        const text = String(raw)
+        if (tokens.has(text)) {
+          return { ...r, values: { ...r.values, [t.column]: null } }
+        }
+        const stripped =
+          t.stripSuffix !== null && text.endsWith(t.stripSuffix)
+            ? text.slice(0, -t.stripSuffix.length)
+            : text
+        return { ...r, values: { ...r.values, [t.column]: toNumber(stripped) } }
+      })
+    }
     case "log10":
     case "ln": {
       const f = t.kind === "log10" ? Math.log10 : Math.log

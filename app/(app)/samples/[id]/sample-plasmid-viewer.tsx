@@ -1036,11 +1036,23 @@ export function SamplePlasmidViewer({
 
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="outline" className="font-mono text-2xs tabular-nums">
-                    {(alignSourceId === "paste"
-                      ? pastedClean.length
-                      : alignmentSources.find((s) => s.id === alignSourceId)?.sequence?.length ?? 0
-                    ).toLocaleString()}{" "}
-                    bp query
+                    {alignSourceId === "paste" ? (
+                      <>{pastedClean.length.toLocaleString()} bp query</>
+                    ) : alignmentSources.find((s) => s.id === alignSourceId)?.sequence ===
+                      undefined ? (
+                      // Not "0 bp": the sequence simply is not loaded yet. It is
+                      // fetched and parsed from Storage when Align runs, and
+                      // reading "0 bp query" beside the Align button implied an
+                      // empty file rather than an unread one.
+                      <>length not yet read</>
+                    ) : (
+                      <>
+                        {(
+                          alignmentSources.find((s) => s.id === alignSourceId)?.sequence?.length ?? 0
+                        ).toLocaleString()}{" "}
+                        bp query
+                      </>
+                    )}
                   </Badge>
                   <Badge variant="outline" className="font-mono text-2xs tabular-nums">
                     {currentSequence.length.toLocaleString()} bp construct
