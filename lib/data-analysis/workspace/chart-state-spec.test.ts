@@ -667,6 +667,26 @@ describe("the shipping rail dispatches", () => {
   })
 })
 
+describe("the bracket style control is routed, not held", () => {
+  /**
+   * T0.27's hand control. A panel that kept bracket style in `useState` would
+   * draw correctly and record nothing — no history entry, no undo, nothing in
+   * the saved spec — which is exactly the defect the rail refactor removed and
+   * exactly what makes a restyle look like it worked and vanish on reopen.
+   */
+  const panel = readFileSync("components/data-analysis/workspace/brackets-panel.tsx", "utf8")
+  const host = readFileSync("components/data-analysis/data-analysis-workspace.tsx", "utf8")
+
+  it("emits figure.setBracketStyle and holds no figure state of its own", () => {
+    expect(panel).toMatch(/kind: "figure\.setBracketStyle"/)
+    expect(panel).not.toMatch(/useState/)
+  })
+
+  it("is mounted on the same applySpecMutation door every other hand edit uses", () => {
+    expect(host).toMatch(/<BracketsPanel[\s\S]{0,200}onMutate=\{applySpecMutation\}/)
+  })
+})
+
 describe("Law 5 — the two classifications agree", () => {
   /**
    * `requiresRecompute` (mutations.ts) and `recomputeSignature` (this file) are
@@ -698,6 +718,7 @@ describe("Law 5 — the two classifications agree", () => {
     { kind: "figure.addAnnotation", annotation: { kind: "text", id: "n1", x: 1, y: 1, text: "hi", fontSize: 12, colour: "#000000" } },
     { kind: "figure.removeAnnotation", id: "n1" },
     { kind: "figure.moveBracket", id: "AB", offsetY: 8 },
+    { kind: "figure.setBracketStyle", id: "AB", patch: { colour: "#ff0000", hidden: true } },
     { kind: "figure.setShowExcluded", value: false },
     { kind: "axis.set", axis: "x", patch: { label: "l", unit: "u", scale: "log10", min: 1, max: 9, tickCount: 5 } },
     { kind: "axis.set", axis: "y", patch: { scale: "log10" } },

@@ -241,6 +241,13 @@ describe("splitApprovedMutations reproduces the approved spec exactly", () => {
     "figure.moveBracket": [
       { kind: "figure.moveBracket", id: bracketId("drug", "vehicle"), offsetY: 12 },
     ],
+    "figure.setBracketStyle": [
+      {
+        kind: "figure.setBracketStyle",
+        id: bracketId("drug", "vehicle"),
+        patch: { colour: "#112233", lineWidth: 2, capLength: 6 },
+      },
+    ],
     "figure.setShowExcluded": [{ kind: "figure.setShowExcluded", value: false }],
     "axis.set": [{ kind: "axis.set", axis: "y", patch: { scale: "log10", min: 0.1, max: 100 } }],
     "figure.setErrorBars": [{ kind: "figure.setErrorBars", value: "sd" }],

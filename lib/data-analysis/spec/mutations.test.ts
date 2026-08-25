@@ -8,6 +8,7 @@ import {
   describeHistorySince,
   dispatchMutation,
   initHistory,
+  mutationPath,
   redo,
   requiresRecompute,
   undo,
@@ -154,6 +155,76 @@ describe("applyMutation is pure", () => {
     expect(
       applyMutation(base, { kind: "figure.moveBracket", id: "b1", offsetY: 3 }).figure.brackets
     ).toHaveLength(0)
+  })
+
+  it("writes a style override into the same sparse layer a drag writes into", () => {
+    // T0.27: the style fields existed and `figure.moveBracket` was the only
+    // bracket mutation, so nothing could set them. A DERIVED bracket has no row
+    // in the spec until it is touched, and the id names the pair, so restyling
+    // creates the row the same way dragging does.
+    const base = baseSpec()
+    expect(base.figure.brackets).toHaveLength(0)
+    const styled = applyMutation(base, {
+      kind: "figure.setBracketStyle",
+      id: bracketId("Control", "Treated"),
+      patch: { colour: "#ff0000", capLength: 6 },
+    })
+    expect(styled.figure.brackets).toHaveLength(1)
+    expect(styled.figure.brackets[0]).toMatchObject({
+      id: bracketId("Control", "Treated"),
+      fromGroup: "Control",
+      toGroup: "Treated",
+      offsetY: 0,
+      colour: "#ff0000",
+      capLength: 6,
+    })
+  })
+
+  it("patches an existing bracket without disturbing where it was dragged to", () => {
+    const dragged = applyMutation(baseSpec(), {
+      kind: "figure.moveBracket",
+      id: bracketId("Control", "Treated"),
+      offsetY: -8,
+    })
+    const styled = applyMutation(dragged, {
+      kind: "figure.setBracketStyle",
+      id: bracketId("Control", "Treated"),
+      patch: { hidden: true },
+    })
+    expect(styled.figure.brackets).toHaveLength(1)
+    expect(styled.figure.brackets[0].offsetY).toBe(-8)
+    expect(styled.figure.brackets[0].hidden).toBe(true)
+  })
+
+  it("leaves an untouched style field alone rather than resetting it", () => {
+    // Sparse means sparse: a second restyle that names only `lineWidth` must not
+    // wipe the colour the first one set, or the panel's three controls would
+    // fight each other.
+    const one = applyMutation(baseSpec(), {
+      kind: "figure.setBracketStyle",
+      id: bracketId("Control", "Treated"),
+      patch: { colour: "#ff0000" },
+    })
+    const two = applyMutation(one, {
+      kind: "figure.setBracketStyle",
+      id: bracketId("Control", "Treated"),
+      patch: { lineWidth: 3 },
+    })
+    expect(two.figure.brackets[0]).toMatchObject({ colour: "#ff0000", lineWidth: 3 })
+  })
+
+  it("is style, not a recompute: it changes how a bracket looks, not the numbers", () => {
+    expect(
+      requiresRecompute({ kind: "figure.setBracketStyle", id: "b1", patch: { colour: "#ff0000" } })
+    ).toBe(false)
+  })
+
+  it("owns the same spec path a drag on that bracket owns", () => {
+    // Both edits are the same bracket, so a hand restyle and an AI drag collide
+    // on one path rather than sliding past each other (L6 stickiness).
+    expect(mutationPath({ kind: "figure.setBracketStyle", id: "b1", patch: {} })).toBe(
+      mutationPath({ kind: "figure.moveBracket", id: "b1", offsetY: 1 })
+    )
   })
 })
 

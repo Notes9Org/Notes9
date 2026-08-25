@@ -246,6 +246,110 @@ describe("significance brackets are driven by the post-hoc result", () => {
     expect(shapes[0].y0 - figure.brackets![0].baseY).toBeCloseTo(25, 6)
   })
 
+  /**
+   * T0.27. `SignificanceBracket` grew `colour`, `lineWidth`, `fontSize`,
+   * `capLength` and `hidden`, and until `figure.setBracketStyle` existed there
+   * was no mutation and no control that could set any of them. These assert the
+   * other half of that: that a set field actually reaches the rendered figure,
+   * so the mutation is not a well-typed no-op.
+   */
+  const styled = (patch: Record<string, unknown>) =>
+    spec({
+      figure: {
+        kind: "bar-scatter-error",
+        x: {},
+        y: {},
+        errorBars: "sd",
+        brackets: [
+          {
+            id: bracketId("Control", "Treated"),
+            fromGroup: "Control",
+            toGroup: "Treated",
+            offsetY: 0,
+            derived: false,
+            display: "stars",
+            ...patch,
+          },
+        ],
+      },
+    })
+
+  it("draws a restyled bracket in the colour and width it was given", () => {
+    const figure = buildFigure(styled({ colour: "#ff0000", lineWidth: 4 }), withPairwise)
+    const shapes = figure.layout.shapes as Record<string, Record<string, unknown>>[]
+    expect(shapes[0].line).toMatchObject({ color: "#ff0000", width: 4 })
+  })
+
+  it("labels a restyled bracket at the size and colour it was given", () => {
+    const figure = buildFigure(styled({ colour: "#00ff00", fontSize: 22 }), withPairwise)
+    const annotations = figure.layout.annotations as Record<string, Record<string, unknown>>[]
+    const star = annotations.find((a) => String(a.text).includes("*"))
+    expect(star!.font).toMatchObject({ size: 22, color: "#00ff00" })
+  })
+
+  it("draws no end caps until capLength is set", () => {
+    // The field's default is "no caps", so an untouched figure is unchanged by
+    // the feature existing.
+    expect((buildFigure(styled({}), withPairwise).layout.shapes as unknown[]).length).toBe(1)
+  })
+
+  it("draws two end caps, in pixels, when capLength is set", () => {
+    const figure = buildFigure(styled({ capLength: 9, colour: "#0000ff" }), withPairwise)
+    const shapes = figure.layout.shapes as Record<string, unknown>[]
+    expect(shapes).toHaveLength(3)
+    const caps = shapes.slice(1)
+    // Anchored to the bracket line and measured DOWNWARD in px, which a
+    // data-coordinate shape cannot express on its own.
+    for (const cap of caps) {
+      expect(cap.ysizemode).toBe("pixel")
+      expect(cap.yanchor).toBe((shapes[0] as Record<string, number>).y0)
+      expect(cap.y0).toBe(0)
+      expect(cap.y1).toBe(-9)
+      expect(cap.line).toMatchObject({ color: "#0000ff" })
+    }
+    // One cap sits over each end of the comparison.
+    expect(caps.map((c) => c.x0)).toEqual([shapes[0].x0, shapes[0].x1])
+  })
+
+  it("keeps the bracket lines as the leading shape run when caps are drawn", () => {
+    // `bracketMoveFromRelayout` maps `shapes[i]` to `brackets[i]`. If a cap were
+    // interleaved, a drag would be recorded against the wrong comparison, and
+    // `figure-canvas` would hang a move handle on a tick.
+    const figure = buildFigure(styled({ capLength: 9 }), withPairwise)
+    const shapes = figure.layout.shapes as Record<string, number>[]
+    expect(figure.brackets).toHaveLength(1)
+    expect(shapes[0].y0).toBeCloseTo(figure.brackets![0].baseY, 6)
+    expect(
+      bracketMoveFromRelayout({ "shapes[0].y0": figure.brackets![0].baseY + 12 }, figure.brackets!)
+    ).toEqual({ id: bracketId("Control", "Treated"), offsetY: 12 })
+  })
+
+  it("does not draw a bracket the researcher hid", () => {
+    const figure = buildFigure(styled({ hidden: true }), withPairwise)
+    expect((figure.layout.shapes as unknown[]).length).toBe(0)
+    expect(figure.brackets).toHaveLength(0)
+    const annotations = figure.layout.annotations as Record<string, unknown>[]
+    expect(annotations.some((a) => String(a.text).includes("*"))).toBe(false)
+  })
+
+  it("keeps a style override when the brackets are regenerated", () => {
+    // The whole reason the overrides are sparse and keyed by the PAIR: rerun the
+    // analysis, get a different post-hoc result, and the bracket for the same
+    // comparison is a fresh derived one that must still come back red.
+    const recomputed = result({
+      test: {
+        ...withPairwise.test!,
+        pValue: 0.02,
+        pairwise: [
+          { ...withPairwise.test!.pairwise[0], pAdjusted: 0.011, meanDifference: 12 },
+        ],
+      },
+    })
+    const figure = buildFigure(styled({ colour: "#ff0000", lineWidth: 3 }), recomputed)
+    const shapes = figure.layout.shapes as Record<string, Record<string, unknown>>[]
+    expect(shapes[0].line).toMatchObject({ color: "#ff0000", width: 3 })
+  })
+
   it("maps p-values to the conventional star count", () => {
     expect(significanceStars(0.00005)).toBe("****")
     expect(significanceStars(0.0005)).toBe("***")

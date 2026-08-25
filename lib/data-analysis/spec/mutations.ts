@@ -1,10 +1,12 @@
 import type {
   AnalysisSpec,
   Annotation,
+  BRACKET_STYLE_FIELDS,
   Exclusion,
   FigureKind,
   RowFilter,
   SeriesStyle,
+  SignificanceBracket,
   TestKind,
   Transform,
 } from "./analysis-spec"
@@ -32,6 +34,15 @@ import { bracketPair } from "./analysis-spec"
 
 /* ── Mutations ─────────────────────────────────────────────────────────────*/
 
+/**
+ * What `figure.setBracketStyle` may set, named by the spec's own
+ * `BRACKET_STYLE_FIELDS` rather than a second hand-written list, so the
+ * mutation, the zod schema and what regeneration copies cannot drift apart.
+ */
+export type BracketStylePatch = Partial<
+  Pick<SignificanceBracket, (typeof BRACKET_STYLE_FIELDS)[number]>
+>
+
 export type SpecMutation =
   /* Figure, style. These never trigger a recompute (Law 5). */
   | { kind: "figure.setKind"; value: FigureKind }
@@ -48,6 +59,7 @@ export type SpecMutation =
   | { kind: "figure.updateAnnotation"; id: string; patch: Partial<Annotation> }
   | { kind: "figure.removeAnnotation"; id: string }
   | { kind: "figure.moveBracket"; id: string; offsetY: number }
+  | { kind: "figure.setBracketStyle"; id: string; patch: BracketStylePatch }
   | { kind: "figure.setShowExcluded"; value: boolean }
   /* Axes, label/scale/limits. Scale and limits are style; they redraw, not recompute. */
   | { kind: "axis.set"; axis: "x" | "y" | "y2"; patch: Partial<AnalysisSpec["figure"]["x"]> }
@@ -98,6 +110,7 @@ export function mutationPath(m: SpecMutation): string {
     case "figure.removeAnnotation":
       return `figure.annotation.${m.id}`
     case "figure.moveBracket":
+    case "figure.setBracketStyle":
       return `figure.bracket.${m.id}`
     case "data.excludeRow":
       return `data.exclusion.${m.exclusion.rowId}`
@@ -156,6 +169,15 @@ export function describeMutation(m: SpecMutation): string {
       return "Annotation removed"
     case "figure.moveBracket":
       return "Significance bracket moved"
+    case "figure.setBracketStyle":
+      // Hiding is not a restyle: it takes a significant comparison off the
+      // figure, and the history entry has to say so rather than reading as a
+      // colour change (§3A.4 wants the diff to be honest in plain language).
+      return m.patch.hidden === true
+        ? "Significance bracket hidden"
+        : m.patch.hidden === false
+          ? "Significance bracket shown"
+          : "Significance bracket restyled"
     case "figure.setShowExcluded":
       return m.value ? "Excluded points shown" : "Excluded points hidden"
     case "axis.set": {
@@ -316,6 +338,39 @@ export function applyMutation(spec: AnalysisSpec, m: SpecMutation): AnalysisSpec
                 // put it.
                 b.id === m.id ? { ...b, offsetY: m.offsetY, derived: false } : b
               ),
+        },
+      }
+    }
+    case "figure.setBracketStyle": {
+      // The same sparse override layer `figure.moveBracket` writes into, for the
+      // same reason: brackets are DERIVED from `result.test.pairwise` on every
+      // recompute, so the spec holds a row only for the ones a researcher has
+      // actually touched, keyed by the pair the id names. That is what makes a
+      // restyle survive the analysis changing — the new post-hoc result
+      // regenerates the bracket and the renderer finds this row by the same
+      // pair, exactly as it finds a dragged `offsetY`.
+      //
+      // `derived` is cleared for the same reason a drag clears it: this
+      // comparison now looks the way the researcher chose, not the way the
+      // engine produced it.
+      const pair = figure.brackets.some((b) => b.id === m.id) ? null : bracketPair(m.id)
+      return {
+        ...spec,
+        figure: {
+          ...figure,
+          brackets: pair
+            ? [
+                ...figure.brackets,
+                {
+                  id: m.id,
+                  ...pair,
+                  offsetY: 0,
+                  derived: false,
+                  display: "stars" as const,
+                  ...m.patch,
+                },
+              ]
+            : figure.brackets.map((b) => (b.id === m.id ? { ...b, ...m.patch, derived: false } : b)),
         },
       }
     }
