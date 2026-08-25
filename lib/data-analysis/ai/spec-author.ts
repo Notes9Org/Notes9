@@ -115,6 +115,15 @@ export const FORBIDDEN_MUTATION_KINDS = new Set<string>([
   // the same sticky, human-owned status as the fields above, so the assistant
   // does not get a mutation for it either.
   "figure.setCaption",
+  // Restyling a bracket is cosmetic and would sit comfortably beside
+  // `figure.setSeriesStyle`, which the assistant may set -- but the patch also
+  // carries `hidden`, and hiding a bracket takes a significant comparison off
+  // the figure. That is the same act as excluding a row, which S8.1 keeps in
+  // human hands, and it is deliberately the one bracket operation that survives
+  // regeneration: a deleted derived bracket comes back, a hidden one does not.
+  // Splitting the kind so the assistant could have the cosmetic half would be
+  // an abstraction bought only to widen the model's reach.
+  "figure.setBracketStyle",
 ])
 
 /* ── Guardrails (§7 adversarial set, §8.1) ─────────────────────────────────*/
