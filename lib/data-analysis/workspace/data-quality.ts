@@ -132,6 +132,40 @@ export function revertActionMutations(
   ]
 }
 
+/**
+ * A value a finding is actually about.
+ *
+ * The evidence line has always carried the number -- `"1.84 — Grubbs G=2.881,
+ * p=0.0031"` -- but as prose, inside a sentence, with no way to say WHERE 1.84
+ * is. A researcher deciding whether to exclude a point or correct a typo needs
+ * to look at the cell, and could not get to it from the finding. The detectors
+ * knew the row all along: `grubbsOutliers` used `hit.rowId` to build the
+ * exclusion and then dropped it.
+ *
+ * The A1 address is deliberately NOT stored here. It is a function of the
+ * header plan -- which row the data starts on, which column the table starts in
+ * -- and the plan can change under a finding when the researcher corrects the
+ * region. Computing it at render time from the live plan means the address is
+ * always the one currently on screen.
+ */
+export interface FindingLocation {
+  /** Sheet-anchored row id, `row-<1-based sheet row>`. */
+  rowId: string
+  /** Column name, or null when the finding is about the whole row. */
+  column: string | null
+  /** The value there, for showing beside the address. Null for a whole row. */
+  value: string | number | null
+}
+
+/**
+ * Cap on located cells per finding.
+ *
+ * A column of 4000 `"<LOD"` readings is one finding, and listing every one of
+ * them helps nobody -- the evidence line already carries the count. Enough to
+ * go and look at, not a second copy of the data.
+ */
+export const MAX_LOCATIONS_PER_FINDING = 25
+
 export interface Finding {
   id: string
   severity: FindingSeverity
@@ -141,6 +175,11 @@ export interface Finding {
   summary: string
   /** The counts or statistic behind it. Never a bare assertion. */
   evidence: string
+  /**
+   * The specific values behind the evidence, when there are specific values.
+   * Empty for a finding about a column or the table as a whole.
+   */
+  locations: FindingLocation[]
   actions: FindingAction[]
   /** Index into `actions`. Null when the tool should not have a preference. */
   recommended: number | null
@@ -181,7 +220,21 @@ function groupKey(columns: string[], values: Record<string, unknown>): string {
  * column it writes `"0.42 ng/mL"` into, and asking twice about one column reads
  * as two problems.
  */
-function contaminatedColumns(spec: AnalysisSpec, prepared: PreparedColumn[]): Finding[] {
+/** Cells in `column` that are neither empty nor a number: the contaminants. */
+function nonNumericCells(table: Table, column: string): FindingLocation[] {
+  const out: FindingLocation[] = []
+  for (const row of table.rows) {
+    if (out.length >= MAX_LOCATIONS_PER_FINDING) break
+    const raw = row.values[column]
+    if (raw === null || raw === undefined || raw === "") continue
+    if (typeof raw === "number" && Number.isFinite(raw)) continue
+    if (typeof raw === "string" && raw.trim() !== "" && Number.isFinite(Number(raw))) continue
+    out.push({ rowId: row.rowId, column, value: raw as string | number })
+  }
+  return out
+}
+
+function contaminatedColumns(spec: AnalysisSpec, table: Table, prepared: PreparedColumn[]): Finding[] {
   const already = new Set(
     spec.transforms.filter((t) => t.kind === "coerceNumeric").map((t) => t.column),
   )
@@ -231,6 +284,7 @@ function contaminatedColumns(spec: AnalysisSpec, prepared: PreparedColumn[]): Fi
       evidence: `${evidence.join("; ")} — ${Math.round(
         p.numericShareAfterCoercion * 100,
       )}% reads as numeric once repaired`,
+      locations: nonNumericCells(table, p.column),
       actions,
       recommended: 0,
     })
@@ -294,6 +348,8 @@ function duplicateRows(
         table.columns.length,
         "column",
       )}`,
+      // Whole rows, so no column: the panel addresses these as a row span.
+      locations: repeats.slice(0, MAX_LOCATIONS_PER_FINDING).map((rowId) => ({ rowId, column: null, value: null })),
       actions,
       recommended: null,
     },
@@ -360,7 +416,11 @@ function grubbsOutliers(
       severity: "decision",
       column: p.column,
       summary: `One value in "${p.column}" is a statistical outlier`,
-      evidence: `${result.outlier} — Grubbs ${result.stat[0].label}=${result.stat[0].value.toFixed(3)}, p=${result.p.toFixed(4)}, alpha=${GRUBBS_ALPHA}, n=${points.length}`,
+      evidence: `Grubbs ${result.stat[0].label}=${result.stat[0].value.toFixed(3)}, p=${result.p.toFixed(4)}, alpha=${GRUBBS_ALPHA}, n=${points.length}`,
+      // The value moves out of the prose and into the location, so the panel can
+      // show it AS a cell -- addressed, and worth clicking -- rather than as a
+      // number at the front of a sentence about statistics.
+      locations: [{ rowId: hit.rowId, column: p.column, value: hit.value }],
       actions,
       // No recommendation, on purpose. See §8.1.
       recommended: null,
@@ -426,6 +486,8 @@ function technicalReplicates(spec: AnalysisSpec, table: Table): Finding[] {
         table.rows.length,
         "row",
       )}; collapsing changes n to ${groups.size}`,
+      // About the shape of the whole table, not about any particular cell.
+      locations: [],
       actions: [collapse("mean"), collapse("median"), { label: "Keep every replicate", mutations: [] }],
       recommended: null,
     },
@@ -465,6 +527,9 @@ function constantColumns(spec: AnalysisSpec, prepared: PreparedColumn[]): Findin
       column: p.column,
       summary: `"${p.column}" is the same in every row`,
       evidence: `Only value: "${p.levels[0] ?? ""}" across ${plural(p.count, "row")}`,
+      // Every row is the same; pointing at one of them would be arbitrary, and
+      // pointing at all of them is the column, which `column` above already says.
+      locations: [],
       actions,
       recommended: 0,
     })
@@ -487,6 +552,8 @@ function fromPrepOffers(spec: AnalysisSpec, prepared: PreparedColumn[]): Finding
     column: null,
     summary: offer.summary,
     evidence: offer.evidence,
+    // `PrepOffer` is column- and table-level; it carries no row identity to lift.
+    locations: [],
     actions: [{ label: "Apply", mutations: offer.apply }, LEAVE_AS_IS],
     recommended: null,
   }))
@@ -504,7 +571,7 @@ export function findFindings(
   return [
     // Structural first: they are cheap, certain, and repairing them changes
     // what every detector below sees.
-    ...contaminatedColumns(spec, prepared),
+    ...contaminatedColumns(spec, table, prepared),
     ...duplicateRows(spec, table, now, actor),
     ...constantColumns(spec, prepared),
     ...technicalReplicates(spec, table),

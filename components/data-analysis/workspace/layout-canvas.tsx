@@ -71,6 +71,9 @@ export function LayoutCanvas({
   onChange,
   onOpenPipeline,
   interaction,
+  onCompute,
+  computing = false,
+  activePipelineId,
   className,
 }: {
   layout: FigureLayout
@@ -80,6 +83,30 @@ export function LayoutCanvas({
   onOpenPipeline?: (pipelineId: string) => void
   /** Hover, click-to-exclude and bracket dragging, for one pipeline. */
   interaction?: FigureInteraction
+  /**
+   * Run the active analysis, for a panel whose only problem is that nothing has
+   * computed it yet.
+   *
+   * A panel here draws from an `EngineResult`, while the Chart tab draws
+   * straight from the sheet — so a freshly attached file has a chart there and
+   * empty panels here. The placeholder said so, accurately, and then offered no
+   * way to do anything about it: the control that starts a compute lives on
+   * another tab. Saying "not computed" without "compute it" is a dead end.
+   */
+  onCompute?: () => void
+  computing?: boolean
+  /**
+   * The analysis a panel falls back to when its own binding does not resolve.
+   *
+   * A fresh layout is created with its first panel bound to the sentinel
+   * `"current"`, which no pipeline has ever carried — so `byId.get()` returned
+   * undefined and the panel sat on "Choose which analysis this panel shows"
+   * forever, whether or not the analysis had been run. A saved layout can also
+   * name an analysis that has since been closed. Both are the same situation
+   * from the researcher's side: a panel showing nothing for a reason nobody
+   * stated.
+   */
+  activePipelineId?: string | null
   className?: string
 }) {
   const reduce = useReducedMotion()
@@ -203,9 +230,13 @@ export function LayoutCanvas({
         }}
       >
         {placements.map((placement) => {
-          const pipeline = placement.panel.pipelineId
-            ? byId.get(placement.panel.pipelineId)
-            : undefined
+          // Resolve, then fall back to the active analysis. Falling back is
+          // right rather than lax: every panel names the analysis it is showing
+          // in its own header, so a fallback is visible, whereas an empty panel
+          // is not.
+          const bound = placement.panel.pipelineId ? byId.get(placement.panel.pipelineId) : undefined
+          const pipeline =
+            bound ?? (activePipelineId ? byId.get(activePipelineId) : undefined) ?? pipelines[0]
           return (
             <motion.section
               key={placement.panel.id}
@@ -279,9 +310,20 @@ export function LayoutCanvas({
                   <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border/60 bg-muted/20 p-4 text-center">
                     <p className="text-[12.5px] text-muted-foreground">
                       {pipeline
-                        ? `"${pipeline.name}" has not been computed yet.`
+                        ? computing
+                          ? `Computing "${pipeline.name}"…`
+                          : `"${pipeline.name}" has not been computed yet.`
                         : "Choose which analysis this panel shows."}
                     </p>
+                    {pipeline && onCompute && !computing && (
+                      <button
+                        type="button"
+                        onClick={onCompute}
+                        className="rounded-lg bg-[var(--n9-accent,#965034)] px-2.5 py-1 text-[12px] font-medium text-white transition-opacity hover:opacity-90"
+                      >
+                        Run it
+                      </button>
+                    )}
                     <select
                       value={placement.panel.pipelineId ?? ""}
                       onChange={(e) =>

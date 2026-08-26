@@ -100,15 +100,30 @@ export function LibraryDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
+      {/*
+        A bounded column, not a growing stack.
+
+        `DialogContent` sets no height of its own, and this dialog stacks a
+        header, a "This computer" block that can itself carry a scrolling list
+        of folder files, a search box, and a file list that asked for `50vh`.
+        Added together those exceed the viewport, and with nothing capping the
+        box the file list simply ran out past the bottom edge of the dialog and
+        off the screen.
+
+        The fix is that the DIALOG owns the height and the list flexes inside
+        it: everything else is `shrink-0`, the list gets `min-h-0 flex-1`, and
+        `min-h-0` is the load-bearing half — without it a flex child refuses to
+        shrink below its content and overflows again exactly as before.
+      */}
+      <DialogContent className="flex max-h-[85vh] flex-col gap-3 overflow-hidden sm:max-w-lg">
+        <DialogHeader className="shrink-0">
           <DialogTitle>Import from your data files</DialogTitle>
           <DialogDescription>Load a file you&rsquo;ve uploaded to an experiment, or connect a folder on this computer.</DialogDescription>
         </DialogHeader>
         {onOpenLocalFile && (
-          <div className="space-y-2 rounded-lg border border-border p-3">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
+          <div className="shrink-0 space-y-2 rounded-lg border border-border p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium">This computer</p>
                 <p className="truncate text-xs text-muted-foreground">
                   {folder
@@ -149,11 +164,11 @@ export function LibraryDialog({
             )}
           </div>
         )}
-        <div className="relative">
+        <div className="relative shrink-0">
           <MagnifyingGlass className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input value={search} onChange={(e) => onSearchChange(e.target.value)} placeholder="Search files…" className="pl-8" />
         </div>
-        <div className="max-h-[50vh] space-y-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-0.5">
           {visible.map((f) => {
             const reason = fileErrors[f.id]
             const disabled = reason != null || loadingFileId != null

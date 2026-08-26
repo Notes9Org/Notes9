@@ -51,6 +51,10 @@ import {
   ArrowUUpRight,
   X,
   ClockCounterClockwise,
+  Question,
+  Warning,
+  CheckCircle,
+  ArrowClockwise,
   Prohibit,
   DotsThree,
   Info,
@@ -72,6 +76,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import type { DataFileRow } from "@/components/data-analysis/data-files-list"
 import { UniverWorkbookView, type SheetSelection } from "@/components/spreadsheet/univer-workbook-view"
@@ -84,7 +95,21 @@ import { describe as describeStats } from "@/lib/data-analysis/statistics"
 import { normalInv } from "@/lib/data-analysis/distributions"
 import { rocCurve, kaplanMeier, blandAltman } from "@/lib/data-analysis/chart-transforms"
 import { useStandardCurve } from "@/components/data-analysis/standard-curve-panel"
-import { plateLayoutFromSheet, usePlate, usePlateModel } from "@/components/data-analysis/plate-view"
+import { CURVE_SHEET_NAME, curveExportColumnWidths } from "@/lib/data-analysis/curve-export"
+import { cellAddress, planDataRange, type HeaderOverride } from "@/lib/data-analysis/workspace/bootstrap"
+import { DataRegionDialog } from "@/components/data-analysis/workspace/data-region-dialog"
+import { IngestJourney, type JourneyStep } from "@/components/data-analysis/workspace/ingest-journey"
+import { AutoChoicesPanel } from "@/components/data-analysis/workspace/auto-choices-panel"
+import { HelpCenter } from "@/components/data-analysis/workspace/help-center"
+import { describeAutoChoices } from "@/lib/data-analysis/auto-choices"
+import { planColumnRange } from "@/lib/data-analysis/workspace/bootstrap"
+import {
+  appendAuditEntry,
+  auditEntry,
+  type AuditBoundary,
+  type SheetAuditEntry,
+} from "@/lib/data-analysis/workspace/sheet-audit"
+import { SheetHistoryPanel } from "@/components/data-analysis/workspace/sheet-history-panel"
 import { TemplatesDialog } from "@/components/data-analysis/templates-dialog"
 import { SaveChartDialog } from "@/components/data-analysis/save-chart-dialog"
 import { detectDataKind } from "@/lib/data-analysis/detect"
@@ -239,6 +264,7 @@ import {
   revertActionMutations,
   structuralFindings,
   type Finding,
+  type FindingLocation,
 } from "@/lib/data-analysis/workspace/data-quality"
 import { DataQualityGate } from "@/components/data-analysis/workspace/data-quality-gate"
 import { computeAnalysis } from "@/lib/data-analysis/engine/client"
@@ -797,10 +823,21 @@ function useIsWide() {
    inner width, Univer's canvas width never changes, so it can't blank or
    re-init. Edits report out via onPersistSnapshot only (never fed back to the
    prop), so live editing never triggers a remount either. `mountKey` bumps on
-   import, the one time a fresh workbook must replace the instance. */
+   import, the one time a fresh workbook must replace the instance.
+
+   That was true of any ONE host. There are three, at three positions in the
+   tree -- the maximized data editor, the docked rail and the undocked card --
+   and maximize/restore swaps between them with a different `compact`, which
+   Univer's mount effect depends on. So the instance IS destroyed and rebuilt in
+   normal use, and `mountSnapshot` is only ever written on load. `liveSheetRef`
+   is what the rebuilt instance reads instead: the outgoing one writes it as it
+   tears down, synchronously, ahead of the state update that carries the same
+   bytes. Without it a maximize round-trip reverted the sheet to the file as
+   imported -- new sheets included -- and then autosaved that over the live copy. */
 function SheetHost({
   mountSnapshot,
   mountKey,
+  liveSheetRef,
   onPersist,
   heightClass,
   compact,
@@ -808,6 +845,7 @@ function SheetHost({
 }: {
   mountSnapshot: UniverWorkbookSnapshot
   mountKey: number
+  liveSheetRef: { current: Record<string, unknown> | null }
   onPersist: (s: UniverWorkbookSnapshot) => void
   heightClass: string
   compact: boolean
@@ -817,6 +855,7 @@ function SheetHost({
     <UniverWorkbookView
       instanceKey={mountKey}
       workbookSnapshot={mountSnapshot}
+      latestSnapshotRef={liveSheetRef}
       variant="workspace"
       compact={compact}
       heightClass={heightClass}
@@ -829,13 +868,15 @@ function SheetHost({
 /** The `DesignDeclaration` schema's own defaults, for a sheet with no spec yet. */
 const DEFAULT_DESIGN: DesignDeclaration = DesignDeclaration.parse({ source: "inferred" })
 
-type Phase = "chart" | "stats" | "curve" | "plate" | "workspace"
+/** The id the first analysis carries; `analysisSeq` counts on from it. */
+const INITIAL_ANALYSIS_ID = "a1"
+
+type Phase = "chart" | "stats" | "curve" | "workspace"
 
 const PHASES: { id: Phase; label: string; Icon: React.ComponentType<{ className?: string; weight?: "regular" | "bold" | "fill" }> }[] = [
   { id: "chart", label: "Chart", Icon: ChartLine },
   { id: "stats", label: "Statistics", Icon: Sigma },
   { id: "curve", label: "Standard curve", Icon: TrendUp },
-  { id: "plate", label: "Plate", Icon: GridNine },
   // Multi-panel figure assembly (Prism's "Layouts", Tier 1 #8). Panels draw
   // from the spec this workspace derives, so a figure composed here is the same
   // figure the Chart phase shows.
@@ -878,6 +919,58 @@ export function DataAnalysisWorkspace({
    */
   const initial = useMemo(() => emptySnapshot(), [])
   const [mountSnapshot, setMountSnapshot] = useState<UniverWorkbookSnapshot>(initial)
+  /**
+   * The sheet as it stands, across Univer remounts.
+   *
+   * Held beside `mountSnapshot` rather than derived from `liveSnapshot`,
+   * because the moment it has to be correct is during a teardown, before the
+   * state update carrying those bytes has been applied. Every place that bumps
+   * `mountKey` to install a DIFFERENT workbook must reset this in the same
+   * breath, or the outgoing sheet wins over the incoming one.
+   */
+  /**
+   * Boxed on purpose, and replaced rather than mutated when the workbook is.
+   *
+   * The Univer host captures this box at mount and writes its teardown save
+   * into that same box. Handing out a NEW box on every install is what stops a
+   * departing instance's teardown — which React runs after the new workbook is
+   * already in place — from writing the OLD sheet over it. Mutating one shared
+   * box instead made importing a second file silently re-open the first.
+   */
+  const liveSheetBoxRef = useRef<{ current: Record<string, unknown> | null }>({ current: null })
+
+  /* ── The spreadsheet's own history ──────────────────────────────────────
+     Every other edit on this page is already auditable: an exclusion records
+     who, when and why; a rail edit lands as a typed mutation on the undo stack
+     and shows on the provenance card. A cell typed over in the grid recorded
+     nothing — the snapshot simply became the new snapshot. That is the only
+     edit that can move a published number leaving no trace.
+
+     Cut at boundaries, not per keystroke: an attach, a save, a sheet the app
+     appends. Each entry is the diff from the previous boundary, so it answers
+     "what changed between these two points, and what was there before" and not
+     "in which order". `sheet-audit.ts` says why that trade was taken. */
+  const [sheetAudit, setSheetAudit] = useState<SheetAuditEntry[]>([])
+  /** The sheet as it stood at the last boundary; the left side of the next diff. */
+  const auditBaselineRef = useRef<UniverWorkbookSnapshot | null>(null)
+
+  /* ── Saving the SHEET, as opposed to the analysis ────────────────────────
+     These are two different things and only one of them had a button. "Save"
+     on the toolbar cuts a revision of the ANALYSIS -- spec, figure, results --
+     and a sheet edit reaches it only as part of that bundle. The workbook a
+     researcher actually typed into, sitting in `experiment_data` where every
+     other page reads it from, was never written back: the PATCH route for it
+     exists and nothing on this page called it. Edits lived in `localStorage`
+     and in the analysis draft, so a colleague opening the same data file saw
+     the numbers as originally uploaded.
+
+     `sheetSavedAtRef` holds the snapshot as last written to the server, so
+     "unsaved changes" is a real comparison rather than a flag that gets out of
+     step. */
+  const [sheetSaving, setSheetSaving] = useState(false)
+  const [sheetSavedAt, setSheetSavedAt] = useState<string | null>(null)
+  const sheetSavedJsonRef = useRef<string | null>(null)
+  const [sheetHistoryOpen, setSheetHistoryOpen] = useState(false)
   const [mountKey, setMountKey] = useState(0)
   const [liveSnapshot, setLiveSnapshot] = useState<UniverWorkbookSnapshot>(initial)
   /**
@@ -889,6 +982,45 @@ export function DataAnalysisWorkspace({
 
   const liveRef = useRef(liveSnapshot)
   liveRef.current = liveSnapshot
+
+  /**
+   * Close the current stretch of editing and open the next.
+   *
+   * `nextBaseline` is what the following entry will be measured against, which
+   * is NOT always the sheet as it is now: an attach replaces the workbook, so
+   * the changes since the last boundary belong to the OUTGOING sheet and the
+   * new baseline is the incoming one. Passing it explicitly is what keeps those
+   * two straight.
+   *
+   * Reads `liveSheetRef` first for the same reason the export does: on the
+   * frame after an edit it is ahead of React state.
+   */
+  const cutAudit = useCallback(
+    (boundary: AuditBoundary, label: string, nextBaseline?: UniverWorkbookSnapshot | null) => {
+      const current = (liveSheetBoxRef.current.current as UniverWorkbookSnapshot | null) ?? liveRef.current
+      const baseline = auditBaselineRef.current
+      if (baseline) {
+        setSheetAudit((log) =>
+          appendAuditEntry(
+            log,
+            auditEntry({
+              before: baseline,
+              after: current,
+              boundary,
+              label,
+              actor: auditActorRef.current,
+              at: new Date().toISOString(),
+              id: `a${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            })
+          )
+        )
+      }
+      auditBaselineRef.current = nextBaseline === undefined ? current : nextBaseline
+    },
+    []
+  )
+  /** Who is editing, read through a ref so `cutAudit` needs no dependency on it. */
+  const auditActorRef = useRef("unknown")
   const hasDataRef = useRef(hasData)
   hasDataRef.current = hasData
 
@@ -924,9 +1056,19 @@ export function DataAnalysisWorkspace({
    */
   const [analysisSheet, setAnalysisSheet] = useState<string | null>(null)
   const sheetNames = useMemo(() => snapshotSheetNames(liveSnapshot), [liveSnapshot])
+  /**
+   * The researcher's corrections to where the table is.
+   *
+   * Empty means "as detected", which is what every sheet starts as. It is part
+   * of the saved configuration, because a region correction is a statement
+   * about the data that a reopened analysis must not lose -- re-detecting from
+   * scratch on reopen would put the columns back where the researcher said they
+   * were not.
+   */
+  const [headerOverride, setHeaderOverride] = useState<HeaderOverride>({})
   const table = useMemo(
-    () => snapshotToTable(liveSnapshot, analysisSheet),
-    [liveSnapshot, analysisSheet]
+    () => snapshotToTable(liveSnapshot, analysisSheet, headerOverride),
+    [liveSnapshot, analysisSheet, headerOverride]
   )
   /** A click on a mark, as the row for the "Rows used" panel to reveal. */
   const [selectedRow, setSelectedRow] = useState<UsedRowHighlight | null>(null)
@@ -1144,6 +1286,18 @@ export function DataAnalysisWorkspace({
    * it. Silent once either axis is already chosen, by hand or by a prior
    * accept.
    */
+  /**
+   * What to plot, for the region dialog.
+   *
+   * The same `suggestAxes` the column-role offer uses, computed unconditionally
+   * -- the offer below suppresses itself once an axis is chosen, which is right
+   * for an offer and wrong for a review that has to say what it found.
+   */
+  const regionSuggestion = useMemo(() => {
+    const s = suggestAxes(table, derivedSpec?.roles ?? [], numericCols)
+    return s ? { x: s.x, y: s.y, evidence: s.evidence, fromRoles: s.fromRoles } : null
+  }, [table, derivedSpec?.roles, numericCols])
+
   const columnRoleOffer = useMemo<PrepOffer | null>(() => {
     if (xKey || yKeys.length > 0) return null
     const suggestion = suggestAxes(table, derivedSpec?.roles ?? [], numericCols)
@@ -1287,7 +1441,12 @@ export function DataAnalysisWorkspace({
   const [figureLayout, setFigureLayout] = useState<FigureLayout>(() => {
     const preset = LAYOUT_PRESETS.find((p) => p.id === "single")!
     const base = layoutFromPreset(preset, "Figure 1")
-    return assignPanel(base, base.panels[0].id, "current")
+    // The first analysis's real id. This used to be the string "current",
+    // which no pipeline has ever carried, so the only panel of a fresh layout
+    // never resolved and the Figure layout was permanently empty — including
+    // after the analysis had been run, which is what made it look like the
+    // chart simply was not reaching it.
+    return assignPanel(base, base.panels[0].id, INITIAL_ANALYSIS_ID)
   })
   const activeY = yKeys.filter((k) => table.columns.includes(k))
   const editKey = activeY.includes(editSeries) ? editSeries : activeY[0] ?? ""
@@ -1830,32 +1989,42 @@ export function DataAnalysisWorkspace({
 
 
   // Feature hooks (called unconditionally; each renders lazily where placed).
-  // The plate model is shared so the plate layout drives the standard curve.
-  const plateModel = usePlateModel(grid)
-  /**
-   * T0.2: seed the plate from the detection that is already on screen.
-   *
-   * `usePlateModel`'s `init` is read once, at first render, when the sheet has
-   * not arrived yet — so passing it there would seed every plate from an empty
-   * grid. This runs when the DATASET changes instead, which is the only moment
-   * a re-seed is right: after that the format and the start row are the
-   * researcher's, and a cell edit must not undo them.
-   */
-  const { setFormat: setPlateFormat, setOriginRow: setPlateOriginRow, setOriginCol: setPlateOriginCol } = plateModel
-  useEffect(() => {
-    if (!detected.plate) return
-    const layout = plateLayoutFromSheet(grid, detected)
-    setPlateFormat(layout.format)
-    setPlateOriginRow(layout.originRow)
-    setPlateOriginCol(layout.originCol)
-    // `gridRef` deliberately absent: re-seeding on every keystroke would fight
-    // the origin spinner. `sheetFileName` and the sheet name together are what
-    // "a different dataset" means here.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sheetFileName, analysisSheet, detected.plate, detected.plateFormat, setPlateFormat, setPlateOriginRow, setPlateOriginCol])
   const stats = useStatsPanel(table, numericCols)
-  const curve = useStandardCurve(table, numericCols, plateModel)
-  const plate = usePlate(plateModel)
+  /**
+   * Show the fit over the sheet's own points on the Chart tab.
+   *
+   * Default on, and only ever ACTS when the chart is plotting the very columns
+   * the curve was fitted to (`fitOnChart` below) -- a fit line drawn over a
+   * different pair of columns is a line through unrelated data, which is worse
+   * than no curve at all. Off is a real choice: a figure for a paper may want
+   * the points bare.
+   */
+  const [showFitOnChart, setShowFitOnChart] = useState(true)
+  /** The researcher said this sheet is not a standard curve; stop offering. */
+  const [curveOfferDismissed, setCurveOfferDismissed] = useState(false)
+  /**
+   * "Add to sheet", late-bound.
+   *
+   * The implementation needs the workbook helpers declared further down this
+   * component, and the hook needs the callback here, so the ref breaks what
+   * would otherwise be a declaration cycle. Nothing can fire it before it is
+   * assigned: the only caller is a button the panel renders.
+   */
+  const addCurveSheetRef = useRef<(rows: (string | number)[][]) => void>(() => {})
+  /**
+   * Whether the Chart tab is drawing the fit, computed here because both the
+   * chart (which needs to draw it) and the panel (which must then NOT draw it)
+   * have to agree, and `fitOnChart` below is derived from what this same hook
+   * returns. Reading the previous render's answer through a ref is what breaks
+   * that circle without either side guessing.
+   */
+  const fitOnChartRef = useRef(false)
+  const curve = useStandardCurve(table, numericCols, {
+    title,
+    overlaidOnChart: fitOnChartRef.current,
+    onGoToChart: useCallback(() => setPhase("chart"), []),
+    onAddToSheet: useCallback((rows: (string | number)[][]) => addCurveSheetRef.current(rows), []),
+  })
 
   /* ── Analyses (tabs) ──────────────────────────────────────────────────────
      Several analyses of the same sheet, open at once. Each is a saved chart
@@ -1893,7 +2062,7 @@ export function DataAnalysisWorkspace({
       abortController: AbortController | null
     }[]
   >([])
-  const [activeAnalysisId, setActiveAnalysisId] = useState<string>("a1")
+  const [activeAnalysisId, setActiveAnalysisId] = useState<string>(INITIAL_ANALYSIS_ID)
   // Read by `commitSave` and the reopen/bind flow, both declared later in this
   // component — a ref so a save always tags the tab active when it happened,
   // never a stale one from whenever those callbacks were created.
@@ -2169,7 +2338,15 @@ export function DataAnalysisWorkspace({
           ? {
               ...a,
               config: buildConfigRef.current(),
-              snapshot: liveRef.current,
+              // The ref, not the state, and the distinction is load-bearing.
+              // Univer writes `liveSheetRef` synchronously as it saves; the
+              // `setLiveSnapshot` carrying the same bytes is a microtask behind
+              // it and the autosave that triggers it is debounced 250ms. A tab
+              // switched immediately after an edit therefore captured the
+              // PRE-edit workbook here, losing the edit from the tab being
+              // left — while the ref kept it and handed it to the tab being
+              // entered. Reading the fresher of the two fixes both halves.
+              snapshot: (liveSheetBoxRef.current.current as UniverWorkbookSnapshot | null) ?? liveRef.current,
               source: sourceFileRef.current,
               hasData: hasDataRef.current,
               turns: turnsRef.current,
@@ -2203,6 +2380,16 @@ export function DataAnalysisWorkspace({
       setActiveAnalysisId(id)
       if (target.snapshot !== liveRef.current) {
         loadSnapshotRef.current(target.snapshot, target.source ?? undefined, true)
+      } else {
+        // The remount is skipped because the two tabs share this snapshot by
+        // reference (Duplicate does that deliberately). `liveSheetRef` still
+        // has to move: it is a SINGLE ref serving whichever Univer instance
+        // mounts next, and left pointing at the departing tab's edited workbook
+        // it would hand those edits to this tab at the next remount — a
+        // maximize, a dock toggle — with nothing on screen to say the sheet had
+        // changed. That is the "loaded sheet changed in another analysis tab"
+        // failure, and it is silent, which makes it the worst kind.
+        liveSheetBoxRef.current = { current: target.snapshot as unknown as Record<string, unknown> }
       }
       setHasData(target.hasData)
       setTurns(target.turns)
@@ -2501,7 +2688,7 @@ export function DataAnalysisWorkspace({
     if (analyses.length === 0) {
       setAnalyses([
         {
-          id: "a1",
+          id: INITIAL_ANALYSIS_ID,
           name: title || "Analysis 1",
           config: buildConfigRef.current(),
           snapshot: liveRef.current,
@@ -2567,10 +2754,27 @@ export function DataAnalysisWorkspace({
     // row count visible, no axes, no test, no compute — until the researcher
     // (or a caller restoring an already-approved revision, right after this
     // returns) says otherwise.
+    // Close the outgoing sheet's stretch of editing BEFORE the workbook is
+    // replaced, and open the incoming one's against the sheet being loaded --
+    // the edits that just ended belong to the file leaving, not the file
+    // arriving. `internal` repaints an already-known tab rather than loading
+    // new data, so it is not a boundary and must not cut one.
+    if (!internal) {
+      cutAudit("attach", snap.name === EMPTY_SHEET_NAME ? "Sheet cleared" : `Attached ${snap.name}`, snap)
+    }
     setAnalysisApproved(false)
     setLiveSnapshot(snap)
     setMountSnapshot(snap)
+    // This IS the swap door, so the across-remount copy is replaced rather than
+    // preserved -- leaving it would let the previous dataset's sheet outrank the
+    // one being loaded.
+    liveSheetBoxRef.current = { current: snap as unknown as Record<string, unknown> }
     setMountKey((k) => k + 1)
+    // Whatever was just loaded IS what the server holds, so the sheet starts
+    // clean. Without this a freshly opened file reads as having unsaved changes
+    // before anyone has touched it.
+    sheetSavedJsonRef.current = source ? JSON.stringify(snap) : null
+    setSheetSavedAt(null)
     // A new workbook has new sheets; a pin from the previous one either names
     // nothing here or, worse, names something unrelated. Back to the detector,
     // and to `null` in the config a save would write. Callers that restore a
@@ -2617,6 +2821,18 @@ export function DataAnalysisWorkspace({
     // since moved would silently change a published number — the
     // retraction-class failure §3A.3 rule 3 exists to prevent.
     setDataQualityReviewed(!isNewDataset || fromStoredSpec)
+    // Where the data is comes BEFORE what is wrong with it: the quality gate's
+    // findings are computed against the region, so reviewing them first would
+    // be reviewing findings about the wrong cells. `dataQualityBlocking` reads
+    // `regionReviewed` for that ordering.
+    setRegionReviewed(!isNewDataset || fromStoredSpec)
+    setJourneyOpen(isNewDataset && !fromStoredSpec)
+    // A dismissal belongs to the sheet it was made about.
+    if (isNewDataset) setQualityDismissed(false)
+    // A correction belongs to the sheet it was made about. Callers restoring a
+    // saved analysis put their own back through `applyConfig`, which runs after
+    // this returns.
+    if (isNewDataset) setHeaderOverride({})
     const hasUnappliedIntent = pendingIntentRef.current !== null && pendingIntentRef.current.appliedToDatasetId === null
     if (isNewDataset && !hasUnappliedIntent) {
       setTurns([
@@ -2669,7 +2885,11 @@ export function DataAnalysisWorkspace({
     setDataFilters(PIPELINE_FOR_NEW_SHEET.filters)
     setDataTransforms(PIPELINE_FOR_NEW_SHEET.transforms)
     setDataExclusions(PIPELINE_FOR_NEW_SHEET.exclusions)
-  }, [docks.setActivePanelId])
+    // The trail belongs to the sheet it is about. Carrying it across an attach
+    // would put another dataset's cell changes under this one's history, which
+    // is worse than having none: an auditor would read them as this file's.
+    if (!internal) setSheetAudit([])
+  }, [docks.setActivePanelId, cutAudit])
 
   // Serialize / restore the full analysis config (chart + plate) for .n9a save
   // and session persistence.
@@ -2681,13 +2901,16 @@ export function DataAnalysisWorkspace({
     referenceLevel: statReferenceLevel,
     filters: dataFilters, transforms: dataTransforms, exclusions: dataExclusions,
     aiOverlay,
-    plate: { format: plateModel.format, originRow: plateModel.originRow, originCol: plateModel.originCol, roleOverrides: plateModel.roleOverrides, annOverrides: plateModel.annOverrides },
     phase,
     // Which sheet the saved columns and row ids are ABOUT. Without it a
     // reopened analysis re-runs the detector against a workbook that may have
     // grown a sheet since (the statistics writer appends one), and resolves
     // its column names against different data under the same names.
     analysisSheet,
+    // And WHERE on that sheet. A region the researcher corrected by hand is a
+    // statement about the data, so a reopen that re-detected from scratch would
+    // quietly put the columns back where they said they were not.
+    headerOverride,
   })
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const applyConfig = useCallback((c: any) => {
@@ -2750,6 +2973,13 @@ export function DataAnalysisWorkspace({
     if ("analysisSheet" in c) {
       setAnalysisSheet(typeof c.analysisSheet === "string" ? c.analysisSheet : null)
     }
+    // Same present-or-absent rule, for the same reason: an analysis saved
+    // before the region picker existed carries no override, and the right
+    // reading of that silence is "however it read before".
+    if ("headerOverride" in c) {
+      const stored = c.headerOverride
+      setHeaderOverride(stored && typeof stored === "object" ? (stored as HeaderOverride) : {})
+    }
     if (typeof c.hlines === "string") setHlines(c.hlines)
     if (typeof c.vlines === "string") setVlines(c.vlines)
     if (typeof c.chartH === "number") setChartH(c.chartH)
@@ -2781,14 +3011,13 @@ export function DataAnalysisWorkspace({
     // conditional, an older `.n9a` opened with the last figure's approved edits
     // still being restated over every derivation.
     setAiOverlay(overlay)
-    if (c.plate) {
-      if (c.plate.format) plateModel.setFormat(c.plate.format)
-      if (typeof c.plate.originRow === "number") plateModel.setOriginRow(c.plate.originRow)
-      if (typeof c.plate.originCol === "number") plateModel.setOriginCol(c.plate.originCol)
-      if (c.plate.roleOverrides || c.plate.annOverrides) plateModel.applyOverrides(c.plate.roleOverrides ?? {}, c.plate.annOverrides ?? {})
-    }
-    if (c.phase) setPhase(c.phase)
-  }, [plateModel])
+    // `c.plate` is read and ignored on purpose. Analyses saved while the Plate
+    // tab existed still carry a layout; there is no longer anywhere to apply it
+    // and no reader that consults it. Dropping the field from `buildConfig` is
+    // what stops it being written again, and saying so here is what stops
+    // someone reinstating the restore without the tab.
+    if (c.phase && c.phase !== "plate") setPhase(c.phase)
+  }, [])
 
   /* ── Ask for a change, in words ────────────────────────────────────────────
      A sentence and a control are the same edit: both end as typed mutations on
@@ -2843,9 +3072,29 @@ export function DataAnalysisWorkspace({
    * not "the findings were all acted on". Declining is a review outcome.
    */
   const [dataQualityReviewed, setDataQualityReviewed] = useState(true)
+  /**
+   * Has the researcher confirmed WHERE the data is?
+   *
+   * Armed on a genuinely new attach, exactly like the data-quality review and
+   * for a stronger reason: a misread region does not move a number, it makes
+   * every number afterwards about the wrong cells, and there is no "leave it
+   * and see" that is defensible. Reopening a saved analysis does NOT re-arm it
+   * -- the stored override is the researcher's own answer, and asking again
+   * would invite them to give a different one against a source file that may
+   * have moved since.
+   */
+  const [regionReviewed, setRegionReviewed] = useState(true)
+  /**
+   * The narrated hand-off between "a file arrived" and "confirm the region".
+   *
+   * Armed on the same condition as the two reviews it introduces, so a reopen
+   * -- which skips both -- does not replay the tour.
+   */
+  const [journeyOpen, setJourneyOpen] = useState(false)
 
   const currentUser = useAuthUser()
   const excludedBy = currentUser?.email ?? currentUser?.id ?? "unknown"
+  auditActorRef.current = excludedBy
 
   /**
    * DATA QUALITY (Tier 0, "Data preparation").
@@ -2889,7 +3138,155 @@ export function DataAnalysisWorkspace({
    * must never have been blocked in the first place, and the only way to
    * guarantee that is to read the condition rather than sequence it.
    */
+  /**
+   * The region question blocks while there is data and nobody has answered it.
+   *
+   * `hasData` rather than `table.rows.length`: a sheet the region has been
+   * narrowed to nothing is exactly when the picker must stay up, and gating on
+   * rows would close it at the moment it is needed.
+   */
+  const regionBlocking = !regionReviewed && hasData
+
+  /**
+   * The researcher has accepted the data. Stop interrupting them.
+   *
+   * Accepting the region used to hand straight over to the data-quality gate,
+   * so attaching one file meant clearing two modals back to back before seeing
+   * a chart. One confirmation is a review; two in a row is an interrogation,
+   * and the second one arrives at the moment the researcher most wants to look
+   * at the data rather than answer questions about it.
+   *
+   * The findings do NOT go away -- dropping them silently would be far worse
+   * than showing them at a bad time. They become a banner above the chart,
+   * carrying the count, opening the same panel on demand. Structural repairs
+   * still auto-apply exactly as before; those were never a question.
+   */
+  const acceptData = useCallback(() => {
+    setRegionReviewed(true)
+    setDataQualityReviewed(true)
+  }, [])
+
+  /** Re-opened from the banner, on purpose, so it is a normal dialog now. */
+  const [qualityOpen, setQualityOpen] = useState(false)
+  /** The banner has been answered by being declined; stop showing it. */
+  const [qualityDismissed, setQualityDismissed] = useState(false)
+  /** The reference manual, and which section to land on. */
+  const [helpOpen, setHelpOpen] = useState(false)
+  const [helpSection, setHelpSection] = useState<string | undefined>(undefined)
+  const openHelp = useCallback((section?: string) => {
+    setHelpSection(section)
+    setHelpOpen(true)
+  }, [])
+
+  /**
+   * The journey's lines, each carrying what actually came out of that step.
+   *
+   * Assembled from the same memos the rest of the page reads -- the plan, the
+   * profiles, the findings -- so a step cannot report a number the software did
+   * not produce.
+   */
+  const journeySteps = useMemo<JourneyStep[]>(() => {
+    const plan = table.plan
+    const rowCount = table.rows.length
+    const numeric = tableProfiles.filter((p) => p.type === "numeric").length
+    const steps: JourneyStep[] = [
+      {
+        id: "read",
+        label: "Reading the workbook",
+        detail: table.sheetName ? `Sheet “${table.sheetName}”` : "Sheet read",
+      },
+      {
+        id: "region",
+        label: "Finding the table",
+        detail: plan
+          ? `Header on row ${plan.startRow + 1} · ${plan.columns.length} column${plan.columns.length === 1 ? "" : "s"} · ${rowCount} row${rowCount === 1 ? "" : "s"}`
+          : "No table found on this sheet",
+        attention: !plan || rowCount === 0,
+      },
+      {
+        id: "profile",
+        label: "Profiling the columns",
+        detail: `${numeric} numeric · ${tableProfiles.length - numeric} categorical or text`,
+      },
+      {
+        id: "repair",
+        label: "Repairing what the file got wrong",
+        detail:
+          structuralPending.length > 0
+            ? `${structuralPending.length} to repair — units stripped, non-numbers read as missing`
+            : "Nothing misread",
+      },
+      {
+        id: "check",
+        label: "Checking for outliers, duplicates and replicates",
+        detail:
+          decisionPending.length > 0
+            ? `${decisionPending.length} need${decisionPending.length === 1 ? "s" : ""} your decision`
+            : "Nothing that needs a decision",
+        attention: decisionPending.length > 0,
+      },
+    ]
+    return steps
+  }, [table.plan, table.rows.length, table.sheetName, tableProfiles, structuralPending.length, decisionPending.length])
+
+  /**
+   * What was decided for this sheet, and why.
+   *
+   * Assembled from inference that already runs -- the header plan's rationale,
+   * the per-column role rationales `specFromTable` strips, the design's, the
+   * axis evidence -- so this adds no new opinions, only visibility of the ones
+   * the tool was already acting on.
+   */
+  const autoChoices = useMemo(
+    () =>
+      describeAutoChoices({
+        spec: derivedSpec,
+        table: specTable,
+        planRationale: table.plan?.rationale ?? null,
+        dataRange: table.plan ? planDataRange(table.plan) : null,
+        xKey,
+        yKeys: activeY,
+        axisEvidence: regionSuggestion?.evidence ?? null,
+        rangeFor: (column) => {
+          const plan = table.plan
+          if (!plan) return undefined
+          const i = table.columns.indexOf(column)
+          return i < 0 ? undefined : planColumnRange(plan, i)
+        },
+      }),
+    [derivedSpec, specTable, table.plan, table.columns, xKey, activeY, regionSuggestion?.evidence]
+  )
+
+  /**
+   * Chart-tab settings the FIGURE cannot carry.
+   *
+   * The two surfaces are not two views of one picture. The Chart tab renders
+   * the rail directly; a figure panel renders the Analysis Spec, and
+   * `specFromChartState` maps only the spec-bearing half of the rail. Reference
+   * lines, the marker and show-points toggles and the bubble/3-D column
+   * mappings have no home in `AnalysisSpec.figure`, so they are silently
+   * absent from a figure panel — which is what "everything is being missed"
+   * looks like from the outside.
+   *
+   * Computed from the live rail rather than written out as prose, so the notice
+   * names only what THIS chart actually loses, and cannot drift from the
+   * mapping above it.
+   */
+  const figureGaps = useMemo(() => {
+    const gaps: string[] = []
+    if (hlines.trim() || vlines.trim()) gaps.push("reference lines")
+    if (markers) gaps.push("the marker toggle")
+    if (showPoints) gaps.push("individual points over the bars")
+    if (zKey) gaps.push(`the Z column (${zKey})`)
+    if (sizeKey) gaps.push(`the bubble-size column (${sizeKey})`)
+    return gaps
+  }, [hlines, vlines, markers, showPoints, zKey, sizeKey])
+
   const dataQualityBlocking =
+    // Strictly after the region. The findings below are computed against
+    // whichever cells the region names, so asking about them first is asking
+    // about cells that may be about to change.
+    !regionBlocking &&
     !dataQualityReviewed &&
     (structuralPending.length > 0 || decisionPending.length > 0 || autoApplied.length > 0)
 
@@ -3576,6 +3973,79 @@ export function DataAnalysisWorkspace({
   )
 
   /**
+   * Is there anything in the sheet the server has not been told about?
+   *
+   * Compared against the bytes last written rather than tracked with a boolean,
+   * because a boolean drifts: an edit that is undone leaves it stuck on "dirty"
+   * and a save that fails leaves it stuck on "clean". Only meaningful for a
+   * sheet that CAME from a data file -- a local import has no row to be out of
+   * step with.
+   */
+  const sheetDirty = useMemo(() => {
+    if (!sourceFile) return false
+    const current = (liveSheetBoxRef.current.current as UniverWorkbookSnapshot | null) ?? liveSnapshot
+    return JSON.stringify(current) !== sheetSavedJsonRef.current
+  }, [sourceFile, liveSnapshot, sheetSavedAt])
+
+  /**
+   * Write the sheet back to the data file it came from.
+   *
+   * `sync_storage` so the stored .xlsx/.csv matches the snapshot: without it
+   * the cached snapshot and the downloadable file disagree, and which one a
+   * given surface shows becomes a coin toss.
+   */
+  const saveSheet = useCallback(async () => {
+    if (!sourceFile) return
+    const snapshot = (liveSheetBoxRef.current.current as UniverWorkbookSnapshot | null) ?? liveRef.current
+    setSheetSaving(true)
+    try {
+      const res = await fetch(
+        `/api/experiments/${sourceFile.experimentId}/data-files/${sourceFile.id}/workbook`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ workbook_snapshot: snapshot, sync_storage: true }),
+        }
+      )
+      const body = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(body?.error || "The server refused the save.")
+      sheetSavedJsonRef.current = JSON.stringify(snapshot)
+      setSheetSavedAt(new Date().toISOString())
+      // A write to the data file is a boundary in its own right: everything
+      // typed since the last one is now what every other page will read.
+      cutAudit("save", "Saved to the data file")
+      toast.success("Sheet saved to the data file")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't save the sheet")
+    } finally {
+      setSheetSaving(false)
+    }
+  }, [sourceFile, cutAudit])
+
+  /**
+   * The spreadsheet itself, every edit included.
+   *
+   * Reads `liveSheetRef` ahead of `liveSnapshot`. Both hold the workbook, but
+   * the ref is written synchronously by the Univer host as it saves or tears
+   * down, while the state update carrying the same bytes is a microtask behind
+   * it — so on the frame right after an edit, or right after a maximize
+   * round-trip, the ref is the one that is current. Exporting a workbook is
+   * exactly the moment to prefer the fresher of the two.
+   *
+   * Named from the analysis title, falling back to the source file's own name,
+   * because `analysis.xlsx` for every export means a downloads folder of files
+   * nobody can tell apart.
+   */
+  const exportEditedWorkbook = useCallback(() => {
+    const snapshot = (liveSheetBoxRef.current.current as UniverWorkbookSnapshot | null) ?? liveRef.current
+    const base = title.trim()
+      ? slugify(title)
+      : sheetFileName.replace(/\.[^.]+$/, "") || "analysis"
+    downloadSnapshotAsXlsxFile(snapshot, `${base}.xlsx`)
+    toast.success("Sheet exported")
+  }, [title, sheetFileName])
+
+  /**
    * The `.n9a` download.
    *
    * Kept, and demoted. It was the only way to keep an analysis, which is the
@@ -3957,6 +4427,10 @@ export function DataAnalysisWorkspace({
         setReopenVerdict(null)
         gateRef.current = emptyGate()
         setSaveDialogOpen(false)
+        // A save is a boundary: everything typed into the sheet since the last
+        // one is now part of a revision someone may cite, so it gets an entry
+        // naming the revision it went into.
+        cutAudit("save", `Saved r${revision.revisionNo}`)
         toast.success(
           openRevisionRow?.isFrozen
             ? `Saved as revision ${revision.revisionNo}, forked from frozen revision ${openRevisionRow.revisionNo}.`
@@ -4156,6 +4630,10 @@ export function DataAnalysisWorkspace({
         const saved = JSON.parse(raw)
         if (saved?.workbook) loadSnapshot(saved.workbook as UniverWorkbookSnapshot)
         if (saved?.config) applyConfig(saved.config)
+        // After `loadSnapshot`, which clears the trail as an attach must: this
+        // is the same sheet coming back, not a different one arriving, so its
+        // history comes back with it.
+        if (Array.isArray(saved?.sheetAudit)) setSheetAudit(saved.sheetAudit as SheetAuditEntry[])
         // The conversation resumes with the sheet. The transcript itself lives
         // in the database, not in localStorage — only the pointer is local, so a
         // reload does not silently fork a second copy of the thread.
@@ -4185,13 +4663,25 @@ export function DataAnalysisWorkspace({
     if (!restoredRef.current) return
     const t = setTimeout(() => {
       try {
-        localStorage.setItem(SESSION_KEY, JSON.stringify({ threadId: threadIdRef.current, savedAt: new Date().toISOString(), workbook: liveSnapshot, config: JSON.parse(configJson) }))
+        localStorage.setItem(
+          SESSION_KEY,
+          JSON.stringify({
+            threadId: threadIdRef.current,
+            savedAt: new Date().toISOString(),
+            workbook: liveSnapshot,
+            config: JSON.parse(configJson),
+            // The trail rides with the sheet it is about. Without this a reload
+            // is an undetectable gap in a record whose whole job is not having
+            // any.
+            sheetAudit,
+          })
+        )
       } catch {
         /* quota / serialize failure, non-fatal */
       }
     }, 800)
     return () => clearTimeout(t)
-  }, [liveSnapshot, configJson])
+  }, [liveSnapshot, configJson, sheetAudit])
 
   /**
    * §3A.3 rule 1: once an analysis exists, the autosave goes to its server
@@ -4231,6 +4721,58 @@ export function DataAnalysisWorkspace({
     [loadSnapshot, applyConfig],
   )
 
+  /**
+   * Is the chart currently drawing the pair the curve was fitted to?
+   *
+   * Both halves matter. X must BE the concentration column, because the fit
+   * line's x values are concentrations; Y must INCLUDE the signal column,
+   * because the chart may legitimately draw other series beside it. Anything
+   * else and the overlay is withheld -- silently, since the offer below is
+   * where the researcher is told about it.
+   */
+  const fitOnChart =
+    showFitOnChart &&
+    curve.fitLayer.ready &&
+    xKey === curve.fitLayer.concCol &&
+    activeY.includes(curve.fitLayer.signalCol)
+
+  fitOnChartRef.current = fitOnChart
+
+  const chartPlotData = useMemo(
+    () => (fitOnChart ? [...plotData, ...curve.fitLayer.traces] : plotData),
+    [fitOnChart, plotData, curve.fitLayer.traces]
+  )
+
+  /**
+   * Point the chart at the curve's columns and draw the fit on it.
+   *
+   * Plain setters, the same way every other axis control on this page assigns X
+   * and Y -- `xKey`/`yKeys` are not `RailControlKey`s, so there is no rail
+   * mutation to record and routing them through `railEdit` would invent one.
+   */
+  const plotCurveOnChart = useCallback(() => {
+    const { concCol, signalCol } = curve.fitLayer
+    if (!concCol || !signalCol) return
+    setXKey(concCol)
+    setYKeys([signalCol])
+    setShowFitOnChart(true)
+    setPhase("chart")
+  }, [curve.fitLayer])
+
+  /**
+   * The offer.
+   *
+   * `detectDataKind` has always been able to tell a dose-response from an
+   * ordinary sheet -- it just used the answer to slip an extra tab into the
+   * strip and say nothing, so the tab read as clutter of unknown origin rather
+   * than as a finding. This says what was detected, from which columns, and
+   * gives both answers: draw it, or say it is not one.
+   */
+  const curveOffer =
+    detected.standardCurve && !curveOfferDismissed && !fitOnChart && curve.fitLayer.concCol && curve.fitLayer.signalCol
+      ? { concCol: curve.fitLayer.concCol, signalCol: curve.fitLayer.signalCol, fitted: curve.fitLayer.ready }
+      : null
+
   const chartCanvas = (
     <div className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-card/80 shadow-sm backdrop-blur-sm">
       <PaneHeader Icon={ChartLine} title="Chart">
@@ -4251,10 +4793,98 @@ export function DataAnalysisWorkspace({
           <ExportMenu variant="ghost" disabled={!hasPlot} defaultName={title} onExport={runExport} getPng={getChartPng} getCanvasSize={getChartSize} onSaveToLibrary={() => setSaveChartOpen(true)} />
         </div>
       </PaneHeader>
+      {hasData && <AutoChoicesPanel choices={autoChoices} onOpenHelp={() => openHelp("tests")} />}
+
+      {/* The data-quality findings, after the researcher has accepted the data.
+          Not a modal: it sits above the figure carrying its own count, and
+          opens the same panel on demand. Dismissible, because a researcher who
+          has looked and decided to leave the points alone has answered it. */}
+      {dataQualityReviewed && !qualityDismissed && decisionPending.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-border bg-amber-500/[0.07] px-4 py-2.5">
+          <Warning className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" weight="fill" />
+          <span className="text-[12.5px]">
+            <span className="font-medium">
+              {decisionPending.length} finding{decisionPending.length === 1 ? "" : "s"} about this data
+            </span>{" "}
+            <span className="text-muted-foreground">
+              {decisionPending.length === 1 ? "needs" : "need"} a decision — outliers, duplicates or
+              missing values. Nothing has been changed.
+            </span>
+          </span>
+          <div className="ml-auto flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => setQualityOpen(true)}>
+              Review
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setQualityDismissed(true)}
+              title="Leave the data as it is"
+            >
+              Leave as is
+            </Button>
+          </div>
+        </div>
+      )}
+      {curveOffer && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-border bg-[var(--n9-accent,#965034)]/[0.05] px-4 py-2.5">
+          <TrendUp className="h-4 w-4 shrink-0 text-[var(--n9-accent,#965034)]" />
+          <span className="text-[12.5px]">
+            <span className="font-medium">This looks like a standard curve.</span>{" "}
+            <span className="text-muted-foreground">
+              “{curveOffer.concCol}” reads as a concentration against “{curveOffer.signalCol}” as the signal
+              {curveOffer.fitted ? "" : " — pick the pair on the Standard curve tab to fit it"}.
+            </span>
+          </span>
+          <div className="ml-auto flex items-center gap-2">
+            {curveOffer.fitted && (
+              <Button size="sm" onClick={plotCurveOnChart}>
+                Plot the fit here
+              </Button>
+            )}
+            <Button variant="outline" size="sm" onClick={() => setPhase("curve")}>
+              Open Standard curve
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setCurveOfferDismissed(true)
+                setCurvePinned(false)
+              }}
+              title="Hide the standard curve tab for this sheet"
+            >
+              Not a standard curve
+            </Button>
+          </div>
+        </div>
+      )}
+      {fitOnChart && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2 text-[11.5px] text-muted-foreground">
+          <TrendUp className="h-4 w-4 shrink-0 text-[var(--n9-accent,#965034)]" />
+          <span>
+            Standard curve overlaid — <span className="font-medium text-foreground">{curve.fitLayer.summary}</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => setShowFitOnChart(false)}
+            className="ml-auto rounded-md border border-border px-2 py-0.5 font-medium transition-colors hover:bg-muted hover:text-foreground"
+          >
+            Hide fit
+          </button>
+          <button
+            type="button"
+            onClick={() => setPhase("curve")}
+            className="rounded-md border border-border px-2 py-0.5 font-medium transition-colors hover:bg-muted hover:text-foreground"
+          >
+            Fit settings &amp; export
+          </button>
+        </div>
+      )}
       <div className="p-2">
         <div ref={chartBoxRef} className="w-full" style={{ height: chartH }}>
           {hasPlot ? (
-            <PlotlyChart data={plotData} layout={plotLayout} onEdit={handleChartEdit} onEditElement={onEditElement} extraGroups={chartMenuGroups} exportApiRef={chartExportRef} renderApiRef={chartImageRef} className="h-full w-full" />
+            <PlotlyChart data={chartPlotData} layout={plotLayout} onEdit={handleChartEdit} onEditElement={onEditElement} extraGroups={chartMenuGroups} exportApiRef={chartExportRef} renderApiRef={chartImageRef} className="h-full w-full" />
           ) : (
             <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-border px-6 text-center text-sm text-muted-foreground">
               {is3D(chartType) ? "Assign an X, a Y and a Z column (right) to plot in 3D." : "Choose a chart type and at least one Y series."}
@@ -4757,6 +5387,41 @@ export function DataAnalysisWorkspace({
    * new sheet rather than over the data, and regenerated on every press, so it
    * is a report and never an input.
    */
+  /**
+   * The curve as a workbook sheet.
+   *
+   * Deliberately the same shape as `addStatsSheet` below, including the
+   * append-a-number-rather-than-overwrite rule: pressing it twice must not
+   * destroy a tab the researcher has since annotated. It installs the workbook
+   * directly rather than through `loadSnapshot`, for the reason spelled out
+   * there -- this is the same data with a report tab added, and the swap door
+   * would drop the pipeline, the exclusions and the undo stack on the way.
+   */
+  const addCurveSheet = useCallback(
+    (rows: (string | number)[][]) => {
+      try {
+        const wb = snapshotToXlsxWorkbook(liveRef.current)
+        const ws = XLSX.utils.aoa_to_sheet(rows)
+        ws["!cols"] = curveExportColumnWidths(rows)
+        let name = CURVE_SHEET_NAME
+        let n = 2
+        while (wb.SheetNames.includes(name)) name = `${CURVE_SHEET_NAME} ${n++}`
+        XLSX.utils.book_append_sheet(wb, ws, name)
+        const next = buildSpreadsheetWorkbookSnapshot(sheetFileName, wb)
+        setLiveSnapshot(next)
+        setMountSnapshot(next)
+        liveSheetBoxRef.current = { current: next as unknown as Record<string, unknown> }
+        setMountKey((k) => k + 1)
+        cutAudit("app-sheet", `Standard curve written to “${name}”`, next)
+        toast.success(`Standard curve added to the sheet as “${name}”`)
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Could not add the standard curve sheet")
+      }
+    },
+    [sheetFileName]
+  )
+  addCurveSheetRef.current = addCurveSheet
+
   const addStatsSheet = useCallback(() => {
     if (!derivedSpec) return
     try {
@@ -4781,7 +5446,11 @@ export function DataAnalysisWorkspace({
       const next = buildSpreadsheetWorkbookSnapshot(sheetFileName, wb)
       setLiveSnapshot(next)
       setMountSnapshot(next)
+      // Same rule as `loadSnapshot`: this remount is here to SHOW a workbook
+      // that changed, so the across-remount copy has to be the changed one.
+      liveSheetBoxRef.current = { current: next as unknown as Record<string, unknown> }
       setMountKey((k) => k + 1)
+      cutAudit("app-sheet", `Statistics written to “${name}”`, next)
       toast.success(`Statistics added to the sheet as "${name}"`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not add the statistics sheet")
@@ -4947,8 +5616,119 @@ export function DataAnalysisWorkspace({
     (t): t is AnalysisAssistantTurn => t.role === "assistant" && canApprovePlan(t, specToken),
   ).length
 
-  const canvasForPhase = phase === "chart" ? chartCanvas : phase === "stats" ? statsCanvas : phase === "curve" ? curve.canvas : plate.canvas
-  const settingsForPhase = phase === "chart" ? chartSettings : phase === "stats" ? stats.settings : phase === "curve" ? curveSettings : plate.settings
+  /**
+   * A finding's location, as a cell address in the sheet on screen.
+   *
+   * Resolved here rather than stored on the finding because it is a function of
+   * the header plan -- where the data starts, which column the table begins in
+   * -- and the plan moves when the researcher corrects the data region. An
+   * address baked in at detection time would go on pointing at the old cell.
+   *
+   * `rowId` is `row-<1-based sheet row>`, which is the number the researcher
+   * sees in the spreadsheet's own row header, so the arithmetic is only ever
+   * about the column.
+   */
+  const locateFinding = useCallback(
+    (loc: FindingLocation): string | null => {
+      const plan = table.plan
+      if (!plan) return null
+      const sheetRow = Number(loc.rowId.replace(/^row-/, ""))
+      if (!Number.isFinite(sheetRow) || sheetRow < 1) return null
+      if (loc.column === null) {
+        // A whole-row finding: name the span the table occupies on that row.
+        return `${cellAddress(plan.startCol, sheetRow - 1)}:${cellAddress(plan.endCol, sheetRow - 1)}`
+      }
+      const index = table.columns.indexOf(loc.column)
+      if (index < 0) return null
+      return cellAddress(plan.startCol + index, sheetRow - 1)
+    },
+    [table.plan, table.columns]
+  )
+
+  /**
+   * Put the researcher's cursor on the cell a finding is about.
+   *
+   * Bringing the sheet forward is the honest half of this: the maximized data
+   * editor is where a value is actually readable, and sending someone to a cell
+   * they then have to find themselves is barely better than not sending them.
+   */
+  const revealFinding = useCallback(
+    (loc: FindingLocation) => {
+      const address = locateFinding(loc)
+      if (!address) return
+      setDataMax(true)
+      // Univer owns the selection; there is no imperative "select this range"
+      // on the facade this view exposes, so the address is surfaced for the
+      // researcher to read off rather than driven into the grid. Named as such
+      // in the toast so nobody waits for a cursor that is not coming.
+      toast.info(`${loc.column ?? "Row"} · ${address}`, {
+        description: "Shown in the data editor — scroll to the cell to change or check it.",
+      })
+    },
+    [locateFinding]
+  )
+
+  /**
+   * Save and history, for the SHEET.
+   *
+   * Rendered into every Data pane header -- docked, undocked and maximized --
+   * because "where do I save my edits?" is asked of the pane the edits were
+   * made in, not of a toolbar at the top of the page that says "Save" and means
+   * the analysis. History sits beside it for the same reason: it is the record
+   * of what this control writes, and it was previously a fourth tab in the
+   * right rail, where the strip overflowed and clipped it.
+   */
+  const sheetActions = (
+    <>
+      <button
+        type="button"
+        onClick={() => setSheetHistoryOpen(true)}
+        title="What has changed in this sheet"
+        className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+      >
+        <ClockCounterClockwise className="h-4 w-4" />
+        History
+        {sheetAudit.length > 0 && (
+          <span className="rounded-full bg-muted px-1.5 text-[10px] font-semibold">{sheetAudit.length}</span>
+        )}
+      </button>
+      {sourceFile ? (
+        <button
+          type="button"
+          onClick={() => void saveSheet()}
+          disabled={sheetSaving || !sheetDirty}
+          title={
+            sheetDirty
+              ? "Write these edits back to the data file"
+              : "No changes since the last save"
+          }
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-medium transition-colors",
+            sheetDirty
+              ? "bg-[var(--n9-accent,#965034)] text-white hover:opacity-90"
+              : "text-muted-foreground hover:bg-muted hover:text-foreground",
+            sheetSaving && "opacity-60"
+          )}
+        >
+          <FloppyDisk className="h-4 w-4" />
+          {sheetSaving ? "Saving…" : sheetDirty ? "Save sheet" : "Saved"}
+        </button>
+      ) : (
+        // A local import has no row on the server to be written back to, and
+        // saying "Save" at something with nowhere to go is worse than saying
+        // nothing. The two things that DO keep it are named instead.
+        <span
+          title="This sheet was opened from your computer, so there is no data file to save it into. Export it, or save the analysis."
+          className="rounded-md px-1.5 py-1 text-[11.5px] text-muted-foreground"
+        >
+          Local file
+        </span>
+      )}
+    </>
+  )
+
+  const canvasForPhase = phase === "chart" ? chartCanvas : phase === "stats" ? statsCanvas : curve.canvas
+  const settingsForPhase = phase === "chart" ? chartSettings : phase === "stats" ? stats.settings : curveSettings
   const activePhase = PHASES.find((p) => p.id === phase)!
   const ActiveIcon = activePhase.Icon
 
@@ -5100,8 +5880,63 @@ export function DataAnalysisWorkspace({
       {/* Tier 0, "Data preparation". Blocks proposing an analysis, never
           capturing intent — a researcher may say what they are after before
           they have looked at a column (ADR-023). */}
+      {/* Where the data is, answered before anything is charted or reviewed. */}
+      {/* The pipeline, narrated, before it asks its first question. Every line
+          reports a result that has already been computed -- see the component's
+          own note on why that distinction is load-bearing. */}
+      <IngestJourney
+        open={journeyOpen}
+        fileName={sheetFileName}
+        steps={journeySteps}
+        onDone={() => setJourneyOpen(false)}
+      />
+
+      <DataRegionDialog
+        open={regionBlocking && !journeyOpen}
+        fileName={sheetFileName}
+        sheetName={table.sheetName}
+        grid={grid}
+        override={headerOverride}
+        suggestion={regionSuggestion}
+        onApply={setHeaderOverride}
+        onAskAi={(prompt) => {
+          // Answering the region question is what unblocks the page, and the
+          // assistant lives behind this dialog -- so confirm as read, then ask.
+          setRegionReviewed(true)
+          docks.setActivePanelId("ask")
+          void askForChange(prompt)
+        }}
+        onConfirm={(chosen) => {
+          if (chosen.xKey) setXKey(chosen.xKey)
+          if (chosen.yKeys?.length) setYKeys(chosen.yKeys)
+          if (chosen.title) setTitle(chosen.title)
+          acceptData()
+        }}
+        onDismiss={acceptData}
+      />
+
+      <HelpCenter open={helpOpen} onOpenChange={setHelpOpen} initialSectionId={helpSection} />
+
+      {/* Opened from beside the sheet, where the edits it records are made. */}
+      <Dialog open={sheetHistoryOpen} onOpenChange={setSheetHistoryOpen}>
+        <DialogContent className="flex max-h-[80vh] w-[min(46rem,94vw)] flex-col gap-0 overflow-hidden p-0 sm:max-w-none">
+          <DialogHeader className="border-b border-border px-5 py-3.5">
+            <DialogTitle className="text-[14px]">Sheet history</DialogTitle>
+            <DialogDescription className="text-[12px]">
+              What changed in {sheetFileName}, and what was there before.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <SheetHistoryPanel log={sheetAudit} fileName={sheetFileName} />
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <DataQualityGate
-        open={dataQualityBlocking && (decisionPending.length > 0 || autoApplied.length > 0)}
+        open={
+          (dataQualityBlocking || qualityOpen) &&
+          (decisionPending.length > 0 || autoApplied.length > 0)
+        }
         fileName={typeof liveSnapshot?.name === "string" ? liveSnapshot.name : null}
         applied={autoApplied}
         decisions={decisionPending}
@@ -5117,8 +5952,13 @@ export function DataAnalysisWorkspace({
           applySpecMutations([...revert, ...mutations])
         }}
         onUndo={(mutation) => applySpecMutations(mutation)}
-        onContinue={() => setDataQualityReviewed(true)}
+        onContinue={() => {
+          setDataQualityReviewed(true)
+          setQualityOpen(false)
+        }}
         onOpenProvenance={() => setProvenanceOpen(true)}
+        locate={locateFinding}
+        onReveal={revealFinding}
       />
 
       {/* §10.5. Everything a reader needs to judge the figure or the result,
@@ -5306,10 +6146,9 @@ export function DataAnalysisWorkspace({
           <TabsList>
             <AnimatePresence initial={false} mode="popLayout">
               {visiblePhases.map((p) => {
-                // A specialized tab (curve/plate) surfaced because the data
-                // matched gets a subtle accent dot, no pill, no chip.
-                const auto =
-                  (p.id === "curve" && detected.standardCurve) || (p.id === "plate" && detected.plate)
+                // A specialized tab (the standard curve) surfaced because the
+                // data matched gets a subtle accent dot, no pill, no chip.
+                const auto = p.id === "curve" && detected.standardCurve
                 return (
                   <motion.div
                     key={p.id}
@@ -5344,6 +6183,61 @@ export function DataAnalysisWorkspace({
         </Tabs>
 
         <input ref={fileRef} type="file" accept=".csv,.tsv,.txt,.xlsx,.xls,.n9a,.json" className="hidden" onChange={(e) => { if (e.target.files?.[0]) onImport(e.target.files[0]); e.target.value = "" }} />
+        {/*
+          The run state, said plainly and always in the same place.
+
+          Whether the engine had run was previously only inferable — from a
+          results card being absent, or from a figure panel being empty — and
+          the control that starts a run was an implicit side effect of making an
+          edit that happened to need recomputing. A researcher who simply wanted
+          their numbers had nothing to press.
+
+          Three states, and the middle one is the point: LOADED means a sheet is
+          on screen and nothing has been computed from it, which is a deliberate
+          resting state (ADR-025) and not an error — so it is stated rather than
+          hidden, with the button that leaves it.
+        */}
+        {hasData && derivedSpec && (
+          <div className="flex items-center gap-1.5">
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11.5px] font-medium",
+                engineBusy
+                  ? "bg-muted text-muted-foreground"
+                  : engineResult
+                    ? "bg-[var(--n9-accent,#965034)]/10 text-[var(--n9-accent,#965034)]"
+                    : "bg-amber-500/12 text-amber-700 dark:text-amber-400"
+              )}
+              title={
+                engineResult
+                  ? "The statistics and the figure layout are up to date with this analysis."
+                  : "The chart is drawn from the sheet. Statistics and the figure layout need a computed result."
+              }
+            >
+              {engineBusy ? (
+                <>
+                  <ArrowClockwise className="h-3.5 w-3.5 animate-spin" /> Computing
+                </>
+              ) : engineResult ? (
+                <>
+                  <CheckCircle className="h-3.5 w-3.5" weight="fill" /> Statistics computed
+                </>
+              ) : (
+                <>
+                  <Warning className="h-3.5 w-3.5" weight="fill" /> Statistics not computed
+                </>
+              )}
+            </span>
+            {!engineResult && !engineBusy && (
+              <Button size="sm" onClick={() => setAnalysisApproved(true)}>
+                Compute statistics
+              </Button>
+            )}
+          </div>
+        )}
+        <Button variant="ghost" size="sm" onClick={() => openHelp()} title="How Notes9 analyses your data">
+          <Question className="mr-1.5 h-4 w-4" /> Help
+        </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm"><UploadSimple className="mr-1.5 h-4 w-4" /> Import <CaretDown className="ml-1 h-3.5 w-3.5" /></Button>
@@ -5388,9 +6282,17 @@ export function DataAnalysisWorkspace({
             )}
             {/* Two datasets, named apart. "Used" is what the figure was built
                 from — post-filter, post-transform, exclusions marked — and is
-                what a reader needs to reproduce it. "Raw file" is the workbook
-                as attached, which is still worth having and is no longer the
-                thing that comes out when someone asks to export the data. */}
+                what a reader needs to reproduce it. The sheet export is the
+                workbook itself, and is no longer the thing that comes out when
+                someone asks to export the data.
+
+                It was labelled "Export raw file", and this comment used to
+                claim it was "the workbook as attached". Both were wrong about
+                the same line of code: it passes `liveSnapshot`, which is the
+                sheet WITH every edit, added sheet and appended report tab.
+                Users read the label, believed there was no way to get their
+                edited spreadsheet out, and there had been all along. The name
+                now says what it exports. */}
             <DropdownMenuItem disabled={!engineResult} onClick={() => exportUsedDataset("csv")}>
               <DownloadSimple className="mr-2 h-4 w-4" /> Export used data (.csv)
             </DropdownMenuItem>
@@ -5400,8 +6302,8 @@ export function DataAnalysisWorkspace({
             <DropdownMenuItem disabled={!derivedSpec} onClick={exportReproducibleCode}>
               <DownloadSimple className="mr-2 h-4 w-4" /> Export code (.py)
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => downloadSnapshotAsXlsxFile(liveSnapshot, "analysis.xlsx")}>
-              <DownloadSimple className="mr-2 h-4 w-4" /> Export raw file (.xlsx)
+            <DropdownMenuItem onClick={exportEditedWorkbook}>
+              <DownloadSimple className="mr-2 h-4 w-4" /> Export sheet with edits (.xlsx)
             </DropdownMenuItem>
             <DropdownMenuItem onClick={exportAnalysisFile}>
               <DownloadSimple className="mr-2 h-4 w-4" /> Export analysis (.n9a)
@@ -5524,12 +6426,13 @@ export function DataAnalysisWorkspace({
             <TableIcon className="h-4 w-4 text-[var(--n9-accent,#965034)]" />
             <span className="text-sm font-semibold">Data editor</span>
             <span className="text-[11px] text-muted-foreground">{table.rows.length} rows · {table.columns.length} cols · edits flow to every view</span>
-            <button onClick={toggleDataMax} className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+            <div className="ml-auto flex items-center gap-1">{sheetActions}</div>
+            <button onClick={toggleDataMax} className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
               <ArrowsInSimple className="h-4 w-4" /> Done
             </button>
           </div>
           <div className="p-2" data-n9-sheet>
-            <SheetHost mountSnapshot={mountSnapshot} mountKey={mountKey} onPersist={setLiveSnapshot} onSelectionChange={setSheetSel} heightClass="h-[calc(100vh-13rem)]" compact={false} />
+            <SheetHost mountSnapshot={mountSnapshot} mountKey={mountKey} liveSheetRef={liveSheetBoxRef.current} onPersist={setLiveSnapshot} onSelectionChange={setSheetSel} heightClass="h-[calc(100vh-13rem)]" compact={false} />
           </div>
         </div>
       )}
@@ -5540,11 +6443,40 @@ export function DataAnalysisWorkspace({
           reads the sheet loaded above, so both phases analyse one dataset. */}
       {!dataMax && phase === "workspace" && (
         <div className="flex min-h-[calc(100vh-24rem)] flex-col">
+          {/* Said here, where the difference is actually seen. */}
+          {hasData && (
+            <div className="mb-2 rounded-xl border border-border bg-muted/25 px-3.5 py-2.5">
+              <p className="text-[12.5px] leading-relaxed">
+                <span className="font-medium">A figure panel is not a copy of the Chart tab.</span>{" "}
+                <span className="text-muted-foreground">
+                  The chart draws the rail straight from your sheet; a panel draws the analysis the
+                  engine computed, so it needs a run and it carries only the settings the analysis
+                  itself records.
+                </span>
+              </p>
+              {figureGaps.length > 0 && (
+                <p className="mt-1 text-[11.5px] leading-relaxed text-amber-700 dark:text-amber-400">
+                  Not carried into the figure: {figureGaps.join(", ")}. Those live on the Chart tab
+                  only.
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={() => openHelp("charts")}
+                className="mt-1 text-[11.5px] font-medium text-[var(--n9-accent,#965034)] underline-offset-2 hover:underline"
+              >
+                Why they differ
+              </button>
+            </div>
+          )}
           <LayoutCanvas
             layout={figureLayout}
             pipelines={layoutPipelines}
             onChange={setFigureLayout}
             interaction={figureInteraction}
+            onCompute={() => setAnalysisApproved(true)}
+            computing={engineBusy}
+            activePipelineId={activeAnalysisId}
             className="flex-1"
           />
           {/* The landing place for a click on a mark. The right dock that holds
@@ -5601,19 +6533,22 @@ export function DataAnalysisWorkspace({
             className="h-[620px]"
             bodyClassName="overflow-hidden"
             actions={
-              <button
-                onClick={toggleDataMax}
-                title="Maximize data editor"
-                className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              >
-                <ArrowsOutSimple className="h-4 w-4" />
-              </button>
+              <div className="flex items-center gap-1">
+                {sheetActions}
+                <button
+                  onClick={toggleDataMax}
+                  title="Maximize data editor"
+                  className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <ArrowsOutSimple className="h-4 w-4" />
+                </button>
+              </div>
             }
           >
             {/* The sheet stays mounted through a collapse: remounting Univer
                 would drop the user's cursor and selection. */}
             <div className="h-full p-2" data-n9-sheet>
-              <SheetHost mountSnapshot={mountSnapshot} mountKey={mountKey} onPersist={setLiveSnapshot} onSelectionChange={setSheetSel} heightClass="h-full" compact />
+              <SheetHost mountSnapshot={mountSnapshot} mountKey={mountKey} liveSheetRef={liveSheetBoxRef.current} onPersist={setLiveSnapshot} onSelectionChange={setSheetSel} heightClass="h-full" compact />
             </div>
           </Dock>
         ) : (
@@ -5621,12 +6556,13 @@ export function DataAnalysisWorkspace({
             <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
               <TableIcon className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-semibold">Data</span>
-              <button onClick={toggleDataMax} title="Maximize data editor" className="ml-auto rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+              <div className="ml-auto flex items-center gap-1">{sheetActions}</div>
+              <button onClick={toggleDataMax} title="Maximize data editor" className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
                 <ArrowsOutSimple className="h-4 w-4" />
               </button>
             </div>
             <div className="p-2" data-n9-sheet>
-              <SheetHost mountSnapshot={mountSnapshot} mountKey={mountKey} onPersist={setLiveSnapshot} onSelectionChange={setSheetSel} heightClass="h-[560px]" compact />
+              <SheetHost mountSnapshot={mountSnapshot} mountKey={mountKey} liveSheetRef={liveSheetBoxRef.current} onPersist={setLiveSnapshot} onSelectionChange={setSheetSel} heightClass="h-[560px]" compact />
             </div>
           </div>
         )}

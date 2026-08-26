@@ -113,10 +113,27 @@ export function FigureCanvas({
   onSelectRow,
   onExcludeRow,
   onMoveBracket,
+  onRun,
+  computing = false,
   className,
 }: {
   spec: AnalysisSpec
   result: EngineResult | null
+  /**
+   * Compute the analysis, when the reason there is no figure is simply that
+   * nothing has computed one yet.
+   *
+   * This canvas draws from an `EngineResult`, while the Chart tab draws
+   * straight from the table — so a freshly loaded sheet shows a chart there and
+   * nothing here, and the old placeholder said "Choose a test and a chart type"
+   * at a researcher who had already chosen both. The asymmetry is deliberate
+   * (a figure in a layout must show what the ENGINE computed, not a redrawing
+   * of the raw columns), but it has to be explained where it bites, with the
+   * action that resolves it.
+   */
+  onRun?: () => void
+  /** A compute is in flight; the figure is coming. */
+  computing?: boolean
   /** A mark was clicked. Used to reveal the row in the data pane. */
   onSelectRow?: (rowId: string) => void
   /** A mark was right-clicked. Opens the reasoned-exclusion dialog (§8.1). */
@@ -263,11 +280,41 @@ export function FigureCanvas({
   }
 
   if (!hasData) {
+    // Three genuinely different situations, which the single old message
+    // collapsed into one wrong sentence.
+    if (computing) {
+      return (
+        <Placeholder className={className}>
+          <span className="inline-flex items-center gap-2">
+            <ArrowClockwise className="size-3.5 animate-spin" />
+            Computing the analysis…
+          </span>
+        </Placeholder>
+      )
+    }
+    if (result) {
+      return (
+        <Placeholder className={className}>
+          The analysis ran, but no rows survived to plot. Check the filters and exclusions in the
+          pipeline bar.
+        </Placeholder>
+      )
+    }
     return (
       <Placeholder className={className}>
-        {result
-          ? "This analysis produced no plottable rows yet."
-          : "Choose a test and a chart type to draw the figure."}
+        <span className="block max-w-[46ch]">
+          This figure draws from the computed analysis, and it has not been run yet. The Chart tab
+          draws straight from the sheet, which is why a chart appears there first.
+        </span>
+        {onRun && (
+          <button
+            type="button"
+            onClick={onRun}
+            className="mt-3 rounded-lg bg-[var(--n9-accent,#965034)] px-3 py-1.5 text-[12.5px] font-medium text-white transition-opacity hover:opacity-90"
+          >
+            Run the analysis
+          </button>
+        )}
       </Placeholder>
     )
   }

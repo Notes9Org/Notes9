@@ -299,7 +299,18 @@ function DockTabStrip({
   }
 
   return (
-    <div role="tablist" aria-label={label} className="flex min-w-0 items-center gap-1">
+    /* Scrollable, because the tabs are `shrink-0` and the rail is narrow: past
+       three labels the strip simply ran off the end and the last tab could not
+       be clicked at all. The scrollbar is hidden with arbitrary variants rather
+       than a `scrollbar-none` utility: the only one in this codebase is scoped
+       to `.marketing-theme` and would silently not apply here. Keyboard
+       navigation (arrows/Home/End) already reaches every tab and scrolls it
+       into view via `focus()`. */
+    <div
+      role="tablist"
+      aria-label={label}
+      className="flex min-w-0 items-center gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+    >
       {panels.map((panel, index) => {
         const selected = panel.id === activeId
         const badgeCount =
