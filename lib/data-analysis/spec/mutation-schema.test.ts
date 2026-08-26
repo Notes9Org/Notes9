@@ -46,6 +46,11 @@ const VALID_EXAMPLES: Record<SpecMutation["kind"], SpecMutation> = {
   },
   "figure.removeAnnotation": { kind: "figure.removeAnnotation", id: "a1" },
   "figure.moveBracket": { kind: "figure.moveBracket", id: "b1", offsetY: 5 },
+  "figure.setBracketStyle": {
+    kind: "figure.setBracketStyle",
+    id: "b1",
+    patch: { colour: "#ff0000", lineWidth: 2, fontSize: 14, capLength: 6, hidden: false, display: "both" },
+  },
   "figure.setShowExcluded": { kind: "figure.setShowExcluded", value: true },
   "axis.set": { kind: "axis.set", axis: "y", patch: { label: "Viability (%)", scale: "log10" } },
   "figure.setErrorBars": { kind: "figure.setErrorBars", value: "sd" },
@@ -65,6 +70,25 @@ const VALID_EXAMPLES: Record<SpecMutation["kind"], SpecMutation> = {
   "data.setFilters": {
     kind: "data.setFilters",
     filters: [{ column: "viability", op: "gt", value: 0 }],
+  },
+  "data.setJoins": {
+    kind: "data.setJoins",
+    joins: [
+      {
+        right: {
+          fileId: "3f2504e0-4f89-41d3-9a0c-0305e82c3301",
+          fileName: "plate-map.csv",
+          sheet: "Sheet1",
+          versionHash: "fnv1a64:0011223344556677",
+          rowCount: 96,
+          columnCount: 3,
+        },
+        on: [{ left: "Well", right: "Well" }],
+        type: "left",
+        columns: [],
+        suffix: "_r",
+      },
+    ],
   },
   "data.excludeRow": {
     kind: "data.excludeRow",

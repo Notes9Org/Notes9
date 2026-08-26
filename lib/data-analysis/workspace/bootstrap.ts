@@ -21,6 +21,7 @@ import {
   parseUnit,
   profileTable,
 } from "@/lib/data-analysis/semantic/infer"
+import { applyRecord, rolesFromRecord, type ExperimentRecord } from "@/lib/data-analysis/semantic/record"
 import type { AnalysisPipeline } from "./pipelines"
 
 export interface SheetMeta {
@@ -37,6 +38,15 @@ export interface SheetMeta {
  * Used as the data version when the caller has no better identity to offer. It
  * is not cryptographic, it only has to change when the data changes, because
  * that is what makes a stored result detectably stale on reopen (§3A.3).
+ *
+ * The prefix says `fnv1a64` because that is what this is: two 32-bit FNV-1a
+ * accumulators, 64 non-cryptographic bits. It used to say `sha256`, which put a
+ * collision-resistance claim on a provenance record that the function cannot
+ * keep. The digits are byte-for-byte the ones the old label carried — only the
+ * name changed — so a stored `sha256:<hex>` and a live `fnv1a64:<same hex>`
+ * describe identical data. Nothing parses the prefix; `checkResultIntegrity`
+ * compares the whole string, so a revision saved before this change reports a
+ * data-version mismatch once. See the note in `checkExclusions`.
  */
 export function hashTable(table: Table): string {
   let h1 = 0x811c9dc5
@@ -53,7 +63,7 @@ export function hashTable(table: Table): string {
     for (const c of table.columns) write(String(row.values[c] ?? ""))
   }
   const hex = (n: number) => (n >>> 0).toString(16).padStart(8, "0")
-  return `sha256:${hex(h1)}${hex(h2)}`
+  return `fnv1a64:${hex(h1)}${hex(h2)}`
 }
 
 /**
@@ -106,6 +116,13 @@ export interface BootstrapOptions {
   test?: TestKind
   /** Roles the project record already knows; never re-guessed (§6.2). */
   knownRoles?: AnalysisSpec["roles"]
+  /**
+   * The notes9 experiment record for this sheet, when the workspace knows
+   * which experiment it belongs to. Supplies `knownRoles` on its own and
+   * cross-checks the file-derived design against what the project recorded,
+   * which is what makes test selection project-driven rather than shape-driven.
+   */
+  record?: ExperimentRecord | null
   title?: string
 }
 
@@ -121,10 +138,28 @@ export function specFromTable(
   meta: SheetMeta,
   options: BootstrapOptions = {}
 ): AnalysisSpec {
-  const roles = inferRoles(table, options.knownRoles ?? [])
+  // Roles the record establishes are locked before inference runs, so they are
+  // never re-guessed (§6.2). An explicit `knownRoles` still wins over them: it
+  // is what a caller has already settled.
+  const fromRecord = options.record ? rolesFromRecord(table, options.record) : []
+  const known = [...(options.knownRoles ?? [])]
+  for (const role of fromRecord) {
+    if (!known.some((k) => k.column === role.column)) known.push(role)
+  }
+
+  const roles = inferRoles(table, known)
   const plainRoles = roles.map(({ rationale: _r, ...role }) => role)
-  const design = inferDesign(table, plainRoles)
-  const { rationale: _d, ...plainDesign } = design
+  // Deliberately NOT given the record's design: this must stay the file's own
+  // reading, so `applyRecord` has two independent sides to compare. Handing it
+  // the record here would make the design its own control and the
+  // record-vs-file disagreement would silently always come back empty.
+  const { rationale: _d, ...fileDesign } = inferDesign(table, plainRoles)
+  // The record is the higher authority for design, but the file is still read
+  // and any disagreement is reported with both sides named, never resolved
+  // quietly in favour of one.
+  const plainDesign = options.record
+    ? applyRecord(table, plainRoles, fileDesign, options.record)
+    : fileDesign
 
   const groupColumn = defaultGroupColumn(plainRoles)
   const responseColumns = plainRoles.filter((r) => r.role === "response").map((r) => r.column)
@@ -473,6 +508,28 @@ export function detectHeader(grid: Grid, override: HeaderOverride = {}): HeaderP
 }
 
 /**
+ * Make repeated column names distinct instead of letting them collide.
+ *
+ * `values` is keyed by name, so two columns called "OD" used to mean the second
+ * one overwrote the first and the deduped header then showed the FIRST name
+ * against the SECOND column's numbers. Suffixing is the smallest thing that
+ * keeps both columns' data and keeps the name a user can recognise.
+ */
+function disambiguate(names: string[]): string[] {
+  const seen = new Map<string, number>()
+  return names.map((name) => {
+    const n = (seen.get(name) ?? 0) + 1
+    seen.set(name, n)
+    if (n === 1) return name
+    let candidate = `${name} (${n})`
+    // A sheet that literally contains "OD" and "OD (2)" must not collapse either.
+    for (let extra = n; seen.has(candidate); extra++) candidate = `${name} (${extra + 1})`
+    seen.set(candidate, 1)
+    return candidate
+  })
+}
+
+/**
  * Rows from a spreadsheet grid.
  *
  * The header block is found by `detectHeader` rather than assumed to be row 0,
@@ -487,7 +544,7 @@ export function tableFromGrid(
 ): Table {
   const plan = detectHeader(grid, options.header ?? {})
   if (plan.columns.length === 0) return { columns: [], rows: [] }
-  const header = plan.columns.map((h, i) => h || `Column ${i + 1}`)
+  const header = disambiguate(plan.columns.map((h, i) => h || `Column ${i + 1}`))
   const prefix = options.rowIdPrefix ?? "row"
   const rows: Table["rows"] = []
   for (let r = plan.dataStart; r <= plan.dataEnd; r++) {
@@ -509,8 +566,35 @@ export function tableFromGrid(
     // they can find.
     rows.push({ rowId: `${prefix}-${r + 1}`, values })
   }
-  const uniqueHeader = header.filter((h, i) => header.indexOf(h) === i)
-  return { columns: uniqueHeader, rows }
+  return { columns: header, rows }
+}
+
+/* ── Carrying the sheet-anchored ids to the spec ───────────────────────────*/
+
+/**
+ * The row ids a flat `Row[]` came from.
+ *
+ * `snapshotToTable` has to hand the workspace `Record<string, …>[]`, which has
+ * nowhere to put a `rowId`, and `tableFromChartRows` then had to invent one from
+ * the array index — which is only right when the header is on row 1 and no row
+ * was dropped. Keying the ids off the array the reader produced lets the true,
+ * sheet-anchored ids survive the trip without changing either shape, so no
+ * caller has to be rewritten to keep an exclusion pointing at its own sample.
+ *
+ * ponytail: side channel keyed on array identity; it misses if a caller copies
+ * the array (`.map`, `.filter`, a spread). That is why `tableFromChartRows`
+ * still falls back to the positional id and why it also takes `rowIds`
+ * explicitly — pass them and the side channel is not consulted at all.
+ */
+const ROW_IDS = new WeakMap<object, string[]>()
+
+export function rememberRowIds<T extends object>(rows: T, ids: string[]): T {
+  ROW_IDS.set(rows, ids)
+  return rows
+}
+
+export function recallRowIds(rows: object): string[] | undefined {
+  return ROW_IDS.get(rows)
 }
 
 /** Profiles for the roles panel, alongside the spec's own role list. */

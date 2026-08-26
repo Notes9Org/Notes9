@@ -147,6 +147,15 @@ export interface ComputeOptions {
    * pre-commit exclusion preview, asks for it.
    */
   withExclusionImpact?: boolean
+  /**
+   * Right-hand tables for `spec.joins`, keyed by `join.right.fileId` (T0.6).
+   *
+   * Omitted means a spec carrying joins cannot resolve and says so. That is the
+   * deliberate behaviour: running the analysis on the left table alone would
+   * silently answer a different question than the one the researcher asked,
+   * which is the invisible substitution S3.2 forbids.
+   */
+  joinTables?: ReadonlyMap<string, Table>
 }
 
 /**
@@ -191,7 +200,11 @@ async function computeExclusionImpact(
   table: Table,
   plotRows: EngineResult["plotData"],
   withExclusions: TestResult | null,
-  warnings: string[]
+  warnings: string[],
+  /** Same map the outer compute used. The with/without comparison has to run
+   *  against the SAME table the analysis did, joins included, or the delta it
+   *  reports is a delta between two different datasets. */
+  joinTables?: ReadonlyMap<string, Table>
 ): Promise<ExclusionImpact | null> {
   // The exclusion under consideration is the LAST one: `data.excludeRow`
   // appends (dropping any earlier entry for the same row), so the preview's
@@ -209,7 +222,7 @@ async function computeExclusionImpact(
   // combined effect of every earlier exclusion, and the preview renders the
   // delta as "Effect of this exclusion" — a wrong attribution on the one
   // screen §8.1 built to be trusted.
-  const bare = resolvePayload({ ...spec, exclusions: spec.exclusions.slice(0, -1) }, table)
+  const bare = resolvePayload({ ...spec, exclusions: spec.exclusions.slice(0, -1) }, table, joinTables)
   if (!bare.ok) {
     // Putting points back should not break a precondition that held without
     // them, but if it does, say so rather than quietly showing one side.
@@ -271,7 +284,7 @@ export async function computeAnalysis(
   table: Table,
   options: ComputeOptions = {}
 ): Promise<ComputeOutcome> {
-  const resolved = resolvePayload(spec, table)
+  const resolved = resolvePayload(spec, table, options.joinTables)
   if (!resolved.ok) return resolved
 
   const { specHash, cacheKey } = await computeCacheKey(spec)
@@ -301,7 +314,7 @@ export async function computeAnalysis(
   const test = raw.test ?? null
   const warnings = [...resolved.warnings, ...(raw.warnings ?? [])]
   const exclusionImpact = options.withExclusionImpact
-    ? await computeExclusionImpact(spec, table, resolved.payload.plotRows, test, warnings)
+    ? await computeExclusionImpact(spec, table, resolved.payload.plotRows, test, warnings, options.joinTables)
     : null
 
   const result: EngineResult = {

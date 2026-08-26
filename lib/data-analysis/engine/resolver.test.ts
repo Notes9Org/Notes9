@@ -409,6 +409,199 @@ describe("transforms and exclusions", () => {
     expect(out.payload.x).toEqual([1, 10, 100, 1000])
     expect(out.warnings.join(" ")).toContain("concentration ≤ 0")
   })
+
+  /* ── Replicate collapse: what it must not lose ───────────────────────────*/
+
+  it("does not average a numeric identifier that is not a measurement", () => {
+    // subject is a numeric ID, not a reading. Averaging it produces subject 2,
+    // a subject who was never enrolled. Only `v` may collapse.
+    const t = table([
+      { arm: "Ctrl", subject: 1, v: 10 }, { arm: "Ctrl", subject: 2, v: 12 },
+      { arm: "Ctrl", subject: 3, v: 14 },
+      { arm: "Drug", subject: 4, v: 20 }, { arm: "Drug", subject: 5, v: 22 },
+      { arm: "Drug", subject: 6, v: 24 },
+    ])
+    const out = resolvePayload(
+      spec(
+        { test: "descriptives", responseColumns: ["v"] },
+        { transforms: [{ kind: "collapseReplicates", by: ["arm"], statistic: "mean" }] }
+      ),
+      t
+    )
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+    const subjects = out.payload.plotRows.map((r) => r.values.subject)
+    expect(subjects).not.toContain(2)
+    expect(subjects).not.toContain(5)
+    // The three subjects in an arm disagree, so no single ID survives, and the
+    // collapse says so rather than printing the first one.
+    expect(subjects).toEqual([null, null])
+    expect(out.warnings.join(" ")).toContain('disagreed on "subject"')
+  })
+
+  it("refuses to carry a disagreeing non-numeric column silently", () => {
+    const t = table([
+      { sample: "S1", operator: "Ana", plate: "P1", v: 10 },
+      { sample: "S1", operator: "Bo", plate: "P1", v: 12 },
+      { sample: "S2", operator: "Ana", plate: "P2", v: 20 },
+      { sample: "S2", operator: "Ana", plate: "P2", v: 22 },
+    ])
+    const out = resolvePayload(
+      spec(
+        { test: "descriptives", responseColumns: ["v"] },
+        { transforms: [{ kind: "collapseReplicates", by: ["sample"], statistic: "mean" }] }
+      ),
+      t
+    )
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+    // S1 disagreed on operator → empty + warned. S2 agreed → kept.
+    expect(out.payload.plotRows.map((r) => r.values.operator)).toEqual([null, "Ana"])
+    // plate agreed within each group, so it is untouched.
+    expect(out.payload.plotRows.map((r) => r.values.plate)).toEqual(["P1", "P2"])
+    const w = out.warnings.join(" ")
+    expect(w).toContain('disagreed on "operator"')
+    expect(w).toContain("Ana, Bo")
+    expect(w).not.toContain('disagreed on "plate"')
+  })
+
+  it("emits the replicate count as a real column", () => {
+    const t = table([
+      { sample: "S1", v: 10 }, { sample: "S1", v: 12 }, { sample: "S1", v: 14 },
+      { sample: "S2", v: 20 }, { sample: "S2", v: 22 },
+    ])
+    const out = resolvePayload(
+      spec(
+        { test: "descriptives", responseColumns: ["v"] },
+        { transforms: [{ kind: "collapseReplicates", by: ["sample"], statistic: "mean" }] }
+      ),
+      t
+    )
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+    expect(out.payload.plotRows.map((r) => r.values.n)).toEqual([3, 2])
+  })
+
+  it("collapses to SD and to SEM, and leaves a lone replicate's spread empty", () => {
+    const t = table([
+      { sample: "S1", v: 10 }, { sample: "S1", v: 14 },
+      { sample: "S2", v: 7 },
+    ])
+    const sd = resolvePayload(
+      spec(
+        { test: "descriptives", responseColumns: ["v"] },
+        { transforms: [{ kind: "collapseReplicates", by: ["sample"], statistic: "sd" }] }
+      ),
+      t
+    )
+    expect(sd.ok).toBe(true)
+    if (!sd.ok) return
+    // Sample SD of {10, 14} is sqrt(8) ≈ 2.828; n=1 has no spread to report.
+    expect(sd.payload.plotRows.map((r) => r.values.v)).toEqual([Math.sqrt(8), null])
+    expect(sd.payload.plotRows.map((r) => r.values.n)).toEqual([2, 1])
+
+    const sem = resolvePayload(
+      spec(
+        { test: "descriptives", responseColumns: ["v"] },
+        { transforms: [{ kind: "collapseReplicates", by: ["sample"], statistic: "sem" }] }
+      ),
+      t
+    )
+    expect(sem.ok).toBe(true)
+    if (!sem.ok) return
+    expect(sem.payload.plotRows.map((r) => r.values.v)).toEqual([Math.sqrt(8) / Math.sqrt(2), null])
+  })
+
+  /* ── Long → wide ─────────────────────────────────────────────────────────*/
+
+  it("spreads a long table wide", () => {
+    const t = table([
+      { subject: "s1", timepoint: "t0", value: 1 },
+      { subject: "s1", timepoint: "t1", value: 2 },
+      { subject: "s2", timepoint: "t0", value: 3 },
+      { subject: "s2", timepoint: "t1", value: 4 },
+    ])
+    const out = resolvePayload(
+      spec(
+        { test: "descriptives", responseColumns: ["t0", "t1"] },
+        { transforms: [{ kind: "pivotWider", namesFrom: "timepoint", valuesFrom: "value" }] }
+      ),
+      t
+    )
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+    expect(out.payload.plotRows.map((r) => r.values)).toEqual([
+      { subject: "s1", t0: 1, t1: 2 },
+      { subject: "s2", t0: 3, t1: 4 },
+    ])
+  })
+
+  it("fills a level a group never measured with an explicit null", () => {
+    const t = table([
+      { subject: "s1", timepoint: "t0", value: 1 },
+      { subject: "s1", timepoint: "t1", value: 2 },
+      { subject: "s2", timepoint: "t0", value: 3 },
+    ])
+    const out = resolvePayload(
+      spec(
+        { test: "descriptives", responseColumns: ["t0", "t1"] },
+        { transforms: [{ kind: "pivotWider", namesFrom: "timepoint", valuesFrom: "value" }] }
+      ),
+      t
+    )
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+    expect(out.payload.plotRows[1].values).toEqual({ subject: "s2", t0: 3, t1: null })
+  })
+
+  it("warns rather than dropping when two long rows collide on the same cell", () => {
+    const t = table([
+      { subject: "s1", timepoint: "t0", value: 1 },
+      { subject: "s1", timepoint: "t0", value: 99 },
+      { subject: "s1", timepoint: "t1", value: 2 },
+    ])
+    const out = resolvePayload(
+      spec(
+        { test: "descriptives", responseColumns: ["t0", "t1"] },
+        { transforms: [{ kind: "pivotWider", namesFrom: "timepoint", valuesFrom: "value" }] }
+      ),
+      t
+    )
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+    expect(out.payload.plotRows[0].values).toEqual({ subject: "s1", t0: 1, t1: 2 })
+    expect(out.warnings.join(" ")).toContain('more than one row with "timepoint" = t0')
+  })
+
+  it("round-trips wide → long → wide back to the original rows AND row ids", () => {
+    // The resolver documents that transform order is significant. A reshape is
+    // the one pair that must commute with itself: if folding is not reversible
+    // the fold is destructive, and an exclusion recorded against a pre-fold row
+    // must still match after the trip back.
+    const wide = table([
+      { subject: "s1", t0: 1, t1: 2 },
+      { subject: "s2", t0: 3, t1: 4 },
+    ])
+    const out = resolvePayload(
+      spec(
+        { test: "descriptives", responseColumns: ["t0", "t1"] },
+        {
+          transforms: [
+            { kind: "pivotLonger", columns: ["t0", "t1"], namesTo: "timepoint", valuesTo: "value" },
+            { kind: "pivotWider", namesFrom: "timepoint", valuesFrom: "value" },
+          ],
+        }
+      ),
+      wide
+    )
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+    expect(out.payload.plotRows.map((r) => r.values)).toEqual([
+      { subject: "s1", t0: 1, t1: 2 },
+      { subject: "s2", t0: 3, t1: 4 },
+    ])
+    expect(out.payload.plotRows.map((r) => r.rowId)).toEqual(["r1", "r2"])
+  })
 })
 
 describe("an analysis with no test chosen still resolves", () => {
@@ -650,5 +843,310 @@ describe("a curve fit needs distinct concentrations, not just points", () => {
     expect(out.ok).toBe(true)
     if (!out.ok || out.payload.shape !== "curve") return
     expect(new Set(out.payload.x).size).toBe(4)
+  })
+})
+
+/* ── Cross-file join (T0.6) ───────────────────────────────────────────────── */
+
+const MAP_REF = { fileId: "11111111-2222-3333-4444-555555555555", fileName: "plate-map.xlsx", sheet: null, versionHash: "sha256:bbbb2222", rowCount: 4, columnCount: 2 }
+
+function joinSpec(join: Record<string, unknown>, analysis: Record<string, unknown>, extra: Record<string, unknown> = {}) {
+  return spec(analysis, { joins: [{ right: MAP_REF, ...join }], ...extra })
+}
+
+describe("resolvePayload, joining across files in the same project", () => {
+  const readings = table([
+    { well: "A1", signal: 10 },
+    { well: "A2", signal: 12 },
+    { well: "A3", signal: 30 },
+    { well: "A4", signal: 33 },
+  ])
+  const map: Table = {
+    columns: ["well", "treatment"],
+    rows: [
+      { rowId: "m1", values: { well: "A1", treatment: "ctrl" } },
+      { rowId: "m2", values: { well: "A2", treatment: "ctrl" } },
+      { rowId: "m3", values: { well: "A3", treatment: "drug" } },
+      { rowId: "m4", values: { well: "A4", treatment: "drug" } },
+    ],
+  }
+  const tables = new Map([[MAP_REF.fileId, map]])
+  const ttest = { test: "t-unpaired" as const, responseColumns: ["signal"], groupColumn: "treatment" }
+  // For cases that deliberately leave a group with one value, where a t-test
+  // would block for its own reasons and hide what the join did.
+  const desc = { test: "descriptives" as const, responseColumns: ["signal"], groupColumn: "treatment" }
+
+  it("brings the right file's columns in, and the analysis can group on them", () => {
+    const s = joinSpec({ on: [{ left: "well", right: "well" }] }, ttest)
+    const out = resolvePayload(s, readings, tables)
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+    expect(out.payload.shape).toBe("groups")
+    if (out.payload.shape !== "groups") return
+    expect(Object.keys(out.payload.groups).sort()).toEqual(["ctrl", "drug"])
+    expect(out.payload.groups.ctrl).toEqual([10, 12])
+    expect(out.payload.groups.drug).toEqual([30, 33])
+  })
+
+  it("keeps the left row ids on a 1:1 join, so exclusions filed before it still resolve", () => {
+    const s = joinSpec(
+      { on: [{ left: "well", right: "well" }] },
+      desc,
+      {
+        exclusions: [{
+          rowId: "r3", reasonKind: "instrument-error", excludedBy: "u1",
+          excludedAt: "2026-01-01T00:00:00.000Z",
+        }],
+      },
+    )
+    const out = resolvePayload(s, readings, tables)
+    expect(out.ok).toBe(true)
+    if (!out.ok || out.payload.shape !== "groups") return
+    // r3 was excluded and stayed excluded THROUGH the join.
+    expect(out.payload.groups.drug).toEqual([33])
+    expect(out.warnings.some((w) => w.includes("orphaned"))).toBe(false)
+    expect(out.payload.rowIds).toEqual(["r1", "r2", "r4"])
+  })
+
+  it("gives fanned-out rows composite ids and says so", () => {
+    const twoPerWell: Table = {
+      columns: ["well", "treatment"],
+      rows: [
+        ...map.rows,
+        { rowId: "m5", values: { well: "A1", treatment: "ctrl" } },
+      ],
+    }
+    const s = joinSpec({ on: [{ left: "well", right: "well" }] }, ttest)
+    const out = resolvePayload(s, readings, new Map([[MAP_REF.fileId, twoPerWell]]))
+    expect(out.ok).toBe(true)
+    if (!out.ok || out.payload.shape !== "groups") return
+    // A1 matched twice, so it contributes twice and takes composite ids.
+    expect(out.payload.groups.ctrl).toEqual([10, 10, 12])
+    // A1's two joined rows take composite ids; every row that matched exactly
+    // once kept its own id untouched, which is what makes a 1:1 metadata join
+    // safe to add to an analysis that already has exclusions on it.
+    expect([...out.payload.rowIds!].sort()).toEqual(["r1⋈m1", "r1⋈m5", "r2", "r3", "r4"])
+    expect(out.warnings.some((w) => w.includes("matched more than one row") && w.includes("no longer resolves"))).toBe(true)
+  })
+
+  it("reports unmatched rows, and drops them only on an inner join", () => {
+    const partial: Table = { columns: map.columns, rows: map.rows.slice(0, 3) }
+    const left = resolvePayload(joinSpec({ on: [{ left: "well", right: "well" }], type: "left" }, desc), readings, new Map([[MAP_REF.fileId, partial]]))
+    expect(left.ok).toBe(true)
+    if (!left.ok) return
+    expect(left.warnings.some((w) => w.includes("had no match") && w.includes("plate-map.xlsx"))).toBe(true)
+
+    const inner = resolvePayload(joinSpec({ on: [{ left: "well", right: "well" }], type: "inner" }, desc), readings, new Map([[MAP_REF.fileId, partial]]))
+    expect(inner.ok).toBe(true)
+    if (!inner.ok || inner.payload.shape !== "groups") return
+    expect(inner.warnings.some((w) => w.includes("dropped by the inner join"))).toBe(true)
+    expect(inner.payload.groups.drug).toEqual([30]) // A4 gone
+  })
+
+  it("renames rather than overwrites a colliding column, and names the rename", () => {
+    const collides: Table = {
+      columns: ["well", "signal", "treatment"],
+      rows: map.rows.map((r) => ({ rowId: r.rowId, values: { ...r.values, signal: 999 } })),
+    }
+    const out = resolvePayload(joinSpec({ on: [{ left: "well", right: "well" }] }, ttest), readings, new Map([[MAP_REF.fileId, collides]]))
+    expect(out.ok).toBe(true)
+    if (!out.ok || out.payload.shape !== "groups") return
+    // The LEFT signal survived; the right one is beside it under `signal_r`.
+    expect(out.payload.groups.ctrl).toEqual([10, 12])
+    expect(out.warnings.some((w) => w.includes("signal → signal_r"))).toBe(true)
+  })
+
+  it("honours an explicit column allow-list and a custom suffix", () => {
+    const wide: Table = {
+      columns: ["well", "treatment", "operator"],
+      rows: map.rows.map((r) => ({ rowId: r.rowId, values: { ...r.values, operator: "kd" } })),
+    }
+    const s = joinSpec({ on: [{ left: "well", right: "well" }], columns: ["treatment"], suffix: "__m" }, ttest)
+    const out = resolvePayload(s, readings, new Map([[MAP_REF.fileId, wide]]))
+    expect(out.ok).toBe(true)
+    if (!out.ok || out.payload.shape !== "groups") return
+    expect(Object.keys(out.payload.groups).sort()).toEqual(["ctrl", "drug"])
+    // `operator` was not requested and did not come across.
+    const filtered = resolvePayload(
+      joinSpec({ on: [{ left: "well", right: "well" }], columns: ["treatment"] }, ttest, { filters: [{ column: "operator", op: "eq", value: "kd" }] }),
+      readings, new Map([[MAP_REF.fileId, wide]]),
+    )
+    expect(filtered.ok).toBe(false)
+  })
+
+  it("matches a numeric key against a text key, because the same well often arrives both ways", () => {
+    const numeric = table([{ well: 1, signal: 10 }, { well: 2, signal: 12 }, { well: 3, signal: 30 }, { well: 4, signal: 33 }])
+    const textMap: Table = {
+      columns: ["well", "treatment"],
+      rows: [
+        { rowId: "m1", values: { well: "1", treatment: "ctrl" } },
+        { rowId: "m2", values: { well: "2", treatment: "ctrl" } },
+        { rowId: "m3", values: { well: "3", treatment: "drug" } },
+        { rowId: "m4", values: { well: "4", treatment: "drug" } },
+      ],
+    }
+    const out = resolvePayload(joinSpec({ on: [{ left: "well", right: "well" }] }, ttest), numeric, new Map([[MAP_REF.fileId, textMap]]))
+    expect(out.ok).toBe(true)
+    if (!out.ok || out.payload.shape !== "groups") return
+    expect(out.payload.groups.ctrl).toEqual([10, 12])
+  })
+
+  it("joins on a composite key", () => {
+    const plates = table([
+      { plate: "P1", well: "A1", signal: 10 },
+      { plate: "P2", well: "A1", signal: 30 },
+    ])
+    const twoPlateMap: Table = {
+      columns: ["plate", "well", "treatment"],
+      rows: [
+        { rowId: "m1", values: { plate: "P1", well: "A1", treatment: "ctrl" } },
+        { rowId: "m2", values: { plate: "P2", well: "A1", treatment: "drug" } },
+      ],
+    }
+    const s = joinSpec({ on: [{ left: "plate", right: "plate" }, { left: "well", right: "well" }] }, { test: "descriptives", responseColumns: ["signal"], groupColumn: "treatment" })
+    const out = resolvePayload(s, plates, new Map([[MAP_REF.fileId, twoPlateMap]]))
+    expect(out.ok).toBe(true)
+    if (!out.ok || out.payload.shape !== "groups") return
+    expect(out.payload.groups).toEqual({ ctrl: [10], drug: [30] })
+  })
+
+  it("refuses to run when the joined file's rows were not supplied", () => {
+    const out = resolvePayload(joinSpec({ on: [{ left: "well", right: "well" }] }, ttest), readings)
+    expect(out.ok).toBe(false)
+    if (out.ok || !("blocked" in out)) throw new Error("expected blocked")
+    expect(out.blocked[0].code).toBe("join-source-missing")
+    expect(out.blocked[0].message).toContain("plate-map.xlsx")
+  })
+
+  it("refuses when a key column no longer exists on either side", () => {
+    const out = resolvePayload(joinSpec({ on: [{ left: "barcode", right: "well" }] }, ttest), readings, tables)
+    expect(out.ok).toBe(false)
+    if (out.ok || !("blocked" in out)) throw new Error("expected blocked")
+    expect(out.blocked[0].code).toBe("join-column-missing")
+    expect(out.blocked[0].message).toContain("barcode")
+  })
+
+  it("does not join blank keys to each other", () => {
+    const blanks = table([{ well: "", signal: 10 }, { well: "A2", signal: 12 }, { well: "A3", signal: 30 }, { well: "A4", signal: 33 }])
+    const blankMap: Table = {
+      columns: ["well", "treatment"],
+      rows: [{ rowId: "m0", values: { well: "", treatment: "ctrl" } }, ...map.rows.slice(1)],
+    }
+    const out = resolvePayload(joinSpec({ on: [{ left: "well", right: "well" }] }, desc), blanks, new Map([[MAP_REF.fileId, blankMap]]))
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+    expect(out.warnings.some((w) => w.includes("blank key"))).toBe(true)
+    expect(out.warnings.some((w) => w.includes("had no match"))).toBe(true)
+  })
+
+  it("is a no-op for every spec written before joins existed", () => {
+    const s = spec(ttest)
+    expect(s.joins).toBeUndefined()
+    const withMap = table([{ signal: 10, treatment: "ctrl" }, { signal: 12, treatment: "ctrl" }, { signal: 30, treatment: "drug" }, { signal: 33, treatment: "drug" }])
+    const a = resolvePayload(s, withMap)
+    const b = resolvePayload(s, withMap, tables)
+    expect(a).toEqual(b)
+    expect(a.ok).toBe(true)
+  })
+})
+
+/* ── Global fitting: multiple datasets on one curve payload (T0.20) ───────── */
+
+describe("resolvePayload, dose-response over several datasets", () => {
+  const doses = [0.001, 0.01, 0.1, 1, 10, 100]
+  const rows: Record<string, number | string | null>[] = []
+  for (const cmpd of ["A", "B"]) {
+    for (const d of doses) rows.push({ compound: cmpd, dose: d, response: cmpd === "A" ? d * 2 : d * 3 })
+  }
+  const curves = table(rows)
+  const nlSpec = (nonlinear: Record<string, unknown>) =>
+    spec({ test: "nonlinear-regression", responseColumns: ["dose", "response"], nonlinear: { model: "4pl", ...nonlinear } })
+
+  it("emits one dataset per level, in first-appearance order, when datasetColumn is set", () => {
+    const out = resolvePayload(nlSpec({ datasetColumn: "compound", sharedParameters: ["hillSlope"] }), curves)
+    expect(out.ok).toBe(true)
+    if (!out.ok || out.payload.shape !== "curve") return
+    expect(out.payload.datasets?.map((d) => d.label)).toEqual(["A", "B"])
+    expect(out.payload.datasetColumn).toBe("compound")
+    expect(out.payload.sharedParameters).toEqual(["hillSlope"])
+    expect(out.payload.datasets?.[0].x).toEqual(doses)
+    expect(out.payload.datasets?.[1].y).toEqual(doses.map((d) => d * 3))
+    // The flat arrays stay the concatenation in dataset order, so any consumer
+    // that ignores `datasets` still sees every point with its own row id.
+    expect(out.payload.x).toEqual([...doses, ...doses])
+    expect(out.payload.rowIds).toEqual([...out.payload.datasets![0].rowIds, ...out.payload.datasets![1].rowIds])
+    expect(out.payload.rowIds).toHaveLength(12)
+  })
+
+  it("orders datasets by first appearance, not alphabetically", () => {
+    const reversed = table([...rows.filter((r) => r.compound === "B"), ...rows.filter((r) => r.compound === "A")])
+    const out = resolvePayload(nlSpec({ datasetColumn: "compound" }), reversed)
+    expect(out.ok).toBe(true)
+    if (!out.ok || out.payload.shape !== "curve") return
+    expect(out.payload.datasets?.map((d) => d.label)).toEqual(["B", "A"])
+  })
+
+  it("emits no datasets key at all when datasetColumn is null, as before", () => {
+    const single = table(rows.filter((r) => r.compound === "A"))
+    const out = resolvePayload(nlSpec({}), single)
+    expect(out.ok).toBe(true)
+    if (!out.ok || out.payload.shape !== "curve") return
+    expect(out.payload.datasets).toBeUndefined()
+    expect(out.payload.datasetColumn).toBeUndefined()
+    expect(out.payload.x).toEqual(doses)
+  })
+
+  it("says so when shared parameters were asked for but there is only one curve", () => {
+    const single = table(rows.filter((r) => r.compound === "A"))
+    const out = resolvePayload(nlSpec({ sharedParameters: ["bottom", "top"] }), single)
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+    expect(out.warnings.some((w) => w.includes("nothing was shared") && w.includes("bottom, top"))).toBe(true)
+  })
+
+  it("says so when datasetColumn is set but holds one value", () => {
+    const single = table(rows.filter((r) => r.compound === "A"))
+    const out = resolvePayload(nlSpec({ datasetColumn: "compound", sharedParameters: ["hillSlope"] }), single)
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+    expect(out.warnings.some((w) => w.includes("nothing was shared") && w.includes('"compound" holds only one distinct value'))).toBe(true)
+  })
+
+  it("blocks and names the dataset when one curve is too short, rather than fitting the rest", () => {
+    const short = table([...rows, { compound: "C", dose: 1, response: 5 }, { compound: "C", dose: 10, response: 9 }])
+    const out = resolvePayload(nlSpec({ datasetColumn: "compound" }), short)
+    expect(out.ok).toBe(false)
+    if (out.ok || !("blocked" in out)) throw new Error("expected blocked")
+    expect(out.blocked[0].code).toBe("too-few-points")
+    expect(out.blocked[0].message).toContain('"C"')
+    // and it did NOT quietly fit A and B without C
+    expect(out.blocked.some((b) => b.message.includes('"A"'))).toBe(false)
+  })
+
+  it("blocks per dataset on distinct concentrations too", () => {
+    const flat = table([...rows, ...[1, 1, 1, 1].map((d, i) => ({ compound: "C", dose: d, response: i }))])
+    const out = resolvePayload(nlSpec({ datasetColumn: "compound" }), flat)
+    expect(out.ok).toBe(false)
+    if (out.ok || !("blocked" in out)) throw new Error("expected blocked")
+    expect(out.blocked[0].code).toBe("too-few-concentrations")
+    expect(out.blocked[0].message).toContain('"C"')
+  })
+
+  it("counts rows with no dataset label instead of folding them into a curve", () => {
+    const gappy = table([...rows, { compound: null, dose: 1, response: 7 }])
+    const out = resolvePayload(nlSpec({ datasetColumn: "compound" }), gappy)
+    expect(out.ok).toBe(true)
+    if (!out.ok || out.payload.shape !== "curve") return
+    expect(out.payload.rowIds).toHaveLength(12)
+    expect(out.warnings.some((w) => w.includes('no value in "compound"'))).toBe(true)
+  })
+
+  it("still drops non-positive concentrations from a log-scale fit, per dataset", () => {
+    const withZero = table([...rows, { compound: "A", dose: 0, response: 1 }])
+    const out = resolvePayload(nlSpec({ datasetColumn: "compound" }), withZero)
+    expect(out.ok).toBe(true)
+    if (!out.ok || out.payload.shape !== "curve") return
+    expect(out.payload.datasets?.[0].x).toEqual(doses)
+    expect(out.warnings.some((w) => w.includes("concentration ≤ 0"))).toBe(true)
   })
 })

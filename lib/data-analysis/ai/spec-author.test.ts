@@ -380,3 +380,94 @@ describe("trimHistory", () => {
     expect(trimHistory([turn(huge)])).toEqual({ turns: [], dropped: 1 })
   })
 })
+
+describe("L3 — the model can see the figure it is being asked to change", () => {
+  /**
+   * The bundle used to carry `figure: spec.figure.kind` and nothing else, so
+   * "extend the y-axis top a bit" was unanswerable: the model could emit an
+   * `axis.set` but had no current maximum to extend. The rolling window of
+   * recent edits was the only mitigation, and it describes the last ten changes
+   * rather than the state — empty on a reopened analysis, which is exactly the
+   * "must work as the 15th edit" case.
+   */
+  const styled = (): AnalysisSpec => {
+    const s = spec()
+    return {
+      ...s,
+      figure: {
+        ...s.figure,
+        y: { ...s.figure.y, label: "Viability", unit: "%", scale: "log10" as const, min: 0, max: 110, tickCount: 6 },
+        palette: "viridis",
+        fontFamily: "serif" as const,
+        legendPosition: "right" as const,
+        errorBars: "ci95" as const,
+        series: [
+          { key: "Control", colour: "#112233", pointShape: "square" as const, pointSize: 8, opacity: 0.9, jitter: 0, lineStyle: "dash" as const, lineWidth: 3, axis: "left" as const },
+        ],
+      },
+    }
+  }
+
+  const figureOf = (target: AnalysisSpec) =>
+    (buildContextBundle({
+      prompt: "extend the y axis a bit",
+      spec: target,
+      profile: { fileName: "p.xlsx", rowCount: 10, columns: [] },
+    }).currentSpec as { figure: Record<string, unknown> }).figure
+
+  it("carries the current axis limits, scale, units and tick count", () => {
+    expect(figureOf(styled()).y).toEqual({
+      label: "Viability",
+      unit: "%",
+      scale: "log10",
+      min: 0,
+      max: 110,
+      tickCount: 6,
+    })
+  })
+
+  it("carries the style the researcher chose", () => {
+    const figure = figureOf(styled())
+    expect(figure.palette).toBe("viridis")
+    expect(figure.fontFamily).toBe("serif")
+    expect(figure.legendPosition).toBe("right")
+    expect(figure.errorBars).toBe("ci95")
+    expect(figure.series).toEqual([
+      { key: "Control", colour: "#112233", pointShape: "square", pointSize: 8, opacity: 0.9, lineStyle: "dash", lineWidth: 3, axis: "left" },
+    ])
+  })
+
+  it("still names the figure kind, which is all it used to send", () => {
+    expect(figureOf(styled()).kind).toBe(spec().figure.kind)
+  })
+
+  it("summarises annotations and brackets rather than sending their geometry", () => {
+    const s = styled()
+    const withMarks: AnalysisSpec = {
+      ...s,
+      figure: {
+        ...s.figure,
+        annotations: [{ kind: "text", id: "note-1", x: 1, y: 2, text: "outlier", fontSize: 12, colour: "#000000" }],
+        brackets: [{ id: "AB", fromGroup: "A", toGroup: "B", offsetY: 12, derived: false, display: "stars" }],
+      },
+    }
+    const figure = figureOf(withMarks)
+    // Ids, because that is what a mutation naming one needs.
+    expect(figure.annotationIds).toEqual(["note-1"])
+    expect(figure.bracketIds).toEqual(["AB"])
+    // Not the coordinates, which would dominate the payload.
+    expect(JSON.stringify(figure)).not.toContain("offsetY")
+  })
+
+  it("adds no data to the bundle", () => {
+    // Widening the figure must not weaken the §11 privacy claim above: the
+    // figure holds style, and every number in it is a style value.
+    const bundle = buildContextBundle({
+      prompt: "tidy up",
+      spec: styled(),
+      profile: { fileName: "p.xlsx", rowCount: 10, columns: [] },
+    })
+    expect(bundle).not.toHaveProperty("rows")
+    expect(JSON.stringify(bundle)).not.toContain("plotData")
+  })
+})

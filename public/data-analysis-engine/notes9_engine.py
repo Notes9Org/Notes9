@@ -49,18 +49,33 @@ except Exception:  # pragma: no cover
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 
-def _clean(values) -> np.ndarray:
-    out = []
+def _clean_counted(values) -> tuple[np.ndarray, int]:
+    """Numeric values plus the number of submitted entries that were discarded.
+
+    Dropping is correct; dropping silently is not. A reported n that is smaller
+    than the n the user submitted, with nothing saying why, reads as a
+    transcription error in the methods section. The count travels back so `run`
+    can say it out loud, the same way the resolver already warns about the
+    missing values it filtered upstream."""
+    out, dropped = [], 0
     for v in values or []:
         if v is None or v == "":
+            dropped += 1
             continue
         try:
             f = float(v)
         except (TypeError, ValueError):
+            dropped += 1
             continue
         if math.isfinite(f):
             out.append(f)
-    return np.asarray(out, dtype=float)
+        else:
+            dropped += 1
+    return np.asarray(out, dtype=float), dropped
+
+
+def _clean(values) -> np.ndarray:
+    return _clean_counted(values)[0]
 
 
 def _fmt_p(p) -> str:
@@ -175,6 +190,80 @@ def _normality(groups) -> dict:
             "alternative": None if ok else "a nonparametric test"}
 
 
+#: Minimum n for the Anderson-Darling p-value approximation. R's nortest::ad.test
+#: refuses below 8 and so do we, rather than extrapolate a fit off the end of the
+#: range it was built on.
+AD_MIN_N = 8
+
+
+def _ad_pvalue(a2: float, n: int) -> float:
+    """p for the Anderson-Darling A^2, D'Agostino & Stephens (1986), table 4.9.
+
+    scipy.stats.anderson returns A^2 and a critical-value table but no p, so the
+    p has to come from somewhere. This is the analytic fit to the null
+    distribution of the modified statistic A* = A^2 (1 + 0.75/n + 2.25/n^2), the
+    same modification scipy applies to its own critical values.
+
+    It is an APPROXIMATION and the report says so. It is also the accurate one:
+    100,000-replicate Monte Carlo of the null at n = 8/10/30/100 puts this fit
+    within 0.001 of the true tail probability at the 10/5/1% points, whereas
+    scipy's tabulated 5% critical value (0.787 before modification) sits at a
+    true tail probability near 0.041. Deciding from this p rather than from that
+    table also keeps p and verdict from contradicting each other, and keeps the
+    Python and TypeScript engines on one shared formula, since the browser has
+    no scipy to consult."""
+    a = a2 * (1.0 + 0.75 / n + 2.25 / (n * n))
+    if a < 0.2:
+        p = 1 - math.exp(-13.436 + 101.14 * a - 223.73 * a * a)
+    elif a < 0.34:
+        p = 1 - math.exp(-8.318 + 42.796 * a - 59.938 * a * a)
+    elif a < 0.6:
+        p = math.exp(0.9177 - 4.279 * a - 1.38 * a * a)
+    elif a < 10:
+        p = math.exp(1.2937 - 5.709 * a + 0.0186 * a * a)
+    else:
+        p = 3.7e-24  # the fit's floor; below this the tail is not resolvable
+    return float(min(1.0, max(0.0, p)))
+
+
+def _anderson_darling(values: np.ndarray) -> dict:
+    """Anderson-Darling normality, the third test §6.3 names.
+
+    Weights the squared distance between the empirical and fitted normal CDFs by
+    1/(F(1-F)), so it is the sensitive one in the tails - which is where the
+    outlier that invalidates a t-test lives. Shapiro-Wilk is stronger against a
+    shifted centre; the two are reported side by side because they fail on
+    different departures."""
+    a = np.asarray(values, dtype=float)
+    n = int(a.size)
+    if n < AD_MIN_N or float(np.std(a, ddof=1) if n > 1 else 0.0) <= 0:
+        return {"name": "Normality (Anderson-Darling)", "statistic": None, "pValue": None,
+                "passed": False,
+                "verdict": f"Anderson-Darling needs at least {AD_MIN_N} distinct-valued "
+                           f"observations; this column has {n}.",
+                "alternative": "a nonparametric test"}
+    # A^2 = -n - (1/n) sum (2i-1)[ln F(z_i) + ln(1 - F(z_{n+1-i}))], with z
+    # standardised by the SAMPLE mean and SD (ddof=1) - the case where both
+    # parameters are estimated, which is the only case a real column is in.
+    # Written out rather than taken from scipy.stats.anderson because that
+    # function's `.statistic` attribute is on a deprecation path (SciPy 1.19
+    # drops it), and because the TypeScript engine has to compute the identical
+    # quantity from the identical formula. Verified equal to scipy to 1e-15.
+    z = np.sort((a - float(np.mean(a))) / float(np.std(a, ddof=1)))
+    i = np.arange(1, n + 1, dtype=float)
+    a2 = float(-n - np.sum((2 * i - 1) * (stats.norm.logcdf(z) + stats.norm.logsf(z[::-1]))) / n)
+    p = _ad_pvalue(a2, n)
+    ok = bool(p >= 0.05)  # assumption screen, the same fixed level _normality uses
+    return {
+        "name": "Normality (Anderson-Darling)", "statistic": a2, "pValue": p, "passed": ok,
+        "verdict": ("Consistent with a normal distribution." if ok
+                    else "Deviates from normality, most visibly in the tails.")
+                   + " p is the D'Agostino & Stephens (1986) analytic approximation to the "
+                     "A-squared null distribution, not an exact tail probability.",
+        "alternative": None if ok else "a nonparametric test",
+    }
+
+
 def _variance(groups) -> dict:
     usable = [g for g in groups if g.size > 1]
     if len(usable) < 2:
@@ -242,6 +331,12 @@ def _hedges_g(a: np.ndarray, b: np.ndarray, alpha: float = 0.05) -> dict:
 # ── post-hoc ──────────────────────────────────────────────────────────────────
 
 
+#: Corrections that control the false discovery rate rather than the family-wise
+#: error rate. They are step-UP procedures: the largest p-value is adjusted
+#: first and monotonicity is enforced downwards, the mirror image of Holm.
+FDR_METHODS = ("benjamini-hochberg", "benjamini-yekutieli")
+
+
 def _adjust(p, method: str):
     m = len(p)
     if m == 0:
@@ -250,6 +345,21 @@ def _adjust(p, method: str):
         return [min(1.0, x * m) for x in p]
     if method == "sidak":
         return [1 - (1 - x) ** m for x in p]
+    if method in FDR_METHODS:
+        # Benjamini-Hochberg (1995): adjusted p_(i) = min over k >= i of
+        # (m/k)·p_(k), which is the reverse cumulative minimum walking down from
+        # the largest p. Benjamini-Yekutieli (2001) multiplies by the harmonic
+        # number c(m) = sum 1/i, the price of dropping BH's positive-dependence
+        # assumption; pairwise comparisons that share a pooled error variance
+        # are exactly the case where that assumption is not free.
+        c = sum(1.0 / i for i in range(1, m + 1)) if method == "benjamini-yekutieli" else 1.0
+        order = sorted(range(m), key=lambda i: p[i])
+        adjusted, running = [0.0] * m, 1.0
+        for rank in range(m - 1, -1, -1):
+            idx = order[rank]
+            running = min(running, min(1.0, c * m * p[idx] / (rank + 1)))
+            adjusted[idx] = running
+        return adjusted
     order = sorted(range(m), key=lambda i: p[i])
     adjusted, running = [0.0] * m, 0.0
     for rank, idx in enumerate(order):
@@ -260,54 +370,188 @@ def _adjust(p, method: str):
     return adjusted
 
 
+def _single_step_alpha(method: str, alpha: float, m: int):
+    """Per-comparison two-sided level whose interval agrees with the adjusted p.
+
+    Bonferroni and Sidak are SINGLE-STEP: every hypothesis is judged against the
+    same threshold, so the simultaneous interval is just the per-comparison
+    interval at that threshold, and the agreement is exact rather than
+    approximate. Bonferroni rejects when min(1, m*p) < alpha, i.e. p < alpha/m,
+    which is precisely when the 1 - alpha/m interval excludes zero; Sidak
+    rejects when 1 - (1-p)^m < alpha, i.e. p < 1 - (1-alpha)^(1/m).
+
+    Returns None for the STEP-DOWN procedures (Holm, Holm-Sidak) and for
+    anything else that falls through `_adjust` to the step-down branch. A
+    step-down procedure compares each ordered p against a threshold that depends
+    on how many hypotheses survived ahead of it, so there is no single level a
+    fixed-width interval could be built at, and no generally accepted
+    simultaneous interval exists. See `_interval_note` for what is reported
+    instead, and why the conservative single-step interval is not it."""
+    if method == "none":
+        # No correction, so the plain per-comparison interval IS the right one.
+        # `_post_hoc` short-circuits before reaching here and `_dunn` is never
+        # called with it, but the helper must not depend on that to be correct.
+        return float(alpha)
+    if method == "bonferroni":
+        return float(alpha) / m
+    if method == "sidak":
+        return 1.0 - (1.0 - float(alpha)) ** (1.0 / m)
+    return None
+
+
+def _pair_hedges_g(diff: float, ms_within: float, df_within: float) -> dict:
+    """Standardised mean difference for one post-hoc row, on the pooled SD.
+
+    §6.3 asks for an effect size beside every comparison, and a difference in
+    assay units is not one: a 2 nM shift means nothing without the scatter it
+    sits in. The denominator is the ANOVA's own pooled within-group SD, so the
+    whole family is standardised on one scale and the rows are comparable with
+    each other; Hedges' correction uses df_within, the df that SD was estimated
+    with.
+
+    No interval. A simultaneous interval for a standardised effect is not
+    defined by any correction offered here, and the multiplicity-adjusted
+    interval on the raw difference beside it already carries the uncertainty at
+    the family-wise level."""
+    if not (ms_within > 0) or df_within < 2:
+        return {"name": "hedges-g", "value": None, "ciLow": None, "ciHigh": None}
+    j = math.exp(math.lgamma(df_within / 2) - math.log(math.sqrt(df_within / 2))
+                 - math.lgamma((df_within - 1) / 2))
+    return {"name": "hedges-g", "value": (diff / math.sqrt(ms_within)) * j,
+            "ciLow": None, "ciHigh": None}
+
+
+def _pair_rank_biserial(a: np.ndarray, b: np.ndarray) -> dict:
+    """Rank-biserial correlation (Cliff's delta) for one rank-based pair.
+
+    Computed from the pair's own values rather than from Dunn's z, because Dunn
+    ranks across every group at once: a z built on the global ranking is not a
+    measure of how far apart these two groups are. +1 when every a exceeds every
+    b. No CI: Cliff's interval is a per-comparison 1 - alpha one, and issuing it
+    beside a family-wise-adjusted p is the contradiction this file removes."""
+    if a.size == 0 or b.size == 0:
+        return {"name": "rank-biserial", "value": None, "ciLow": None, "ciHigh": None}
+    u = float(stats.mannwhitneyu(a, b, alternative="two-sided").statistic)
+    return {"name": "rank-biserial", "value": 2.0 * u / (a.size * b.size) - 1.0,
+            "ciLow": None, "ciHigh": None}
+
+
 def _post_hoc(names, arrays, method, alpha, ms_within, df_within, reference=None):
     """Adjusted p AND confidence intervals for every pair (§2)."""
     if method == "none" or len(arrays) < 2 or df_within <= 0:
         return []
 
+    if method == "dunnett" and reference not in names:
+        # No control level means no many-to-one distribution to test against.
+        # Falling through to the pairwise branch is a defensible substitution;
+        # continuing to stamp "dunnett" on the rows is not, because the label is
+        # what the methods section will claim was run.
+        method = "holm-sidak"
+
     if method == "dunnett" and reference in names:
         # A real Dunnett: scipy implements the many-to-one distribution exactly.
         ci = names.index(reference)
         others = [i for i in range(len(arrays)) if i != ci]
-        res = stats.dunnett(*[arrays[i] for i in others], control=arrays[ci])
-        crit = float(stats.t.ppf(1 - alpha / 2, df_within))
+        # Seeded: scipy integrates the many-to-one distribution by quasi-Monte
+        # Carlo, so an unseeded call returns a different p on every run. Law 4
+        # promises the same payload yields the same number forever, and a
+        # p-value that moves between two runs of the same analysis cannot be
+        # reproduced by the reviewer who checks it.
+        res = stats.dunnett(*[arrays[i] for i in others], control=arrays[ci], random_state=0)
+        # The interval comes from the SAME many-to-one distribution as the
+        # p-value. Pairing the exact Dunnett p with a plain two-sided t interval
+        # was the worst version of this defect in the file: the p is corrected
+        # for k-1 comparisons against a shared control and the interval is not,
+        # so the two disagree on every borderline row. scipy computes the
+        # matching simultaneous interval and it was sitting unused.
+        band = res.confidence_interval(confidence_level=1.0 - float(alpha))
+        lo = np.atleast_1d(band.low)
+        hi = np.atleast_1d(band.high)
         out = []
         for slot, i in enumerate(others):
             diff = float(np.mean(arrays[i])) - float(np.mean(arrays[ci]))
-            se = math.sqrt(ms_within * (1 / arrays[i].size + 1 / arrays[ci].size))
             padj = float(np.atleast_1d(res.pvalue)[slot])
             out.append({"groupA": names[ci], "groupB": names[i], "meanDifference": diff,
-                        "ciLow": diff - crit * se, "ciHigh": diff + crit * se,
+                        "ciLow": float(lo[slot]), "ciHigh": float(hi[slot]),
                         "pValue": padj, "pAdjusted": padj, "correctionMethod": "dunnett",
-                        "significant": bool(padj < alpha)})
+                        "significant": bool(padj < alpha),
+                        "effectSize": _pair_hedges_g(diff, ms_within, df_within)})
         return out
 
-    out, raw = [], []
-    for i in range(len(arrays)):
-        for j in range(i + 1, len(arrays)):
+    k = len(arrays)
+    m_pairs = k * (k - 1) // 2
+    # The margin is a function of the CORRECTION, not of alpha alone. Building
+    # every non-Tukey interval at 1 - alpha/2 was the defect: it put a plain
+    # per-comparison interval that excludes zero beside an adjusted p that says
+    # the comparison is not significant. None means the procedure has no
+    # simultaneous interval and none is reported (see `_single_step_alpha`).
+    per_alpha = _single_step_alpha(method, alpha, m_pairs)
+
+    out, raw, ses = [], [], []
+    for i in range(k):
+        for j in range(i + 1, k):
             a, b = arrays[i], arrays[j]
             diff = float(np.mean(a)) - float(np.mean(b))
             se = math.sqrt(ms_within * (1 / a.size + 1 / b.size))
+            ses.append(se)
             if method == "tukey":
                 q = abs(diff) / (se / math.sqrt(2)) if se > 0 else 0.0
-                p = float(stats.studentized_range.sf(q, len(arrays), df_within))
-                crit = float(stats.studentized_range.ppf(1 - alpha, len(arrays), df_within))
+                p = float(stats.studentized_range.sf(q, k, df_within))
+                crit = float(stats.studentized_range.ppf(1 - alpha, k, df_within))
                 margin = crit * se / math.sqrt(2)
             else:
                 t = diff / se if se > 0 else 0.0
                 p = float(2 * stats.t.sf(abs(t), df_within))
-                margin = float(stats.t.ppf(1 - alpha / 2, df_within)) * se
+                margin = (float(stats.t.ppf(1 - per_alpha / 2, df_within)) * se
+                          if per_alpha is not None else None)
             raw.append(p)
             out.append({"groupA": names[i], "groupB": names[j], "meanDifference": diff,
-                        "ciLow": diff - margin, "ciHigh": diff + margin,
-                        "pValue": p, "pAdjusted": p, "correctionMethod": method, "significant": False})
+                        "ciLow": diff - margin if margin is not None else None,
+                        "ciHigh": diff + margin if margin is not None else None,
+                        "pValue": p, "pAdjusted": p, "correctionMethod": method,
+                        "significant": False,
+                        "effectSize": _pair_hedges_g(diff, ms_within, df_within)})
 
     if method != "tukey":
         for row, padj in zip(out, _adjust(raw, method)):
             row["pAdjusted"] = padj
     for row in out:
         row["significant"] = bool(row["pAdjusted"] < alpha)
+    if method in FDR_METHODS:
+        _apply_fcr_intervals(out, ses, alpha, lambda q: float(stats.t.ppf(1 - q / 2, df_within)))
     return out
+
+
+def _apply_fcr_intervals(rows, ses, alpha, crit) -> None:
+    """Replace the unadjusted intervals on FDR-corrected rows with FCR-adjusted ones.
+
+    An FDR-adjusted p beside a plain 1-alpha interval is a contradiction the
+    reader has to catch: the p says "not a discovery" while the interval, built
+    at the uncorrected level, excludes zero. Benjamini & Yekutieli (2005) give
+    the matching interval. Select the R rows the FDR procedure rejects, then
+    build intervals at level 1 - R*alpha/m for exactly those R parameters; the
+    false coverage-statement rate over the selected set is then at most alpha.
+
+    The pairing is exact, not merely thematic. A selected row has raw
+    p <= rank*alpha/m <= R*alpha/m, so its 1 - R*alpha/m interval excludes zero
+    precisely when the row was selected. Rows that were NOT selected get no
+    interval: FCR theory constructs intervals only for the selected set, and
+    re-issuing the uncorrected one there is the very defect this avoids.
+    """
+    m = len(rows)
+    r = sum(1 for row in rows if row["significant"])
+    if r == 0:
+        for row in rows:
+            row["ciLow"] = row["ciHigh"] = None
+        return
+    q = float(alpha) * r / m
+    margin_crit = crit(q)
+    for row, se in zip(rows, ses):
+        if row["significant"]:
+            row["ciLow"] = row["meanDifference"] - margin_crit * se
+            row["ciHigh"] = row["meanDifference"] + margin_crit * se
+        else:
+            row["ciLow"] = row["ciHigh"] = None
 
 
 def _dunn(names, arrays, alpha, method="holm"):
@@ -324,22 +568,35 @@ def _dunn(names, arrays, alpha, method="holm"):
     ties = float(np.sum(counts.astype(float) ** 3 - counts))
     sigma2 = (n * (n + 1) / 12.0) - (ties / (12.0 * (n - 1))) if n > 1 else 0.0
 
-    out, raw = [], []
-    for i in range(len(arrays)):
-        for j in range(i + 1, len(arrays)):
+    k = len(arrays)
+    # Dunn's rows carried the same defect as the parametric ones: a margin of
+    # z(alpha)*se beside a Holm- or Bonferroni-adjusted p. Rank units do not
+    # excuse it - an interval on a rank-mean difference that excludes zero while
+    # the adjusted p says the pair is not separated contradicts itself exactly
+    # as an interval in assay units would.
+    per_alpha = _single_step_alpha(method, alpha, k * (k - 1) // 2)
+
+    out, raw, ses = [], [], []
+    for i in range(k):
+        for j in range(i + 1, k):
             se = math.sqrt(sigma2 * (1 / sizes[i] + 1 / sizes[j])) if sigma2 > 0 else 0.0
+            ses.append(se)
             diff = mean_ranks[i] - mean_ranks[j]
             z = diff / se if se > 0 else 0.0
             p = float(2 * stats.norm.sf(abs(z)))
             raw.append(p)
-            margin = _z(alpha) * se  # a real interval in rank units, not NaN
+            margin = _z(per_alpha) * se if per_alpha is not None else None
             out.append({"groupA": names[i], "groupB": names[j], "meanDifference": diff,
-                        "ciLow": diff - margin, "ciHigh": diff + margin,
+                        "ciLow": diff - margin if margin is not None else None,
+                        "ciHigh": diff + margin if margin is not None else None,
                         "pValue": p, "pAdjusted": p,
-                        "correctionMethod": f"dunn ({method})", "significant": False})
+                        "correctionMethod": f"dunn ({method})", "significant": False,
+                        "effectSize": _pair_rank_biserial(arrays[i], arrays[j])})
     for row, padj in zip(out, _adjust(raw, method)):
         row["pAdjusted"] = padj
         row["significant"] = bool(padj < alpha)
+    if method in FDR_METHODS:
+        _apply_fcr_intervals(out, ses, alpha, _z)
     return out
 
 
@@ -357,11 +614,19 @@ def run_normality(p) -> dict:
     cols = p.get("columns") or {}
     assumptions = []
     for name, values in cols.items():
-        chk = _normality([_clean(values)])
-        chk["name"] = f"Normality, {name} (Shapiro-Wilk)"
-        assumptions.append(chk)
+        a = _clean(values)
+        # Both tests, every column: they disagree on purpose. Shapiro-Wilk is the
+        # more powerful against a skewed or shifted centre, Anderson-Darling
+        # against heavy tails. Reporting one and not the other means the reader
+        # cannot tell which departure was looked for.
+        for chk, label in ((_normality([a]), "Shapiro-Wilk"),
+                           (_anderson_darling(a), "Anderson-Darling")):
+            chk["name"] = f"Normality, {name} ({label})"
+            assumptions.append(chk)
     return _result("Normality", assumptions=assumptions,
-                   sentence="Normality assessed by Shapiro-Wilk on each column.")
+                   sentence="Normality assessed by Shapiro-Wilk and Anderson-Darling on each "
+                            "column; the Anderson-Darling p is an analytic approximation "
+                            "(D'Agostino & Stephens 1986).")
 
 
 def run_one_sample_t(p) -> dict:
@@ -409,10 +674,27 @@ def run_wilcoxon(p) -> dict:
     res = stats.wilcoxon(pairs[:, 0], pairs[:, 1], alternative=_alt(p["tails"]))
     la, lb = p.get("labels", ["A", "B"])
     n = int(pairs.shape[0])
+    # Kerby (2014) matched-pairs rank-biserial correlation, (W+ - W-) divided by
+    # the total rank sum. §6.3 wants an effect size beside every p and this test
+    # shipped without one; W on its own is unbounded in n and unreadable as a
+    # magnitude. Zero differences are dropped first, matching scipy's default
+    # zero_method="wilcox", so the effect is computed over the same pairs the
+    # p-value was. No CI: no interval for this coefficient is standard, and the
+    # bootstrap one that exists is not what a reader would assume it to be.
+    d = pairs[:, 0] - pairs[:, 1]
+    d = d[d != 0]
+    rrb = None
+    if d.size:
+        ranks = stats.rankdata(np.abs(d))
+        w_plus = float(np.sum(ranks[d > 0]))
+        w_minus = float(np.sum(ranks[d < 0]))
+        rrb = (w_plus - w_minus) / (d.size * (d.size + 1) / 2.0)
     return _result("Wilcoxon signed-rank", float(res.statistic), None, float(res.pvalue),
+                   [{"name": "rank-biserial", "value": rrb, "ciLow": None, "ciHigh": None}],
                    sizes={la: n, lb: n},
                    sentence=f"Wilcoxon signed-rank W = {float(res.statistic):.1f}, "
-                            f"{_fmt_p(float(res.pvalue))} ({n} pairs).")
+                            f"{_fmt_p(float(res.pvalue))} ({n} pairs)"
+                            + (f", rank-biserial r = {rrb:.3f}." if rrb is not None else "."))
 
 
 def run_mann_whitney(p) -> dict:
@@ -445,10 +727,79 @@ def run_anova_one_way(p) -> dict:
          f"η² = {eta:.3f} (n = {n_total} across {k} groups).")
     if pw:
         s += f" Post-hoc: {pw[0]['correctionMethod']}."
-    return _result("One-way ANOVA", float(f), f"{df_b}, {df_w}", float(pv),
-                   [{"name": "eta-squared", "value": float(eta), "ciLow": None, "ciHigh": None}],
-                   [_normality(arrays), _variance(arrays)], pw,
-                   {n: int(a.size) for n, a in zip(names, arrays)}, s)
+    out = _result("One-way ANOVA", float(f), f"{df_b}, {df_w}", float(pv),
+                  [{"name": "eta-squared", "value": float(eta), "ciLow": None, "ciHigh": None}],
+                  [_normality(arrays), _variance(arrays)], pw,
+                  {n: int(a.size) for n, a in zip(names, arrays)}, s)
+    if pw and p.get("postHoc") != pw[0]["correctionMethod"]:
+        out["_warnings"] = [
+            f"Dunnett's test needs a control group and the reference level "
+            f"{p.get('referenceLevel')!r} is not one of the groups analysed, so "
+            f"{pw[0]['correctionMethod']} pairwise comparisons were run instead."]
+    note = _interval_note(pw, p["alpha"], pw[0]["correctionMethod"] if pw else None)
+    if note:
+        out.setdefault("_warnings", []).append(note)
+    return out
+
+
+def _interval_note(rows, alpha, method):
+    """Say what the intervals beside an adjusted p actually are.
+
+    Silence is only honest when the interval is the plain 1 - alpha one. Every
+    correction here reports something else - a simultaneous interval at a
+    different per-comparison level, an FCR-adjusted one over the selected set,
+    or no interval at all - and an interval whose level is not the one the
+    reader assumes is the same defect as an interval that contradicts its
+    p-value, just harder to notice."""
+    if not rows:
+        return None
+    m = len(rows)
+    a = float(alpha)
+
+    if method in FDR_METHODS:
+        r = sum(1 for row in rows if row["significant"])
+        if r == 0:
+            return (f"{method} controls the false discovery rate and "
+                    f"selected no comparison, so no confidence interval is reported: an "
+                    f"unadjusted interval beside an FDR-adjusted p would contradict it.")
+        return (f"{method} selected {r} of {m} comparisons. Intervals are "
+                f"FCR-adjusted (Benjamini & Yekutieli 2005) at "
+                f"{(1 - a * r / m) * 100:g}%, not {(1 - a) * 100:g}%, so they "
+                f"agree with the adjusted p-values; the {m - r} unselected comparisons carry no "
+                f"interval, because the false coverage-statement rate is only controlled over "
+                f"the selected set.")
+
+    if method.startswith("dunn (") or method in ("tukey", "dunnett", "none"):
+        # Tukey (studentized range) and Dunnett (many-to-one) both have exact
+        # simultaneous intervals at 1 - alpha and both report them; "none" is the
+        # plain 1 - alpha interval. Nothing to disclose, and a note would be
+        # noise that trains the reader to skip the ones that matter.
+        # "dunn (...)" is dispatched on its inner method by the caller.
+        return None
+
+    per = _single_step_alpha(method, a, m)
+    if per is not None:
+        return (f"{method} is a single-step correction, so each interval is built at the "
+                f"per-comparison level {(1 - per) * 100:.6g}%, not {(1 - a) * 100:g}%. The "
+                f"family-wise coverage over all {m} comparisons is {(1 - a) * 100:g}%, and "
+                f"each interval excludes zero exactly when its adjusted p is below "
+                f"{a:g}.")
+
+    # Holm and Holm-Sidak, plus anything else `_adjust` routes to the step-down
+    # branch. Reporting the conservative single-step interval instead was the
+    # tempting option and it is the wrong one: Holm's adjusted p is never larger
+    # than Bonferroni's, so a comparison can be Holm-significant while the
+    # Bonferroni interval still contains zero. That reintroduces the exact
+    # contradiction this work removes, pointing the other way, and it does so
+    # while looking like a real number the reader can quote.
+    return (f"{method} is a step-down procedure: each ordered p-value is judged against a "
+            f"threshold that depends on how many hypotheses remain, so there is no single "
+            f"level a simultaneous interval could be built at, and no generally accepted "
+            f"one exists. No interval is reported rather than an invented or a mismatched "
+            f"one - the single-step interval is wider than the step-down rejection region, "
+            f"so it would contain zero for comparisons {method} calls significant. Choose "
+            f"bonferroni or sidak (single-step, slightly less powerful) if the differences "
+            f"need intervals, or tukey for all-pairs comparisons of means.")
 
 
 def run_kruskal(p) -> dict:
@@ -456,12 +807,33 @@ def run_kruskal(p) -> dict:
     arrays = [_clean(p["groups"][n]) for n in names]
     h, pv = stats.kruskal(*arrays)
     k, n_total = len(arrays), sum(a.size for a in arrays)
-    eps = (float(h) - k + 1) / (n_total - k) if n_total > k else float("nan")
-    pw = _dunn(names, arrays, p["alpha"]) if p.get("postHoc", "none") != "none" else []
-    return _result("Kruskal-Wallis", float(h), k - 1, float(pv),
-                   [{"name": "epsilon-squared", "value": float(eps), "ciLow": None, "ciHigh": None}],
-                   [], pw, {n: int(a.size) for n, a in zip(names, arrays)},
-                   f"Kruskal-Wallis H({k - 1}) = {float(h):.3f}, {_fmt_p(float(pv))} (n = {n_total}).")
+    # (H - k + 1) / (n - k) is eta-squared-H. Epsilon-squared is H / (n - 1),
+    # a different number; naming this one epsilon-squared misreports the effect
+    # size a reader will look up to interpret it.
+    eta_h = (float(h) - k + 1) / (n_total - k) if n_total > k else float("nan")
+    # The chosen correction is the user's decision, not a default to discard:
+    # Dunn's rank comparisons take whichever family-wise adjustment was asked
+    # for. Tukey and Dunnett are not defined on ranks, so those fall back and
+    # `correctionMethod` names the adjustment that actually ran.
+    requested = p.get("postHoc", "none")
+    chosen = (requested if requested in ("bonferroni", "sidak", "holm-sidak") + FDR_METHODS
+              else "holm")
+    pw = _dunn(names, arrays, p["alpha"], chosen) if requested != "none" else []
+    out = _result("Kruskal-Wallis", float(h), k - 1, float(pv),
+                  [{"name": "eta-squared-H", "value": float(eta_h), "ciLow": None, "ciHigh": None}],
+                  [], pw, {n: int(a.size) for n, a in zip(names, arrays)},
+                  f"Kruskal-Wallis H({k - 1}) = {float(h):.3f}, {_fmt_p(float(pv))} (n = {n_total}).")
+    if requested in ("tukey", "dunnett"):
+        out["_warnings"] = [
+            f"{requested.title()}'s test is defined on group means, not ranks; Dunn's "
+            f"test with a Holm adjustment was run after the Kruskal-Wallis instead."]
+    # The note names the adjustment that RAN, not the one that was asked for:
+    # a request for Tukey lands on Holm here, and a note about Tukey's
+    # intervals would describe a procedure that never executed.
+    note = _interval_note(pw, p["alpha"], chosen)
+    if note:
+        out.setdefault("_warnings", []).append(note)
+    return out
 
 
 def run_friedman(p) -> dict:
@@ -470,7 +842,7 @@ def run_friedman(p) -> dict:
     n, k = m.shape
     w = float(chi) / (n * (k - 1)) if n and k > 1 else float("nan")  # Kendall's W
     return _result("Friedman", float(chi), k - 1, float(pv),
-                   [{"name": "epsilon-squared", "value": w, "ciLow": None, "ciHigh": None}],
+                   [{"name": "kendalls-w", "value": w, "ciLow": None, "ciHigh": None}],
                    sizes={c: int(n) for c in p["conditions"]},
                    sentence=f"Friedman χ²({k - 1}) = {float(chi):.3f}, {_fmt_p(float(pv))} "
                             f"({n} subjects × {k} conditions).")
@@ -481,7 +853,14 @@ def run_anova_rm(p) -> dict:
     n, k = m.shape
     subjects, conditions = p["subjects"], p["conditions"]
     if not _HAS_SM:
-        return run_friedman(p)
+        # Friedman is a reasonable stand-in without statsmodels, but the record
+        # has to name what ran, not what was asked for.
+        out = run_friedman(p)
+        out["_test_ran"] = "friedman"
+        out["_warnings"] = ["statsmodels is unavailable in this session, so the "
+                            "nonparametric Friedman test was run instead of a "
+                            "repeated-measures ANOVA."]
+        return out
 
     long = pd.DataFrame({"y": m.flatten(),
                          "subject": np.repeat(subjects, k),
@@ -494,6 +873,7 @@ def run_anova_rm(p) -> dict:
     sph = _sphericity(m)
 
     note = ""
+    rdf1, rdf2 = df1, df2  # the df the reported p was actually computed against
     if sph["passed"] is False:
         # Greenhouse-Geisser. Reporting an uncorrected RM p-value against
         # violated sphericity inflates significance.
@@ -503,12 +883,28 @@ def run_anova_rm(p) -> dict:
         den = d * (np.sum(cov**2) - 2 * k * np.sum(np.mean(cov, axis=0) ** 2) + (k**2) * np.mean(cov) ** 2)
         if den > 0:
             gg = float(min(max(num / den, 1.0 / d), 1.0))
-            pv = float(stats.f.sf(f, df1 * gg, df2 * gg))
+            rdf1, rdf2 = df1 * gg, df2 * gg
+            pv = float(stats.f.sf(f, rdf1, rdf2))
             note = f" Greenhouse-Geisser corrected (ε = {gg:.3f})."
 
-    return _result("Repeated-measures ANOVA", f, f"{df1:.0f}, {df2:.0f}", pv, [], [sph], [],
-                   {c: int(n) for c in conditions},
-                   f"RM ANOVA: F({df1:.0f}, {df2:.0f}) = {f:.3f}, {_fmt_p(pv)} ({n} subjects).{note}")
+    # Partial eta-squared for the within-subjects factor, the effect size §6.3
+    # asks for and this routine shipped without. F*df1/(F*df1 + df2) is exactly
+    # SS_cond/(SS_cond + SS_error) for this design, and it is computed from the
+    # UNCORRECTED df on purpose: Greenhouse-Geisser multiplies both df by the
+    # same epsilon, which cancels, so the effect size does not move when the
+    # p-value is corrected - and it should not, because epsilon rescales the
+    # reference distribution, not the variance the factor explains.
+    pes = (f * df1) / (f * df1 + df2) if (f * df1 + df2) > 0 else float("nan")
+    effects = [{"name": "partial-eta-squared", "term": "within-subjects factor",
+                "value": float(pes), "ciLow": None, "ciHigh": None}]
+
+    # The df reported are the df the p-value came from. Quoting the uncorrected
+    # integer df beside a Greenhouse-Geisser p is a pairing no reader can
+    # reproduce, and the mismatch is invisible unless they try.
+    return _result("Repeated-measures ANOVA", f, f"{rdf1:.2f}, {rdf2:.2f}", pv, effects,
+                   [sph], [], {c: int(n) for c in conditions},
+                   f"RM ANOVA: F({rdf1:.2f}, {rdf2:.2f}) = {f:.3f}, {_fmt_p(pv)}, "
+                   f"partial η² = {pes:.3f} ({n} subjects).{note}")
 
 
 def run_anova_two_way(p) -> dict:
@@ -573,13 +969,39 @@ def run_mixed_effects(p) -> dict:
     terms = [_term(pretty(n), float(model.tvalues[n]), None, float(model.pvalues[n]),
                    float(model.params[n]), float(conf.loc[n, 0]), float(conf.loc[n, 1]))
              for n in names]
+    # Nakagawa & Schielzeth (2013) pseudo-R^2, the effect size for a mixed model
+    # and the one this routine shipped without. Marginal R^2 is the share of
+    # total variance the FIXED effects explain; conditional R^2 adds the random
+    # intercept, so the gap between them is how much of the response is
+    # between-subject rather than treatment. Reporting only coefficients leaves
+    # the reader unable to tell a large effect from a large subject spread.
+    #
+    # var_f is computed from the design matrix rather than from
+    # `model.fittedvalues`, which statsmodels defines to include the predicted
+    # random effects; that would fold the subject variance into the fixed part
+    # and inflate marginal R^2 toward conditional R^2.
+    var_f = float(np.var(np.asarray(model.model.exog) @ np.asarray(model.fe_params), ddof=0))
+    var_r = float(np.asarray(model.cov_re)[0, 0])
+    var_e = float(model.scale)
+    total = var_f + var_r + var_e
+    # No CI: no closed-form interval for either quantity is standard, and the
+    # parametric bootstrap that gives one is not affordable in Pyodide.
+    effects = ([{"name": "r-squared", "term": "marginal (fixed effects)",
+                 "value": var_f / total, "ciLow": None, "ciHigh": None},
+                {"name": "r-squared", "term": "conditional (fixed + random)",
+                 "value": (var_f + var_r) / total, "ciLow": None, "ciHigh": None}]
+               if total > 0 else [])
+
     lead = names[0]
     ci = _ci_label(alpha)
     pieces = [f"{pretty(n)}: b = {float(model.params[n]):.3f} "
               f"({ci} {float(conf.loc[n, 0]):.3f} to {float(conf.loc[n, 1]):.3f}), "
               f"{_fmt_p(float(model.pvalues[n]))}" for n in names]
+    if effects:
+        pieces.append(f"marginal R² = {effects[0]['value']:.3f}, "
+                      f"conditional R² = {effects[1]['value']:.3f}")
     return _result("Mixed-effects model", float(model.tvalues[lead]), None,
-                   float(model.pvalues[lead]), [], [], [],
+                   float(model.pvalues[lead]), effects, [], [],
                    {str(k): int(v) for k, v in df["f1"].value_counts().items()},
                    f"Linear mixed-effects model with subject as a random intercept "
                    f"({df['subject'].nunique()} subjects, {len(df)} observations). "
@@ -597,7 +1019,14 @@ def run_contingency(p) -> dict:
     # the label when used rather than silently changing the number behind a
     # result the user reads as a plain chi-square.
     chi2, p_chi, dof, expected = stats.chi2_contingency(table, correction=is_2x2)
-    small = bool((expected < 5).any())
+    # Cochran's rule, not "any cell below 5". On a 2x2 the strict form is right
+    # and it is what escalates to Fisher. On anything larger the chi-square
+    # approximation survives a fifth of the cells below 5 provided none is below
+    # 1, and firing "unreliable" on a single sparse cell of a 5x4 table trains
+    # the reader to ignore the warning that does matter.
+    n_below5 = int((expected < 5).sum())
+    small = (n_below5 > 0 if is_2x2
+             else n_below5 > 0.20 * expected.size or bool((expected < 1).any()))
 
     if is_2x2:
         # Haldane-Anscombe: a zero cell otherwise yields an infinite odds ratio.
@@ -644,11 +1073,12 @@ def run_contingency(p) -> dict:
         if small:
             # Fisher on a large R x C table is not tractable in the browser, so
             # the chi-square stands but the user is told its p is approximate.
-            cells = int((expected < 5).sum())
             warnings.append(
-                f"{cells} of {expected.size} expected cell counts are below 5, so the "
-                f"chi-square approximation is unreliable here. Consider pooling sparse "
-                f"categories or collecting more observations.")
+                f"{n_below5} of {expected.size} expected cell counts are below 5"
+                + (f" and {int((expected < 1).sum())} below 1" if (expected < 1).any() else "")
+                + ", which breaches Cochran's rule, so the chi-square approximation is "
+                "unreliable here. Consider pooling sparse categories or collecting more "
+                "observations.")
 
     ors = ""
     if is_2x2:
@@ -692,6 +1122,77 @@ def run_correlation(p) -> dict:
                    + f", {_fmt_p(float(pv))} (n = {n}).")
 
 
+def _regression_assumptions(x: np.ndarray, y: np.ndarray, resid: np.ndarray,
+                            fitted: np.ndarray) -> list:
+    """The three assumptions a straight-line fit actually rests on.
+
+    A slope, an R-squared and a p-value describe the line that was drawn; none
+    of them notices that the relationship curves, that the scatter fans out, or
+    that one point is dragging the whole fit. §6.3 asks for the assumption
+    checks by default, and this routine had none - the only test in the file
+    that reported a p-value with nothing supporting it."""
+    n = int(x.size)
+    out = []
+
+    # 1. Residual normality. The slope's t-test and its interval both assume it.
+    norm = _normality([resid])
+    norm["name"] = "Residual normality (Shapiro-Wilk)"
+    out.append(norm)
+
+    # 2. Homoscedasticity, Breusch-Pagan in Koenker's studentised form: the LM
+    # statistic n*R^2 from regressing the SQUARED residuals on x. Koenker's
+    # version rather than the original because the original divides by an
+    # estimate of the fourth moment under normality, so on the heavy-tailed
+    # residuals that usually accompany non-constant variance it rejects for the
+    # wrong reason. Matches statsmodels het_breuschpagan (robust=True).
+    if n >= 4 and float(np.std(x)) > 0:
+        aux = stats.linregress(x, resid ** 2)
+        lm = n * float(aux.rvalue) ** 2
+        p_bp = float(stats.chi2.sf(lm, 1))
+        ok = bool(p_bp >= 0.05)
+        out.append({"name": "Equal variance of residuals (Breusch-Pagan)",
+                    "statistic": lm, "pValue": p_bp, "passed": ok,
+                    "verdict": ("Residual scatter is comparable across the range of x."
+                                if ok else
+                                "Residual scatter changes with x, so the slope's standard "
+                                "error and interval are understated where the scatter is "
+                                "widest."),
+                    "alternative": None if ok else "weighted least squares, or a transform of Y"})
+    else:
+        out.append({"name": "Equal variance of residuals (Breusch-Pagan)", "statistic": None,
+                    "pValue": None, "passed": False,
+                    "verdict": f"Needs at least 4 points with varying x; this fit has {n}.",
+                    "alternative": None})
+
+    # 3. Linearity, Ramsey's RESET with powers 2 and 3 of the fitted values. If
+    # squares and cubes of the fit explain residual structure, the relationship
+    # is not a straight line and every number above describes the wrong model.
+    # Lack-of-fit against pure error would be stronger but needs replicate x,
+    # which a regression payload is not guaranteed to have.
+    dfd = n - 4
+    sse_r = float(np.sum(resid ** 2))
+    if dfd > 0 and sse_r > 0:
+        design = np.column_stack([np.ones(n), x, fitted ** 2, fitted ** 3])
+        beta = np.linalg.lstsq(design, y, rcond=None)[0]
+        sse_f = float(np.sum((y - design @ beta) ** 2))
+        f_reset = ((sse_r - sse_f) / 2) / (sse_f / dfd) if sse_f > 0 else float("inf")
+        p_reset = float(stats.f.sf(f_reset, 2, dfd)) if math.isfinite(f_reset) else 0.0
+        ok = bool(p_reset >= 0.05)
+        out.append({"name": "Linearity (Ramsey RESET, powers 2-3)",
+                    "statistic": float(f_reset), "pValue": p_reset, "passed": ok,
+                    "verdict": ("No detectable curvature; a straight line is an adequate "
+                                "description." if ok else
+                                "The relationship departs from a straight line, so the slope "
+                                "is an average over a curve rather than a constant rate."),
+                    "alternative": None if ok else "a nonlinear model, or a transform of X"})
+    else:
+        out.append({"name": "Linearity (Ramsey RESET, powers 2-3)", "statistic": None,
+                    "pValue": None, "passed": False,
+                    "verdict": f"Needs more than 4 points; this fit has {n}.",
+                    "alternative": None})
+    return out
+
+
 def run_linear_regression(p) -> dict:
     x, y = np.asarray(p["x"], float), np.asarray(p["y"], float)
     alpha = float(p["alpha"])
@@ -711,15 +1212,49 @@ def run_linear_regression(p) -> dict:
         _term("Slope", float(res.slope / res.stderr) if res.stderr else None, n - 2,
               float(res.pvalue), float(res.slope), lo, hi),
     ]
-    return _result("Linear regression", float(res.slope), n - 2, float(res.pvalue),
-                   [{"name": "r-squared", "value": r2, "ciLow": None, "ciHigh": None}],
-                   [], [], {"points": n},
-                   f"Linear regression: slope = {float(res.slope):.4f} ({ci} {lo:.4f} to {hi:.4f}), "
-                   f"R² = {r2:.4f}, {_fmt_p(float(res.pvalue))} (n = {n}).",
-                   terms=terms)
+    fitted = float(res.intercept) + float(res.slope) * x
+    resid = y - fitted
+    assumptions = _regression_assumptions(x, y, resid, fitted)
+
+    # Prediction interval. The confidence band says where the LINE is; the
+    # prediction band says where the next observation will fall, and they differ
+    # by the residual scatter itself - the wider one is the one a reader needs
+    # to use a standard curve to read off an unknown. Reporting only the slope's
+    # interval leaves both unavailable.
+    regression = None
+    if n > 2:
+        sxx = float(np.sum((x - float(np.mean(x))) ** 2))
+        syx = math.sqrt(float(np.sum(resid ** 2)) / (n - 2))
+        if sxx > 0:
+            grid = np.linspace(float(np.min(x)), float(np.max(x)), 120)
+            centre = float(res.intercept) + float(res.slope) * grid
+            lev = 1.0 / n + (grid - float(np.mean(x))) ** 2 / sxx
+            se_mean = syx * np.sqrt(lev)
+            se_pred = syx * np.sqrt(1.0 + lev)
+            regression = {
+                "x": grid.tolist(), "fit": centre.tolist(),
+                "ciLow": (centre - tcrit * se_mean).tolist(),
+                "ciHigh": (centre + tcrit * se_mean).tolist(),
+                "piLow": (centre - tcrit * se_pred).tolist(),
+                "piHigh": (centre + tcrit * se_pred).tolist(),
+                "level": 1.0 - alpha, "syx": syx,
+            }
+
+    out = _result("Linear regression", float(res.slope), n - 2, float(res.pvalue),
+                  [{"name": "r-squared", "value": r2, "ciLow": None, "ciHigh": None}],
+                  assumptions, [], {"points": n},
+                  f"Linear regression: slope = {float(res.slope):.4f} ({ci} {lo:.4f} to {hi:.4f}), "
+                  f"R² = {r2:.4f}, {_fmt_p(float(res.pvalue))} (n = {n}). Residual normality, "
+                  f"equal variance and linearity were tested; see the assumption checks."
+                  + (f" A {(1 - alpha) * 100:g}% prediction interval accompanies the fitted "
+                     f"line." if regression else ""),
+                  terms=terms)
+    if regression:
+        out["_regression"] = regression
+    return out
 
 
-def _km_curve(durations: np.ndarray, events: np.ndarray) -> dict:
+def _km_curve(durations: np.ndarray, events: np.ndarray, alpha: float = 0.05) -> dict:
     """
     One Kaplan-Meier product-limit curve, with Greenwood standard errors.
 
@@ -734,6 +1269,7 @@ def _km_curve(durations: np.ndarray, events: np.ndarray) -> dict:
     step_lo = [1.0]
     step_hi = [1.0]
     at_risk_out = [int(durations.size)]
+    zc = _z(alpha)  # the spec's alpha governs the band, not a hard-coded 1.96
     surv = 1.0
     greenwood = 0.0
     median = None
@@ -748,8 +1284,8 @@ def _km_curve(durations: np.ndarray, events: np.ndarray) -> dict:
         se = surv * math.sqrt(greenwood) if greenwood > 0 else 0.0
         step_t.append(float(t))
         step_s.append(float(surv))
-        step_lo.append(float(max(0.0, surv - 1.96 * se)))
-        step_hi.append(float(min(1.0, surv + 1.96 * se)))
+        step_lo.append(float(max(0.0, surv - zc * se)))
+        step_hi.append(float(min(1.0, surv + zc * se)))
         at_risk_out.append(int(n_risk))
         if median is None and surv <= 0.5:
             median = float(t)
@@ -772,9 +1308,10 @@ def run_survival(p) -> dict:
     durations = np.asarray(p["durations"], float)
     events = np.asarray(p["events"], float)
     groups = p.get("groups")
+    alpha = float(p.get("alpha", 0.05))
 
     if not groups:
-        curve = _km_curve(durations, events)
+        curve = _km_curve(durations, events, alpha)
         median = curve["median"]
         out = _result("Kaplan-Meier", None, None, None, [], [], [],
                       {"subjects": int(durations.size)},
@@ -785,36 +1322,95 @@ def run_survival(p) -> dict:
 
     labels = sorted(set(groups))
     g = np.asarray(groups)
+    k = len(labels)
     obs = {l: 0.0 for l in labels}
     exp = {l: 0.0 for l in labels}
     var = 0.0
+    # Hypergeometric covariance of the per-group death counts, accumulated over
+    # event times. Σ(O-E)²/E is a Pearson goodness-of-fit statistic, not the
+    # log-rank test: the O-E are linearly dependent (they sum to zero) and
+    # correlated, and E is not their variance. It does not follow chi²(k-1), so
+    # its p-value is wrong in a direction that depends on the data — neither
+    # reliably conservative nor reliably liberal, which is the worse failure.
+    vmat = np.zeros((k, k))
     for t in np.unique(durations[events == 1]):
         n_risk = float(np.sum(durations >= t))
         d_t = float(np.sum((durations == t) & (events == 1)))
         if n_risk <= 1:
             continue
-        for l in labels:
+        at_risk = np.array([float(np.sum(durations[g == l] >= t)) for l in labels])
+        for i, l in enumerate(labels):
             m = g == l
             obs[l] += float(np.sum((durations[m] == t) & (events[m] == 1)))
-            exp[l] += d_t * float(np.sum(durations[m] >= t)) / n_risk
-        if len(labels) == 2:
-            n1 = float(np.sum(durations[g == labels[0]] >= t))
-            var += d_t * (n1 / n_risk) * (1 - n1 / n_risk) * (n_risk - d_t) / (n_risk - 1)
+            exp[l] += d_t * at_risk[i] / n_risk
+        # Accumulated for every k, not just k > 2. The diagonal V_ii is what the
+        # Peto hazard-ratio standard error needs, and for k = 2 vmat[0,0] is
+        # algebraically the same scalar the two-group branch used to compute on
+        # its own, so the statistic is unchanged.
+        frac = at_risk / n_risk
+        vmat += d_t * (n_risk - d_t) / (n_risk - 1) * (np.diag(frac) - np.outer(frac, frac))
 
+    var = float(vmat[0, 0])
+    df = len(labels) - 1
     if len(labels) == 2 and var > 0:
         chi, df = (obs[labels[0]] - exp[labels[0]]) ** 2 / var, 1
     else:
-        chi = sum((obs[l] - exp[l]) ** 2 / exp[l] for l in labels if exp[l] > 0)
-        df = len(labels) - 1
+        # Mantel-Cox quadratic form on any k-1 of the groups; the omitted group
+        # is redundant, and which one is dropped does not change the statistic.
+        d_vec = np.array([obs[l] - exp[l] for l in labels[:-1]])
+        v_red = vmat[:-1, :-1]
+        try:
+            chi = float(d_vec @ np.linalg.solve(v_red, d_vec))
+        except np.linalg.LinAlgError:
+            chi = float(d_vec @ np.linalg.pinv(v_red) @ d_vec)
+        chi = max(chi, 0.0)
     pv = float(stats.chi2.sf(chi, df))
 
-    out = _result("Kaplan-Meier with log-rank", float(chi), df, pv, [], [], [],
+    # Hazard ratio. A log-rank p says the curves differ; it never says by how
+    # much or in which direction, and this routine reported no effect size at
+    # all. The Peto one-step estimator log(HR_i) = (O_i - E_i)/V_ii with
+    # SE = 1/sqrt(V_ii) is the one that AGREES with the test by construction:
+    # for two groups chi2 = (O-E)^2/V, so the interval excludes 1 exactly when
+    # the log-rank p falls below alpha. A Mantel-Haenszel (O1/E1)/(O2/E2) ratio
+    # with SE = sqrt(1/E1 + 1/E2) does not have that property.
+    zc = _z(alpha)
+    ci_lbl = _ci_label(alpha)
+    effects, hr_pieces = [], []
+    for i, l in enumerate(labels):
+        v_ii = float(vmat[i, i])
+        if v_ii <= 0:
+            continue
+        loghr = (obs[l] - exp[l]) / v_ii
+        se = 1.0 / math.sqrt(v_ii)
+        # With two groups "group i versus the rest" IS group i versus the other
+        # group, so the label is the plain contrast. Above two it is group i
+        # against the pooled remainder, which is a different quantity from any
+        # pairwise contrast and is named as such rather than left to be misread.
+        term = (f"{l} vs {labels[1 - i]}" if k == 2 else f"{l} vs. all other groups")
+        effects.append({"name": "hazard-ratio", "term": term,
+                        "value": math.exp(loghr),
+                        "ciLow": math.exp(loghr - zc * se),
+                        "ciHigh": math.exp(loghr + zc * se)})
+        hr_pieces.append(f"HR {term} = {math.exp(loghr):.3g} "
+                         f"({ci_lbl} {math.exp(loghr - zc * se):.3g} to "
+                         f"{math.exp(loghr + zc * se):.3g})")
+        if k == 2:
+            break  # the second group's HR is just the reciprocal of the first
+
+    out = _result("Kaplan-Meier with log-rank", float(chi), df, pv, effects, [], [],
                   {l: int(np.sum(g == l)) for l in labels},
                   f"Log-rank test: χ²({df}) = {float(chi):.3f}, {_fmt_p(pv)} across "
-                  f"{len(labels)} groups (n = {int(durations.size)}).")
+                  f"{len(labels)} groups (n = {int(durations.size)})."
+                  + (" " + "; ".join(hr_pieces) + "." if hr_pieces else ""))
+    if k > 2 and effects:
+        out["_warnings"] = [
+            "The log-rank test above is an omnibus test across all "
+            f"{k} groups. With more than two groups there is no single hazard ratio, so "
+            "each one reported is the Peto estimate for that group against the pooled "
+            "remainder, not a pairwise contrast; two of them can both exceed 1."]
     out["_survival"] = {
         "groups": [
-            {"label": str(l), **_km_curve(durations[g == l], events[g == l])} for l in labels
+            {"label": str(l), **_km_curve(durations[g == l], events[g == l], alpha)} for l in labels
         ]
     }
     return out
@@ -835,49 +1431,361 @@ def _five_pl(x, bottom, top, logec50, hill, s):
     return bottom + (top - bottom) / ((1.0 + 10.0 ** ((logec50 - x) * hill)) ** s)
 
 
-def run_dose_response(p) -> dict:
-    """
-    Parameterised in log10(concentration), so logEC50 is a FITTED parameter with
-    its own standard error. Deriving an EC50 interval from a linear-x fit does
-    not give you an honest one.
-    """
-    xs = np.log10(np.asarray(p["x"], float))
-    ys = np.asarray(p["y"], float)
-    model = p.get("model", "4pl")
-    func, n_params, names = (
-        (_three_pl, 3, ["bottom", "top", "logEC50"]) if model == "3pl"
-        else (_five_pl, 5, ["bottom", "top", "logEC50", "hillSlope", "asymmetry"]) if model == "5pl"
-        else (_four_pl, 4, ["bottom", "top", "logEC50", "hillSlope"])
-    )
+#: model key -> (function, parameter names, in the order the function takes them)
+_DR_MODELS = {
+    "3pl": (_three_pl, ["bottom", "top", "logEC50"]),
+    "4pl": (_four_pl, ["bottom", "top", "logEC50", "hillSlope"]),
+    "5pl": (_five_pl, ["bottom", "top", "logEC50", "hillSlope", "asymmetry"]),
+}
+
+
+def _dr_sigma(ys: np.ndarray, weighting: str):
+    """curve_fit minimises sum(((y - f)/sigma)^2), so the effective weight is
+    1/sigma^2, not 1/sigma. Passing sigma = |y| for "1/Y" delivers 1/Y^2 and
+    sigma = y^2 delivers 1/Y^4: both over-weight the low end by a whole power
+    and pull the EC50 with them."""
+    absy = np.where(np.abs(ys) > 0, np.abs(ys), 1.0)
+    return (np.sqrt(absy) if weighting == "1/Y"
+            else absy if weighting == "1/Y^2" else None)
+
+
+def _dr_scores(ys: np.ndarray, resid: np.ndarray, sigma, k: int):
+    """R-squared, adjusted R-squared, Sy.x and AICc, on the fit's own weights.
+
+    The weights that chose the parameters have to be the weights that judge
+    them. Scoring a weighted fit with unweighted residuals describes a fit that
+    was never performed."""
+    ss_res = float(np.sum((resid if sigma is None else resid / sigma) ** 2))
+    if sigma is None:
+        ss_tot = float(np.sum((ys - np.mean(ys)) ** 2))
+    else:
+        wt = 1.0 / sigma**2
+        ss_tot = float(np.sum(wt * (ys - np.sum(wt * ys) / np.sum(wt)) ** 2))
+    n = int(ys.size)
+    r2 = 1 - ss_res / ss_tot if ss_tot > 0 else float("nan")
+    adj = 1 - (1 - r2) * (n - 1) / (n - k - 1) if n - k - 1 > 0 else float("nan")
+    syx = math.sqrt(ss_res / (n - k)) if n > k else float("nan")
+    # Burnham-Anderson, and GraphPad after them, count the residual variance as
+    # a parameter: K = p + 1. Below n = p + 3 the correction is undefined and
+    # there is no honest finite value to report.
+    kk = k + 1
+    aicc = (n * math.log(ss_res / n) + 2 * kk + (2 * kk * (kk + 1)) / (n - kk - 1)
+            if n - kk - 1 > 0 and ss_res > 0 else None)
+    return {"ss_res": ss_res, "rSquared": r2, "adjustedRSquared": adj, "syx": syx,
+            "aicc": aicc}
+
+
+def _numeric_band(f, theta, cov, grid, tcrit):
+    """Delta-method interval for y = f(gx, theta) over a grid of gx.
+
+    A fixed absolute finite-difference step is below float64 relative precision
+    once a parameter is large (a plateau in RFU, an EC50 in nM): the bumped
+    value equals the original, every gradient reads exactly zero, and the band
+    collapses to zero width - which draws as a perfect fit. The step is
+    therefore relative to each parameter's own magnitude."""
+    theta = np.asarray(theta, float)
+    steps = np.abs(theta) * 1e-6 + 1e-6
+    centre, lower, upper = [], [], []
+    for gx in grid:
+        base = float(f(gx, theta))
+        grad = np.zeros(theta.size)
+        for i in range(theta.size):
+            bumped = theta.copy()
+            bumped[i] += steps[i]
+            grad[i] = (float(f(gx, bumped)) - base) / steps[i]
+        v = float(grad @ cov @ grad)
+        half = tcrit * math.sqrt(v) if v > 0 else 0.0
+        centre.append(base)
+        lower.append(base - half)
+        upper.append(base + half)
+    return centre, lower, upper
+
+
+def _dr_clean(x_raw, y_raw, warnings, label=""):
+    """log10 the doses, dropping the ones that have no position on a log axis.
+
+    log10 of a zero-dose vehicle control is -inf, which curve_fit rejects, so
+    one control row otherwise takes the whole fit down as a generic convergence
+    failure. Substituting an arbitrary value some decades below the lowest real
+    dose would invent an anchor point the reader cannot see, and the EC50 would
+    move with the invention, so the point is excluded and the exclusion said out
+    loud."""
+    x_raw = np.asarray(x_raw, float)
+    ys = np.asarray(y_raw, float)
+    usable = x_raw > 0
+    if not np.all(usable):
+        where = f" in {label}" if label else ""
+        warnings.append(
+            f"{int((~usable).sum())} point(s){where} at zero or negative concentration were "
+            f"excluded from the fit, because the curve is parameterised in "
+            f"log10(concentration) where a vehicle control has no position. The fit "
+            f"uses the remaining {int(usable.sum())} point(s){where}.")
+        x_raw, ys = x_raw[usable], ys[usable]
+    return np.log10(x_raw), ys
+
+
+def _dr_guess(xs: np.ndarray, ys: np.ndarray, n_params: int) -> list:
     p0 = [float(np.min(ys)), float(np.max(ys)), float(np.median(xs))]
     if n_params >= 4:
         p0.append(1.0)
     if n_params == 5:
         p0.append(1.0)
+    return p0
+
+
+def run_global_dose_response(p, datasets) -> dict:
+    """Several dose-response curves fitted SIMULTANEOUSLY, sharing parameters.
+
+    The pharmacology case this exists for: a family of analogues assayed on one
+    plate share a bottom, a top and a Hill slope because they act on the same
+    receptor through the same readout, and differ only in potency. Fitting them
+    independently spends four parameters per curve on three quantities that are
+    known to be common, so each curve's plateaus are estimated from its own
+    handful of points and the logEC50s inherit that noise. Fitting them together
+    estimates the shared parameters from every point at once, and the logEC50
+    confidence intervals narrow accordingly.
+
+    This is NOT the same answer as fitting each curve alone and averaging: the
+    shared parameters are a joint least-squares solution over the pooled
+    residuals, so a curve with more points, or with less scatter, pulls harder.
+    The test suite pins that difference rather than asserting it.
+
+    `sharedParameters` names parameters of the chosen model. Naming none is
+    legal and means the curves are fitted jointly but constrained by nothing,
+    which reproduces the independent fits exactly - useful as a control, and
+    the suite checks it.
+    """
+    warnings = []
+    model = p.get("model", "4pl")
+    func, names = _DR_MODELS.get(model, _DR_MODELS["4pl"])
+    n_params = len(names)
+    weighting = p.get("weighting", "none")
+    alpha = float(p.get("alpha", 0.05))
+
+    requested = list(p.get("sharedParameters") or [])
+    shared = [s for s in requested if s in names]
+    unknown = [s for s in requested if s not in names]
+    if unknown:
+        # The record names what ran. Silently dropping a name the caller asked
+        # to share would report a global fit that shares less than it claims.
+        warnings.append(
+            f"{', '.join(repr(u) for u in unknown)} is not a parameter of the "
+            f"{model.upper()} model, whose parameters are {', '.join(names)}, so it was "
+            f"ignored; the fit shares {', '.join(shared) if shared else 'nothing'}.")
+
+    prepared = []
+    for idx, d in enumerate(datasets):
+        label = str(d.get("label") or f"dataset {idx + 1}")
+        xs, ys = _dr_clean(d.get("x"), d.get("y"), warnings, label)
+        if xs.size < 2:
+            warnings.append(f"{label} has fewer than 2 usable points and was left out of "
+                            f"the global fit.")
+            continue
+        prepared.append({"label": label, "xs": xs, "ys": ys})
+
+    if len(prepared) < 2:
+        return {"curveFit": {"converged": False, "model": model.upper(), "global": True},
+                "warnings": warnings + [
+                    "A global fit needs at least two datasets with usable points; "
+                    f"{len(prepared)} survived cleaning, so no fit was attempted."]}
+
+    n_sets = len(prepared)
+    # Flat parameter vector: one slot per shared parameter, one slot per dataset
+    # for every free one. `slot[(j, i)]` is where parameter j of dataset i lives.
+    slot, flat_names, free_of = {}, [], []
+    for j, nm in enumerate(names):
+        if nm in shared:
+            slot[(j, None)] = len(flat_names)
+            flat_names.append(f"{nm} (shared)")
+            free_of.append((j, None))
+        else:
+            for i in range(n_sets):
+                slot[(j, i)] = len(flat_names)
+                flat_names.append(f"{nm} [{prepared[i]['label']}]")
+                free_of.append((j, i))
+
+    def index_of(j, i):
+        return slot[(j, None)] if names[j] in shared else slot[(j, i)]
+
+    guesses = [_dr_guess(d["xs"], d["ys"], n_params) for d in prepared]
+    theta0 = np.empty(len(flat_names))
+    for j, nm in enumerate(names):
+        if nm in shared:
+            # One starting value for a parameter every curve will share: the
+            # mean of what each curve would have started from on its own.
+            theta0[slot[(j, None)]] = float(np.mean([g[j] for g in guesses]))
+        else:
+            for i in range(n_sets):
+                theta0[slot[(j, i)]] = guesses[i][j]
+
+    xs_all = np.concatenate([d["xs"] for d in prepared])
+    ys_all = np.concatenate([d["ys"] for d in prepared])
+    owner = np.concatenate([np.full(d["xs"].size, i) for i, d in enumerate(prepared)])
+    sigma_all = _dr_sigma(ys_all, weighting)
+
+    def params_for(i, theta):
+        return [theta[index_of(j, i)] for j in range(n_params)]
+
+    def stacked(_x, *theta):
+        theta = np.asarray(theta, float)
+        out = np.empty(xs_all.size)
+        for i in range(n_sets):
+            m = owner == i
+            out[m] = func(xs_all[m], *params_for(i, theta))
+        return out
+
+    try:
+        popt, pcov = optimize.curve_fit(stacked, xs_all, ys_all, p0=theta0,
+                                        sigma=sigma_all, maxfev=40000)
+    except (RuntimeError, ValueError) as exc:
+        return {"curveFit": {"converged": False, "model": model.upper(), "global": True},
+                "warnings": warnings + [f"Global fit did not converge: {exc}"]}
+
+    k_flat = len(flat_names)
+    resid = ys_all - stacked(xs_all, *popt)
+    scores = _dr_scores(ys_all, resid, sigma_all, k_flat)
+    if scores["aicc"] is None:
+        warnings.append(
+            f"AICc is not defined for {int(ys_all.size)} pooled points and a {k_flat}-parameter "
+            f"global fit (it needs more than {k_flat + 2}), so no value is reported; comparing "
+            f"models on this data set is not supported.")
+
+    n_total = int(ys_all.size)
+    tcrit = float(stats.t.ppf(1 - alpha / 2, max(n_total - k_flat, 1)))
+    perr = np.sqrt(np.diag(pcov))
+
+    def described(flat_index, val):
+        e = float(perr[flat_index]) if math.isfinite(perr[flat_index]) else None
+        return {"value": float(val), "stderr": e,
+                "ciLow": float(val - tcrit * e) if e is not None else None,
+                "ciHigh": float(val + tcrit * e) if e is not None else None}
+
+    shared_block = {nm: described(slot[(j, None)], popt[slot[(j, None)]])
+                    for j, nm in enumerate(names) if nm in shared}
+    if "logEC50" in shared_block and shared_block["logEC50"]["ciLow"] is not None:
+        shared_block["ec50"] = {
+            "value": 10.0 ** shared_block["logEC50"]["value"], "stderr": None,
+            "ciLow": 10.0 ** shared_block["logEC50"]["ciLow"],
+            "ciHigh": 10.0 ** shared_block["logEC50"]["ciHigh"]}
+
+    want_band = p.get("confidenceBands", True) and bool(np.all(np.isfinite(pcov)))
+    per_set = []
+    for i, d in enumerate(prepared):
+        block = {nm: described(index_of(j, i), popt[index_of(j, i)])
+                 for j, nm in enumerate(names)}
+        logec50 = float(popt[index_of(names.index("logEC50"), i)])
+        if block["logEC50"]["ciLow"] is not None:
+            # Asymmetric in concentration because symmetric in log units.
+            block["ec50"] = {"value": 10.0**logec50, "stderr": None,
+                             "ciLow": 10.0 ** block["logEC50"]["ciLow"],
+                             "ciHigh": 10.0 ** block["logEC50"]["ciHigh"]}
+        grid = np.linspace(float(np.min(d["xs"])), float(np.max(d["xs"])), 120)
+        curve_y = func(grid, *params_for(i, popt))
+        band = None
+        if want_band:
+            # The gradient runs over the FULL flat vector, so a shared
+            # parameter's uncertainty - which every dataset paid into and every
+            # dataset carries - propagates into this curve's band. Taking only
+            # this dataset's own slots would understate it.
+            _, lo_b, hi_b = _numeric_band(
+                lambda gx, th, i=i: func(gx, *params_for(i, th)), popt, pcov, grid, tcrit)
+            band = {"x": (10.0**grid).tolist(), "lower": lo_b, "upper": hi_b}
+        d_resid = d["ys"] - func(d["xs"], *params_for(i, popt))
+        d_sigma = _dr_sigma(d["ys"], weighting)
+        # Per-dataset R-squared is scored against the parameters this dataset
+        # actually got, shared ones included; k is its own free count, because
+        # a shared parameter was not spent on this curve alone.
+        k_own = sum(1 for nm in names if nm not in shared)
+        d_scores = _dr_scores(d["ys"], d_resid, d_sigma, max(k_own, 1))
+        per_set.append({
+            "label": d["label"], "n": int(d["xs"].size), "parameters": block,
+            "ec50": 10.0**logec50,
+            "rSquared": d_scores["rSquared"], "syx": d_scores["syx"],
+            "curve": {"x": (10.0**grid).tolist(), "y": curve_y.tolist()},
+            "confidenceBand": band,
+        })
+
+    if p.get("unknowns"):
+        warnings.append(
+            "Unknowns are not interpolated from a global fit: each dataset has its own "
+            "standard curve, so a single signal has no unambiguous concentration. Fit the "
+            "standard curve on its own to interpolate.")
+
+    if not shared:
+        warnings.append(
+            f"A global fit over {n_sets} datasets was run with no shared parameters, so it "
+            f"is arithmetically identical to fitting each curve independently; name "
+            f"parameters in sharedParameters ({', '.join(names)}) for the curves to "
+            f"constrain each other.")
+
+    if scores["rSquared"] < 0.9:
+        warnings.append(f"Pooled R² is {scores['rSquared']:.3f}; inspect the fit before "
+                        f"reporting it.")
+
+    return {
+        "curveFit": {
+            "model": model.upper(), "global": True, "sharedParameters": shared,
+            "datasets": per_set, "parameters": shared_block,
+            "ec50": (shared_block["ec50"]["value"] if "ec50" in shared_block else None),
+            "rSquared": float(scores["rSquared"]),
+            "adjustedRSquared": float(scores["adjustedRSquared"]),
+            "aicc": scores["aicc"], "syx": float(scores["syx"]),
+            "curve": None, "confidenceBand": None, "interpolated": None,
+            "converged": True, "iterations": 0,
+        },
+        "warnings": warnings,
+    }
+
+
+def run_dose_response(p) -> dict:
+    """
+    Parameterised in log10(concentration), so logEC50 is a FITTED parameter with
+    its own standard error. Deriving an EC50 interval from a linear-x fit does
+    not give you an honest one.
+
+    `datasets` is the additive, backward-compatible way to express more than one
+    curve: absent, the payload's flat `x`/`y` are fitted exactly as before; with
+    two or more entries the fit is global (see `run_global_dose_response`).
+    """
+    datasets = p.get("datasets") or []
+    if len(datasets) > 1:
+        return run_global_dose_response(p, datasets)
+    if len(datasets) == 1:
+        # One dataset is a single fit, not a degenerate global one; sharing a
+        # parameter with nothing is not a constraint.
+        p = {**p, "x": datasets[0].get("x"), "y": datasets[0].get("y")}
+    warnings = []
+    xs, ys = _dr_clean(p["x"], p["y"], warnings)
+    model = p.get("model", "4pl")
+    func, names = _DR_MODELS.get(model, _DR_MODELS["4pl"])
+    n_params = len(names)
+    p0 = _dr_guess(xs, ys, n_params)
 
     weighting = p.get("weighting", "none")
-    sigma = (np.where(np.abs(ys) > 0, np.abs(ys), 1.0) if weighting == "1/Y"
-             else np.where(np.abs(ys) > 0, ys**2, 1.0) if weighting == "1/Y^2" else None)
+    sigma = _dr_sigma(ys, weighting)
 
-    warnings = []
     try:
         popt, pcov = optimize.curve_fit(func, xs, ys, p0=p0, sigma=sigma, maxfev=20000)
     except (RuntimeError, ValueError) as exc:
         return {"curveFit": {"converged": False, "model": model.upper()},
-                "warnings": [f"Fit did not converge: {exc}"]}
+                "warnings": warnings + [f"Fit did not converge: {exc}"]}
 
     resid = ys - func(xs, *popt)
-    ss_res = float(np.sum(resid**2))
-    ss_tot = float(np.sum((ys - np.mean(ys)) ** 2))
-    r2 = 1 - ss_res / ss_tot if ss_tot > 0 else float("nan")
     n, k = int(xs.size), len(popt)
-    adj = 1 - (1 - r2) * (n - 1) / (n - k - 1) if n - k - 1 > 0 else float("nan")
-    syx = math.sqrt(ss_res / (n - k)) if n > k else float("nan")
-    aicc = (n * math.log(ss_res / n) + 2 * k + (2 * k * (k + 1)) / (n - k - 1)
-            if n - k - 1 > 0 and ss_res > 0 else float("nan"))
+    scores = _dr_scores(ys, resid, sigma, k)
+    r2, adj, syx, aicc = (scores["rSquared"], scores["adjustedRSquared"],
+                          scores["syx"], scores["aicc"])
+    if aicc is None:
+        warnings.append(
+            f"AICc is not defined for {n} points and a {k}-parameter model (it needs "
+            f"more than {k + 2}), so no value is reported; comparing models on this "
+            f"data set is not supported.")
 
     perr = np.sqrt(np.diag(pcov))
-    tcrit = float(stats.t.ppf(0.975, max(n - k, 1)))
+    # The caller's alpha governs the parameter intervals too. An analysis
+    # declared at alpha = 0.01 must not quote 95% limits on its EC50.
+    alpha = float(p.get("alpha", 0.05))
+    tcrit = float(stats.t.ppf(1 - alpha / 2, max(n - k, 1)))
     params = {}
     for name, val, err in zip(names, popt, perr):
         e = float(err) if math.isfinite(err) else None
@@ -895,18 +1803,7 @@ def run_dose_response(p) -> dict:
     grid = np.linspace(float(np.min(xs)), float(np.max(xs)), 120)
     band = None
     if p.get("confidenceBands", True) and np.all(np.isfinite(pcov)):
-        lower, upper, eps = [], [], 1e-6
-        for gx in grid:
-            grad = np.zeros(k)
-            for i in range(k):
-                bumped = np.array(popt, float)
-                bumped[i] += eps
-                grad[i] = (func(gx, *bumped) - func(gx, *popt)) / eps
-            v = float(grad @ pcov @ grad)
-            half = tcrit * math.sqrt(v) if v > 0 else 0.0
-            yv = float(func(gx, *popt))
-            lower.append(yv - half)
-            upper.append(yv + half)
+        _, lower, upper = _numeric_band(lambda gx, th: func(gx, *th), popt, pcov, grid, tcrit)
         band = {"x": (10.0**grid).tolist(), "lower": lower, "upper": upper}
 
     interpolated = None
@@ -936,7 +1833,7 @@ def run_dose_response(p) -> dict:
     return {
         "curveFit": {
             "model": model.upper(), "parameters": params, "ec50": ec50,
-            "rSquared": float(r2), "adjustedRSquared": float(adj), "aicc": float(aicc),
+            "rSquared": float(r2), "adjustedRSquared": float(adj), "aicc": aicc,
             "syx": float(syx),
             "curve": {"x": (10.0**grid).tolist(), "y": func(grid, *popt).tolist()},
             "confidenceBand": band, "interpolated": interpolated,
@@ -988,12 +1885,26 @@ def run(payload: dict) -> dict:
 
     descriptives = []
     shape = payload.get("shape")
+    series = {}
     if shape == "columns":
-        descriptives = [describe_column(n, v) for n, v in (payload.get("columns") or {}).items()]
+        series = payload.get("columns") or {}
     elif shape == "groups":
-        descriptives = [describe_column(n, v) for n, v in (payload.get("groups") or {}).items()]
+        series = payload.get("groups") or {}
+    descriptives = [describe_column(n, v) for n, v in series.items()]
 
-    test_result, curve_fit, survival, error = None, None, None, None
+    # Every routine below reaches its data through `_clean`, which discards
+    # blanks and non-numeric entries. Silently is the problem: an n smaller than
+    # the n the user submitted, with nothing saying why, reads as a mistake in
+    # the methods section. One warning here covers every routine.
+    for name, values in series.items():
+        dropped = _clean_counted(values)[1]
+        if dropped:
+            warnings.append(
+                f"{dropped} of {len(values)} value(s) in {name} were blank or "
+                f"non-numeric and were excluded; the reported n counts only the "
+                f"values actually analysed.")
+
+    test_result, curve_fit, survival, regression, error = None, None, None, None, None
     test_ran = None
     fn = REGISTRY.get(test)
     if fn is None:
@@ -1017,6 +1928,7 @@ def run(payload: dict) -> dict:
                 # the result, not inside the test object the renderer prints.
                 warnings.extend(out.pop("_warnings", None) or [])
                 survival = out.pop("_survival", None)
+                regression = out.pop("_regression", None)
                 test_result = out
         except Exception as exc:
             # Reported, never swallowed, but as a failure, not a caveat. Filed
@@ -1035,6 +1947,7 @@ def run(payload: dict) -> dict:
         "test": test_result,
         "curveFit": curve_fit,
         "survival": survival,
+        "regression": regression,
         "testRan": test_ran,
         "error": error,
         "warnings": warnings,

@@ -72,7 +72,20 @@ export interface WorkbookStorageDownloader {
  */
 function looksLikeTabularFile(fileName: string): boolean {
   const lower = fileName.toLowerCase()
-  return lower.endsWith(".csv") || lower.endsWith(".tsv") || lower.endsWith(".xlsx") || lower.endsWith(".xls")
+  return (
+    lower.endsWith(".csv") ||
+    lower.endsWith(".tsv") ||
+    lower.endsWith(".xlsx") ||
+    lower.endsWith(".xls") ||
+    // `.txt` belongs here for the same reason `.tsv` does, and for one more:
+    // every upload control in the workspace already advertises `accept=".txt"`.
+    // Rejecting here made the app give two answers about one file — accepted on
+    // the way in, "not a spreadsheet" on the way out (T0.2). Read-only, so none
+    // of the overwrite hazards that keep `.txt` out of
+    // `inferTabularFormatFromFileName` apply; `readSpreadsheetWorkbook` sniffs
+    // the separator out of the bytes.
+    lower.endsWith(".txt")
+  )
 }
 
 export interface OpenWorkbookFromStorageInput {

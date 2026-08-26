@@ -5,6 +5,7 @@ import {
   Exclusion,
   parseSpec,
   migrateSpec,
+  BRACKET_STYLE_FIELDS,
 } from "./analysis-spec"
 
 /**
@@ -163,11 +164,159 @@ describe("migrateSpec (§3A.6: never fail to open)", () => {
     expect(migrated.notes.length).toBeGreaterThan(0)
   })
 
+  it("still parses a collapseReplicates saved before columns/countTo existed", () => {
+    // The two new fields are additive: an already-saved spec omits them and
+    // must keep opening, picking up the documented defaults.
+    const result = parseSpec({
+      ...minimalSpec(),
+      transforms: [{ kind: "collapseReplicates", by: ["sample"], statistic: "mean" }],
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    const t = result.spec.transforms[0]
+    expect(t.kind).toBe("collapseReplicates")
+    if (t.kind !== "collapseReplicates") return
+    expect(t.columns).toEqual([])
+    expect(t.countTo).toBe("n")
+  })
+
+  it("accepts sd and sem as collapse statistics, and the pivotWider reshape", () => {
+    const result = parseSpec({
+      ...minimalSpec(),
+      transforms: [
+        { kind: "pivotWider", namesFrom: "timepoint", valuesFrom: "value" },
+        { kind: "collapseReplicates", by: ["sample"], statistic: "sem", columns: ["v"] },
+      ],
+    })
+    expect(result.ok).toBe(true)
+  })
+
   it("reports issues rather than throwing, so the AI repair loop can run", () => {
     // §6.6: invalid specs are rejected and repaired, never rendered.
     const result = parseSpec({ schemaVersion: 1, dataset: {} })
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.issues.length).toBeGreaterThan(0)
+  })
+})
+
+/* -- Additive schema growth (T0.6 / T0.20 / T0.27) -------------------------
+   Every field these tests cover was added after specs were already being saved.
+   The rule is that an already-saved spec must still parse, unchanged, and mean
+   what it meant. Each field is therefore optional rather than defaulted: a
+   default would also parse, but it would make the field REQUIRED at every
+   construction site through `z.infer`, which is how a "purely additive" schema
+   change breaks code that never mentioned it. */
+
+describe("additive spec fields", () => {
+  function withBrackets(brackets: unknown[]): Record<string, unknown> {
+    const s = minimalSpec() as Record<string, unknown>
+    s.figure = { ...(s.figure as Record<string, unknown>), brackets }
+    return s
+  }
+
+  it("parses a spec written before joins, datasetColumn or bracket styling existed", () => {
+    const parsed = parseSpec(minimalSpec())
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    expect(parsed.spec.joins).toBeUndefined()
+    expect(parsed.spec.analysis.nonlinear?.datasetColumn).toBeUndefined()
+    expect(parsed.spec.schemaVersion).toBe(ANALYSIS_SPEC_SCHEMA_VERSION)
+  })
+
+  it("keeps an old bracket parsing, with no style overrides on it", () => {
+    // Exactly the shape `figure.moveBracket` has always produced.
+    const parsed = parseSpec(withBrackets([
+      { id: "CtrlDrug", fromGroup: "Ctrl", toGroup: "Drug", offsetY: 12, derived: false, display: "stars" },
+    ]))
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    const b = parsed.spec.figure.brackets[0]
+    expect(b.offsetY).toBe(12)
+    // Absent, not null: nothing was overridden, so the renderer's own tokens win
+    // and a later theme change still reaches this bracket.
+    expect(b.colour).toBeUndefined()
+    expect(b.lineWidth).toBeUndefined()
+    expect(b.fontSize).toBeUndefined()
+    expect(b.capLength).toBeUndefined()
+    expect(b.hidden).toBeUndefined()
+  })
+
+  it("accepts a restyled bracket and round-trips every override", () => {
+    const parsed = parseSpec(withBrackets([
+      {
+        id: "CtrlDrug", fromGroup: "Ctrl", toGroup: "Drug", offsetY: 0, derived: true,
+        display: "both", colour: "#0072B2", lineWidth: 2.5, fontSize: 14, capLength: 6, hidden: true,
+      },
+    ]))
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    expect(parsed.spec.figure.brackets[0]).toMatchObject({
+      display: "both", colour: "#0072B2", lineWidth: 2.5, fontSize: 14, capLength: 6, hidden: true,
+    })
+  })
+
+  it("rejects a bracket colour that is not a hex triplet", () => {
+    expect(parseSpec(withBrackets([{ id: "ab", fromGroup: "a", toGroup: "b", colour: "red" }])).ok).toBe(false)
+  })
+
+  it("lists exactly the fields regeneration must carry across", () => {
+    // The renderer re-derives brackets from the post-hoc result on every change.
+    // Anything NOT in this list is a property of the fresh result; anything in it
+    // is the researcher's own decision and has to survive. `offsetY` is handled
+    // separately because it is a position, not a style.
+    expect([...BRACKET_STYLE_FIELDS]).toEqual([
+      "display", "colour", "lineWidth", "fontSize", "capLength", "hidden",
+    ])
+  })
+
+  it("accepts a cross-file join and pins the joined file by its own hash", () => {
+    const s = minimalSpec() as Record<string, unknown>
+    s.joins = [{
+      right: { fileId: "11111111-2222-3333-4444-555555555555", fileName: "map.xlsx", sheet: null, versionHash: "sha256:beef5678", rowCount: 96, columnCount: 3 },
+      on: [{ left: "well", right: "Well" }],
+    }]
+    const parsed = parseSpec(s)
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    const j = parsed.spec.joins![0]
+    // Law 4: a result depends on BOTH files, so both versions are in the spec.
+    expect(j.right.versionHash).toBe("sha256:beef5678")
+    expect(j.type).toBe("left")
+    expect(j.suffix).toBe("_r")
+    expect(j.columns).toEqual([])
+  })
+
+  it("rejects a join with no key columns", () => {
+    const s = minimalSpec() as Record<string, unknown>
+    s.joins = [{
+      right: { fileId: null, fileName: "map.xlsx", sheet: null, versionHash: "sha256:beef5678", rowCount: 1, columnCount: 1 },
+      on: [],
+    }]
+    expect(parseSpec(s).ok).toBe(false)
+  })
+
+  it("accepts a dataset column on a nonlinear fit, for a global fit", () => {
+    const s = minimalSpec() as Record<string, unknown>
+    s.analysis = {
+      test: "nonlinear-regression",
+      responseColumns: ["dose", "signal"],
+      nonlinear: { model: "4pl", datasetColumn: "compound", sharedParameters: ["hillSlope"] },
+    }
+    const parsed = parseSpec(s)
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    expect(parsed.spec.analysis.nonlinear?.datasetColumn).toBe("compound")
+    expect(parsed.spec.analysis.nonlinear?.sharedParameters).toEqual(["hillSlope"])
+  })
+
+  it("still accepts ROUT as a named exclusion method", () => {
+    // ROUT was never removed from this enum, so analyses saved when the dialog
+    // still offered it keep parsing. It is a real method again as of T0.10.
+    const ok = Exclusion.safeParse({
+      rowId: "r7", reasonKind: "statistical-outlier", method: { name: "ROUT", params: { Q: 0.01 } },
+      excludedBy: "u1", excludedAt: "2026-01-01T00:00:00.000Z",
+    })
+    expect(ok.success).toBe(true)
   })
 })

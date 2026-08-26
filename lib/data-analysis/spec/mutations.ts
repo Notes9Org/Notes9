@@ -1,10 +1,13 @@
 import type {
   AnalysisSpec,
   Annotation,
+  BRACKET_STYLE_FIELDS,
+  DatasetJoin,
   Exclusion,
   FigureKind,
   RowFilter,
   SeriesStyle,
+  SignificanceBracket,
   TestKind,
   Transform,
 } from "./analysis-spec"
@@ -32,6 +35,15 @@ import { bracketPair } from "./analysis-spec"
 
 /* ── Mutations ─────────────────────────────────────────────────────────────*/
 
+/**
+ * What `figure.setBracketStyle` may set, named by the spec's own
+ * `BRACKET_STYLE_FIELDS` rather than a second hand-written list, so the
+ * mutation, the zod schema and what regeneration copies cannot drift apart.
+ */
+export type BracketStylePatch = Partial<
+  Pick<SignificanceBracket, (typeof BRACKET_STYLE_FIELDS)[number]>
+>
+
 export type SpecMutation =
   /* Figure, style. These never trigger a recompute (Law 5). */
   | { kind: "figure.setKind"; value: FigureKind }
@@ -48,6 +60,7 @@ export type SpecMutation =
   | { kind: "figure.updateAnnotation"; id: string; patch: Partial<Annotation> }
   | { kind: "figure.removeAnnotation"; id: string }
   | { kind: "figure.moveBracket"; id: string; offsetY: number }
+  | { kind: "figure.setBracketStyle"; id: string; patch: BracketStylePatch }
   | { kind: "figure.setShowExcluded"; value: boolean }
   /* Axes, label/scale/limits. Scale and limits are style; they redraw, not recompute. */
   | { kind: "axis.set"; axis: "x" | "y" | "y2"; patch: Partial<AnalysisSpec["figure"]["x"]> }
@@ -66,6 +79,7 @@ export type SpecMutation =
   | { kind: "data.addTransform"; transform: Transform }
   | { kind: "data.removeTransform"; index: number }
   | { kind: "data.setFilters"; filters: RowFilter[] }
+  | { kind: "data.setJoins"; joins: DatasetJoin[] }
   | { kind: "data.excludeRow"; exclusion: Exclusion }
   | { kind: "data.restoreRow"; rowId: string }
   /* Roles and design, the semantic layer (L2). */
@@ -98,6 +112,7 @@ export function mutationPath(m: SpecMutation): string {
     case "figure.removeAnnotation":
       return `figure.annotation.${m.id}`
     case "figure.moveBracket":
+    case "figure.setBracketStyle":
       return `figure.bracket.${m.id}`
     case "data.excludeRow":
       return `data.exclusion.${m.exclusion.rowId}`
@@ -156,6 +171,15 @@ export function describeMutation(m: SpecMutation): string {
       return "Annotation removed"
     case "figure.moveBracket":
       return "Significance bracket moved"
+    case "figure.setBracketStyle":
+      // Hiding is not a restyle: it takes a significant comparison off the
+      // figure, and the history entry has to say so rather than reading as a
+      // colour change (§3A.4 wants the diff to be honest in plain language).
+      return m.patch.hidden === true
+        ? "Significance bracket hidden"
+        : m.patch.hidden === false
+          ? "Significance bracket shown"
+          : "Significance bracket restyled"
     case "figure.setShowExcluded":
       return m.value ? "Excluded points shown" : "Excluded points hidden"
     case "axis.set": {
@@ -189,6 +213,12 @@ export function describeMutation(m: SpecMutation): string {
       return "Transform removed"
     case "data.setFilters":
       return `Filters updated (${m.filters.length})`
+    case "data.setJoins":
+      // Names the file, because "1 join" in the history tells the researcher
+      // nothing about which of their files the numbers now depend on.
+      return m.joins.length === 0
+        ? "Join removed"
+        : `Joined ${m.joins.map((j) => j.right.fileName ?? j.right.fileId).join(", ")}`
     case "data.excludeRow":
       // The reason is part of the description on purpose: §8.1 wants the record
       // to carry WHY, everywhere it appears, not only in the provenance card.
@@ -319,6 +349,39 @@ export function applyMutation(spec: AnalysisSpec, m: SpecMutation): AnalysisSpec
         },
       }
     }
+    case "figure.setBracketStyle": {
+      // The same sparse override layer `figure.moveBracket` writes into, for the
+      // same reason: brackets are DERIVED from `result.test.pairwise` on every
+      // recompute, so the spec holds a row only for the ones a researcher has
+      // actually touched, keyed by the pair the id names. That is what makes a
+      // restyle survive the analysis changing — the new post-hoc result
+      // regenerates the bracket and the renderer finds this row by the same
+      // pair, exactly as it finds a dragged `offsetY`.
+      //
+      // `derived` is cleared for the same reason a drag clears it: this
+      // comparison now looks the way the researcher chose, not the way the
+      // engine produced it.
+      const pair = figure.brackets.some((b) => b.id === m.id) ? null : bracketPair(m.id)
+      return {
+        ...spec,
+        figure: {
+          ...figure,
+          brackets: pair
+            ? [
+                ...figure.brackets,
+                {
+                  id: m.id,
+                  ...pair,
+                  offsetY: 0,
+                  derived: false,
+                  display: "stars" as const,
+                  ...m.patch,
+                },
+              ]
+            : figure.brackets.map((b) => (b.id === m.id ? { ...b, ...m.patch, derived: false } : b)),
+        },
+      }
+    }
     case "figure.setShowExcluded":
       return { ...spec, figure: { ...figure, showExcludedPoints: m.value } }
     case "axis.set": {
@@ -371,6 +434,8 @@ export function applyMutation(spec: AnalysisSpec, m: SpecMutation): AnalysisSpec
       return { ...spec, transforms: spec.transforms.filter((_, i) => i !== m.index) }
     case "data.setFilters":
       return { ...spec, filters: m.filters }
+    case "data.setJoins":
+      return { ...spec, joins: m.joins }
     case "data.excludeRow": {
       // §8.1 records are append-only. An exclusion names a person, a reason, a
       // method and a time, and the spec holds the only copy; replacing it in
@@ -422,8 +487,37 @@ export interface SpecHistory {
   userEditedPaths: Set<string>
 }
 
-export function initHistory(spec: AnalysisSpec): SpecHistory {
-  return { spec, past: [], future: [], userEditedPaths: new Set() }
+/**
+ * `userEditedPaths` is a parameter because the surface that owns the sticky set
+ * is not this module. The workspace keeps one history for the whole analysis
+ * and derives the set from its audit log (`edit-history.ts`), then hands it in
+ * here for the one call that needs it, `applyAiPatch`. Defaulting it to empty
+ * was not a placeholder — it was the whole of L6 failing quietly, because every
+ * caller took the default and no collision could ever be detected.
+ */
+export function initHistory(spec: AnalysisSpec, userEditedPaths: Iterable<string> = []): SpecHistory {
+  return { spec, past: [], future: [], userEditedPaths: new Set(userEditedPaths) }
+}
+
+/**
+ * The record form of a mutation.
+ *
+ * Split out of `dispatchMutation` for the caller that needs the ENTRY but not a
+ * new spec — a rail control that has already moved its own state and only wants
+ * the edit written to history. Sharing this is what keeps a hand-turned knob and
+ * an assistant patch indistinguishable to the undo stack and the provenance
+ * card, which is the property the whole of L6 rests on.
+ */
+export function appliedMutation(
+  mutation: SpecMutation,
+  origin: MutationOrigin = "user"
+): AppliedMutation {
+  return {
+    mutation,
+    origin,
+    at: new Date().toISOString(),
+    description: describeMutation(mutation),
+  }
 }
 
 export function dispatchMutation(
@@ -431,12 +525,7 @@ export function dispatchMutation(
   mutation: SpecMutation,
   origin: MutationOrigin = "user"
 ): SpecHistory {
-  const applied: AppliedMutation = {
-    mutation,
-    origin,
-    at: new Date().toISOString(),
-    description: describeMutation(mutation),
-  }
+  const applied = appliedMutation(mutation, origin)
   const nextSpec = applyMutation(history.spec, mutation)
   const userEditedPaths = new Set(history.userEditedPaths)
   if (origin === "user") userEditedPaths.add(mutationPath(mutation))

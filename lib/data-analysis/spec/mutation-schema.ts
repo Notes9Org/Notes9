@@ -4,7 +4,9 @@ import {
   AnalysisConfig,
   Annotation,
   AxisSpec,
+  BRACKET_STYLE_FIELDS,
   ColumnRole,
+  DatasetJoin,
   DesignDeclaration,
   ErrorBarKind,
   Exclusion,
@@ -14,6 +16,7 @@ import {
   PostHocKind,
   RowFilter,
   SeriesStyle,
+  SignificanceBracket,
   TestKind,
   Transform,
 } from "./analysis-spec"
@@ -39,6 +42,18 @@ import {
  */
 
 /* ── The payload schemas, mirroring `mutations.ts` branch for branch ────────*/
+
+/**
+ * The pick mask for a bracket style patch, built from the ONE list that names
+ * those fields (`BRACKET_STYLE_FIELDS`, which is also what regeneration and the
+ * reopen residue copy). Hand-writing the field list here would let the mutation
+ * accept a field regeneration then drops, which is the silent half of a restyle
+ * that reports success and disappears on the next recompute.
+ */
+const BRACKET_STYLE_MASK = Object.fromEntries(
+  BRACKET_STYLE_FIELDS.map((field) => [field, true])
+) as { [K in (typeof BRACKET_STYLE_FIELDS)[number]]: true }
+
 
 export const SpecMutationSchema = z.discriminatedUnion("kind", [
   /* Figure, style. */
@@ -88,6 +103,14 @@ export const SpecMutationSchema = z.discriminatedUnion("kind", [
   }),
   z.object({ kind: z.literal("figure.removeAnnotation"), id: z.string().max(64) }),
   z.object({ kind: z.literal("figure.moveBracket"), id: z.string().max(64), offsetY: z.number() }),
+  z.object({
+    kind: z.literal("figure.setBracketStyle"),
+    id: z.string().max(64),
+    // Sparse: every field is optional, and an absent one means "leave it alone",
+    // not "reset it". That is what lets a restyle survive regeneration — only
+    // the fields the researcher actually set are ever carried across.
+    patch: SignificanceBracket.pick(BRACKET_STYLE_MASK).partial(),
+  }),
   z.object({ kind: z.literal("figure.setShowExcluded"), value: z.boolean() }),
   /* Axes. */
   z.object({
@@ -120,6 +143,10 @@ export const SpecMutationSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("data.addTransform"), transform: Transform }),
   z.object({ kind: z.literal("data.removeTransform"), index: z.number().int().nonnegative() }),
   z.object({ kind: z.literal("data.setFilters"), filters: z.array(RowFilter) }),
+  // Bounded like the filter list: a spec carrying an unbounded number of joins
+  // is a spec that resolves by chaining table scans, and the rail only ever
+  // authors one at a time.
+  z.object({ kind: z.literal("data.setJoins"), joins: z.array(DatasetJoin).max(4) }),
   z.object({ kind: z.literal("data.excludeRow"), exclusion: Exclusion }),
   z.object({ kind: z.literal("data.restoreRow"), rowId: z.string().max(128) }),
   /* Roles and design. */

@@ -12,8 +12,12 @@ import {
   recommendTestForChart,
   tableFromChartRows,
   recomputeSignature,
+  railControlMutation,
+  seriesStyleMutation,
   type ChartState,
+  type RailControlKey,
 } from "./chart-state-spec"
+import { applyMutation, mutationPath, requiresRecompute, type SpecMutation } from "@/lib/data-analysis/spec/mutations"
 
 const table: Table = tableFromChartRows(
   ["Treatment", "Viability"],
@@ -478,5 +482,298 @@ describe("replacing the sheet", () => {
     expect(body).not.toContain("loadSnapshot(")
     // It must still show the new tab, so the remount is half the fix.
     expect(body).toContain("setMountKey(")
+  })
+})
+
+/* ── The rail, as mutations (Tier 0: rail-over-spec) ───────────────────────── */
+
+describe("railControlMutation reproduces the derivation exactly", () => {
+  /**
+   * The invariant that makes routing the rail through the mutation system safe,
+   * and the backward-compatibility proof at the same time.
+   *
+   * `specFromChartState` is still the one derivation, unchanged, and every
+   * saved analysis still opens through it. What `railControlMutation` claims is
+   * only that it names the STEP between two of its outputs. So for each
+   * control: derive the spec from the state before, apply the control's
+   * mutation, and land on the spec derived from the state after — byte for
+   * byte. A mutation that under-describes its control (a font change that
+   * forgets the face, an axis limit parsed differently) fails here, which is
+   * the class of bug a hand-written map is otherwise full of.
+   */
+  const CASES: { key: RailControlKey; before: Partial<ChartState>; after: Partial<ChartState> }[] = [
+    { key: "title", before: { title: "Viability" }, after: { title: "Cell viability" } },
+    { key: "subtitle", before: { subtitle: "" }, after: { subtitle: "n = 6" } },
+    { key: "subtitle", before: { subtitle: "n = 6" }, after: { subtitle: "" } },
+    { key: "caption", before: { caption: null }, after: { caption: "Mean ± SEM." } },
+    { key: "caption", before: { caption: "Mean ± SEM." }, after: { caption: null } },
+    { key: "xLabel", before: { xLabel: "Treatment" }, after: { xLabel: "Dose" } },
+    { key: "xUnit", before: { xUnit: "" }, after: { xUnit: "µM" } },
+    { key: "xUnit", before: { xUnit: "µM" }, after: { xUnit: "" } },
+    { key: "yLabel", before: { yLabel: "Viability" }, after: { yLabel: "OD₄₅₀" } },
+    { key: "yUnit", before: { yUnit: "" }, after: { yUnit: "%" } },
+    { key: "xLog", before: { xLog: false }, after: { xLog: true } },
+    { key: "xLog", before: { xLog: true }, after: { xLog: false } },
+    { key: "yLog", before: { yLog: false }, after: { yLog: true } },
+    { key: "xMin", before: { xMin: "" }, after: { xMin: "0.5" } },
+    { key: "xMin", before: { xMin: "0.5" }, after: { xMin: "" } },
+    { key: "xMax", before: { xMax: "" }, after: { xMax: "100" } },
+    { key: "yMin", before: { yMin: "" }, after: { yMin: "-2" } },
+    { key: "yMax", before: { yMax: "90" }, after: { yMax: "120" } },
+    { key: "nticks", before: { nticks: "" }, after: { nticks: "8" } },
+    { key: "nticks", before: { nticks: "8" }, after: { nticks: "" } },
+    { key: "showGrid", before: { showGrid: true }, after: { showGrid: false } },
+    { key: "showLegend", before: { showLegend: true }, after: { showLegend: false } },
+    { key: "legendPos", before: { legendPos: "bottom" }, after: { legendPos: "right" } },
+    { key: "legendPos", before: { legendPos: "right" }, after: { legendPos: "none" } },
+    { key: "paletteName", before: { paletteName: "okabe-ito" }, after: { paletteName: "viridis" } },
+    // The rail holds a CSS stack, the spec one of three faces. A control that
+    // shipped the stack straight into the mutation would fail the schema.
+    { key: "fontFamily", before: { fontFamily: "system-ui, sans-serif" }, after: { fontFamily: "serif" } },
+    { key: "fontFamily", before: { fontFamily: "serif" }, after: { fontFamily: "system-ui, -apple-system, sans-serif" } },
+    { key: "titleSize", before: { titleSize: 17 }, after: { titleSize: 22 } },
+    { key: "axisTitleSize", before: { axisTitleSize: 13 }, after: { axisTitleSize: 11 } },
+    { key: "errorMode", before: { errorMode: "sem" }, after: { errorMode: "sd" } },
+  ]
+
+  it.each(CASES)("$key: $before -> $after", ({ key, before, after }) => {
+    const from = { ...base, ...before } as ChartState
+    const to = { ...base, ...before, ...after } as ChartState
+    const mutation = railControlMutation(key, to)
+    expect(mutation).not.toBeNull()
+    expect(applyMutation(specFromChartState(from, table), mutation!)).toEqual(
+      specFromChartState(to, table)
+    )
+  })
+
+  it("names the spec path the sticky rule defends", () => {
+    // Two axes are two independent hand edits; the Y label the researcher wrote
+    // must not be shielded by their having touched the X label.
+    expect(mutationPath(railControlMutation("yLabel", base)!)).toBe("figure.axis.y")
+    expect(mutationPath(railControlMutation("xLabel", base)!)).toBe("figure.axis.x")
+    expect(mutationPath(railControlMutation("paletteName", base)!)).toBe("figure.setPalette")
+  })
+
+  it("does not misclassify a style edit as needing the engine (Law 5)", () => {
+    // Every routed control except the error bars redraws; only the error bars
+    // change what is drawn FROM the data. Read off `requiresRecompute` rather
+    // than a second list, so the two classifications cannot drift.
+    for (const { key } of CASES) {
+      const mutation = railControlMutation(key, base)!
+      expect([key, requiresRecompute(mutation)]).toEqual([key, key === "errorMode"])
+    }
+  })
+})
+
+describe("seriesStyleMutation reproduces the derivation exactly", () => {
+  const styled = (s: Record<string, unknown>): ChartState => ({
+    ...base,
+    seriesStyles: { Viability: s },
+  })
+
+  it.each([
+    ["colour", { color: "#112233" }],
+    ["line width", { width: 4 }],
+    ["marker size", { size: 12 }],
+    ["opacity", { opacity: 0.4 }],
+    ["dash", { dash: "dash" }],
+    ["marker", { marker: "square" }],
+    ["second axis", { axis: "y2" }],
+    // An unrecognised value must fall back exactly as the derivation does,
+    // rather than reaching the schema and throwing.
+    ["a marker the picker cannot produce", { marker: "hexagram" }],
+  ])("%s", (_label, patch) => {
+    const from = styled({ color: "#aabbcc" })
+    const to = styled({ color: "#aabbcc", ...(patch as Record<string, unknown>) })
+    expect(applyMutation(specFromChartState(from, table), seriesStyleMutation("Viability", to))).toEqual(
+      specFromChartState(to, table)
+    )
+  })
+
+  it("gives each series its own sticky path", () => {
+    expect(mutationPath(seriesStyleMutation("Viability", base))).toBe("figure.series.Viability")
+    expect(mutationPath(seriesStyleMutation("Toxicity", base))).toBe("figure.series.Toxicity")
+  })
+})
+
+describe("the shipping rail dispatches", () => {
+  /**
+   * The Tier 0 regression guard.
+   *
+   * Every style control was a bare `useState` setter handed straight to a
+   * widget's `onChange`, which is why none of them was undoable, sticky or
+   * announceable. Asserting the source is the only way to check that from here
+   * — the alternative is mounting a five-thousand-line component with Univer
+   * and Plotly inside it — and it catches exactly the regression that matters:
+   * someone adding a twenty-third control the lazy way.
+   */
+  const railSource = () =>
+    readFileSync("components/data-analysis/data-analysis-workspace.tsx", "utf8")
+
+  const SETTERS = [
+    "setTitle", "setSubtitle", "setXLabel", "setXUnit", "setYLabel", "setYUnit",
+    "setXLog", "setYLog", "setShowGrid", "setShowLegend", "setLegendPos",
+    "setPaletteName", "setXMin", "setXMax", "setYMin", "setYMax", "setNticks",
+    "setFontFamily", "setTitleSize", "setAxisTitleSize", "setErrorMode", "setCaption",
+  ]
+
+  it.each(SETTERS)("%s never reaches a control except through railEdit", (setter) => {
+    // Every line that hands this setter to a widget must go through `railEdit`.
+    // `onChange={setX}` and `onChange={(e) => setX(...)}` were the two shapes
+    // the rail used, and both are the defect. The declaration and `applyConfig`
+    // are the two legitimate bare uses, and neither is a control.
+    const call = new RegExp(`\\b${setter}\\b`)
+    const offenders = railSource()
+      .split("\n")
+      .filter((line) => call.test(line))
+      .filter((line) => !/const \[\w+, set\w+\] = useState/.test(line))
+      .filter((line) => !/^\s*(if \(|setCaption\(rail\.)/.test(line))
+      .filter((line) => !line.includes("railEdit("))
+    expect(offenders).toEqual([])
+    // And it is actually wired, not merely absent.
+    expect(railSource()).toMatch(new RegExp(`railEdit\\("\\w+", \\{[^}]*\\}, \\(\\) => [^)]*${setter}\\(`))
+  })
+
+  it("routes the per-series inspector through the recording setStyle", () => {
+    const src = railSource()
+    // `setSeriesStyles` is the raw setter; only `setStyle` may call it, and
+    // `setStyle` is the one that writes the mutation.
+    const inspector = src.slice(src.indexOf('id="cs-series"'), src.indexOf('id="cs-palette"'))
+    expect(inspector).toContain("setStyle(editKey,")
+    expect(inspector).not.toContain("setSeriesStyles(")
+  })
+
+  it("does not let a style edit approve the analysis and start a compute", () => {
+    // Law 5, at the one place routing the rail could have broken it. Every
+    // style control now reaches `recordEdit`, and `recordEdit` reaching
+    // `setAnalysisApproved(true)` unconditionally would mean a font change on a
+    // freshly loaded table flipping "loaded" to "approved" and firing the
+    // Pyodide worker. The gate is `requiresRecompute` — the same classification
+    // the compute effect uses, not a second opinion.
+    const src = railSource()
+    const start = src.indexOf("const recordEdit = useCallback(")
+    expect(start).toBeGreaterThan(-1)
+    const body = src.slice(start, src.indexOf("\n  )", start))
+    expect(body).toMatch(/if \(applied\.some\(\(a\) => requiresRecompute\(a\.mutation\)\)\) setAnalysisApproved\(true\)/)
+    // And there is exactly one such call in the whole edit path.
+    expect(src.match(/setAnalysisApproved\(true\)/g)).toHaveLength(2)
+  })
+
+  it("hands the AI patch the sticky set instead of an empty one", () => {
+    const src = railSource()
+    // The single fact that made L6 dead code. Both call sites, or neither.
+    expect(src).not.toMatch(/applyAiPatch\(initHistory\(derivedSpec\)/)
+    expect(src.match(/applyAiPatch\(initHistory\(derivedSpec, userEditedPaths\(editHistory\)\)/g)).toHaveLength(2)
+  })
+})
+
+describe("the bracket style control is routed, not held", () => {
+  /**
+   * T0.27's hand control. A panel that kept bracket style in `useState` would
+   * draw correctly and record nothing — no history entry, no undo, nothing in
+   * the saved spec — which is exactly the defect the rail refactor removed and
+   * exactly what makes a restyle look like it worked and vanish on reopen.
+   */
+  const panel = readFileSync("components/data-analysis/workspace/brackets-panel.tsx", "utf8")
+  const host = readFileSync("components/data-analysis/data-analysis-workspace.tsx", "utf8")
+
+  it("emits figure.setBracketStyle and holds no figure state of its own", () => {
+    expect(panel).toMatch(/kind: "figure\.setBracketStyle"/)
+    expect(panel).not.toMatch(/useState/)
+  })
+
+  it("is mounted on the same applySpecMutation door every other hand edit uses", () => {
+    expect(host).toMatch(/<BracketsPanel[\s\S]{0,200}onMutate=\{applySpecMutation\}/)
+  })
+})
+
+describe("Law 5 — the two classifications agree", () => {
+  /**
+   * `requiresRecompute` (mutations.ts) and `recomputeSignature` (this file) are
+   * two independent answers to "does this edit need the engine". They are each
+   * tested on their own; nothing tested them against each other, and one of
+   * them drifting is a Tier 0 defect in whichever direction it drifts.
+   *
+   * The direction asserted here is the dangerous one: if the SIGNATURE moves,
+   * `requiresRecompute` must say so too. A signature change that
+   * `requiresRecompute` calls style is a figure redrawn against numbers that
+   * no longer match it — the false negative the comment in `mutations.ts`
+   * names. The converse is deliberately allowed and documented: `figure.setKind`
+   * recomputes without moving the signature, because the aggregation can change
+   * while the inputs do not.
+   */
+  const before = specFromChartState(base, table)
+
+  const EVERY_KIND: SpecMutation[] = [
+    { kind: "figure.setKind", value: "box" },
+    { kind: "figure.setTitle", value: "t" },
+    { kind: "figure.setCaption", value: "c" },
+    { kind: "figure.setSubtitle", value: "s" },
+    { kind: "figure.setPalette", value: "viridis" },
+    { kind: "figure.setLegend", show: false },
+    { kind: "figure.setGridlines", value: false },
+    { kind: "figure.setDimensions", width: 900 },
+    { kind: "figure.setFont", family: "serif", titleSize: 20, axisSize: 11 },
+    { kind: "figure.setSeriesStyle", seriesKey: "Viability", patch: { colour: "#123456" } },
+    { kind: "figure.addAnnotation", annotation: { kind: "text", id: "n1", x: 1, y: 1, text: "hi", fontSize: 12, colour: "#000000" } },
+    { kind: "figure.removeAnnotation", id: "n1" },
+    { kind: "figure.moveBracket", id: "AB", offsetY: 8 },
+    { kind: "figure.setBracketStyle", id: "AB", patch: { colour: "#ff0000", hidden: true } },
+    { kind: "figure.setShowExcluded", value: false },
+    { kind: "axis.set", axis: "x", patch: { label: "l", unit: "u", scale: "log10", min: 1, max: 9, tickCount: 5 } },
+    { kind: "axis.set", axis: "y", patch: { scale: "log10" } },
+    { kind: "figure.setErrorBars", value: "ci95" },
+    { kind: "analysis.setTest", value: "t-welch" },
+    { kind: "analysis.setPostHoc", value: "tukey" },
+    { kind: "analysis.setTails", value: "greater" },
+    { kind: "analysis.setAlpha", value: 0.01 },
+    { kind: "analysis.setColumns", response: ["Viability"], group: "Treatment" },
+    { kind: "analysis.setReferenceLevel", value: "Vehicle" },
+    { kind: "analysis.setMissingValues", value: "pairwise" },
+    { kind: "analysis.setNonlinear", patch: { model: "4pl" } },
+    { kind: "data.addTransform", transform: { kind: "log10", column: "Viability" } },
+    { kind: "data.setFilters", filters: [] },
+    { kind: "data.excludeRow", exclusion: { rowId: "row-3", reasonKind: "technical-failure", reasonText: null, method: null, excludedBy: "t@x", excludedAt: "2026-01-01T00:00:00.000Z" } },
+    { kind: "data.restoreRow", rowId: "row-3" },
+    { kind: "design.set", patch: { paired: true } },
+    { kind: "roles.set", roles: before.roles },
+  ]
+
+  it.each(EVERY_KIND.map((m) => [m.kind, m] as const))(
+    "%s: a moved signature is never classified as style",
+    (_kind, mutation) => {
+      const after = applyMutation(before, mutation)
+      const signatureMoved = recomputeSignature(after) !== recomputeSignature(before)
+      if (signatureMoved) expect(requiresRecompute(mutation)).toBe(true)
+    }
+  )
+
+  it("keeps the two documented exceptions", () => {
+    // Both are deliberate, both are load-bearing, and both would look like bugs
+    // to a future reader without an assertion saying otherwise.
+    expect(requiresRecompute({ kind: "figure.setErrorBars", value: "sd" })).toBe(true)
+    expect(requiresRecompute({ kind: "figure.setKind", value: "box" })).toBe(true)
+    expect(
+      recomputeSignature(applyMutation(before, { kind: "figure.setKind", value: "box" }))
+    ).toBe(recomputeSignature(before))
+  })
+
+  it("leaves every routed style control off the engine's path entirely", () => {
+    // The claim the whole change rests on: routing the rail through the
+    // mutation system did not make a colour picker call Pyodide. Every rail
+    // control except the error bars leaves the signature exactly where it was.
+    for (const key of ["title", "subtitle", "caption", "xLabel", "yLabel", "xLog", "yLog",
+      "xMin", "yMax", "nticks", "showGrid", "showLegend", "legendPos", "paletteName",
+      "fontFamily", "titleSize", "axisTitleSize"] as RailControlKey[]) {
+      const moved = { ...base, title: "T", subtitle: "S", caption: "C", xLabel: "X", yLabel: "Y",
+        xLog: true, yLog: true, xMin: "1", yMax: "9", nticks: "7", showGrid: false,
+        showLegend: false, legendPos: "top", paletteName: "viridis", fontFamily: "serif",
+        titleSize: 20, axisTitleSize: 11 } as ChartState
+      const mutation = railControlMutation(key, moved)!
+      expect([key, recomputeSignature(applyMutation(before, mutation))]).toEqual([
+        key,
+        recomputeSignature(before),
+      ])
+    }
   })
 })

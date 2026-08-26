@@ -7,7 +7,11 @@ import { cn } from "@/lib/utils"
 import type { AnalysisSpec } from "@/lib/data-analysis/spec/analysis-spec"
 import type { EngineResult } from "@/lib/data-analysis/engine/contract"
 import type { AppliedMutation } from "@/lib/data-analysis/spec/mutations"
-import { buildProvenanceCard, type ProvenanceEntry } from "@/lib/data-analysis/provenance"
+import {
+  buildProvenanceCard,
+  type EditAuditRecord,
+  type ProvenanceEntry,
+} from "@/lib/data-analysis/provenance"
 import { EASE_OUT, SlideOver } from "./motion"
 
 /**
@@ -70,24 +74,36 @@ export function ProvenancePanel({
   spec,
   result,
   history,
+  auditLog,
   revisionNo,
   isFrozen,
   sourceDetached,
+  author,
+  savedAt,
 }: {
   open: boolean
   onClose: () => void
   spec: AnalysisSpec
   result: EngineResult | null
+  /** Legacy: the edits with no reverted flag. Prefer `auditLog`. */
   history?: AppliedMutation[]
+  /** The append-only audit log, live or read back off the revision. */
+  auditLog?: EditAuditRecord[]
   revisionNo?: number
   isFrozen?: boolean
   sourceDetached?: boolean
+  /** From the revision row, so who/when survives a reload (L8). */
+  author?: { id: string | null; label?: string | null } | null
+  savedAt?: string | null
 }) {
   const card = buildProvenanceCard(spec, result, {
     history,
+    auditLog,
     revisionNo,
     isFrozen,
     sourceDetached,
+    author,
+    savedAt,
   })
 
   return (
@@ -170,11 +186,27 @@ export function ProvenancePanel({
                     <User className="mt-0.5 size-3 shrink-0 text-muted-foreground" />
                   )}
                   <span className="min-w-0">
-                    <span className="block text-[12.5px] leading-snug text-foreground/85">
+                    {/* A reverted edit stays on the card, struck through and
+                        labelled. Removing it would make the history read
+                        tidier than it was, and "we tried this and took it
+                        back" is a fact a reviewer is entitled to. */}
+                    <span
+                      className={cn(
+                        "block text-[12.5px] leading-snug",
+                        h.reverted
+                          ? "text-muted-foreground line-through decoration-muted-foreground/50"
+                          : "text-foreground/85"
+                      )}
+                    >
                       {h.description}
                     </span>
                     <span className="block text-[11px] text-muted-foreground">
                       {new Date(h.at).toLocaleTimeString()}
+                      {h.reverted && (
+                        <span className="ml-1.5 rounded border border-border px-1 py-px text-[10px] uppercase tracking-wide">
+                          reverted
+                        </span>
+                      )}
                     </span>
                   </span>
                 </li>

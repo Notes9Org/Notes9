@@ -63,17 +63,104 @@ export function inferTabularFormatFromFileName(fileName: string): TabularFormat 
  * buffer, and a swallowed rejection here shows the user an empty sheet with no
  * explanation for it.
  */
+/** Delimiters a `.txt` export is plausibly using, most-likely first. Ties are
+ *  broken by this order, which is why tab leads: a lab instrument writing
+ *  `.txt` is far more often tab-separated than anything else. */
+const TXT_DELIMITER_CANDIDATES = ["\t", ",", ";", "|"] as const
+
+/**
+ * Count `delimiter` occurrences in `line`, ignoring any inside double quotes.
+ *
+ * Quote-awareness is not pedantry here: the whole reason the caller cannot just
+ * trust the first line is that a field may legitimately contain the character
+ * being counted. `"Smith, John"\t42` has one tab and one comma, and a counter
+ * that cannot see the quotes reads that comma as a separator — which is how a
+ * tab-separated file ends up split on commas instead.
+ */
+function countOutsideQuotes(line: string, delimiter: string): number {
+  let count = 0
+  let inQuotes = false
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (ch === '"') {
+      // "" inside a quoted field is an escaped quote, not a close-then-open.
+      if (inQuotes && line[i + 1] === '"') i++
+      else inQuotes = !inQuotes
+      continue
+    }
+    if (!inQuotes && ch === delimiter) count++
+  }
+  return count
+}
+
+/**
+ * Guess the field separator of a plain-text table (T0.2).
+ *
+ * `.txt` names no separator of its own, and SheetJS's own guess reads only the
+ * first line — which is the header, the one line most likely to contain a
+ * comma inside a label ("Concentration, uM"). So this samples several lines and
+ * prefers the delimiter whose field count is *consistent* across them: a real
+ * separator produces the same number of columns on every row, while a
+ * character that merely appears inside some values does not.
+ *
+ * Returns null when nothing looks like a separator, which is the correct answer
+ * for a genuinely single-column file — the caller then leaves SheetJS alone
+ * rather than forcing a split that would invent columns.
+ */
+export function sniffTextDelimiter(text: string): string | null {
+  const lines = text
+    .split(/\r\n|\r|\n/)
+    .filter((l) => l.trim().length > 0)
+    .slice(0, 8)
+
+  if (lines.length === 0) return null
+
+  let best: { delimiter: string; fields: number } | null = null
+
+  for (const delimiter of TXT_DELIMITER_CANDIDATES) {
+    const counts = lines.map((l) => countOutsideQuotes(l, delimiter))
+    // Every sampled line must actually contain it, and agree on how many.
+    if (counts[0] === 0) continue
+    if (!counts.every((c) => c === counts[0])) continue
+
+    const fields = counts[0] + 1
+    // More columns is a stronger signal, but only among delimiters that were
+    // consistent — consistency is the test, column count is just the tiebreak.
+    if (!best || fields > best.fields) best = { delimiter, fields }
+  }
+
+  return best?.delimiter ?? null
+}
+
+/** How much of a text file to look at when sniffing. Enough to see several
+ *  rows of anything realistic without decoding a 40 MB export to read line 3. */
+const TXT_SNIFF_BYTES = 64 * 1024
+
 export function readSpreadsheetWorkbook(arrayBuffer: ArrayBuffer, fileName: string): XlsxWorkBook {
   const lower = fileName.toLowerCase()
+
+  // The separator is otherwise guessed from the first line, which picks the
+  // wrong one as soon as a cell in that line contains a comma. The extension
+  // already says what it is, so say it.
+  let fieldSeparator: string | null = null
+  if (lower.endsWith(".tsv")) {
+    fieldSeparator = "\t"
+  } else if (lower.endsWith(".txt")) {
+    // `.txt` names no separator, so it has to be read out of the bytes (T0.2).
+    // `fatal: false` because a sniff must never be the thing that fails an
+    // open: undecodable bytes in the sample just mean no delimiter is found,
+    // and the file still goes to SheetJS exactly as it did before.
+    const sample = new TextDecoder("utf-8", { fatal: false }).decode(
+      new Uint8Array(arrayBuffer, 0, Math.min(arrayBuffer.byteLength, TXT_SNIFF_BYTES))
+    )
+    fieldSeparator = sniffTextDelimiter(sample)
+  }
+
   return XLSX.read(arrayBuffer, {
     type: "array",
     cellFormula: true,
     cellDates: true,
-    // The separator is otherwise guessed from the first line, which picks the
-    // wrong one as soon as a cell in that line contains a comma. The extension
-    // already says what it is, so say it. `.txt` is deliberately left to the
-    // guess: it names no separator of its own.
-    ...(lower.endsWith(".tsv") ? { FS: "\t" } : {}),
+    ...(fieldSeparator ? { FS: fieldSeparator } : {}),
   })
 }
 

@@ -1,4 +1,5 @@
 import {
+  BRACKET_STYLE_FIELDS,
   Exclusion,
   RowFilter,
   Transform,
@@ -8,6 +9,7 @@ import {
 import {
   describeMutation,
   type AppliedMutation,
+  type BracketStylePatch,
   type SpecMutation,
 } from "@/lib/data-analysis/spec/mutations"
 import { parseMutation } from "@/lib/data-analysis/spec/mutation-schema"
@@ -237,9 +239,19 @@ function residueMutations(from: AnalysisSpec, stored: AnalysisSpec): SpecMutatio
   for (const annotation of figure.annotations)
     if (!from.figure.annotations.some((a) => a.id === annotation.id))
       out.push({ kind: "figure.addAnnotation", annotation })
-  for (const bracket of figure.brackets)
-    if (!from.figure.brackets.some((b) => b.id === bracket.id))
-      out.push({ kind: "figure.moveBracket", id: bracket.id, offsetY: bracket.offsetY })
+  for (const bracket of figure.brackets) {
+    if (from.figure.brackets.some((b) => b.id === bracket.id)) continue
+    out.push({ kind: "figure.moveBracket", id: bracket.id, offsetY: bracket.offsetY })
+    // The offset alone is not the bracket. Rebuilding from `offsetY` dropped
+    // every style override on reopen: the restyle applied, saved, and came back
+    // grey. `BRACKET_STYLE_FIELDS` is the one list naming what a bracket carries
+    // beyond its position, so the residue copies exactly that and nothing else.
+    const patch: BracketStylePatch = {}
+    for (const field of BRACKET_STYLE_FIELDS)
+      if (bracket[field] !== undefined) Object.assign(patch, { [field]: bracket[field] })
+    if (Object.keys(patch).length > 0)
+      out.push({ kind: "figure.setBracketStyle", id: bracket.id, patch })
+  }
 
   return out
 }

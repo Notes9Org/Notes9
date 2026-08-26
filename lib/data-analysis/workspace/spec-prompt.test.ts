@@ -241,6 +241,13 @@ describe("splitApprovedMutations reproduces the approved spec exactly", () => {
     "figure.moveBracket": [
       { kind: "figure.moveBracket", id: bracketId("drug", "vehicle"), offsetY: 12 },
     ],
+    "figure.setBracketStyle": [
+      {
+        kind: "figure.setBracketStyle",
+        id: bracketId("drug", "vehicle"),
+        patch: { colour: "#112233", lineWidth: 2, capLength: 6 },
+      },
+    ],
     "figure.setShowExcluded": [{ kind: "figure.setShowExcluded", value: false }],
     "axis.set": [{ kind: "axis.set", axis: "y", patch: { scale: "log10", min: 0.1, max: 100 } }],
     "figure.setErrorBars": [{ kind: "figure.setErrorBars", value: "sd" }],
@@ -269,6 +276,27 @@ describe("splitApprovedMutations reproduces the approved spec exactly", () => {
     ],
     "data.setFilters": [
       { kind: "data.setFilters", filters: [{ column: "treatment", op: "eq", value: "drug" }] },
+    ],
+    "data.setJoins": [
+      {
+        kind: "data.setJoins",
+        joins: [
+          {
+            right: {
+              fileId: "3f2504e0-4f89-41d3-9a0c-0305e82c3301",
+              fileName: "plate-map.csv",
+              sheet: "Sheet1",
+              versionHash: "fnv1a64:0011223344556677",
+              rowCount: 96,
+              columnCount: 3,
+            },
+            on: [{ left: "Well", right: "Well" }],
+            type: "left",
+            columns: [],
+            suffix: "_r",
+          },
+        ],
+      },
     ],
     "data.excludeRow": [
       {

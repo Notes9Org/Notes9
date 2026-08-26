@@ -214,6 +214,61 @@ describe("openWorkbookFromStorage", () => {
     expect(result).toEqual({ ok: false, reason: "not-a-spreadsheet" })
   })
 
+  it("T0.2: a .txt export opens instead of being rejected as not-a-spreadsheet", async () => {
+    // Every upload control in the workspace advertises accept=".txt", so a
+    // rejection here made the app give two answers about one file. Tab-separated
+    // because that is what a plate reader writes.
+    const txt = new TextEncoder().encode("well\tsignal\nA1\t0.412\nA2\t0.518\n").buffer
+    const result = await openWorkbookFromStorage({
+      fileName: "plate-run.txt",
+      storagePath: "org-1/experiment/exp-1/file-1/plate-run.txt",
+      legacyFileUrl: null,
+      forbidden: false,
+      isSafeStorageUrl: alwaysSafe,
+      storage: downloaderReturning(new Blob([txt])),
+    })
+    expect(result.ok).toBe(true)
+  })
+
+  it("T0.2: the sniffed delimiter reaches the parse, so columns are real columns", async () => {
+    // The point of the sniff. If the separator were guessed wrong, this would
+    // come back as ONE column holding the whole line as text.
+    const txt = new TextEncoder().encode("well\tsignal\nA1\t0.412\n").buffer
+    const result = await openWorkbookFromStorage({
+      fileName: "plate-run.txt",
+      storagePath: "org-1/experiment/exp-1/file-1/plate-run.txt",
+      legacyFileUrl: null,
+      forbidden: false,
+      isSafeStorageUrl: alwaysSafe,
+      storage: downloaderReturning(new Blob([txt])),
+    })
+    if (!result.ok) throw new Error(`expected an open, got ${result.reason}`)
+    const snapshot = result.snapshot as {
+      sheetOrder: string[]
+      sheets: Record<string, { cellData: Record<number, Record<number, { v?: unknown }>> }>
+    }
+    const cells = snapshot.sheets[snapshot.sheetOrder[0]].cellData
+    expect(cells[0][0].v).toBe("well")
+    expect(cells[0][1].v).toBe("signal")
+    expect(cells[1][0].v).toBe("A1")
+    expect(cells[1][1].v).toBe(0.412)
+  })
+
+  it("T0.2: a .txt whose bytes are not tabular still opens as one column, not an error", async () => {
+    // No delimiter found is a real answer, not a failure: prose in a .txt is a
+    // single-column sheet, which is exactly what the user will see.
+    const txt = new TextEncoder().encode("alpha\nbeta\ngamma\n").buffer
+    const result = await openWorkbookFromStorage({
+      fileName: "notes.txt",
+      storagePath: "org-1/experiment/exp-1/file-1/notes.txt",
+      legacyFileUrl: null,
+      forbidden: false,
+      isSafeStorageUrl: alwaysSafe,
+      storage: downloaderReturning(new Blob([txt])),
+    })
+    expect(result.ok).toBe(true)
+  })
+
   it("AC-3 reason=parse-failed: a tabular extension whose bytes are corrupt/truncated", async () => {
     const result = await openWorkbookFromStorage({
       fileName: "broken.xlsx",

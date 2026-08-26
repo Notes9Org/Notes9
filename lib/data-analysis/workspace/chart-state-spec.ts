@@ -24,10 +24,13 @@ import {
   type RowFilter,
   type Transform,
   type Exclusion,
+  type SeriesStyle,
 } from "@/lib/data-analysis/spec/analysis-spec"
+import type { SpecMutation } from "@/lib/data-analysis/spec/mutations"
 import type { Table } from "@/lib/data-analysis/engine/resolver"
 import { defaultGroupColumn, inferDesign, inferRoles, legalTests, type TestCapability } from "@/lib/data-analysis/semantic/infer"
-import { hashTable } from "./bootstrap"
+import { applyRecord, rolesFromRecord, type ExperimentRecord } from "@/lib/data-analysis/semantic/record"
+import { hashTable, recallRowIds } from "./bootstrap"
 
 /** Every chart type the workspace offers, mapped onto a figure kind. */
 export const CHART_TYPE_TO_FIGURE_KIND: Record<string, FigureKind> = {
@@ -162,6 +165,30 @@ const LEGEND_POSITIONS = new Set(["bottom", "right", "top", "none"])
 const LINE_STYLES = new Set(["solid", "dash", "dot", "dashdot", "none"])
 const POINT_SHAPES = new Set(["circle", "square", "diamond", "triangle", "cross", "x", "star"])
 
+/** The rail holds a CSS stack; the spec names one of three faces. */
+const figureFontFamily = (v: string | undefined): AnalysisSpec["figure"]["fontFamily"] =>
+  v === "serif" || v === "mono" ? v : "sans"
+
+/**
+ * One rail series entry as the spec's `SeriesStyle`. Shared by the derivation
+ * below and by `seriesStyleMutation`, so the mutation a colour picker
+ * dispatches cannot describe a different style from the one the derivation
+ * would have produced from the same rail state.
+ */
+function figureSeriesStyle(key: string, s: NonNullable<ChartState["seriesStyles"]>[string]): SeriesStyle {
+  return {
+    key,
+    colour: s.color ?? null,
+    pointShape: (POINT_SHAPES.has(s.marker ?? "") ? s.marker : "circle") as SeriesStyle["pointShape"],
+    pointSize: s.size ?? 6,
+    opacity: s.opacity ?? 1,
+    jitter: 0,
+    lineStyle: (LINE_STYLES.has(s.dash ?? "") ? s.dash : "solid") as SeriesStyle["lineStyle"],
+    lineWidth: s.width ?? 2,
+    axis: s.axis === "y2" ? "right" : "left",
+  }
+}
+
 /**
  * Choose the test the chart implies.
  *
@@ -215,10 +242,21 @@ export function recommendTestForChart(
 export function specFromChartState(
   state: ChartState,
   table: Table,
-  meta: { fileName: string; sheet?: string | null } = { fileName: "analysis.xlsx" }
+  meta: { fileName: string; sheet?: string | null } = { fileName: "analysis.xlsx" },
+  /**
+   * The notes9 experiment record for the open sheet, when the workspace knows
+   * which experiment it came from. Absent, everything below infers from the
+   * file exactly as before; present, the roles it establishes are not
+   * re-guessed and the design it declares is cross-checked against the file.
+   */
+  record?: ExperimentRecord | null
 ): AnalysisSpec {
-  const roles = inferRoles(table).map(({ rationale: _r, ...role }) => role)
-  const { rationale: _d, ...design } = inferDesign(table, roles)
+  const known = record ? rolesFromRecord(table, record) : []
+  const roles = inferRoles(table, known).map(({ rationale: _r, ...role }) => role)
+  // The file's own reading, kept independent of the record so `applyRecord`
+  // has something real to compare the record against.
+  const { rationale: _d, ...fileDesign } = inferDesign(table, roles)
+  const design = record ? applyRecord(table, roles, fileDesign, record) : fileDesign
 
   // What the user mapped wins over what was inferred: they chose these columns
   // in the rail, and re-guessing them would fight the choice.
@@ -255,7 +293,7 @@ export function specFromChartState(
     legendPosition: LEGEND_POSITIONS.has(state.legendPos ?? "")
       ? (state.legendPos as "bottom" | "right" | "top" | "none")
       : "bottom",
-    fontFamily: state.fontFamily === "serif" || state.fontFamily === "mono" ? state.fontFamily : "sans",
+    fontFamily: figureFontFamily(state.fontFamily),
     titleFontSize: state.titleSize ?? 17,
     axisFontSize: state.axisTitleSize ?? 13,
     width: state.width ?? 720,
@@ -277,16 +315,7 @@ export function specFromChartState(
     },
     // Per-series overrides carry across unchanged; they are the lab's figure
     // look, and losing them on save is the complaint §Tier1.2 is about.
-    series: Object.entries(state.seriesStyles ?? {}).map(([key, s]) => ({
-      key,
-      colour: s.color ?? null,
-      pointShape: POINT_SHAPES.has(s.marker ?? "") ? s.marker : "circle",
-      pointSize: s.size ?? 6,
-      opacity: s.opacity ?? 1,
-      lineStyle: LINE_STYLES.has(s.dash ?? "") ? s.dash : "solid",
-      lineWidth: s.width ?? 2,
-      axis: s.axis === "y2" ? ("right" as const) : ("left" as const),
-    })),
+    series: Object.entries(state.seriesStyles ?? {}).map(([key, s]) => figureSeriesStyle(key, s)),
   }
 
   const draft = parseSpec({
@@ -336,6 +365,118 @@ export function specFromChartState(
 }
 
 export class SpecDerivationError extends Error {}
+
+/* ── The rail, as mutations ────────────────────────────────────────────────*/
+
+/**
+ * The style controls that now dispatch instead of only setting React state.
+ *
+ * Deliberately NOT the whole rail. `markers`, `showPoints`, `hlines`, `vlines`
+ * and `chartH` have no field in the spec at all — `railFromConfig` excludes
+ * them for exactly that reason — so there is no mutation to dispatch and no
+ * sticky path to defend. The binding controls (`chartType`, `xKey`, `yKeys`,
+ * `zKey`, `sizeKey`) and the statistics slice do have mutations, but they
+ * change what the ENGINE computes rather than how it is drawn, so routing them
+ * moves the recompute gate as well as the history and belongs in its own change.
+ */
+export type RailControlKey =
+  | "title" | "subtitle" | "caption"
+  | "xLabel" | "xUnit" | "yLabel" | "yUnit"
+  | "xLog" | "yLog" | "xMin" | "xMax" | "yMin" | "yMax" | "nticks"
+  | "showGrid" | "showLegend" | "legendPos"
+  | "paletteName" | "fontFamily" | "titleSize" | "axisTitleSize"
+  | "errorMode"
+
+/**
+ * The typed mutation a rail control means, read off the rail state AFTER the
+ * change.
+ *
+ * Every conversion here is the one `specFromChartState` already performs on the
+ * same field — the CSS stack narrowed to one of three faces, the axis-limit
+ * text parsed to a number or null, the empty unit string read as absent. That
+ * is not a coincidence to be maintained by hand: `chart-state-spec.test.ts`
+ * asserts, per control, that applying this mutation to the spec derived from
+ * the state BEFORE lands exactly on the spec derived from the state AFTER. A
+ * conversion that drifts from `specFromChartState` fails that test, which is
+ * also the backward-compatibility guarantee — a saved analysis still derives
+ * through the same function it always did, and the mutations only describe the
+ * steps between two of its outputs.
+ *
+ * `null` means the control has no spec effect worth recording.
+ */
+export function railControlMutation(key: RailControlKey, next: ChartState): SpecMutation | null {
+  switch (key) {
+    case "title":
+      return { kind: "figure.setTitle", value: next.title }
+    case "subtitle":
+      return { kind: "figure.setSubtitle", value: next.subtitle || null }
+    case "caption":
+      return { kind: "figure.setCaption", value: next.caption ?? null }
+    // Label and unit travel together, as the legend's show/position do below.
+    // The spec keeps them on one path, and one control moves both: binding an
+    // axis title from a sheet cell sets the label and clears the unit. A
+    // mutation naming only half of that would under-describe the edit it is the
+    // record of. Re-stating the unchanged half is a no-op — `axis.set` merges.
+    case "xLabel":
+    case "xUnit":
+      return { kind: "axis.set", axis: "x", patch: { label: next.xLabel, unit: next.xUnit || null } }
+    case "yLabel":
+    case "yUnit":
+      return { kind: "axis.set", axis: "y", patch: { label: next.yLabel, unit: next.yUnit || null } }
+    case "xLog":
+      return { kind: "axis.set", axis: "x", patch: { scale: next.xLog ? "log10" : "linear" } }
+    case "yLog":
+      return { kind: "axis.set", axis: "y", patch: { scale: next.yLog ? "log10" : "linear" } }
+    case "xMin":
+      return { kind: "axis.set", axis: "x", patch: { min: num(next.xMin) } }
+    case "xMax":
+      return { kind: "axis.set", axis: "x", patch: { max: num(next.xMax) } }
+    case "yMin":
+      return { kind: "axis.set", axis: "y", patch: { min: num(next.yMin) } }
+    case "yMax":
+      return { kind: "axis.set", axis: "y", patch: { max: num(next.yMax) } }
+    case "nticks":
+      return { kind: "axis.set", axis: "x", patch: { tickCount: num(next.nticks) } }
+    case "showGrid":
+      return { kind: "figure.setGridlines", value: next.showGrid ?? true }
+    // One mutation for the pair, because the spec holds them on one field and
+    // `figure.setLegend` writes both. The position rides along on either edit so
+    // the mutation always reproduces the whole of what the rail shows.
+    case "showLegend":
+    case "legendPos":
+      return {
+        kind: "figure.setLegend",
+        show: next.showLegend ?? true,
+        position: LEGEND_POSITIONS.has(next.legendPos ?? "")
+          ? (next.legendPos as AnalysisSpec["figure"]["legendPosition"])
+          : "bottom",
+      }
+    case "paletteName":
+      return { kind: "figure.setPalette", value: next.paletteName }
+    case "fontFamily":
+      return { kind: "figure.setFont", family: figureFontFamily(next.fontFamily) }
+    case "titleSize":
+      return { kind: "figure.setFont", titleSize: next.titleSize ?? 17 }
+    case "axisTitleSize":
+      return { kind: "figure.setFont", axisSize: next.axisTitleSize ?? 13 }
+    case "errorMode":
+      return { kind: "figure.setErrorBars", value: next.errorMode }
+  }
+}
+
+/**
+ * A series' style, as one mutation.
+ *
+ * Separate from `railControlMutation` because the path it owns names the series
+ * (`figure.series.<key>`), so the key is an argument rather than a case. That
+ * path is the point: two series restyled by hand are two independent sticky
+ * edits, and an AI patch recolouring one must not be reported as colliding with
+ * the other.
+ */
+export function seriesStyleMutation(seriesKey: string, next: ChartState): SpecMutation {
+  const { key: _key, ...patch } = figureSeriesStyle(seriesKey, next.seriesStyles?.[seriesKey] ?? {})
+  return { kind: "figure.setSeriesStyle", seriesKey, patch }
+}
 
 /**
  * Drive the rail from a spec, the direction a saved analysis or an AI-proposed
@@ -474,15 +615,37 @@ export function recomputeSignature(spec: AnalysisSpec): string {
   ])
 }
 
-/** Rows keyed by column name, as the chart workspace holds them, become a Table. */
+/**
+ * Rows keyed by column name, as the chart workspace holds them, become a Table.
+ *
+ * `rowId` is the sheet's own row number, so a mark traced back to a row lands
+ * where the user can find it and an "Excluded points" line cites the sample it
+ * actually names. `row-${i + 2}` is only that number when the header is on row 1
+ * and nothing was dropped in between: a title row, a blank spacer, a unit row or
+ * a footnote all move the data without moving the index. So the true ids are
+ * taken from the reader that knew them — passed in, or recalled from the array
+ * `snapshotToTable` produced — and the positional form is the last resort for
+ * rows assembled by hand (tests, the AI's synthetic tables), where it is right.
+ *
+ * This is also where the two readers converge on what "missing" means. The flat
+ * row shape says `""` because it cannot hold `null`; `tableFromGrid` says
+ * `null`, which is what the `Table` contract declares and what the resolver and
+ * the semantic layer treat as absent. Two spellings of missing arriving at one
+ * missing-value path is a defect waiting for the first `eq ""` filter, so a
+ * blank becomes `null` here. `hashTable` writes `?? ""` either way, so no
+ * stored version hash moves.
+ */
 export function tableFromChartRows(
   columns: string[],
-  rows: Record<string, number | string>[]
+  rows: Record<string, number | string | null>[],
+  rowIds?: readonly string[]
 ): Table {
+  const known = rowIds ?? recallRowIds(rows)
   return {
     columns,
-    // The sheet's own row number, so a mark traced back to a row lands where
-    // the user can find it. Header occupies row 1.
-    rows: rows.map((values, i) => ({ rowId: `row-${i + 2}`, values })),
+    rows: rows.map((row, i) => ({
+      rowId: known?.[i] ?? `row-${i + 2}`,
+      values: Object.fromEntries(Object.entries(row).map(([k, v]) => [k, v === "" ? null : v])),
+    })),
   }
 }

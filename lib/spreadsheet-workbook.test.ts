@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest"
 import { readFileSync } from "node:fs"
-import { isSpreadsheetFile, inferTabularFormatFromFileName } from "./spreadsheet-workbook"
+import { isSpreadsheetFile, inferTabularFormatFromFileName, sniffTextDelimiter } from "./spreadsheet-workbook"
 
 const named = (name: string) => new File([""], name, { type: "" })
 
@@ -63,5 +63,62 @@ describe("inferTabularFormatFromFileName", () => {
     expect(inferTabularFormatFromFileName("PLATE.CSV")).toBe("csv")
     expect(inferTabularFormatFromFileName("plate.xlsx")).toBe("xlsx")
     expect(inferTabularFormatFromFileName("plate.xls")).toBe("xls")
+  })
+})
+
+describe("sniffTextDelimiter (T0.2)", () => {
+  it("picks tab for a tab-separated instrument export", () => {
+    const text = "well\tsignal\tblank\nA1\t0.412\t0.03\nA2\t0.518\t0.03\n"
+    expect(sniffTextDelimiter(text)).toBe("\t")
+  })
+
+  it("picks comma for comma-separated text", () => {
+    expect(sniffTextDelimiter("a,b,c\n1,2,3\n4,5,6\n")).toBe(",")
+  })
+
+  it("picks semicolon for the European decimal-comma layout", () => {
+    // The values themselves contain commas as decimal points, so a first-line
+    // guess that counted commas would split every number in half.
+    const text = "dose;response\n0,5;12,3\n1,0;24,8\n2,0;48,1\n"
+    expect(sniffTextDelimiter(text)).toBe(";")
+  })
+
+  it("ignores a delimiter that only appears inside a quoted field", () => {
+    // This is the case the old first-line guess got wrong: the header carries a
+    // comma inside a label, and the file is really tab-separated.
+    const text = '"Concentration, uM"\tresponse\n0.1\t12\n1.0\t44\n'
+    expect(sniffTextDelimiter(text)).toBe("\t")
+  })
+
+  it("returns null for a genuinely single-column file", () => {
+    // Nothing to split on. Forcing a delimiter here would invent columns.
+    expect(sniffTextDelimiter("alpha\nbeta\ngamma\n")).toBeNull()
+  })
+
+  it("returns null for empty or whitespace-only input", () => {
+    expect(sniffTextDelimiter("")).toBeNull()
+    expect(sniffTextDelimiter("\n\n   \n")).toBeNull()
+  })
+
+  it("rejects a character whose count varies between rows", () => {
+    // Commas appear, but inconsistently — they are prose, not structure. Tab is
+    // consistent, so tab wins rather than the more frequent character.
+    const text = "note\tvalue\nhello, world, again\t1\nbye\t2\n"
+    expect(sniffTextDelimiter(text)).toBe("\t")
+  })
+
+  it("prefers the delimiter yielding more columns when several are consistent", () => {
+    // Every line has one pipe and three tabs; tabs describe the real shape.
+    const text = "a\tb\tc\td|x\n1\t2\t3\t4|y\n"
+    expect(sniffTextDelimiter(text)).toBe("\t")
+  })
+
+  it("handles CRLF line endings", () => {
+    expect(sniffTextDelimiter("a\tb\r\n1\t2\r\n")).toBe("\t")
+  })
+
+  it("treats an escaped double quote as content, not a field boundary", () => {
+    const text = '"say ""hi"", ok"\tn\nfoo\t1\n'
+    expect(sniffTextDelimiter(text)).toBe("\t")
   })
 })
