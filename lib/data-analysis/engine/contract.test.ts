@@ -142,6 +142,20 @@ describe("integrity check on reopen (§3A.3 rule 3)", () => {
     expect(check.engineChanged).toBe(false)
   })
 
+  it("treats the sha256->fnv1a64 relabel as the same data", () => {
+    // The digits never changed; only the (always-wrong) algorithm label did.
+    // Comparing whole strings would false-alarm every analysis saved before it.
+    const check = checkResultIntegrity(stored, { ...stored, dataVersionHash: "fnv1a64:aaaa1111" })
+    expect(check.dataChanged).toBe(false)
+    expect(check.valid).toBe(true)
+  })
+
+  it("still flags real drift under the new label", () => {
+    const check = checkResultIntegrity(stored, { ...stored, dataVersionHash: "fnv1a64:cccc3333" })
+    expect(check.valid).toBe(false)
+    expect(check.dataChanged).toBe(true)
+  })
+
   it("names the current engine version so the banner can quote it", () => {
     expect(ENGINE_VERSION).toMatch(/^notes9-stats \d+\.\d+\.\d+ \(pyodide \d+\.\d+\.\d+\)$/)
   })

@@ -1,11 +1,12 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import { MagnifyingGlass, Table as TableIcon, WarningCircle } from "@phosphor-icons/react/ssr"
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import type { DataFileRow } from "@/components/data-analysis/data-files-list"
+import { ConnectFolderButton, type ConnectedFolder } from "@/components/data-analysis/workspace/folder-connect"
 
 /**
  * ADR-017's `{ error: "unreadable", reason }` failure body, mirrored on the
@@ -61,6 +62,7 @@ export function LibraryDialog({
   loadingFileId,
   fileErrors,
   onSelect,
+  onOpenLocalFile,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -71,7 +73,16 @@ export function LibraryDialog({
   /** Populated as opens fail, keyed by file id. Never removes a row from `files`. */
   fileErrors: Record<string, WorkbookUnreadableReason>
   onSelect: (file: DataFileRow) => void
+  /**
+   * T0.1: open a file from a folder the researcher connected on their own
+   * machine. Optional so the dialog still renders in contexts that have no
+   * local-file path (and so the existing call sites did not all have to
+   * change at once).
+   */
+  onOpenLocalFile?: (file: File) => void
 }) {
+  const [folder, setFolder] = useState<ConnectedFolder | null>(null)
+  const [folderError, setFolderError] = useState<string | null>(null)
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase()
     const matched = !q
@@ -92,8 +103,52 @@ export function LibraryDialog({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Import from your data files</DialogTitle>
-          <DialogDescription>Load a file you&rsquo;ve uploaded to an experiment straight into the analysis workspace.</DialogDescription>
+          <DialogDescription>Load a file you&rsquo;ve uploaded to an experiment, or connect a folder on this computer.</DialogDescription>
         </DialogHeader>
+        {onOpenLocalFile && (
+          <div className="space-y-2 rounded-lg border border-border p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">This computer</p>
+                <p className="truncate text-xs text-muted-foreground">
+                  {folder
+                    ? `${folder.name} — ${folder.files.length} data file${folder.files.length === 1 ? "" : "s"}${folder.truncated ? " (list truncated)" : ""}`
+                    : "A plate reader writes a folder per run. Connect one and open any file in it."}
+                </p>
+              </div>
+              <ConnectFolderButton
+                onConnect={(f) => {
+                  setFolderError(null)
+                  setFolder(f)
+                }}
+                onError={setFolderError}
+              />
+            </div>
+            {folderError && (
+              <p role="alert" className="text-xs text-destructive">
+                {folderError}
+              </p>
+            )}
+            {folder && folder.files.length === 0 && (
+              <p className="text-xs text-muted-foreground">No spreadsheets in that folder.</p>
+            )}
+            {folder && folder.files.length > 0 && (
+              <div className="max-h-40 space-y-1 overflow-y-auto">
+                {folder.files.map((f) => (
+                  <button
+                    key={f.path}
+                    onClick={() => onOpenLocalFile(f.file)}
+                    className="flex w-full items-center gap-3 rounded-md border border-border px-3 py-1.5 text-left transition-colors hover:bg-muted/50"
+                  >
+                    <TableIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span className="min-w-0 flex-1 truncate text-sm">{f.path}</span>
+                    <span className="shrink-0 text-xs font-medium text-[var(--n9-accent,#965034)]">Open</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         <div className="relative">
           <MagnifyingGlass className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input value={search} onChange={(e) => onSearchChange(e.target.value)} placeholder="Search files…" className="pl-8" />

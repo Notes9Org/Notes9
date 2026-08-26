@@ -184,6 +184,63 @@ export function lowerIncompleteGamma(a: number, x: number): number {
   return 1 - q
 }
 
+/**
+ * Upper regularized incomplete gamma Q(a, x) = 1 - P(a, x), computed directly
+ * rather than by subtraction so that a deep tail does not cancel to zero.
+ */
+export function upperIncompleteGamma(a: number, x: number): number {
+  if (x <= 0) return 1
+  if (x < a + 1) return 1 - lowerIncompleteGamma(a, x)
+  return Math.exp(logUpperIncompleteGammaCF(a, x))
+}
+
+/**
+ * ln Q(a, x) by continued fraction, valid only for x ≥ a + 1. Kept in log form
+ * because Q itself underflows to 0 below ~1e-323 while its logarithm stays
+ * perfectly ordinary — which is the difference between reporting a 40σ tail and
+ * reporting −Infinity.
+ */
+function logUpperIncompleteGammaCF(a: number, x: number): number {
+  const tiny = 1e-30
+  let b = x + 1 - a
+  let c = 1 / tiny
+  let d = 1 / b
+  let h = d
+  for (let i = 1; i < 300; i++) {
+    const an = -i * (i - a)
+    b += 2
+    d = an * d + b
+    if (Math.abs(d) < tiny) d = tiny
+    c = b + an / c
+    if (Math.abs(c) < tiny) c = tiny
+    d = 1 / d
+    const del = d * c
+    h *= del
+    if (Math.abs(del - 1) < 1e-12) break
+  }
+  return -x + a * Math.log(x) - logGamma(a) + Math.log(h)
+}
+
+/**
+ * ln Φ(z), accurate in both tails.
+ *
+ * `normalCdf` above is Abramowitz & Stegun 7.1.26, whose ~1.5e-7 ABSOLUTE error
+ * is fine for a p-value and useless here: the Anderson-Darling statistic sums
+ * ln Φ(z) over the order statistics, and beyond z ≈ −5 the true probability is
+ * smaller than that error, so the log is of a negative number. Routing through
+ * the incomplete gamma keeps relative accuracy all the way down, because
+ * Φ(−|z|) = ½·Q(½, z²/2).
+ */
+export function normalLogCdf(z: number): number {
+  if (!isFinite(z)) return z > 0 ? 0 : -Infinity
+  const x = (z * z) / 2
+  // z ≥ 0: Φ = 1 − ½Q, and log1p keeps the precision near Φ = 1.
+  if (z >= 0) return Math.log1p(-0.5 * upperIncompleteGamma(0.5, x))
+  // z < 0: Φ = ½Q. Past |z| ≈ 1.732 the continued fraction applies and its LOG
+  // is taken directly, so Φ(−40) ≈ 1e-350 reports as −804.6 rather than −∞.
+  return x >= 1.5 ? Math.LN2 * -1 + logUpperIncompleteGammaCF(0.5, x) : Math.log(0.5 * (1 - lowerIncompleteGamma(0.5, x)))
+}
+
 /** Chi-square CDF (lower tail). */
 export function chiSquareCdf(x: number, df: number): number {
   return lowerIncompleteGamma(df / 2, x / 2)

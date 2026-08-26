@@ -58,6 +58,73 @@ export const DatasetRef = z.object({
 })
 export type DatasetRef = z.infer<typeof DatasetRef>
 
+/* ── Cross-file join (T0.6) ────────────────────────────────────────────────
+   "Join across files in the same project." This is DATASET level, not a
+   Transform, and the reason is provenance rather than taste. A Transform is a
+   pure row operation over the table already in hand; it carries no file id and
+   no version hash, and it is applied by `applyTransform(rows, t)`, which has no
+   way to reach a second file. A join pulls in another FILE, and Law 4 (a result
+   is reproducible from spec + data version) means every file a number depends
+   on must be pinned by its own hash. So each join carries a full DatasetRef for
+   its right-hand side, and the joins sit beside `dataset`, not inside
+   `transforms`.
+
+   ORDER. The resolver applies joins as step 0, before row filters and before
+   transforms, because filters and transforms must be able to name the columns
+   the join brought in (that is the whole point of joining a plate map).
+
+   ROW IDENTITY. Exclusions are recorded against row ids (§8.1) and have to
+   resolve again on the next open, so a join may not reshuffle identity for
+   free. Two rules, both deterministic given the two version hashes:
+
+     - a left row matching AT MOST ONE right row keeps its own rowId unchanged.
+       This is the 1:1 case, which is what a plate map, a sample sheet, or a
+       metadata table is, and it means attaching one to a working analysis does
+       not orphan the exclusions already recorded against it.
+     - a left row that fans out to N > 1 right rows yields one row per match
+       with id `${leftRowId}<US>${rightRowId}`, the same convention pivotLonger
+       already uses, because a single id can no longer name a single row. The
+       resolver warns when this happens, since any exclusion recorded before the
+       fan-out now names a row that no longer exists.
+
+   Cardinality cannot change under a fixed pair of version hashes, so the branch
+   between those two rules is itself stable: the same spec against the same two
+   snapshots always produces the same ids. */
+
+export const DatasetJoin = z.object({
+  /** The file being joined in, pinned by its own hash exactly as `dataset` is. */
+  right: DatasetRef,
+  /**
+   * Key columns, left name paired with right name. A multi-column key matches
+   * on the whole tuple. Values are compared in their string form, so a well
+   * number that arrived as a number on one side and as text on the other still
+   * meets, which is the single most common shape of this join in practice.
+   */
+  on: z
+    .array(z.object({ left: z.string().max(256), right: z.string().max(256) }))
+    .min(1)
+    .max(8),
+  /**
+   * "left" keeps unmatched left rows with nulls in the right columns; "inner"
+   * drops them. Either way the resolver reports the count in `warnings`, because
+   * a table that silently shrank is the kind of invisible substitution §3.2
+   * forbids.
+   */
+  type: z.enum(["inner", "left"]).default("left"),
+  /**
+   * Right columns to bring in. Empty, the default, means every right column
+   * except the ones used as keys.
+   */
+  columns: z.array(z.string().max(256)).default([]),
+  /**
+   * Appended to a right column's name when it would otherwise collide with a
+   * left column. Never overwrite the left column: the left table is the one the
+   * analysis was built against.
+   */
+  suffix: z.string().min(1).max(64).default("_r"),
+})
+export type DatasetJoin = z.infer<typeof DatasetJoin>
+
 /* ── Semantic layer (L2) ───────────────────────────────────────────────────
    Variable roles and the design declaration. Populated in priority order from
    the notes9 project record, then inference, then the user (§3.3 L2). The
@@ -154,7 +221,22 @@ export const Transform = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("collapseReplicates"),
     by: z.array(z.string().max(256)).min(1),
-    statistic: z.enum(["mean", "median"]),
+    statistic: z.enum(["mean", "median", "sd", "sem"]),
+    /**
+     * The measurement columns to collapse. ADDITIVE and optional: a spec saved
+     * before this field existed omits it and defaults to `[]`, in which case
+     * the resolver falls back to `analysis.responseColumns`. Naming the
+     * measurements matters because "parses as a number" is not the same
+     * question as "is a measurement": a numeric subject/well/plate ID that is
+     * averaged turns subjects 1, 2, 3 into subject 2.
+     */
+    columns: z.array(z.string().max(256)).default([]),
+    /**
+     * Column receiving the group size. Replicate n belongs in the table, not
+     * only in the concatenated row id, because SD and SEM are unreadable
+     * without it. ADDITIVE: defaults to "n" for specs saved before it existed.
+     */
+    countTo: z.string().max(256).default("n"),
   }),
   z.object({
     kind: z.literal("calculatedColumn"),
@@ -177,6 +259,24 @@ export const Transform = z.discriminatedUnion("kind", [
     namesTo: z.string().max(256),
     /** New column carrying its value. */
     valuesTo: z.string().max(256),
+  }),
+  /**
+   * Long → wide, the inverse of `pivotLonger`. Rows that agree on every column
+   * except the two named here become one row, with one new column per level of
+   * `namesFrom`. Needed because half the instruments in a lab emit long and
+   * half the readers (and every heatmap) want wide, and because a folded table
+   * has to be unfoldable or the fold is destructive.
+   *
+   * Like `pivotLonger` this changes the row count and the column set, so it
+   * belongs at the FRONT of the transform list: exclusions and downstream
+   * column references are written against whichever shape follows it.
+   */
+  z.object({
+    kind: z.literal("pivotWider"),
+    /** Column whose distinct values become the new column names. */
+    namesFrom: z.string().max(256),
+    /** Column whose values fill those new columns. */
+    valuesFrom: z.string().max(256),
   }),
   /**
    * Repair a numeric column that arrived carrying text: `"<LOD"`, `"N/A"`,
@@ -335,6 +435,20 @@ export const PostHocKind = z.enum([
   "holm-sidak",
   "dunn",
   "none",
+  /**
+   * False-discovery-rate corrections. Appended, never reordered: a stored spec
+   * names its correction by string, so moving a member would silently reparse
+   * an already-saved analysis as a different one.
+   *
+   * These control the expected PROPORTION of false positives among the
+   * rejections rather than the probability of any at all, which is the trade a
+   * comparison count in the hundreds — an omics panel, a multi-marker plate —
+   * has to make: a family-wise correction over 300 pairs has no power left.
+   * The engine implements both, and pairs them with Benjamini-Yekutieli (2005)
+   * FCR intervals so the interval and the adjusted p cannot contradict.
+   */
+  "benjamini-hochberg",
+  "benjamini-yekutieli",
 ])
 
 /** Nonlinear model library for Tier 0's non-negotiable dose-response work (§2). */
@@ -350,6 +464,25 @@ export const NonlinearModel = z.enum([
   "linear",
   "semi-log",
 ])
+
+/**
+ * Parameters a global fit can share across curves, per model (T0.20).
+ *
+ * MIRRORS `_DR_MODELS` in `public/data-analysis-engine/notes9_engine.py` --
+ * names and order both. The engine is the source of truth; this copy exists
+ * only so the UI can offer checkboxes without a round-trip, and
+ * `analysis-spec.nonlinear-parameters.test.ts` fails if the two drift apart.
+ *
+ * Models absent from this map (Michaelis-Menten, the exponentials, ...) are not
+ * missing by oversight: the dose-response family is what §T0.20 asks to share
+ * parameters across, and offering a checkbox the engine would ignore is worse
+ * than offering none.
+ */
+export const NONLINEAR_SHARED_PARAMETERS: Readonly<Record<string, readonly string[]>> = {
+  "3pl": ["bottom", "top", "logEC50"],
+  "4pl": ["bottom", "top", "logEC50", "hillSlope"],
+  "5pl": ["bottom", "top", "logEC50", "hillSlope", "asymmetry"],
+}
 
 export const AnalysisConfig = z.object({
   test: TestKind.default("none"),
@@ -371,6 +504,21 @@ export const AnalysisConfig = z.object({
       weighting: z.enum(["none", "1/Y", "1/Y^2"]).default("none"),
       /** Share parameters across datasets, Prism's global fit. */
       sharedParameters: z.array(z.string().max(64)).default([]),
+      /**
+       * Column whose distinct values split the included rows into SEPARATE
+       * CURVES for a global fit (T0.20). Null, the default and the meaning of
+       * every spec written before this field existed, is one curve over all
+       * rows.
+       *
+       * `sharedParameters` was always here but had nothing to share ACROSS,
+       * because the payload could only ever carry one x/y pair. With this set
+       * the resolver emits `datasets: [{ label, x, y }, ...]`, one entry per
+       * level ordered by FIRST APPEARANCE in the data (not by a Set's iteration
+       * order and not alphabetically), so the engine's per-dataset results come
+       * back in an order the caller can predict and the labels are stable
+       * across re-runs.
+       */
+      datasetColumn: z.string().max(256).nullable().optional(),
       constraints: z.record(z.string(), z.object({ min: z.number().nullable(), max: z.number().nullable() })).default({}),
       confidenceBands: z.boolean().default(true),
       /** Interpolate unknowns from the fitted standard curve. */
@@ -454,7 +602,15 @@ export const ErrorBarKind = z.enum([
 export const AxisSpec = z.object({
   label: z.string().max(256).nullable().default(null),
   unit: z.string().max(64).nullable().default(null),
-  scale: z.enum(["linear", "log10"]).default("linear"),
+  /**
+   * "auto" defers to the figure kind, which is not the same statement as
+   * "linear". A four-parameter logistic fit is unreadable at the low end on a
+   * linear dose axis, so `dose-response` wants log x — but only until someone
+   * says otherwise, and a schema whose only default IS "linear" cannot tell a
+   * chosen linear axis from an unset one. `parseSpec` resolves "auto" to a
+   * concrete scale, so every consumer downstream still sees "linear"|"log10".
+   */
+  scale: z.enum(["auto", "linear", "log10"]).default("auto"),
   min: z.number().nullable().default(null),
   max: z.number().nullable().default(null),
   tickCount: z.number().int().min(2).max(50).nullable().default(null),
@@ -493,8 +649,52 @@ export const SignificanceBracket = z.object({
   derived: z.boolean().default(true),
   /** Render as stars or the numeric p. */
   display: z.enum(["stars", "p-value", "both"]).default("stars"),
+
+  /* ── Style overrides (T0.27) ────────────────────────────────────────────
+     Every field below is a SPARSE OVERRIDE and is OPTIONAL, absence meaning "use
+     the figure's style tokens". That is what keeps restyling compatible with
+     regeneration: when the analysis changes, brackets are re-derived from the
+     new post-hoc result and only the fields the user actually set are carried
+     across, exactly as `offsetY` already is. A bracket that has never been
+     restyled carries none of them and is therefore indistinguishable from a fresh one, so
+     regeneration has nothing to preserve and nothing to fight.
+
+     Storing a concrete colour on every derived bracket instead would freeze the
+     palette at the moment of generation: changing the figure theme afterwards
+     would leave the brackets behind, and the "user restyled this" signal would
+     be lost because every bracket would look restyled. */
+
+  /** Line and label colour. Null uses the figure's foreground token. */
+  colour: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional(),
+  /** Bracket stroke width in px. Absent uses the figure default. */
+  lineWidth: z.number().min(0.25).max(10).nullable().optional(),
+  /** Label size in px. Absent uses `style.tickFontSize`. */
+  fontSize: z.number().min(6).max(36).nullable().optional(),
+  /** Height of the downward end ticks in px. Absent uses the figure default. */
+  capLength: z.number().min(0).max(40).nullable().optional(),
+  /**
+   * Suppress this bracket without deleting it. Deleting a DERIVED bracket does
+   * not work, the next recompute regenerates it; hiding is the only stable way
+   * to say "not this comparison" and survive regeneration.
+   */
+  hidden: z.boolean().optional(),
 })
 export type SignificanceBracket = z.infer<typeof SignificanceBracket>
+
+/**
+ * The style fields a user may have overridden on a bracket. When brackets are
+ * re-derived after an analysis change, copy exactly these (plus `offsetY`) from
+ * the old bracket with the same pair key onto the new one; everything else is a
+ * property of the fresh post-hoc result and must NOT be carried over.
+ */
+export const BRACKET_STYLE_FIELDS = [
+  "display",
+  "colour",
+  "lineWidth",
+  "fontSize",
+  "capLength",
+  "hidden",
+] as const satisfies readonly (keyof SignificanceBracket)[]
 
 /**
  * A bracket's identity is the comparison it spans.
@@ -602,6 +802,45 @@ export const FigureSpec = z.object({
    * figure are the same cut-offs the reader is told were applied.
    */
   volcanoFoldChange: z.number().min(0).max(100).default(1),
+  /**
+   * Volcano only: how many significant features get an on-plot label.
+   *
+   * A volcano a reader cannot read gene names off is half a volcano, and a
+   * volcano that labels all 20 000 of them is none. The cap is stored rather
+   * than hardcoded so the figure can state which bound was applied, and the
+   * subtitle says "top N of M" whenever M exceeds it — a truncation a reader
+   * cannot see is a truncation that misrepresents the result.
+   */
+  volcanoLabelCount: z.number().int().min(0).max(100).default(10),
+  /**
+   * Violin only: stop the kernel density at the observed range.
+   *
+   * Plotly's default (`spanmode: "soft"`) runs the KDE past the extreme
+   * observations, so a violin of a concentration, a count or an elapsed time
+   * draws density below zero — a claim about values the assay cannot produce.
+   * Truncation is the default for that reason; the soft tail stays available
+   * because it is the right picture for a genuinely unbounded quantity.
+   */
+  violinTruncate: z.boolean().default(true),
+  /**
+   * Violin only: mirror the second factor's two levels about each group's tick.
+   *
+   * Off by default because it needs a second factor with exactly two levels;
+   * asking for it without one is reported on the figure, never ignored.
+   */
+  violinSplit: z.boolean().default(false),
+  /** Violin only: the median/IQR box inside the density, as journals draw it. */
+  violinInnerBox: z.boolean().default(true),
+  /**
+   * Histogram only: bin count. Null asks for Freedman-Diaconis, which is the
+   * rule that survives the skewed, outlier-heavy distributions lab data
+   * actually has; a number here overrides it.
+   */
+  histogramBins: z.number().int().min(1).max(500).nullable().default(null),
+  /** Histogram only: what the bar height means. */
+  histogramNorm: z
+    .enum(["count", "probability", "density", "probability density"])
+    .default("count"),
 })
 export type FigureSpec = z.infer<typeof FigureSpec>
 
@@ -624,6 +863,12 @@ export type ExportSettings = z.infer<typeof ExportSettings>
 export const AnalysisSpec = z.object({
   schemaVersion: z.literal(ANALYSIS_SPEC_SCHEMA_VERSION),
   dataset: DatasetRef,
+  /**
+   * Other files in the same project joined onto `dataset` (T0.6). Applied by
+   * the resolver BEFORE filters and transforms. Empty is the default and the
+   * meaning of every spec written before this field existed.
+   */
+  joins: z.array(DatasetJoin).optional(),
   roles: z.array(ColumnRole).default([]),
   design: DesignDeclaration,
   filters: z.array(RowFilter).default([]),
@@ -646,6 +891,29 @@ export const AnalysisSpec = z.object({
 export type AnalysisSpec = z.infer<typeof AnalysisSpec>
 
 /**
+ * Kinds whose x axis is a concentration series, where log is the readable
+ * default. A 4PL fit on a linear dose axis crushes every low-dose point into
+ * the left margin, which is the half of the curve the EC50 is estimated from.
+ */
+const LOG_X_BY_DEFAULT = new Set<FigureKind>(["dose-response"])
+
+/**
+ * Resolve an "auto" axis scale against the figure kind.
+ *
+ * Only the x axis of a dose-response gets a non-linear default: no kind in the
+ * catalogue wants a log y unless its author asks. Exported because the renderer
+ * has to make the same decision for a spec that never went through `parseSpec`.
+ */
+export function effectiveScale(
+  scale: AxisSpec["scale"],
+  kind: FigureKind,
+  axis: "x" | "y" | "y2"
+): "linear" | "log10" {
+  if (scale !== "auto") return scale
+  return axis === "x" && LOG_X_BY_DEFAULT.has(kind) ? "log10" : "linear"
+}
+
+/**
  * Parse-and-validate. The AI layer (§6.6) must route every proposed spec through
  * this: invalid specs are rejected and repaired, never rendered. Returning the
  * issues rather than throwing is what lets the orchestrator run its repair loop.
@@ -654,9 +922,24 @@ export function parseSpec(
   input: unknown
 ): { ok: true; spec: AnalysisSpec } | { ok: false; issues: z.ZodIssue[] } {
   const result = AnalysisSpec.safeParse(input)
-  return result.success
-    ? { ok: true, spec: result.data }
-    : { ok: false, issues: result.error.issues }
+  if (!result.success) return { ok: false, issues: result.error.issues }
+  // "auto" is resolved here rather than left for each reader. The chart-state
+  // round trip writes a concrete "linear"|"log10" back on every conversion, so
+  // a sentinel that survived parsing would be erased by the first UI edit and
+  // the log default would silently revert.
+  const { figure } = result.data
+  const spec: AnalysisSpec = {
+    ...result.data,
+    figure: {
+      ...figure,
+      x: { ...figure.x, scale: effectiveScale(figure.x.scale, figure.kind, "x") },
+      y: { ...figure.y, scale: effectiveScale(figure.y.scale, figure.kind, "y") },
+      y2: figure.y2
+        ? { ...figure.y2, scale: effectiveScale(figure.y2.scale, figure.kind, "y2") }
+        : figure.y2,
+    },
+  }
+  return { ok: true, spec }
 }
 
 /**

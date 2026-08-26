@@ -5,10 +5,12 @@ import {
   ArrowCounterClockwise,
   CaretDown,
   CircleNotch,
+  CopySimple,
   DownloadSimple,
   FloppyDisk,
   Lock,
   LockOpen,
+  PushPin,
 } from "@phosphor-icons/react/ssr"
 
 import { Button } from "@/components/ui/button"
@@ -234,6 +236,8 @@ export function RevisionHistoryDialog({
   onOpenRevision,
   onFreeze,
   onExport,
+  onPin,
+  onDuplicate,
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
@@ -249,8 +253,25 @@ export function RevisionHistoryDialog({
   onOpenRevision: (revision: AnalysisRevision, restore: boolean) => void
   onFreeze: (revision: AnalysisRevision) => void
   onExport: (revision: AnalysisRevision) => void
+  /**
+   * Pin/unpin (§3A.4). Optional: the button appears only when a caller wires
+   * it, so adopting this needs no change to callers that have not.
+   */
+  onPin?: (revision: AnalysisRevision, pinned: boolean) => void
+  /**
+   * "Duplicate as a new analysis" (§3A.4) — a separate analysis with its own
+   * revision chain, NOT a fork within this one.
+   */
+  onDuplicate?: (revision: AnalysisRevision) => void
 }) {
   const latestNo = revisions[0]?.revisionNo ?? 0
+  /**
+   * Pinned first, then newest. A pin is a bookmark, and a bookmark that does
+   * not float to the top is just a label.
+   */
+  const ordered = [...revisions].sort((a, b) =>
+    a.isPinned === b.isPinned ? b.revisionNo - a.revisionNo : a.isPinned ? -1 : 1
+  )
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -308,7 +329,7 @@ export function RevisionHistoryDialog({
             </p>
           )}
 
-          {revisions.map((rev) => {
+          {ordered.map((rev) => {
             const isOpen = rev.id === openRevisionId
             const busy = rev.id === busyRevisionId
             return (
@@ -326,6 +347,11 @@ export function RevisionHistoryDialog({
                   <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
                     {rev.name || rev.changeSummary || "Saved revision"}
                   </span>
+                  {rev.isPinned && (
+                    <span className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-1.5 py-0.5 text-[11px] font-medium text-foreground/70">
+                      <PushPin className="h-3 w-3" weight="fill" /> Pinned
+                    </span>
+                  )}
                   {rev.isFrozen && (
                     <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/[0.09] px-1.5 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
                       <Lock className="h-3 w-3" weight="fill" /> Frozen
@@ -362,6 +388,34 @@ export function RevisionHistoryDialog({
                   {!rev.isFrozen && (
                     <Button size="sm" variant="outline" disabled={busy} onClick={() => onFreeze(rev)}>
                       <LockOpen className="mr-1.5 h-3.5 w-3.5" /> Freeze
+                    </Button>
+                  )}
+                  {onPin && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={busy}
+                      // Pinning is reversible, unlike freezing, so this is one
+                      // toggle rather than a one-way action with a confirm.
+                      aria-pressed={rev.isPinned}
+                      onClick={() => onPin(rev, !rev.isPinned)}
+                    >
+                      <PushPin
+                        className="mr-1.5 h-3.5 w-3.5"
+                        weight={rev.isPinned ? "fill" : "regular"}
+                      />
+                      {rev.isPinned ? "Unpin" : "Pin"}
+                    </Button>
+                  )}
+                  {onDuplicate && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={busy}
+                      onClick={() => onDuplicate(rev)}
+                      title="Create a separate analysis starting from this revision. The original is untouched."
+                    >
+                      <CopySimple className="mr-1.5 h-3.5 w-3.5" /> Duplicate
                     </Button>
                   )}
                   <Button size="sm" variant="ghost" onClick={() => onExport(rev)}>

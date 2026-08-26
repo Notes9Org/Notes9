@@ -115,6 +115,29 @@ export const FORBIDDEN_MUTATION_KINDS = new Set<string>([
   // the same sticky, human-owned status as the fields above, so the assistant
   // does not get a mutation for it either.
   "figure.setCaption",
+  // Restyling a bracket is cosmetic and would sit comfortably beside
+  // `figure.setSeriesStyle`, which the assistant may set -- but the patch also
+  // carries `hidden`, and hiding a bracket takes a significant comparison off
+  // the figure. That is the same act as excluding a row, which S8.1 keeps in
+  // human hands, and it is deliberately the one bracket operation that survives
+  // regeneration: a deleted derived bracket comes back, a hidden one does not.
+  // Splitting the kind so the assistant could have the cosmetic half would be
+  // an abstraction bought only to widen the model's reach.
+  "figure.setBracketStyle",
+  // A join reads as data prep, and `data.addTransform` is allowed, so this
+  // looks like it belongs on the other list. Two things put it here.
+  //
+  // An `inner` join DROPS every left row without a match: that is excluding
+  // rows, reached through a different door, and S8.1 keeps excluding rows in
+  // human hands regardless of which door. And a wrong key fans one left row out
+  // to N matched rows, which -- per `DatasetJoin`'s own comment -- orphans every
+  // exclusion already recorded against the row that no longer exists. Neither
+  // outcome should be reachable by an assistant that misread which column is
+  // the plate well.
+  //
+  // The user picks the file and the key in the rail; the assistant can explain
+  // what a join would do, and cannot perform one.
+  "data.setJoins",
 ])
 
 /* ── Guardrails (§7 adversarial set, §8.1) ─────────────────────────────────*/
@@ -288,6 +311,64 @@ export interface SpecAuthorContext {
   offerableTests?: { test: TestKind; legal: boolean; reason?: string; recommended: boolean }[]
 }
 
+/** An axis as the model needs to read it, to emit an `axis.set` against it. */
+const axisProjection = (a: AnalysisSpec["figure"]["x"]) => ({
+  label: a.label,
+  unit: a.unit,
+  scale: a.scale,
+  min: a.min,
+  max: a.max,
+  tickCount: a.tickCount,
+})
+
+/**
+ * The figure, projected for the model.
+ *
+ * Every field a `figure.*` or `axis.*` mutation can name is here with its
+ * CURRENT value, because that is the difference between the model proposing a
+ * change and the model proposing a replacement. The two collections that could
+ * grow without bound — annotations and brackets — are sent as ids and counts
+ * rather than geometry: a mutation targeting one addresses it by id, and their
+ * coordinates would cost more tokens than the rest of the figure combined.
+ *
+ * Nothing here is data. The figure holds style; the numbers still live in the
+ * result object, so widening this does not touch the §11 privacy claim above.
+ */
+export function figureProjection(f: AnalysisSpec["figure"]): Record<string, unknown> {
+  return {
+    kind: f.kind,
+    title: f.title,
+    subtitle: f.subtitle,
+    caption: f.caption,
+    x: axisProjection(f.x),
+    y: axisProjection(f.y),
+    y2: f.y2 ? axisProjection(f.y2) : null,
+    errorBars: f.errorBars,
+    palette: f.palette,
+    series: f.series.map((s) => ({
+      key: s.key,
+      colour: s.colour,
+      pointShape: s.pointShape,
+      pointSize: s.pointSize,
+      opacity: s.opacity,
+      lineStyle: s.lineStyle,
+      lineWidth: s.lineWidth,
+      axis: s.axis,
+    })),
+    showLegend: f.showLegend,
+    legendPosition: f.legendPosition,
+    showGridlines: f.showGridlines,
+    fontFamily: f.fontFamily,
+    titleFontSize: f.titleFontSize,
+    axisFontSize: f.axisFontSize,
+    width: f.width,
+    height: f.height,
+    showExcludedPoints: f.showExcludedPoints,
+    annotationIds: f.annotations.map((a) => a.id),
+    bracketIds: f.brackets.map((b) => b.id),
+  }
+}
+
 /**
  * Build the model's context. Note what is absent: raw rows. §11 decision 10
  * ("scope of what the model sees") directly affects the privacy claim we can
@@ -314,7 +395,24 @@ export function buildContextBundle(ctx: SpecAuthorContext): Record<string, unkno
       })),
     },
     currentSpec: {
-      figure: ctx.spec.figure.kind,
+      // The WHOLE figure, not just its kind.
+      //
+      // The same reasoning `filters` below is annotated with, finally applied
+      // where it was always needed: a mutation the model is asked to emit
+      // against a value it cannot see is a guess. "Extend the y-axis top a
+      // bit" needs the current max; "match the other panel's font" needs the
+      // current face; "keep the colour I picked for control" needs the series
+      // list. The rolling window of recent edits was never a substitute — it
+      // describes the last ten changes, not the state, so it is empty exactly
+      // when the analysis is reopened and wrong exactly when the edit before
+      // last was undone.
+      //
+      // The payload stays a projection, not the raw object, on the same
+      // judgement that sends a data profile rather than the rows: the parts
+      // that are long and unreadable are summarised. Annotations and brackets
+      // go out as counts plus ids, because a mutation naming one only needs
+      // its id, and their geometry would dominate the bundle.
+      figure: figureProjection(ctx.spec.figure),
       test: ctx.spec.analysis.test,
       postHoc: ctx.spec.analysis.postHoc,
       groupColumn: ctx.spec.analysis.groupColumn,

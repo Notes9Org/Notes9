@@ -38,6 +38,23 @@ const REASONS: { value: ExclusionReasonKind; label: string; hint: string }[] = [
   { value: "other", label: "Other", hint: "Describe it in your own words" },
 ]
 
+/**
+ * The one outlier test this dialog will record.
+ *
+ * ROUT used to sit here, and it was the DEFAULT — but nothing in this codebase
+ * computes ROUT, so accepting the default filed a statistical exclusion
+ * attributed to a test that never ran, in precisely the field §8.1 exists to
+ * keep honest. Grubbs is real (`lib/data-analysis/statistics.ts`, surfaced in
+ * the stats panel), and its parameter is α, not ROUT's Q — so the recorded
+ * params are keyed to the method rather than to whatever the label happened to
+ * say. Adding a method here means adding its estimator first, and its param key
+ * alongside it.
+ */
+const OUTLIER_METHOD = "Grubbs"
+const OUTLIER_PARAM = "α"
+/** Param key for `OUTLIER_METHOD`. Grubbs takes a significance level. */
+const OUTLIER_PARAM_KEY = "alpha"
+
 export interface ExclusionPreview {
   /** p-value with the point still included. */
   withPoint: number | null
@@ -74,7 +91,6 @@ export function ExclusionDialog({
   const reduce = useReducedMotion()
   const [reasonKind, setReasonKind] = useState<ExclusionReasonKind | null>(null)
   const [note, setNote] = useState("")
-  const [method, setMethod] = useState<"ROUT" | "Grubbs">("ROUT")
   const [q, setQ] = useState("1")
 
   const needsNote = reasonKind === "other"
@@ -100,7 +116,7 @@ export function ExclusionDialog({
       reasonKind,
       reasonText: note.trim() || null,
       method: needsMethod
-        ? { name: method, params: { Q: Number(q) / 100 } }
+        ? { name: OUTLIER_METHOD, params: { [OUTLIER_PARAM_KEY]: Number(q) / 100 } }
         : null,
       excludedBy: currentUserId,
       excludedAt: new Date().toISOString(),
@@ -224,20 +240,15 @@ export function ExclusionDialog({
                   className="overflow-hidden"
                 >
                   <div className="mx-5 mt-3 flex items-end gap-2 rounded-lg border border-border/70 bg-muted/30 p-3">
-                    <label className="flex-1">
+                    <div className="flex-1">
                       <span className="block text-[11px] text-muted-foreground">Method</span>
-                      <select
-                        value={method}
-                        onChange={(e) => setMethod(e.target.value as "ROUT" | "Grubbs")}
-                        className="mt-1 h-8 w-full rounded-md border border-border bg-background px-2 text-[13px]"
-                      >
-                        <option value="ROUT">ROUT</option>
-                        <option value="Grubbs">Grubbs</option>
-                      </select>
-                    </label>
+                      <p className="mt-1 flex h-8 items-center rounded-md border border-border bg-background px-2 text-[13px]">
+                        {OUTLIER_METHOD}
+                      </p>
+                    </div>
                     <label className="w-24">
                       <span className="block text-[11px] text-muted-foreground">
-                        {method === "ROUT" ? "Q (%)" : "α (%)"}
+                        {OUTLIER_PARAM} (%)
                       </span>
                       <input
                         value={q}

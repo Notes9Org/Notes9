@@ -19,6 +19,7 @@ import {
   studentizedRangeUpperP,
   studentizedRangeCritical,
   hypergeometricPmf,
+  normalLogCdf,
 } from "./distributions"
 
 export type TestResult = {
@@ -27,6 +28,8 @@ export type TestResult = {
   p: number
   df?: string
   effect?: { label: string; value: number }
+  /** 95% CI on `effect`, when one is defined for that statistic. */
+  effectCI?: [number, number]
   note?: string
 }
 
@@ -251,6 +254,77 @@ export function shapiroWilk(input: number[]): TestResult | null {
 }
 
 /* ── t-tests ─────────────────────────────────────────────────────────────── */
+/**
+ * Minimum n for the Anderson–Darling p-value approximation. R's `nortest::ad.test`
+ * refuses below 8; extrapolating the fit past the range it was built on is worse
+ * than declining.
+ */
+export const AD_MIN_N = 8
+
+/**
+ * p for the Anderson–Darling A², D'Agostino & Stephens (1986) table 4.9.
+ *
+ * The fit is to the modified statistic A* = A²(1 + 0.75/n + 2.25/n²) — the same
+ * modification `scipy.stats.anderson` applies to its critical-value table. It is
+ * an APPROXIMATION and every caller says so. Kept identical, branch for branch,
+ * to `_ad_pvalue` in notes9_engine.py so the two engines cannot disagree.
+ */
+export function andersonDarlingP(a2: number, n: number): number {
+  const a = a2 * (1 + 0.75 / n + 2.25 / (n * n))
+  let p: number
+  if (a < 0.2) p = 1 - Math.exp(-13.436 + 101.14 * a - 223.73 * a * a)
+  else if (a < 0.34) p = 1 - Math.exp(-8.318 + 42.796 * a - 59.938 * a * a)
+  else if (a < 0.6) p = Math.exp(0.9177 - 4.279 * a - 1.38 * a * a)
+  else if (a < 10) p = Math.exp(1.2937 - 5.709 * a + 0.0186 * a * a)
+  else p = 3.7e-24 // the fit's floor; below it the tail is not resolvable
+  return Math.max(0, Math.min(1, p))
+}
+
+/**
+ * Anderson–Darling test for normality — the third test the requirement names,
+ * beside Shapiro–Wilk and D'Agostino–Pearson.
+ *
+ * Weights the squared gap between the empirical and fitted normal CDFs by
+ * 1/(F(1−F)), which makes it the sensitive one in the tails — where the outlier
+ * that invalidates a t-test lives. Shapiro–Wilk is stronger against a shifted or
+ * skewed centre; run both, they fail on different departures.
+ *
+ * The statistic matches `scipy.stats.anderson(x, "norm").statistic` to 1e-13.
+ * The p-value does not come from scipy, which returns none — see
+ * `andersonDarlingP`, and the `note` on the returned result.
+ */
+export function andersonDarling(input: number[]): TestResult | null {
+  const x = input.filter((v) => isFinite(v)).sort((a, b) => a - b)
+  const n = x.length
+  if (n < AD_MIN_N) return null
+  const s = stdev(x)
+  if (!(s > 0)) return null
+  const m = mean(x)
+
+  // A² = −n − (1/n) Σ (2i−1)[ln Φ(z_i) + ln(1 − Φ(z_{n+1−i}))], standardised by
+  // the SAMPLE mean and SD — the case where both parameters are estimated,
+  // which is the only case a real column is ever in.
+  let sum = 0
+  for (let i = 0; i < n; i++) {
+    const zi = (x[i] - m) / s
+    const zj = (x[n - 1 - i] - m) / s
+    sum += (2 * (i + 1) - 1) * (normalLogCdf(zi) + normalLogCdf(-zj))
+  }
+  const A2 = -n - sum / n
+  const p = andersonDarlingP(A2, n)
+  return {
+    name: "Anderson–Darling normality",
+    stat: [{ label: "A²", value: A2 }],
+    p,
+    df: `n = ${n}`,
+    note:
+      (p < 0.05
+        ? "Data deviate from normal in the tails, consider a non-parametric test. "
+        : "No significant deviation from normality. ") +
+      "p is the D'Agostino & Stephens (1986) analytic approximation to the A² null distribution, not an exact tail probability.",
+  }
+}
+
 export function oneSampleT(xs: number[], mu0: number, tail: Tail = "two"): TestResult | null {
   const x = xs.filter(isFinite)
   const n = x.length
@@ -430,26 +504,130 @@ function rank(values: number[]): number[] {
   return ranks
 }
 
+/** Σ(t³ − t) over each group of tied values — the tie term shared by the rank tests. */
+function tieCorrection(values: number[]): number {
+  const counts = new Map<number, number>()
+  for (const v of values) counts.set(v, (counts.get(v) ?? 0) + 1)
+  let s = 0
+  for (const [, t] of counts) s += t ** 3 - t
+  return s
+}
+
+/**
+ * Exact two-sided p for the Wilcoxon signed-rank statistic w = min(W⁺, W⁻).
+ * Enumerates the 2ⁿ equally likely sign assignments via a subset-sum DP over
+ * the ranks 1…n, then p = min(1, 2·P(W⁺ ≤ w)) (scipy `method="exact"`).
+ * Only valid with no tied |differences| and no zero differences.
+ */
+function wilcoxonExactP(w: number, n: number): number {
+  const maxW = (n * (n + 1)) / 2
+  const counts = new Float64Array(maxW + 1)
+  counts[0] = 1
+  for (let r = 1; r <= n; r++) for (let t = maxW; t >= r; t--) counts[t] += counts[t - r]
+  let tail = 0
+  for (let t = 0; t <= w; t++) tail += counts[t]
+  return Math.min(1, (2 * tail) / 2 ** n)
+}
+
+/**
+ * Exact two-sided p for Mann–Whitney U. f(i,j,u) — the number of rank
+ * arrangements of i vs j observations giving U = u — is the count of integer
+ * partitions of u inside an i×j box: f(i,j,u) = f(i−1,j,u) + f(i,j−1,u−i).
+ * p = min(1, 2·P(U ≤ u)) (scipy `method="exact"`). Not valid with ties.
+ */
+function mannWhitneyExactP(u: number, n1: number, n2: number): number {
+  const maxU = n1 * n2
+  // rows[j] holds f(i, j, ·); rolled forward over i.
+  let rows: Float64Array[] = Array.from({ length: n2 + 1 }, () => new Float64Array(maxU + 1))
+  for (let j = 0; j <= n2; j++) rows[j][0] = 1 // f(0, j, u) = [u = 0]
+  for (let i = 1; i <= n1; i++) {
+    const next: Float64Array[] = [new Float64Array(maxU + 1)]
+    next[0][0] = 1 // f(i, 0, u) = [u = 0]
+    for (let j = 1; j <= n2; j++) {
+      const cur = new Float64Array(maxU + 1)
+      for (let t = 0; t <= maxU; t++) cur[t] = rows[j][t] + (t >= i ? next[j - 1][t - i] : 0)
+      next.push(cur)
+    }
+    rows = next
+  }
+  const dist = rows[n2]
+  let total = 0
+  for (let t = 0; t <= maxU; t++) total += dist[t]
+  let tail = 0
+  for (let t = 0; t <= u; t++) tail += dist[t]
+  return Math.min(1, (2 * tail) / total)
+}
+
+/**
+ * Cliff (1993) asymmetric 95% CI for the rank-biserial correlation (which for
+ * two independent samples is exactly Cliff's δ). Built on the logit-like
+ * transform so the interval can never leave (−1, 1) — the same geometry
+ * argument as a log-scale EC₅₀ interval. Matches R `effsize::cliff.delta`.
+ */
+function cliffDeltaCI(x: number[], y: number[], d: number): [number, number] | undefined {
+  const n1 = x.length
+  const n2 = y.length
+  if (n1 < 2 || n2 < 2) return undefined
+  const rowMean = new Array(n1).fill(0)
+  const colMean = new Array(n2).fill(0)
+  let sqDev = 0
+  for (let i = 0; i < n1; i++) {
+    for (let j = 0; j < n2; j++) {
+      const sgn = Math.sign(x[i] - y[j])
+      rowMean[i] += sgn
+      colMean[j] += sgn
+      sqDev += (sgn - d) ** 2
+    }
+  }
+  // Divide once at the end so complete separation gives exactly ±1 and a
+  // variance of exactly 0 (→ no interval) rather than float dust.
+  for (let i = 0; i < n1; i++) rowMean[i] /= n2
+  for (let j = 0; j < n2; j++) colMean[j] /= n1
+  const sRow = rowMean.reduce((s, v) => s + (v - d) ** 2, 0)
+  const sCol = colMean.reduce((s, v) => s + (v - d) ** 2, 0)
+  const varD = (n2 * n2 * sRow + n1 * n1 * sCol - sqDev) / (n1 * n2 * (n1 - 1) * (n2 - 1))
+  if (!(varD > 0)) return undefined
+  const z = 1.959963984540054 // Φ⁻¹(0.975)
+  const denom = 1 - d * d + z * z * varD
+  const centre = (d - d ** 3) / denom
+  const half = (z * Math.sqrt(varD) * Math.sqrt((1 - d * d) ** 2 + z * z * varD)) / denom
+  return [centre - half, centre + half]
+}
+
 export function mannWhitney(a: number[], b: number[]): TestResult | null {
   const x = a.filter(isFinite)
   const y = b.filter(isFinite)
   const n1 = x.length
   const n2 = y.length
   if (n1 < 1 || n2 < 1) return null
-  const ranks = rank([...x, ...y])
+  const all = [...x, ...y]
+  const N = n1 + n2
+  const ranks = rank(all)
   const r1 = ranks.slice(0, n1).reduce((s, r) => s + r, 0)
   const u1 = r1 - (n1 * (n1 + 1)) / 2
   const u2 = n1 * n2 - u1
   const U = Math.min(u1, u2)
   const mu = (n1 * n2) / 2
-  const sigma = Math.sqrt((n1 * n2 * (n1 + n2 + 1)) / 12)
+  // Tie-corrected null variance (scipy convention). Without the tie term the
+  // variance is overstated and the test is conservative — but ties are exactly
+  // what this test is usually chosen for.
+  const tieSum = tieCorrection(all)
+  const sigma = Math.sqrt(((n1 * n2) / 12) * (N + 1 - tieSum / (N * (N - 1))))
   const z = (U - mu) / sigma
+  // The exact distribution assumes no ties; the box DP is cheap up to 20×20.
+  const exact = tieSum === 0 && n1 * n2 <= 400
+  // Rank-biserial correlation = Cliff's δ: +1 when every a exceeds every b.
+  const rrb = (2 * u1) / (n1 * n2) - 1
   return {
     name: "Mann–Whitney U",
     stat: [{ label: "U", value: U }, { label: "z", value: z }],
-    p: normalTwoSidedP(z),
+    p: exact ? mannWhitneyExactP(U, n1, n2) : normalTwoSidedP(z),
     df: `n₁=${n1}, n₂=${n2}`,
-    note: "Rank-based; robust to non-normal data.",
+    effect: { label: "rank-biserial r", value: rrb },
+    effectCI: cliffDeltaCI(x, y, rrb),
+    note: exact
+      ? "Rank-based; exact null distribution (no ties, n₁·n₂ ≤ 400)."
+      : "Rank-based; normal approximation with tie correction.",
   }
 }
 
@@ -469,14 +647,26 @@ export function wilcoxonSignedRank(a: number[], b: number[]): TestResult | null 
   diffs.forEach((d, i) => (d > 0 ? (wPlus += ranks[i]) : (wMinus += ranks[i])))
   const W = Math.min(wPlus, wMinus)
   const mu = (n * (n + 1)) / 4
-  const sigma = Math.sqrt((n * (n + 1) * (2 * n + 1)) / 24)
+  // Tie correction on the null variance (scipy convention) for the fallback.
+  const tieSum = tieCorrection(diffs.map(Math.abs))
+  const sigma = Math.sqrt((n * (n + 1) * (2 * n + 1) - tieSum / 2) / 24)
   const z = (W - mu) / sigma
+  // The normal approximation is badly anti-conservative at bench sample sizes
+  // (n = 5, W = 0 gives p ≈ 0.043 where the exact value is 0.0625), so use the
+  // exact distribution whenever it is valid and affordable.
+  const exact = n <= 25 && tieSum === 0
+  // Kerby (2014) matched-pairs rank-biserial correlation. No standard CI is
+  // defined for it, so `effectCI` is left unset.
+  const rrb = (wPlus - wMinus) / ((n * (n + 1)) / 2)
   return {
     name: "Wilcoxon signed-rank",
     stat: [{ label: "W", value: W }, { label: "z", value: z }],
-    p: normalTwoSidedP(z),
+    p: exact ? wilcoxonExactP(W, n) : normalTwoSidedP(z),
     df: `n = ${n}`,
-    note: "Paired, rank-based.",
+    effect: { label: "rank-biserial r", value: rrb },
+    note: exact
+      ? "Paired, rank-based; exact null distribution (n ≤ 25, no tied |differences|)."
+      : "Paired, rank-based; normal approximation with tie correction.",
   }
 }
 
@@ -494,12 +684,19 @@ export function kruskalWallis(groups: { name: string; values: number[] }[]): Tes
     H += (rSum * rSum) / grp.length
   }
   H = (12 / (N * (N + 1))) * H - 3 * (N + 1)
+  // Tie correction H / (1 − ΣT/(N³ − N)); without it H is deflated and the
+  // p-value inflated whenever values repeat.
+  const tieSum = tieCorrection(all)
+  const C = 1 - tieSum / (N ** 3 - N)
+  if (C > 0) H /= C
   return {
     name: "Kruskal–Wallis H",
     stat: [{ label: "H", value: H }],
     p: chiSquareUpperP(H, k - 1),
     df: `${k - 1}`,
-    note: "Non-parametric one-way test across groups.",
+    note: tieSum > 0
+      ? "Non-parametric one-way test across groups; H corrected for ties."
+      : "Non-parametric one-way test across groups.",
   }
 }
 
@@ -613,7 +810,22 @@ export function chiSquareTest(observed: number[][]): TestResult | null {
 }
 
 /* ── Multiple-comparison correction ──────────────────────────────────────── */
-export type CorrectionMethod = "none" | "bonferroni" | "sidak" | "holm" | "holm-sidak"
+export type CorrectionMethod =
+  | "none"
+  | "bonferroni"
+  | "sidak"
+  | "holm"
+  | "holm-sidak"
+  | "benjamini-hochberg"
+  | "benjamini-yekutieli"
+
+/**
+ * The two corrections that control the false discovery rate rather than the
+ * family-wise error rate — the right default once the comparison count is in the
+ * hundreds (omics, marker panels), where FWER control leaves no power.
+ */
+export const FDR_METHODS = ["benjamini-hochberg", "benjamini-yekutieli"] as const
+export const isFdr = (m: CorrectionMethod) => (FDR_METHODS as readonly string[]).includes(m)
 
 /** Adjust a set of raw p-values for multiple comparisons (order preserved). */
 export function pAdjust(pvals: number[], method: CorrectionMethod): number[] {
@@ -640,6 +852,26 @@ export function pAdjust(pvals: number[], method: CorrectionMethod): number[] {
       })
       return adj
     }
+    case "benjamini-hochberg":
+    case "benjamini-yekutieli": {
+      // Benjamini–Hochberg (1995): adjusted p₍ᵢ₎ = min over k ≥ i of (m/k)·p₍ₖ₎,
+      // i.e. the reverse cumulative minimum walking DOWN from the largest p —
+      // the mirror image of Holm's step-down running maximum above.
+      // Benjamini–Yekutieli (2001) multiplies by the harmonic number
+      // c(m) = Σ 1/i, the price of dropping BH's positive-dependence assumption.
+      const c =
+        method === "benjamini-yekutieli"
+          ? Array.from({ length: m }, (_, i) => 1 / (i + 1)).reduce((a, b) => a + b, 0)
+          : 1
+      const order = pvals.map((p, i) => ({ p, i })).sort((a, b) => a.p - b.p)
+      const adj = new Array(m).fill(0)
+      let prev = 1
+      for (let rank = m - 1; rank >= 0; rank--) {
+        prev = Math.min(prev, clamp((c * m * order[rank].p) / (rank + 1))) // step-up monotonicity
+        adj[order[rank].i] = prev
+      }
+      return adj
+    }
   }
 }
 
@@ -654,6 +886,86 @@ export type Comparison = {
   ciLow: number
   ciHigh: number
   significant: boolean
+  /**
+   * Effect size for THIS row — §6.3 wants one beside every comparison, and a
+   * difference in assay units is not one. Hedges' g on the pooled within-group
+   * SD for the parametric rows, rank-biserial (Cliff's δ) for the rank-based
+   * ones. No interval: a simultaneous interval for a standardised effect is not
+   * defined by any correction offered here, and the multiplicity-adjusted
+   * interval on the raw difference beside it already carries the uncertainty.
+   */
+  effect: { label: string; value: number }
+}
+
+/**
+ * Per-comparison two-sided level whose interval agrees with the adjusted p.
+ *
+ * Bonferroni and Šidák are SINGLE-STEP: every hypothesis is judged against one
+ * threshold, so the simultaneous interval is just the per-comparison interval
+ * at that threshold and the agreement is exact. Bonferroni rejects when
+ * min(1, m·p) < α, i.e. p < α/m, which is precisely when the 1 − α/m interval
+ * excludes zero; Šidák rejects when 1 − (1−p)^m < α, i.e. p < 1 − (1−α)^(1/m).
+ *
+ * Returns null for the STEP-DOWN procedures (Holm, Holm–Šidák). Each ordered
+ * p is compared against a threshold that depends on how many hypotheses survive
+ * ahead of it, so there is no single level a fixed-width interval could be built
+ * at, and no generally accepted simultaneous interval exists. Reporting the
+ * conservative single-step interval instead is the tempting answer and the wrong
+ * one: Holm's adjusted p is never larger than Bonferroni's, so a comparison can
+ * be Holm-significant while the Bonferroni interval still contains zero — the
+ * same contradiction this file removes, pointing the other way, and wearing the
+ * costume of a real number. Callers report NaN, the "no interval defined"
+ * sentinel already used for unselected FDR rows.
+ *
+ * FDR methods return null too; they are handled by the FCR path, which is the
+ * interval that does exist for them.
+ */
+export function singleStepAlpha(method: CorrectionMethod, alpha: number, m: number): number | null {
+  switch (method) {
+    case "none":
+      return alpha
+    case "bonferroni":
+      return alpha / m
+    case "sidak":
+      return 1 - (1 - alpha) ** (1 / m)
+    default:
+      return null
+  }
+}
+
+/**
+ * Hedges' g for one post-hoc row, standardised on the ANOVA's pooled within-group
+ * SD so the whole family sits on one scale. The correction uses df_within, the df
+ * that SD was estimated with.
+ */
+function pooledHedgesG(diff: number, msw: number, dfw: number): number {
+  if (!(msw > 0) || dfw < 2) return NaN
+  const j = Math.exp(lnGamma(dfw / 2) - Math.log(Math.sqrt(dfw / 2)) - lnGamma((dfw - 1) / 2))
+  return (diff / Math.sqrt(msw)) * j
+}
+
+/** Lanczos ln Γ(z), z > 0 — only needed for Hedges' small-sample correction. */
+function lnGamma(z: number): number {
+  const g = [
+    676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059,
+    12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7,
+  ]
+  let x = 0.99999999999980993
+  for (let i = 0; i < g.length; i++) x += g[i] / (z + i)
+  const t = z + g.length - 0.5
+  return 0.5 * Math.log(2 * Math.PI) + (z - 0.5) * Math.log(t) - t + Math.log(x)
+}
+
+/** Rank-biserial correlation (Cliff's δ) for one pair, from the pair's own values. */
+function pairRankBiserial(x: number[], y: number[]): number {
+  const n1 = x.length
+  const n2 = y.length
+  if (n1 < 1 || n2 < 1) return NaN
+  // U₁ via mid-ranks, so ties contribute a half each — the same convention the
+  // rank tests above use.
+  let u1 = 0
+  for (const a of x) for (const b of y) u1 += a > b ? 1 : a === b ? 0.5 : 0
+  return (2 * u1) / (n1 * n2) - 1
 }
 
 /**
@@ -686,7 +998,10 @@ export function multipleComparisons(
   } else {
     for (let i = 0; i < k; i++) for (let j = i + 1; j < k; j++) pairs.push({ a: i, b: j })
   }
-  const tc = tCritical(alpha, dfw)
+  // The margin is a function of the CORRECTION, not of α alone. Building every
+  // interval at 1 − α/2 was the defect: it put a plain per-comparison interval
+  // that excludes zero beside an adjusted p saying the comparison is not
+  // significant — pAdj = 0.23967 next to [0.052, 1.948].
   const raw = pairs.map(({ a, b }) => {
     const mi = mean(g[a].values)
     const mj = mean(g[b].values)
@@ -695,17 +1010,44 @@ export function multipleComparisons(
     return { a, b, diff: mi - mj, se, t, p: tTwoSidedP(t, dfw) }
   })
   const adj = pAdjust(raw.map((r) => r.p), method)
-  return raw.map((r, i) => ({
-    a: g[r.a].name,
-    b: g[r.b].name,
-    diff: r.diff,
-    t: r.t,
-    p: r.p,
-    pAdj: adj[i],
-    ciLow: r.diff - tc * r.se,
-    ciHigh: r.diff + tc * r.se,
-    significant: adj[i] < alpha,
-  }))
+  const sig = adj.map((p) => p < alpha)
+
+  // An FDR-adjusted p beside a plain 1−α interval contradicts itself: the p says
+  // "not a discovery" while the interval, built at the uncorrected level,
+  // excludes zero. Benjamini & Yekutieli (2005) give the matching interval —
+  // select the R rows the FDR procedure rejects, then build intervals at level
+  // 1 − R·α/m for exactly those R parameters. The false coverage-statement rate
+  // over the selected set is then at most α, and the pairing is exact rather
+  // than thematic: a selected row has raw p ≤ rank·α/m ≤ R·α/m, so its interval
+  // excludes zero precisely when the row was selected.
+  //
+  // Unselected rows get NaN, the same "no interval defined" sentinel dunnTest
+  // already uses: FCR theory constructs intervals only over the selected set,
+  // and re-issuing the uncorrected one there is the defect this avoids.
+  const R = sig.filter(Boolean).length
+  const fdr = isFdr(method)
+  const fcrCrit = fdr && R > 0 ? tCritical((alpha * R) / raw.length, dfw) : NaN
+  // Single-step (Bonferroni/Šidák/none) get their interval at the level their
+  // own adjusted p is judged at; step-down (Holm/Holm–Šidák) get NaN, because
+  // no simultaneous interval for them exists. See `singleStepAlpha`.
+  const perAlpha = singleStepAlpha(method, alpha, raw.length)
+  const singleStepCrit = perAlpha === null ? NaN : tCritical(perAlpha, dfw)
+
+  return raw.map((r, i) => {
+    const crit = fdr ? (sig[i] ? fcrCrit : NaN) : singleStepCrit
+    return {
+      a: g[r.a].name,
+      b: g[r.b].name,
+      diff: r.diff,
+      t: r.t,
+      p: r.p,
+      pAdj: adj[i],
+      ciLow: r.diff - crit * r.se,
+      ciHigh: r.diff + crit * r.se,
+      significant: sig[i],
+      effect: { label: "Hedges' g", value: pooledHedgesG(r.diff, msw, dfw) },
+    }
+  })
 }
 
 /* ── Welch's ANOVA (does not assume equal variances) ─────────────────────── */
@@ -739,10 +1081,36 @@ export type TwoWayCell = { a: string; b: string; values: number[] }
 export type AnovaTerm = { source: string; ss: number; df: number; ms: number; F: number; p: number }
 export type TwoWayResult = { terms: AnovaTerm[]; note?: string }
 
+/** Gaussian elimination with partial pivoting; null if the system is singular. */
+function solveLinear(A: number[][], b: number[]): number[] | null {
+  const n = b.length
+  const M = A.map((row, i) => [...row, b[i]])
+  for (let col = 0; col < n; col++) {
+    let piv = col
+    for (let r = col + 1; r < n; r++) if (Math.abs(M[r][col]) > Math.abs(M[piv][col])) piv = r
+    if (Math.abs(M[piv][col]) < 1e-12) return null
+    ;[M[col], M[piv]] = [M[piv], M[col]]
+    for (let r = 0; r < n; r++) {
+      if (r === col) continue
+      const f = M[r][col] / M[col][col]
+      for (let c = col; c <= n; c++) M[r][c] -= f * M[col][c]
+    }
+  }
+  return M.map((row, i) => row[n] / row[i])
+}
+
 /**
  * Two-way ANOVA with interaction. Each cell is one (factor-A level × factor-B
- * level) combination with its replicate values. Uses Type I sums of squares
- * exact for balanced designs (equal replicates per cell).
+ * level) combination with its replicate values.
+ *
+ * Uses **Type II** sums of squares: each main effect is adjusted for the other
+ * (SS(A|B), SS(B|A)) and the interaction for both. Type I SS computed from raw
+ * marginal means is only valid when the design is balanced — on unbalanced
+ * data the main effects double-count the shared variance and the residual
+ * SS_AB = SS_cells − SS_A − SS_B goes NEGATIVE, producing a negative F. Type II
+ * cannot: every term is a difference of nested residual sums of squares.
+ * Matches `statsmodels.stats.anova_lm(..., typ=2)`; identical to Type I when
+ * the design is balanced.
  */
 export function twoWayAnova(cells: TwoWayCell[]): TwoWayResult | null {
   const clean = cells
@@ -754,40 +1122,73 @@ export function twoWayAnova(cells: TwoWayCell[]): TwoWayResult | null {
   const A = aLevels.length
   const B = bLevels.length
   if (A < 2 || B < 2) return null
-  const all = clean.flatMap((c) => c.values)
-  const N = all.length
-  const grand = mean(all)
-  const cellMap = new Map<string, number[]>()
+  const N = clean.reduce((s, c) => s + c.values.length, 0)
+  type Cell = { a: string; b: string; values: number[] }
+  const cellMap = new Map<string, Cell>()
   const aVals = new Map<string, number[]>()
   const bVals = new Map<string, number[]>()
   for (const c of clean) {
-    const key = `${c.a} ${c.b}`
-    cellMap.set(key, (cellMap.get(key) ?? []).concat(c.values))
+    // \u0000 is a collision-proof composite key delimiter: it cannot occur in a
+    // factor label. Written as an escape so the file stays greppable text.
+    const key = `${c.a}\u0000${c.b}`
+    const cur = cellMap.get(key)
+    if (cur) cur.values.push(...c.values)
+    else cellMap.set(key, { a: c.a, b: c.b, values: [...c.values] })
     aVals.set(c.a, (aVals.get(c.a) ?? []).concat(c.values))
     bVals.set(c.b, (bVals.get(c.b) ?? []).concat(c.values))
   }
-  let ssA = 0
-  for (const lv of aLevels) {
-    const v = aVals.get(lv)!
-    ssA += v.length * (mean(v) - grand) ** 2
+  const cellList = [...cellMap.values()]
+
+  /** Residual SS of a model whose fitted value for every point in a cell is `fitted`. */
+  const sseOf = (fitted: (c: Cell) => number) => {
+    let s = 0
+    for (const c of cellList) {
+      const f = fitted(c)
+      for (const x of c.values) s += (x - f) ** 2
+    }
+    return s
   }
-  let ssB = 0
-  for (const lv of bLevels) {
-    const v = bVals.get(lv)!
-    ssB += v.length * (mean(v) - grand) ** 2
+  const sseAOnly = sseOf((c) => mean(aVals.get(c.a)!))
+  const sseBOnly = sseOf((c) => mean(bVals.get(c.b)!))
+  const ssWithin = sseOf((c) => mean(c.values)) // saturated cell-means model
+
+  // Additive model (A + B, no interaction) by least squares on the reference-
+  // coded design [intercept, A₂…A_A, B₂…B_B]; aggregated over cells, since
+  // every point in a cell shares a design row.
+  const aIndex = new Map(aLevels.map((lv, i) => [lv, i]))
+  const bIndex = new Map(bLevels.map((lv, i) => [lv, i]))
+  const np = A + B - 1
+  const designRow = (c: Cell) => {
+    const row = new Array(np).fill(0)
+    row[0] = 1
+    const ai = aIndex.get(c.a)!
+    const bi = bIndex.get(c.b)!
+    if (ai > 0) row[ai] = 1
+    if (bi > 0) row[A - 1 + bi] = 1
+    return row
   }
-  let ssCells = 0
-  let ssWithin = 0
-  for (const [, v] of cellMap) {
-    const cm = mean(v)
-    ssCells += v.length * (cm - grand) ** 2
-    for (const x of v) ssWithin += (x - cm) ** 2
+  const XtX: number[][] = Array.from({ length: np }, () => new Array(np).fill(0))
+  const Xty = new Array(np).fill(0)
+  for (const c of cellList) {
+    const row = designRow(c)
+    const n = c.values.length
+    const m = mean(c.values)
+    for (let i = 0; i < np; i++) {
+      Xty[i] += n * row[i] * m
+      for (let j = 0; j < np; j++) XtX[i][j] += n * row[i] * row[j]
+    }
   }
-  const ssAB = ssCells - ssA - ssB
+  const beta = solveLinear(XtX, Xty)
+  if (!beta) return null // disconnected design: no estimable additive model
+  const sseAdd = sseOf((c) => designRow(c).reduce((s, v, i) => s + v * beta[i], 0))
+
+  const ssA = sseBOnly - sseAdd // SS(A | B)
+  const ssB = sseAOnly - sseAdd // SS(B | A)
+  const ssAB = sseAdd - ssWithin // SS(AB | A, B)
   const dfA = A - 1
   const dfB = B - 1
-  const dfAB = (A - 1) * (B - 1)
-  const dfW = N - A * B
+  const dfAB = cellList.length - dfA - dfB - 1
+  const dfW = N - cellList.length
   const msW = ssWithin / dfW
   const term = (source: string, ss: number, df: number): AnovaTerm => {
     const ms = ss / df
@@ -801,7 +1202,7 @@ export function twoWayAnova(cells: TwoWayCell[]): TwoWayResult | null {
       term("Interaction", ssAB, dfAB),
       { source: "Residual", ss: ssWithin, df: dfW, ms: msW, F: NaN, p: NaN },
     ],
-    note: "Balanced fixed-effects model (Type I sums of squares).",
+    note: "Fixed-effects model, Type II sums of squares (valid for unbalanced designs).",
   }
 }
 
@@ -845,7 +1246,16 @@ export function dagostinoPearson(input: number[]): TestResult | null {
   }
 }
 
-/* ── Grubbs' outlier test (two-sided, single outlier) ────────────────────── */
+/* ── Grubbs' outlier test (two-sided, single outlier) ──────────────────────
+   The UNIVARIATE outlier test: is one value extreme within a single sample?
+   It needs no model and answers nothing about a fitted curve.
+
+   Its counterpart is `routOutliers` in ./curve-fitting, which is ROUT
+   (Motulsky & Brown 2006). ROUT asks the other question — which points lie
+   further from a FITTED MODEL than the scatter of the others explains — and
+   its parameter is a false discovery rate Q, not a significance level α.
+   The two are not interchangeable, and the exclusion record keys its params
+   to whichever method actually ran (§8.1). */
 export function grubbs(input: number[], alpha = 0.05): (TestResult & { outlier: number | null }) | null {
   const x = input.filter(isFinite)
   const n = x.length
@@ -966,6 +1376,7 @@ export function chiSquareGoodnessOfFit(observed: number[], expected?: number[]):
 export function dunnTest(
   groups: { name: string; values: number[] }[],
   method: CorrectionMethod = "holm",
+  alpha = 0.05,
 ): Comparison[] {
   const g = groups.map((x) => ({ name: x.name, values: x.values.filter(isFinite) })).filter((x) => x.values.length > 0)
   const k = g.length
@@ -981,19 +1392,23 @@ export function dunnTest(
     meanRanks.push(s / grp.values.length)
   }
   // Tie correction for the rank-sum variance.
-  const counts = new Map<number, number>()
-  for (const v of all) counts.set(v, (counts.get(v) ?? 0) + 1)
-  let tieSum = 0
-  for (const [, t] of counts) tieSum += t ** 3 - t
+  const tieSum = tieCorrection(all)
   const sigmaFactor = (N * (N + 1)) / 12 - tieSum / (12 * (N - 1))
   const pairs: { a: number; b: number }[] = []
   for (let i = 0; i < k; i++) for (let j = i + 1; j < k; j++) pairs.push({ a: i, b: j })
   const raw = pairs.map(({ a, b }) => {
     const se = Math.sqrt(sigmaFactor * (1 / g[a].values.length + 1 / g[b].values.length))
     const z = (meanRanks[a] - meanRanks[b]) / se
-    return { a, b, diff: meanRanks[a] - meanRanks[b], z, p: normalTwoSidedP(z) }
+    return { a, b, diff: meanRanks[a] - meanRanks[b], se, z, p: normalTwoSidedP(z) }
   })
   const adj = pAdjust(raw.map((r) => r.p), method)
+  // Rank units are not an excuse for a mismatched interval: a band on a
+  // rank-mean difference that excludes zero while the adjusted p says the pair
+  // is not separated contradicts itself exactly as one in assay units would.
+  // Single-step methods get the interval at their own level; step-down ones get
+  // NaN, which is what this function used to return unconditionally.
+  const perAlpha = singleStepAlpha(method, alpha, raw.length)
+  const zc = perAlpha === null ? NaN : normalInv(1 - perAlpha / 2)
   return raw.map((r, i) => ({
     a: g[r.a].name,
     b: g[r.b].name,
@@ -1001,9 +1416,13 @@ export function dunnTest(
     t: r.z,
     p: r.p,
     pAdj: adj[i],
-    ciLow: NaN,
-    ciHigh: NaN,
-    significant: adj[i] < 0.05,
+    ciLow: r.diff - zc * r.se,
+    ciHigh: r.diff + zc * r.se,
+    significant: adj[i] < alpha,
+    effect: {
+      label: "rank-biserial r",
+      value: pairRankBiserial(g[r.a].values, g[r.b].values),
+    },
   }))
 }
 

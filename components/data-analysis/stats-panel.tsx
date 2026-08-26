@@ -8,6 +8,8 @@ import {
   describe,
   shapiroWilk,
   dagostinoPearson,
+  andersonDarling,
+  AD_MIN_N,
   grubbs,
   oneSampleT,
   unpairedT,
@@ -26,6 +28,7 @@ import {
   type TestResult,
   type Tail,
   type CorrectionMethod,
+  FDR_METHODS,
 } from "@/lib/data-analysis/statistics"
 
 export type Table = { columns: string[]; rows: Record<string, number | string>[] }
@@ -53,8 +56,24 @@ const POSTHOC: { id: CorrectionMethod; label: string }[] = [
   { id: "holm", label: "Holm" },
   { id: "bonferroni", label: "Bonferroni" },
   { id: "sidak", label: "Šídák" },
+  // The engine has controlled the false discovery rate for a while and nothing
+  // could ask for it. FDR is the standard choice once the comparison count runs
+  // to the hundreds — omics, marker panels — where family-wise control leaves
+  // no power at all.
+  { id: "benjamini-hochberg", label: "Benjamini–Hochberg (FDR)" },
+  { id: "benjamini-yekutieli", label: "Benjamini–Yekutieli (FDR, dependent)" },
   { id: "none", label: "Uncorrected" },
 ]
+
+/** Prism reports Shapiro–Wilk and Anderson–Darling side by side because they fail
+ *  on different departures: SW on skew and short tails, AD on the tails, where a
+ *  t-test actually breaks. Both are offered rather than one being picked for the
+ *  user. */
+const NORMALITY_TESTS = [
+  { id: "shapiro", label: "Shapiro–Wilk", title: "Normality (Shapiro–Wilk)" },
+  { id: "dagostino", label: "D'Agostino", title: "Normality (D'Agostino–Pearson)" },
+  { id: "anderson", label: "Anderson–Darling", title: "Normality (Anderson–Darling)" },
+] as const
 
 const num = (v: number, d = 3) => (isFinite(v) ? v.toFixed(d) : "-")
 
@@ -74,7 +93,7 @@ export function useStatsPanel(table: Table, numericCols: string[]): { canvas: Re
   const [mu0, setMu0] = useState("0")
   const [tail, setTail] = useState<Tail>("two")
   const [postHoc, setPostHoc] = useState<CorrectionMethod>("holm-sidak")
-  const [normalityMethod, setNormalityMethod] = useState<"shapiro" | "dagostino">("shapiro")
+  const [normalityMethod, setNormalityMethod] = useState<"shapiro" | "dagostino" | "anderson">("shapiro")
 
   const arity = TESTS.find((t) => t.id === testId)?.arity ?? "two"
   const hasTail = testId === "oneSampleT" || testId === "unpairedT" || testId === "welchT" || testId === "pairedT"
@@ -116,9 +135,13 @@ export function useStatsPanel(table: Table, numericCols: string[]): { canvas: Re
     return []
   }, [testId, groupSel, postHoc, colVals])
 
+  const normalityFn =
+    normalityMethod === "shapiro" ? shapiroWilk
+      : normalityMethod === "dagostino" ? dagostinoPearson
+      : andersonDarling
   const normality = useMemo(
-    () => numericCols.map((c) => ({ key: c, r: normalityMethod === "shapiro" ? shapiroWilk(colVals[c] ?? []) : dagostinoPearson(colVals[c] ?? []) })),
-    [numericCols, colVals, normalityMethod],
+    () => numericCols.map((c) => ({ key: c, r: normalityFn(colVals[c] ?? []) })),
+    [numericCols, colVals, normalityFn],
   )
 
   const outliers = useMemo(
@@ -170,7 +193,7 @@ export function useStatsPanel(table: Table, numericCols: string[]): { canvas: Re
         >
           <Card title="Test result" subtitle={result?.name ?? "Choose a test"}>
             {result ? (
-              <ResultView result={result} tukey={tukey} postHoc={postHocPairs} />
+              <ResultView result={result} tukey={tukey} postHoc={postHocPairs} correction={postHoc} />
             ) : (
               <p className="text-sm text-muted-foreground">Not enough data for this test with the selected columns.</p>
             )}
@@ -178,21 +201,33 @@ export function useStatsPanel(table: Table, numericCols: string[]): { canvas: Re
         </motion.div>
       </AnimatePresence>
 
-      <Card title={normalityMethod === "shapiro" ? "Normality (Shapiro–Wilk)" : "Normality (D'Agostino–Pearson)"} subtitle="Per numeric column">
+      <Card title={NORMALITY_TESTS.find((t) => t.id === normalityMethod)!.title} subtitle="Per numeric column">
         <div className="mb-3 inline-flex rounded-lg border border-border bg-background p-0.5 text-xs">
-          {([["shapiro", "Shapiro–Wilk"], ["dagostino", "D'Agostino"]] as const).map(([id, lab]) => (
+          {NORMALITY_TESTS.map(({ id, label }) => (
             <button key={id} onClick={() => setNormalityMethod(id)}
-              className={cn("rounded-md px-2.5 py-1 transition-colors", normalityMethod === id ? "bg-[var(--n9-accent,#965034)] text-white" : "text-muted-foreground hover:text-foreground")}>{lab}</button>
+              className={cn("rounded-md px-2.5 py-1 transition-colors", normalityMethod === id ? "bg-[var(--n9-accent,#965034)] text-white" : "text-muted-foreground hover:text-foreground")}>{label}</button>
           ))}
         </div>
         <div className="flex flex-wrap gap-2">
           {normality.map(({ key, r }) => (
             <div key={key} className="flex items-center gap-2 rounded-lg border border-border bg-muted/20 px-3 py-1.5 text-xs">
               <span className="font-medium">{key}</span>
-              {r ? (<><span className="font-mono text-muted-foreground">{r.stat[0].label}={num(r.stat[0].value)}</span><Pill p={r.p} /></>) : (<span className="text-muted-foreground">n too small</span>)}
+              {/* A test that declined is not a test with a blank result. Anderson–Darling
+                  refuses below n = 8 and on a constant column rather than extrapolating
+                  its p from a table that does not cover the case, so the refusal is what
+                  gets rendered. */}
+              {r
+                ? (<><span className="font-mono text-muted-foreground">{r.stat[0].label}={num(r.stat[0].value)}</span><Pill p={r.p} /></>)
+                : (<span className="text-muted-foreground">{normalityMethod === "anderson" ? `declined: needs n \u2265 ${AD_MIN_N} and some spread` : "n too small"}</span>)}
             </div>
           ))}
         </div>
+        {/* The p is an analytic approximation, and the test says so itself. Passing
+            that note on is the difference between an approximate p and one the
+            reader takes as exact. */}
+        {normality.find(({ r }) => r?.note)?.r?.note && (
+          <p className="mt-2 text-[11px] text-muted-foreground">{normality.find(({ r }) => r?.note)!.r!.note}</p>
+        )}
       </Card>
 
       {outliers.length > 0 && (
@@ -278,10 +313,12 @@ function ResultView({
   result,
   tukey,
   postHoc,
+  correction,
 }: {
   result: TestResult
   tukey: ReturnType<typeof tukeyHSD>
   postHoc: ReturnType<typeof multipleComparisons>
+  correction: CorrectionMethod
 }) {
   return (
     <div className="space-y-4">
@@ -295,7 +332,21 @@ function ResultView({
             <Pill p={result.p} />
           </div>
         </div>
-        {result.effect && <Stat label={result.effect.label} value={num(result.effect.value)} />}
+        {result.effect && (
+          <Stat
+            label={result.effect.label}
+            value={num(result.effect.value)}
+            /* An effect size without its interval reads as a measurement when
+               it is an estimate, and the interval is what says whether the
+               effect is pinned down or merely non-zero. Shown only when the
+               test actually produced one — never manufactured here. */
+            sub={
+              result.effectCI && result.effectCI.every(Number.isFinite)
+                ? `95% CI ${num(result.effectCI[0])} to ${num(result.effectCI[1])}`
+                : undefined
+            }
+          />
+        )}
       </div>
       {result.note && <p className="text-xs text-muted-foreground">{result.note}</p>}
       {tukey.length > 0 && (
@@ -330,7 +381,7 @@ function ResultView({
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground/60">
-                  <th className="py-1.5 pr-4">Pair</th><th className="py-1.5 pr-4">Δ</th><th className="py-1.5 pr-4">raw p</th><th className="py-1.5 pr-4">adj. p</th><th className="py-1.5 pr-4"></th>
+                  <th className="py-1.5 pr-4">Pair</th><th className="py-1.5 pr-4">Δ</th><th className="py-1.5 pr-4">Interval</th><th className="py-1.5 pr-4">raw p</th><th className="py-1.5 pr-4">adj. p</th><th className="py-1.5 pr-4"></th>
                 </tr>
               </thead>
               <tbody className="tabular-nums">
@@ -338,6 +389,17 @@ function ResultView({
                   <tr key={c.a + c.b} className="border-t border-border/50">
                     <td className="py-1.5 pr-4 font-medium">{c.a} vs {c.b}</td>
                     <td className="py-1.5 pr-4 font-mono">{num(c.diff, 2)}</td>
+                    {/* An FDR run defines intervals only over the SELECTED set
+                        (Benjamini–Yekutieli 2005), so an unselected row has no
+                        interval at all. Rendering the absence is the point:
+                        falling back to the uncorrected 1−α limits here would
+                        print an interval excluding zero beside a p that says
+                        "not a discovery". */}
+                    <td className="py-1.5 pr-4 font-mono">
+                      {isFinite(c.ciLow) && isFinite(c.ciHigh)
+                        ? `${num(c.ciLow, 2)} to ${num(c.ciHigh, 2)}`
+                        : <span className="text-muted-foreground">not defined (unselected)</span>}
+                    </td>
                     <td className="py-1.5 pr-4 font-mono text-muted-foreground">{c.p < 0.0001 ? "< 0.0001" : num(c.p, 4)}</td>
                     <td className="py-1.5 pr-4 font-mono">{c.pAdj < 0.0001 ? "< 0.0001" : num(c.pAdj, 4)}</td>
                     <td className="py-1.5 pr-4"><Pill p={c.pAdj} /></td>
@@ -346,18 +408,47 @@ function ResultView({
               </tbody>
             </table>
           </div>
+          {fcrNote(postHoc, correction) && (
+            <p className="mt-2 text-[11px] text-muted-foreground">{fcrNote(postHoc, correction)}</p>
+          )}
         </div>
       )}
     </div>
   )
 }
 
+/**
+ * State the level the FCR intervals were actually built at.
+ *
+ * An FDR run's intervals are NOT 1−α: they are 1 − Rα/m over the R selected
+ * comparisons. A reader who assumes 95% because that is what every other table
+ * on the screen means has misread the width, so the number is said out loud.
+ * Identified by the correction method, not by row shape. The old heuristic --
+ * "some unselected row has no interval" -- held only while every FWER method
+ * still emitted one. Holm and Holm-Sidak now withhold theirs too (no simultaneous
+ * interval for a step-down procedure is generally accepted), so shape alone would
+ * caption a Holm family with FCR prose about a level it never used.
+ */
+export function fcrNote(
+  rows: ReturnType<typeof multipleComparisons>,
+  method: CorrectionMethod,
+  alpha = 0.05,
+): string | null {
+  if (!(FDR_METHODS as readonly CorrectionMethod[]).includes(method)) return null
+  const selected = rows.filter((c) => c.significant).length
+  if (selected === 0) {
+    return "No comparison was selected, so no FCR interval is defined for any of them."
+  }
+  const level = (1 - (alpha * selected) / rows.length) * 100
+  return `Intervals are FCR-adjusted at ${level.toFixed(2)}%, not ${((1 - alpha) * 100).toFixed(0)}%: ${selected} of ${rows.length} comparisons were selected, and false coverage is controlled over that set only.`
+}
+
 function Pill({ p }: { p: number }) {
   const sig = p < 0.05
   return <span className={cn("rounded px-1.5 py-0.5 text-[11px] font-semibold", sig ? "bg-[var(--n9-accent,#965034)]/12 text-[var(--n9-accent,#965034)]" : "bg-muted text-muted-foreground")}>{sigStars(p)}</span>
 }
-function Stat({ label, value }: { label: string; value: string }) {
-  return (<div><div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/70">{label}</div><div className="mt-0.5 font-mono text-lg font-semibold">{value}</div></div>)
+function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (<div><div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/70">{label}</div><div className="mt-0.5 font-mono text-lg font-semibold">{value}</div>{sub && <div className="mt-0.5 font-mono text-[11px] tabular-nums text-muted-foreground">{sub}</div>}</div>)
 }
 function ColSelect({ cols, value, onChange }: { cols: string[]; value: string; onChange: (v: string) => void }) {
   return (

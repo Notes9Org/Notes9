@@ -405,7 +405,11 @@ function technicalReplicates(spec: AnalysisSpec, table: Table): Finding[] {
     mutations: [
       {
         kind: "data.addTransform",
-        transform: { kind: "collapseReplicates", by: design, statistic },
+        // `columns: []` and `countTo: "n"` are the schema defaults, spelled out
+        // because a Zod `.default()` still lands in the INFERRED type as
+        // required — a literal built here has to carry them. `[]` keeps this
+        // author's intent exactly: collapse every numeric column in one pass.
+        transform: { kind: "collapseReplicates", by: design, statistic, columns: [], countTo: "n" },
       },
     ],
   })
