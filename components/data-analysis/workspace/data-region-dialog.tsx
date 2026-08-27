@@ -125,7 +125,19 @@ export function DataRegionDialog({
   const plan = useMemo(() => detectHeader(grid, override), [grid, override])
 
   /** Two-tap flow: the next tap sets the start, then the end, then back. */
-  const [picking, setPicking] = useState<"start" | "end" | "axes">("start")
+  /**
+   * review ⇄ adjust, replacing the start→end→axes wizard.
+   *
+   * "Tap your first header cell" asked the user to think like the parser —
+   * a table as a rectangle with a named corner — and marched every clean file
+   * through corner-picking that detection had already done. Review mode leads
+   * with the detector's answer highlighted and labelled; adjust is the
+   * exception path, entered on demand (or automatically when detection came
+   * up empty), and its semantics ride on the drag gesture itself.
+   */
+  const [mode, setMode] = useState<"review" | "adjust">("review")
+  /** Tap-tap fallback in adjust mode: the first corner, awaiting the second. */
+  const [adjustFirst, setAdjustFirst] = useState<{ r: number; c: number } | null>(null)
   const [title, setTitle] = useState<string | null>(null)
   const [xPick, setXPick] = useState<string | null>(null)
   const [yPick, setYPick] = useState<string[] | null>(null)
@@ -138,9 +150,13 @@ export function DataRegionDialog({
   const dragStart = useRef<{ r: number; c: number } | null>(null)
   const [dragNow, setDragNow] = useState<{ r: number; c: number } | null>(null)
 
+  const detectionPoor = plan.columns.length === 0 || plan.dataEnd < plan.dataStart
   useEffect(() => {
     if (open) {
-      setPicking("start")
+      // A file the detector could not read starts in the redraw gesture — the
+      // one case where dragging first is kinder than reading first.
+      setMode(detectionPoor ? "adjust" : "review")
+      setAdjustFirst(null)
       setTitle(null)
       setXPick(null)
       setYPick(null)
@@ -175,7 +191,16 @@ export function DataRegionDialog({
       endRow: Math.max(a.r, b.r),
       endCol: Math.max(a.c, b.c),
     })
-    setPicking("axes")
+    setAdjustFirst(null)
+    setMode("review")
+  }
+  const dragCorner = (r: number, c: number): "start" | "end" | null => {
+    const a = adjustFirst ?? dragStart.current
+    const b = dragNow ?? adjustFirst
+    if (!a) return null
+    if (r === Math.min(a.r, (b ?? a).r) && c === Math.min(a.c, (b ?? a).c)) return "start"
+    if (b && r === Math.max(a.r, b.r) && c === Math.max(a.c, b.c) && (b.r !== a.r || b.c !== a.c)) return "end"
+    return null
   }
   const inDrag = (r: number, c: number) => {
     const a = dragStart.current
@@ -195,23 +220,16 @@ export function DataRegionDialog({
       setTitle((t) => (t === text ? null : text))
       return
     }
-    if (picking === "start") {
-      onApply({ ...override, startRow: r, startCol: c })
-      setPicking("end")
+    if (mode === "adjust") {
+      // Tap-tap fallback for touch and keyboards: first tap plants the
+      // headers-start corner (tagged on the cell), second completes the table.
+      if (!adjustFirst) setAdjustFirst({ r, c })
+      else commitDrag(adjustFirst, { r, c })
       return
     }
-    if (picking === "end") {
-      onApply({
-        ...override,
-        endRow: Math.max(r, plan.startRow),
-        endCol: Math.max(c, plan.startCol),
-      })
-      setPicking("axes")
-      return
-    }
-    // Axes stage. A header-row tap cycles that column none → X → Y → none —
-    // the grid is the picker, not a set of dropdowns beside it. A data-cell
-    // tap starts a fresh region instead.
+    // Review mode: the grid is live for MEANING, not geometry. A header tap
+    // cycles that column none → X → Y → none; data cells are inert, so a stray
+    // click can no longer redraw the region by accident.
     if (isHeader(r, c)) {
       const col = plan.columns[c - plan.startCol]
       if (!col) return
@@ -224,10 +242,7 @@ export function DataRegionDialog({
         setXPick(col)
         if (y.includes(col)) setYPick(y.filter((k) => k !== col))
       }
-      return
     }
-    onApply({ ...override, startRow: r, startCol: c })
-    setPicking("end")
   }
 
   const commitRange = (text: string) => {
@@ -298,50 +313,50 @@ export function DataRegionDialog({
 
             <div className="grid min-h-0 flex-1 gap-0 overflow-hidden lg:grid-cols-[minmax(0,1fr)_21rem]">
             <div className="min-h-0 overflow-auto px-5 py-4">
-              {/* ── the one instruction ─────────────────────────────── */}
-              <div className="mb-3 flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPicking("start")}
-                  title="Jump back to this step"
-                  className={cn(
-                    "rounded-full px-2.5 py-1 text-[12px] font-medium transition-all duration-150 active:scale-95",
-                    picking === "start"
-                      ? "bg-[var(--n9-accent,#965034)] text-white"
-                      : "bg-muted text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  1 · First header cell
-                </button>
-                <ArrowRight className="size-3.5 text-muted-foreground/50" />
-                <button
-                  type="button"
-                  onClick={() => setPicking("end")}
-                  title="Jump back to this step"
-                  className={cn(
-                    "rounded-full px-2.5 py-1 text-[12px] font-medium transition-all duration-150 active:scale-95",
-                    picking === "end"
-                      ? "bg-[var(--n9-accent,#965034)] text-white"
-                      : "bg-muted text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  2 · Last data cell
-                </button>
-                <ArrowRight className="size-3.5 text-muted-foreground/50" />
-                <button
-                  type="button"
-                  onClick={() => setPicking("axes")}
-                  title="Jump back to this step"
-                  className={cn(
-                    "rounded-full px-2.5 py-1 text-[12px] font-medium transition-all duration-150 active:scale-95",
-                    picking === "axes"
-                      ? "bg-[var(--n9-accent,#965034)] text-white"
-                      : "bg-muted text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  3 · Tap headers: X → Y
-                </button>
-                <span className="text-[11px] text-muted-foreground">· drag across the table works too · pills jump back</span>
+              {/* ── one line, mode-dependent ────────────────────────── */}
+              <div className="mb-3 flex min-h-8 flex-wrap items-center gap-2">
+                {mode === "review" ? (
+                  <>
+                    <p className="text-[13px]">
+                      {tableRange ? (
+                        <>
+                          We read your table as{" "}
+                          <span className="rounded bg-[var(--n9-accent,#965034)]/10 px-1 font-mono text-[12px] font-semibold text-[var(--n9-accent,#965034)]">
+                            {tableRange}
+                          </span>{" "}
+                          <span className="text-muted-foreground">— check the highlights, tap headers to set</span>{" "}
+                          <span className="rounded bg-[var(--n9-accent,#965034)] px-1 text-[10px] font-bold text-white">X</span>{" "}
+                          <span className="rounded bg-emerald-600 px-1 text-[10px] font-bold text-white">Y</span>
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">Nothing detected yet.</span>
+                      )}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => { setMode("adjust"); setAdjustFirst(null) }}
+                      className="ml-auto rounded-full border border-border px-2.5 py-1 text-[12px] font-medium transition-all duration-150 hover:bg-muted active:scale-95"
+                    >
+                      Adjust selection
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-[13px] font-medium">
+                      Drag from your first header to your last value
+                      <span className="ml-1.5 font-normal text-muted-foreground">— or tap the two corners</span>
+                    </p>
+                    {!detectionPoor && (
+                      <button
+                        type="button"
+                        onClick={() => { setMode("review"); setAdjustFirst(null) }}
+                        className="ml-auto rounded-full border border-border px-2.5 py-1 text-[12px] font-medium transition-all duration-150 hover:bg-muted active:scale-95"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </>
+                )}
               </div>
 
               {/* ── the grid IS the interface ───────────────────────── */}
@@ -387,7 +402,7 @@ export function DataRegionDialog({
                               <td
                                 key={c}
                                 onPointerDown={(e) => {
-                                  if (e.button !== 0) return
+                                  if (e.button !== 0 || mode !== "adjust") return
                                   dragStart.current = { r, c }
                                   setDragNow({ r, c })
                                 }}
@@ -402,15 +417,15 @@ export function DataRegionDialog({
                                   else tapCell(r, c)
                                 }}
                                 title={
-                                  r < plan.startRow
-                                    ? "Tap to use as the chart title"
-                                    : picking === "start"
-                                      ? "Tap: first header cell"
-                                      : picking === "end"
-                                        ? "Tap: last data cell"
-                                        : isHeader(r, c)
-                                          ? "Tap: X → tap again: Y → again: off"
-                                          : "Tap: reselect the region"
+                                  mode === "adjust"
+                                    ? adjustFirst
+                                      ? "Tap: your table ends here"
+                                      : "Drag to your last value, or tap — your headers start here"
+                                    : r < plan.startRow
+                                      ? "Tap to use as the chart title"
+                                      : isHeader(r, c)
+                                        ? "Tap: X → tap again: Y → again: off"
+                                        : ""
                                 }
                                 className={cn(
                                   "max-w-[9rem] cursor-pointer select-none truncate border-b border-r border-border/60 px-2 py-1 transition-colors duration-100",
@@ -426,9 +441,30 @@ export function DataRegionDialog({
                                   "hover:bg-[var(--n9-accent,#965034)]/20",
                                   (isStart || isEnd) && "ring-2 ring-inset ring-[var(--n9-accent,#965034)]",
                                   inDrag(r, c) && "bg-[var(--n9-accent,#965034)]/20",
+                                  mode === "adjust" && dragCorner(r, c) && "relative overflow-visible ring-2 ring-inset ring-[var(--n9-accent,#965034)]",
                                   isTitle && "ring-2 ring-inset ring-[var(--n9-accent,#965034)]/60 font-medium"
                                 )}
-                              >{text}</td>
+                              >
+                                {text}
+                                {mode === "adjust" && (() => {
+                                  const corner = dragCorner(r, c)
+                                  if (!corner) return null
+                                  // The meaning appears where the hand is: on
+                                  // the corners of the gesture, as it happens.
+                                  return (
+                                    <span
+                                      className={cn(
+                                        "pointer-events-none absolute z-10 whitespace-nowrap rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white shadow-sm",
+                                        corner === "start"
+                                          ? "-top-4 left-0 bg-[var(--n9-accent,#965034)]"
+                                          : "-bottom-4 right-0 bg-emerald-600"
+                                      )}
+                                    >
+                                      {corner === "start" ? "headers start" : "data ends"}
+                                    </span>
+                                  )
+                                })()}
+                              </td>
                             )
                           })}
                           {/* the demarcation, written where it applies */}
@@ -469,9 +505,9 @@ export function DataRegionDialog({
                   )}
                 >units row</button>
                 {(override.startRow !== undefined || override.startCol !== undefined || override.endRow !== undefined || override.endCol !== undefined || override.rowCount !== undefined || override.unitRow !== undefined) && (
-                  <button type="button" onClick={() => { onApply({}); setPicking("start") }}
+                  <button type="button" onClick={() => { onApply({}); setMode("review"); setAdjustFirst(null) }}
                     className="rounded-full px-2 py-0.5 text-muted-foreground transition-colors hover:text-foreground">
-                    Reset
+                    Re-detect
                   </button>
                 )}
                 {onAskAi && (
