@@ -517,10 +517,14 @@ export function Dock({
             ) : (
               <h2 className="text-[13px] font-medium text-muted-foreground">{title}</h2>
             )}
-            {/* `shrink-0`: the collapse control is how a dock is closed, so it
-                must never be the thing squeezed out when the tabs are wide. */}
-            <div className="ml-auto flex shrink-0 items-center gap-1.5">
-              {actions}
+            {/* The ribbon rule, same as the tab strip: ACTIONS scroll inside
+                their own strip (hidden scrollbar, right-edge fade), and the
+                collapse control is pinned outside it — the one button that
+                closes a dock must never be the one scrolled out of reach. */}
+            <div className="ml-auto flex min-w-0 items-center gap-1.5">
+              <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [mask-image:linear-gradient(to_right,black_calc(100%-1rem),transparent)]">
+                {actions}
+              </div>
               <Button
                 variant="ghost"
                 size="icon-sm"

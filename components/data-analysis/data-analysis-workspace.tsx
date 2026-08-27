@@ -50,7 +50,7 @@ import {
   ArrowUUpRight,
   X,
   ClockCounterClockwise,
-  Crosshair,
+  SelectionAll,
   Question,
   Warning,
   CheckCircle,
@@ -5902,7 +5902,7 @@ export function DataAnalysisWorkspace({
         title="Reopen data selection — region, axes, title"
         className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
       >
-        <Crosshair className="h-4 w-4" /> Select
+        <SelectionAll className="h-4 w-4" /> Select
       </button>
       <button
         type="button"
