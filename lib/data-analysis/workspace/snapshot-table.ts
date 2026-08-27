@@ -32,7 +32,13 @@
 
 import * as XLSX from "xlsx"
 import { snapshotToXlsxWorkbook, type UniverWorkbookSnapshot } from "@/lib/spreadsheet-workbook"
-import { detectHeader, rememberRowIds, tableFromGrid } from "@/lib/data-analysis/workspace/bootstrap"
+import {
+  detectHeader,
+  rememberRowIds,
+  tableFromGrid,
+  type HeaderOverride,
+  type HeaderPlan,
+} from "@/lib/data-analysis/workspace/bootstrap"
 
 /** One row keyed by column name, the shape the chart and stats panels hold. */
 export type Row = Record<string, number | string>
@@ -58,6 +64,17 @@ export type SnapshotTable = {
   sheetName: string | null
   /** Non-null explains why the table is empty. Never set just because there are 0 rows. */
   parseError: string | null
+  /**
+   * How the sheet was read: header rows, unit row, data bounds, column bounds
+   * and the plain-language reason for each.
+   *
+   * Returned rather than kept private because two things need it. A researcher
+   * has to be able to SEE what was decided before charting anything, and
+   * anything that points at a value -- an outlier finding, an excluded row --
+   * needs `startCol`/`dataStart` to turn a column name and a row id into a cell
+   * a person can go and look at. Null only when nothing was read.
+   */
+  plan: HeaderPlan | null
 }
 
 /** The sheets this workbook offers, in tab order. `[]` if it cannot be parsed. */
@@ -102,8 +119,12 @@ function coerceCell(v: number | string | null): number | string {
 
 /** Read one sheet with the preamble/unit-row-aware detector, folded into the
  *  flat row shape every other reader here expects. */
-function detectedReadSheet(grid: Grid): { columns: string[]; rows: Row[]; rowIds: string[] } | null {
-  const table = tableFromGrid(grid)
+function detectedReadSheet(
+  grid: Grid,
+  header: HeaderOverride
+): { columns: string[]; rows: Row[]; rowIds: string[]; plan: HeaderPlan } | null {
+  const plan = detectHeader(grid, header)
+  const table = tableFromGrid(grid, { header })
   if (table.columns.length === 0) return null
   const rows: Row[] = table.rows.map((r) => {
     const o: Row = {}
@@ -111,11 +132,11 @@ function detectedReadSheet(grid: Grid): { columns: string[]; rows: Row[]; rowIds
     return o
   })
   const rowIds = table.rows.map((r) => r.rowId)
-  return { columns: table.columns, rows: rememberRowIds(rows, rowIds), rowIds }
+  return { columns: table.columns, rows: rememberRowIds(rows, rowIds), rowIds, plan }
 }
 
 function failed(parseError: string): SnapshotTable {
-  return { columns: [], rows: [], rowIds: [], sheetName: null, parseError }
+  return { columns: [], rows: [], rowIds: [], sheetName: null, parseError, plan: null }
 }
 
 /**
@@ -134,7 +155,16 @@ function failed(parseError: string): SnapshotTable {
  */
 export function snapshotToTable(
   snapshot: UniverWorkbookSnapshot,
-  sheetName?: string | null
+  sheetName?: string | null,
+  /**
+   * The researcher's corrections to where the table is.
+   *
+   * `HeaderOverride` was exported, documented as "how the user settles the
+   * cases that no rule can", and passed by nothing -- `tableFromGrid` was
+   * called bare here, so the detected plan was take-it-or-leave-it and a
+   * misread sheet had no remedy but editing the file. This is the wire.
+   */
+  header: HeaderOverride = {}
 ): SnapshotTable {
   let wb: XLSX.WorkBook
   try {
@@ -158,9 +188,9 @@ export function snapshotToTable(
     }
     try {
       const grid = sheetToGrid(ws)
-      const found = detectedReadSheet(grid)
+      const found = detectedReadSheet(grid, header)
       if (found) return { ...found, sheetName, parseError: null }
-      const rationale = detectHeader(grid).rationale
+      const rationale = detectHeader(grid, header).rationale
       return failed(`No header row was found on “${sheetName}”.${rationale ? ` ${rationale}` : ""}`)
     } catch (err) {
       return failed(`Could not read “${sheetName}”: ${errorMessage(err)}`)
@@ -175,9 +205,9 @@ export function snapshotToTable(
     if (!ws) continue
     try {
       const grid = sheetToGrid(ws)
-      const found = detectedReadSheet(grid)
+      const found = detectedReadSheet(grid, header)
       if (found) return { ...found, sheetName: name, parseError: null }
-      lastRationale = detectHeader(grid).rationale
+      lastRationale = detectHeader(grid, header).rationale
     } catch (err) {
       lastRationale = errorMessage(err)
     }

@@ -312,7 +312,7 @@ describe("AnalysisConsole — variant=rail: busy", () => {
     const textarea = screen.getByRole("textbox", { name: "Ask about this data" })
     fireEvent.change(textarea, { target: { value: "log the y axis" } })
 
-    const send = screen.getByRole("button", { name: "Thinking…" })
+    const send = screen.getByRole("button", { name: "Thinking" })
     expect(send).toBeDisabled()
   })
 })

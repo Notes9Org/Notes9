@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { CaretDown } from "@phosphor-icons/react/ssr"
+import { CaretDown, Question } from "@phosphor-icons/react/ssr"
 import { cn } from "@/lib/utils"
 import {
   describe,
@@ -30,6 +30,14 @@ import {
   type CorrectionMethod,
   FDR_METHODS,
 } from "@/lib/data-analysis/statistics"
+import {
+  guideQuestions,
+  recommendTest,
+  type GuideAnswers,
+  type GuideGoal,
+  type GuideGroups,
+  type GuideNormality,
+} from "@/lib/data-analysis/test-guide"
 
 export type Table = { columns: string[]; rows: Record<string, number | string>[] }
 
@@ -87,6 +95,21 @@ export function useStatsPanel(table: Table, numericCols: string[]): { canvas: Re
   const descriptives = useMemo(() => numericCols.map((c) => ({ key: c, d: describe(colVals[c] ?? []) })), [numericCols, colVals])
 
   const [testId, setTestId] = useState<TestId>("welchT")
+  /**
+   * The guide's answers, and whether it is open.
+   *
+   * Closed by default: it is scaffolding for someone who needs it, not a wizard
+   * everyone has to dismiss. The defaults match the panel's own default test
+   * (Welch on two independent groups), so opening it does not immediately
+   * recommend something different from what is already selected.
+   */
+  const [guideOpen, setGuideOpen] = useState(false)
+  const [guideAnswers, setGuideAnswers] = useState<GuideAnswers>({
+    goal: "compare",
+    groups: "two",
+    paired: false,
+    normality: "unsure",
+  })
   const [colA, setColA] = useState("")
   const [colB, setColB] = useState("")
   const [groupCols, setGroupCols] = useState<string[]>([])
@@ -246,8 +269,120 @@ export function useStatsPanel(table: Table, numericCols: string[]): { canvas: Re
     </div>
   )
 
+  const guide = recommendTest(guideAnswers)
+  const guideQ = guideQuestions(guideAnswers)
+
   const settings = (
     <div className="space-y-3.5">
+      {/*
+        Choosing a test, for someone who does not already know the answer.
+
+        The dropdown below is unchanged and still first-class -- a researcher
+        who knows they want a Welch's ANOVA should not have to answer three
+        questions to say so. But it could ONLY be used by that person: eleven
+        test names grouped "Parametric / Non-parametric / Correlation" is a menu
+        that requires the knowledge it is supposed to supply. These questions
+        are about the experiment instead, and `test-guide.ts` maps the answers
+        to a test with the sentence that justifies it.
+      */}
+      <div className="rounded-xl border border-border bg-muted/20 p-3">
+        <button
+          type="button"
+          onClick={() => setGuideOpen((v) => !v)}
+          aria-expanded={guideOpen}
+          className="flex w-full items-center gap-2 text-left"
+        >
+          <Question className="h-4 w-4 shrink-0 text-[var(--n9-accent,#965034)]" />
+          <span className="flex-1 text-[12.5px] font-medium">Help me choose a test</span>
+          <CaretDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform duration-200", guideOpen && "rotate-180")} />
+        </button>
+
+        {guideOpen && (
+          <div className="mt-3 space-y-3">
+            <GuideChoice
+              label="What are you trying to find out?"
+              value={guideAnswers.goal}
+              options={[
+                { id: "compare", label: "Whether groups differ" },
+                { id: "relationship", label: "Whether two measurements move together" },
+                { id: "describe", label: "Just describe the data" },
+                { id: "counts", label: "Counts in categories" },
+              ]}
+              onChange={(goal) => setGuideAnswers((a) => ({ ...a, goal: goal as GuideGoal }))}
+            />
+
+            {guideQ.showGroups && (
+              <GuideChoice
+                label="How many groups are you comparing?"
+                value={guideAnswers.groups ?? "two"}
+                options={[
+                  { id: "one", label: "One, against an expected value" },
+                  { id: "two", label: "Two" },
+                  { id: "many", label: "Three or more" },
+                ]}
+                onChange={(g) => setGuideAnswers((a) => ({ ...a, groups: g as GuideGroups }))}
+              />
+            )}
+
+            {guideQ.showPaired && (
+              <GuideChoice
+                label="Are these the same subjects measured more than once?"
+                hint="Before/after on the same animals, or matched pairs."
+                value={guideAnswers.paired ? "yes" : "no"}
+                options={[
+                  { id: "no", label: "No — independent groups" },
+                  { id: "yes", label: "Yes — paired" },
+                ]}
+                onChange={(v) => setGuideAnswers((a) => ({ ...a, paired: v === "yes" }))}
+              />
+            )}
+
+            {guideQ.showNormality && (
+              <GuideChoice
+                label="Is the data roughly normally distributed?"
+                value={guideAnswers.normality ?? "unsure"}
+                options={[
+                  { id: "normal", label: "Roughly normal" },
+                  { id: "skewed", label: "Skewed, or has outliers" },
+                  { id: "unsure", label: "Not sure" },
+                ]}
+                onChange={(v) => setGuideAnswers((a) => ({ ...a, normality: v as GuideNormality }))}
+              />
+            )}
+
+            <div className="rounded-lg border border-border bg-background p-2.5">
+              <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+                {guide.test ? "Recommended" : "No test needed"}
+              </p>
+              <p className="mt-0.5 text-[13px] font-semibold">{guide.label}</p>
+              <p className="mt-1 text-[11.5px] leading-relaxed text-muted-foreground">{guide.why}</p>
+              {guide.caveat && (
+                <p className="mt-1.5 rounded-md border border-amber-500/30 bg-amber-500/[0.07] px-2 py-1.5 text-[11.5px] leading-relaxed text-amber-800 dark:text-amber-300">
+                  {guide.caveat}
+                </p>
+              )}
+              {guide.elsewhere && (
+                <p className="mt-1.5 text-[11.5px] leading-relaxed text-muted-foreground">{guide.elsewhere}</p>
+              )}
+              {guide.test && guide.test !== testId && (
+                <button
+                  type="button"
+                  onClick={() => setTestId(guide.test as TestId)}
+                  className="mt-2 rounded-md bg-[var(--n9-accent,#965034)] px-2.5 py-1 text-[12px] font-medium text-white transition-opacity hover:opacity-90"
+                >
+                  Use {guide.label}
+                </button>
+              )}
+              {guide.test && guide.test === testId && (
+                <p className="mt-2 text-[11.5px] font-medium text-[var(--n9-accent,#965034)]">
+                  This is the test currently selected.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
       <Labeled label="Test">
         <NativeSelect value={testId} onChange={(v) => setTestId(v as TestId)}>
           {["Parametric", "Non-parametric", "Correlation"].map((grp) => (
@@ -457,6 +592,51 @@ function ColSelect({ cols, value, onChange }: { cols: string[]; value: string; o
     </NativeSelect>
   )
 }
+/**
+ * One question in the guide, as a row of buttons rather than a dropdown.
+ *
+ * The options are sentences, and a dropdown hides all but one of them until
+ * clicked -- which is the same "you must already know" problem one level down.
+ */
+function GuideChoice({
+  label,
+  hint,
+  value,
+  options,
+  onChange,
+}: {
+  label: string
+  hint?: string
+  value: string
+  options: { id: string; label: string }[]
+  onChange: (id: string) => void
+}) {
+  return (
+    <div>
+      <p className="text-[11.5px] font-medium">{label}</p>
+      {hint && <p className="mb-1 text-[11px] text-muted-foreground">{hint}</p>}
+      <div className="mt-1 flex flex-wrap gap-1.5">
+        {options.map((o) => (
+          <button
+            key={o.id}
+            type="button"
+            onClick={() => onChange(o.id)}
+            aria-pressed={value === o.id}
+            className={cn(
+              "rounded-lg border px-2 py-1 text-[11.5px] transition-colors duration-150",
+              value === o.id
+                ? "border-foreground/70 bg-foreground text-background"
+                : "border-border bg-background text-foreground hover:bg-muted"
+            )}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 /** A native <select> styled to look modern, with a Phosphor chevron, no shadcn. */
 function NativeSelect({ value, onChange, children }: { value: string; onChange: (v: string) => void; children: ReactNode }) {
   return (

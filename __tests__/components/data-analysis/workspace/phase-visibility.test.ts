@@ -1,29 +1,28 @@
 /**
- * T0.2 — the Plate tab is reachable.
+ * A tab is either offered or it does not exist.
  *
- * It was switched off in code with `if (p.id === "plate") return false`, in a
- * refactor about the spec-driven engine that never mentions the plate. The
- * model behind it kept running: the standard curve reads the plate layout, and
- * the curve panel's own hint tells the researcher to "Mark >= 2 standards on
- * the Plate tab" — a tab nothing could reach.
- *
- * This is the test that the phase list cannot lose a tab in silence again.
+ * The Plate tab was once switched off in code with `if (p.id === "plate")
+ * return false` while the standard curve still read its layout — so the curve
+ * panel pointed at a view nothing could reach. It has since been removed
+ * outright, along with the curve's dependency on it; these assertions are what
+ * keep the remaining phases from being lost the same silent way.
  */
 
 import { describe, expect, it } from "vitest"
 
 import { isPhaseVisible, visiblePhaseIds, type PhaseId } from "@/components/data-analysis/workspace/phase-visibility"
 
-const ALL: PhaseId[] = ["chart", "stats", "curve", "plate", "workspace"]
+const ALL: PhaseId[] = ["chart", "stats", "curve", "workspace"]
 const NOTHING = { detected: {}, curvePinned: false }
 
 describe("isPhaseVisible", () => {
-  it("offers the plate map", () => {
-    expect(isPhaseVisible("plate", NOTHING)).toBe(true)
+  it("offers chart, stats and the sheet outright", () => {
+    expect(visiblePhaseIds(ALL, NOTHING)).toEqual(["chart", "stats", "workspace"])
   })
 
-  it("offers chart, stats and the sheet outright", () => {
-    expect(visiblePhaseIds(ALL, NOTHING)).toEqual(["chart", "stats", "plate", "workspace"])
+  it("has no plate phase to offer", () => {
+    // Removed with the curve's dependency on it, not merely hidden.
+    expect(ALL).not.toContain("plate" as PhaseId)
   })
 
   it("holds the standard curve back until something earns it", () => {

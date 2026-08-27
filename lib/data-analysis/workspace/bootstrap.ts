@@ -330,12 +330,64 @@ export interface HeaderPlan {
   dataStart: number
   /** Last grid row of data, inclusive. -1 when there is none. */
   dataEnd: number
+  /**
+   * First grid COLUMN of the table. `columns[i]` is grid column
+   * `startCol + i`, which is what makes a cell reference computable: a sheet
+   * whose table begins in column C was previously read from column A, giving
+   * two nameless `Column 1`/`Column 2` entries in front of the real ones.
+   */
+  startCol: number
+  /** Last grid column of the table, inclusive. -1 when there is none. */
+  endCol: number
   /** Column names, with any unit-row unit folded in as a "(unit)" suffix. */
   columns: string[]
   /** The unit read for each column from the unit row, for the roles panel. */
   units: (string | null)[]
   /** What was decided, in plain language, so the user can see and correct it. */
   rationale: string
+}
+
+/**
+ * A spreadsheet column letter: 0 -> A, 25 -> Z, 26 -> AA.
+ *
+ * Exported because everything that shows a researcher WHERE a value is needs
+ * it, and a second implementation of base-26 is a second thing to get wrong at
+ * column 26.
+ */
+export function columnLetter(index: number): string {
+  if (!Number.isFinite(index) || index < 0) return ""
+  let n = Math.floor(index)
+  let out = ""
+  while (n >= 0) {
+    out = String.fromCharCode(65 + (n % 26)) + out
+    n = Math.floor(n / 26) - 1
+  }
+  return out
+}
+
+/** `B7` for grid column 1, grid row 6. Both indices are 0-based. */
+export function cellAddress(col: number, row: number): string {
+  return `${columnLetter(col)}${row + 1}`
+}
+
+/**
+ * The A1 range a plan's column occupies, e.g. `B4:B27`.
+ *
+ * `columnIndex` is an index into `plan.columns`, not a grid column, because
+ * that is what every caller holds -- the offset by `startCol` is exactly the
+ * arithmetic this exists to keep in one place.
+ */
+export function planColumnRange(plan: HeaderPlan, columnIndex: number): string {
+  if (columnIndex < 0 || columnIndex >= plan.columns.length) return ""
+  if (plan.dataEnd < plan.dataStart) return ""
+  const col = plan.startCol + columnIndex
+  return `${cellAddress(col, plan.dataStart)}:${cellAddress(col, plan.dataEnd)}`
+}
+
+/** The A1 range of the whole data block, header excluded. */
+export function planDataRange(plan: HeaderPlan): string {
+  if (plan.columns.length === 0 || plan.dataEnd < plan.dataStart) return ""
+  return `${cellAddress(plan.startCol, plan.dataStart)}:${cellAddress(plan.endCol, plan.dataEnd)}`
 }
 
 /**
@@ -353,6 +405,10 @@ export interface HeaderOverride {
   unitRow?: boolean
   /** Last grid row of data, inclusive: where the table stops and junk starts. */
   endRow?: number
+  /** First grid column of the table. */
+  startCol?: number
+  /** Last grid column of the table, inclusive. */
+  endCol?: number
 }
 
 const EMPTY_PLAN: HeaderPlan = {
@@ -361,9 +417,39 @@ const EMPTY_PLAN: HeaderPlan = {
   unitRow: null,
   dataStart: 0,
   dataEnd: -1,
+  startCol: 0,
+  endCol: -1,
   columns: [],
   units: [],
   rationale: "The sheet has no rows to read.",
+}
+
+/**
+ * The columns a table actually occupies, within a row span.
+ *
+ * Scoped to `[fromRow, toRow]` rather than the whole grid on purpose: a title
+ * in A1 above a table that starts in C4 would otherwise anchor the table to
+ * column A and drag two empty columns in with it. Rows above the header are not
+ * part of the table and do not get a vote on its width.
+ *
+ * A column counts as occupied if ANY row in the span has something in it, so
+ * this only ever removes columns that are empty from the header to the last row
+ * -- columns that carry nothing at all. That is what keeps the change invisible
+ * for the ordinary sheet: a table starting at A1 gets `{0, width-1}` and is
+ * read exactly as it was before.
+ */
+function occupiedColumns(grid: Grid, fromRow: number, toRow: number): { startCol: number; endCol: number } {
+  let startCol = -1
+  let endCol = -1
+  for (let r = Math.max(0, fromRow); r <= Math.min(toRow, grid.length - 1); r++) {
+    const row = grid[r] ?? []
+    for (let c = 0; c < row.length; c++) {
+      if (cellText(row[c]) === "") continue
+      if (startCol === -1 || c < startCol) startCol = c
+      if (c > endCol) endCol = c
+    }
+  }
+  return startCol === -1 ? { startCol: 0, endCol: -1 } : { startCol, endCol }
 }
 
 /**
@@ -381,7 +467,7 @@ const EMPTY_PLAN: HeaderPlan = {
  * that no rule can, and it is the reason the plan is returned rather than kept
  * private.
  */
-export function detectHeader(grid: Grid, override: HeaderOverride = {}): HeaderPlan {
+function detectRows(grid: Grid, override: HeaderOverride = {}): HeaderPlan {
   const rows = grid.length
   if (rows === 0) return EMPTY_PLAN
 
@@ -390,14 +476,27 @@ export function detectHeader(grid: Grid, override: HeaderOverride = {}): HeaderP
   // row of numbers is a one-column sheet, not a title.
   let start = override.startRow ?? 0
   if (override.startRow === undefined) {
-    while (start < rows && filledCount(grid[start] ?? []) === 0) start++
-    while (
-      start + 1 < rows &&
-      filledCount(grid[start] ?? []) === 1 &&
-      filledCount(grid[start + 1] ?? []) > 1 &&
-      !rowHasNumber(grid[start + 1] ?? [])
-    ) {
-      start++
+    // Blank rows and lone title rows above the table, in whatever order they
+    // appear. The title test is unchanged -- one filled cell over a row of
+    // names that carries no numbers -- but it now looks PAST blank rows to find
+    // the row it is judging. A title with a spacer row under it is the ordinary
+    // shape of an instrument export, and requiring the header to sit
+    // immediately below meant the title itself was read as the header: one
+    // column, named after the run.
+    for (;;) {
+      while (start < rows && filledCount(grid[start] ?? []) === 0) start++
+      let next = start + 1
+      while (next < rows && filledCount(grid[next] ?? []) === 0) next++
+      if (
+        next < rows &&
+        filledCount(grid[start] ?? []) === 1 &&
+        filledCount(grid[next] ?? []) > 1 &&
+        !rowHasNumber(grid[next] ?? [])
+      ) {
+        start = next
+        continue
+      }
+      break
     }
   }
   start = Math.min(Math.max(start, 0), rows - 1)
@@ -501,9 +600,69 @@ export function detectHeader(grid: Grid, override: HeaderOverride = {}): HeaderP
     unitRow,
     dataStart,
     dataEnd,
+    // Full width. `detectHeader` re-anchors these after it knows which rows the
+    // table occupies, which is the only point at which the question is
+    // answerable -- see the two passes there.
+    startCol: 0,
+    endCol: width - 1,
     columns,
     units,
     rationale: parts.join(" "),
+  }
+}
+
+/**
+ * Work out where the table is: which rows are header, and which columns are
+ * the table at all.
+ *
+ * Two passes, because the two questions depend on each other. Which columns a
+ * table occupies can only be judged over the rows it occupies -- a report title
+ * in A1 sitting above a table that starts in C4 would otherwise anchor the
+ * table to column A. And which rows are the header can only be judged over the
+ * columns the table occupies -- two empty leading columns make every header row
+ * look sparse, and sparseness is one of the signals the two-row-header rule
+ * reads. So: find the rows, use them to find the columns, and if the columns
+ * turn out to be narrower than the sheet, find the rows again inside them.
+ *
+ * It runs exactly twice, never in a loop. The second pass sees a grid that is
+ * a strict column subset of the first, and for the sheet that motivates any of
+ * this the second answer is the stable one.
+ *
+ * A sheet whose table starts at A1 -- the overwhelming majority -- takes the
+ * first pass's answer unchanged and reads byte-for-byte as it always has, which
+ * is what `ingest-identity.test.ts` pins.
+ */
+export function detectHeader(grid: Grid, override: HeaderOverride = {}): HeaderPlan {
+  const first = detectRows(grid, override)
+  if (first.columns.length === 0) return first
+
+  const found = occupiedColumns(grid, first.startRow, first.dataEnd)
+  const startCol = override.startCol ?? found.startCol
+  const endCol = override.endCol ?? found.endCol
+  if (endCol < startCol) return first
+  if (startCol === 0 && endCol >= first.endCol) return { ...first, endCol: Math.max(first.endCol, endCol) }
+
+  const trimmed: Grid = grid.map((row) => (row ?? []).slice(startCol, endCol + 1))
+  const second = detectRows(trimmed, override)
+  if (second.columns.length === 0) return { ...first, startCol: 0, endCol: first.endCol }
+
+  const skipped: string[] = []
+  if (startCol > 0) {
+    skipped.push(
+      `Column${startCol === 1 ? "" : "s"} ${columnLetter(0)}${startCol > 1 ? `-${columnLetter(startCol - 1)}` : ""} skipped as empty.`
+    )
+  }
+  if (endCol < first.endCol) {
+    skipped.push(
+      `Column${endCol + 1 === first.endCol ? "" : "s"} ${columnLetter(endCol + 1)}${endCol + 1 < first.endCol ? `-${columnLetter(first.endCol)}` : ""} skipped as empty.`
+    )
+  }
+
+  return {
+    ...second,
+    startCol,
+    endCol,
+    rationale: [second.rationale, ...skipped].join(" "),
   }
 }
 
@@ -552,7 +711,9 @@ export function tableFromGrid(
     const values: Record<string, number | string | null> = {}
     let any = false
     for (const [c, name] of header.entries()) {
-      const cell = raw[c]
+      // `columns[c]` is grid column `startCol + c`. For a table that begins in
+      // column A this is `raw[c]`, exactly as before.
+      const cell = raw[plan.startCol + c]
       if (cell === undefined || cell === null || cell === "") {
         values[name] = null
         continue

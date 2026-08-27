@@ -55,6 +55,14 @@ export interface FigureLayout {
    * figure's legend follows.
    */
   caption: string | null
+  /**
+   * Typography for the composed figure — title, panel letters and caption.
+   * Optional so every stored layout parses unchanged; absent means the app
+   * face. Applied as CSS on the canvas, so the DOM-capture export inherits it
+   * for free.
+   */
+  fontFamily?: "sans" | "serif" | "mono"
+  captionSize?: number
 }
 
 /* ── Presets ───────────────────────────────────────────────────────────────*/

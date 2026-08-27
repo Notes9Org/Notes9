@@ -276,7 +276,7 @@ describe("Edge case — Cost/latency: a timeout outcome re-enables the composer"
         })}
       />,
     )
-    expect(screen.getByRole("button", { name: "Thinking…" })).toBeDisabled()
+    expect(screen.getByRole("button", { name: "Thinking" })).toBeDisabled()
 
     // spec-author-client.ts returns an outcome, not an exception: busy clears,
     // an error turn is appended, and the plan never entered `proposed`.

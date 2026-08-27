@@ -27,7 +27,7 @@ import {
   type ReactNode,
 } from "react"
 import { motion, useReducedMotion } from "framer-motion"
-import { CaretDown, CaretLeft, CaretRight, CaretUp } from "@phosphor-icons/react/ssr"
+import { CaretDown, CaretLeft, CaretRight, CaretUp, DotsThree } from "@phosphor-icons/react/ssr"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -52,6 +52,8 @@ export type DockLayout = Record<DockSide, DockConfig>
 export type DockPanel = {
   id: string
   label: string
+  /** Leading icon — the lab-notes toolbar is icon-led, and the rail follows it. */
+  icon?: ReactNode
   /** A positive count renders a badge, visible even while another tab is active. */
   badge?: number | null
   content: ReactNode
@@ -258,6 +260,92 @@ function ResizeHandle({
  * rule carried over from the collapsed console bar is that a pending plan must
  * never be hidden by which tab happens to be open.
  */
+/**
+ * A horizontally scrolling actions strip whose overflow affordance is a
+ * MORE menu, not arrows.
+ *
+ * Chevrons were tried and read as siblings of the collapse caret a few pixels
+ * away — two arrow vocabularies in one header. The toolbar-overflow idiom has
+ * no such collision: when content overflows, a ⋯ button appears and opens
+ * every action in a vertical menu, so nothing is ever reachable only by
+ * discovering a scroll. The strip still pans naturally (trackpad, touch) with
+ * edge fades tracking the overflowing sides.
+ */
+function ActionStrip({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement | null>(null)
+  const [canL, setCanL] = useState(false)
+  const [canR, setCanR] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
+  const update = useCallback(() => {
+    const el = ref.current
+    if (!el) return
+    setCanL(el.scrollLeft > 2)
+    setCanR(el.scrollLeft + el.clientWidth < el.scrollWidth - 2)
+  }, [])
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    update()
+    el.addEventListener("scroll", update, { passive: true })
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(update) : null
+    ro?.observe(el)
+    return () => {
+      el.removeEventListener("scroll", update)
+      ro?.disconnect()
+    }
+  }, [update])
+  const overflowing = canL || canR
+  return (
+    <div className="relative flex min-w-0 items-center">
+      <div
+        ref={ref}
+        className={cn(
+          "flex min-w-0 items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+          canL && canR
+            ? "[mask-image:linear-gradient(to_right,transparent,black_1rem,black_calc(100%-1rem),transparent)]"
+            : canL
+              ? "[mask-image:linear-gradient(to_right,transparent,black_1rem)]"
+              : canR
+                ? "[mask-image:linear-gradient(to_right,black_calc(100%-1rem),transparent)]"
+                : undefined
+        )}
+      >
+        {children}
+      </div>
+      {overflowing && (
+        <>
+          <button
+            type="button"
+            onClick={() => setMoreOpen((v) => !v)}
+            aria-expanded={moreOpen}
+            aria-label="All actions"
+            title="All actions"
+            className={cn(
+              "grid size-6 shrink-0 place-items-center rounded-md transition-colors",
+              moreOpen
+                ? "bg-background text-foreground shadow-sm ring-1 ring-border"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            )}
+          >
+            <DotsThree className="size-4" weight="bold" />
+          </button>
+          {moreOpen && (
+            <>
+              <div aria-hidden onClick={() => setMoreOpen(false)} className="fixed inset-0 z-40" />
+              <div
+                onClick={() => setMoreOpen(false)}
+                className="absolute right-0 top-full z-50 mt-1.5 flex min-w-40 flex-col items-stretch gap-1 rounded-xl border border-border bg-card/95 p-1.5 shadow-[0_14px_40px_-14px_rgba(20,14,8,0.45)] backdrop-blur-xl [&_button]:justify-start [&_label]:justify-start"
+              >
+                {children}
+              </div>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 function DockTabStrip({
   panels,
   activeId,
@@ -269,6 +357,7 @@ function DockTabStrip({
   onChange: (id: string) => void
   label: string
 }) {
+  const reduce = useReducedMotion()
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({})
 
   const move = (id: string) => {
@@ -299,7 +388,31 @@ function DockTabStrip({
   }
 
   return (
-    <div role="tablist" aria-label={label} className="flex min-w-0 items-center gap-1">
+    /* Scrollable, because the tabs are `shrink-0` and the rail is narrow: past
+       three labels the strip simply ran off the end and the last tab could not
+       be clicked at all. The scrollbar is hidden with arbitrary variants rather
+       than a `scrollbar-none` utility: the only one in this codebase is scoped
+       to `.marketing-theme` and would silently not apply here. Keyboard
+       navigation (arrows/Home/End) already reaches every tab and scrolls it
+       into view via `focus()`. */
+    <div
+      role="tablist"
+      aria-label={label}
+      // `flex-1` is the load-bearing part, and its absence is why tabs were
+      // unreachable. Without it the strip is sized by its CONTENT: three labels
+      // in a rail this narrow measure wider than the header, so the strip
+      // pushed the collapse button out of the row and its own `overflow-x-auto`
+      // never engaged — there was nothing constraining it to scroll within.
+      // With `flex-1` it takes exactly the space left over and scrolls inside
+      // it. The fade on the right edge is what says there is more.
+      className="min-w-0 flex-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [mask-image:linear-gradient(to_right,black_calc(100%-1.25rem),transparent)]"
+    >
+      {/* The same segmented control the lab-notes editor uses for its ribbon
+          tabs — muted well, active pill on `bg-background` with a shadow — so
+          the two surfaces read as one product. The active pill slides between
+          tabs (`layoutId`) instead of teleporting; reduced motion gets the
+          plain swap. */}
+      <div className="flex w-max items-center gap-0.5 rounded-lg bg-muted/50 p-0.5">
       {panels.map((panel, index) => {
         const selected = panel.id === activeId
         const badgeCount =
@@ -319,17 +432,26 @@ function DockTabStrip({
             onClick={() => move(panel.id)}
             onKeyDown={(e) => onKeyDown(e, index)}
             className={cn(
-              "relative flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-[13px] font-medium transition-colors",
-              selected
-                ? "bg-muted text-foreground"
-                : "text-muted-foreground hover:text-foreground"
+              "relative flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors duration-150",
+              selected ? "text-foreground" : "text-muted-foreground hover:text-foreground"
             )}
           >
-            {panel.label}
+            {selected &&
+              (reduce ? (
+                <span className="absolute inset-0 rounded-md bg-background shadow-sm" />
+              ) : (
+                <motion.span
+                  layoutId={`dock-pill-${label}`}
+                  className="absolute inset-0 rounded-md bg-background shadow-sm"
+                  transition={{ type: "spring", stiffness: 500, damping: 40, mass: 0.7 }}
+                />
+              ))}
+            {panel.icon && <span className="relative z-10 [&>svg]:size-3.5">{panel.icon}</span>}
+            <span className="relative z-10">{panel.label}</span>
             {badgeCount !== null && (
               <span
                 aria-label={`${badgeCount} pending`}
-                className="inline-flex min-w-[16px] items-center justify-center rounded-full bg-[var(--n9-accent)] px-1 text-[10px] font-semibold leading-4 text-white"
+                className="relative z-10 inline-flex min-w-[16px] items-center justify-center rounded-full bg-[var(--n9-accent)] px-1 text-[10px] font-semibold leading-4 text-white"
               >
                 {badgeCount}
               </span>
@@ -337,6 +459,7 @@ function DockTabStrip({
           </button>
         )
       })}
+      </div>
     </div>
   )
 }
@@ -462,12 +585,14 @@ export function Dock({
         <div
           style={vertical ? { width: size } : { height: size }}
           className={cn(
-            "flex h-full flex-col overflow-hidden rounded-2xl border border-border/50 bg-card",
+            // The lab-notes editor's floating-card chrome, so the rail and the
+            // notes toolbar read as one family of surfaces.
+            "flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-[0_10px_34px_-18px_rgba(20,14,8,0.4)] dark:shadow-[0_12px_38px_-16px_rgba(0,0,0,0.6)]",
             vertical ? "min-w-0" : "w-full"
           )}
         >
           <header className="flex items-center gap-2 border-b border-border/40 px-4 py-2.5">
-            {icon}
+            <span className="shrink-0">{icon}</span>
             {showTabs && panels ? (
               <DockTabStrip
                 panels={panels}
@@ -478,8 +603,12 @@ export function Dock({
             ) : (
               <h2 className="text-[13px] font-medium text-muted-foreground">{title}</h2>
             )}
-            <div className="ml-auto flex items-center gap-1.5">
-              {actions}
+            {/* The ribbon rule, same as the tab strip: ACTIONS scroll inside
+                their own strip (hidden scrollbar, right-edge fade), and the
+                collapse control is pinned outside it — the one button that
+                closes a dock must never be the one scrolled out of reach. */}
+            <div className="ml-auto flex min-w-0 items-center gap-1.5">
+              <ActionStrip>{actions}</ActionStrip>
               <Button
                 variant="ghost"
                 size="icon-sm"

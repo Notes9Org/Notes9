@@ -2,23 +2,24 @@
  * Which workspace phases are offered, as a function rather than an inline
  * filter.
  *
- * T0.2: the Plate tab was switched off in code — `if (p.id === "plate") return
- * false`, with a comment saying the model behind it still runs. It did: the
- * standard curve reads the plate layout to know which wells are standards, and
- * the curve panel's own hint tells the researcher to "Mark >= 2 standards on the
- * Plate tab" — a tab nothing could reach. A view that a sibling panel points at
- * is not a view that can be hidden "for now".
- *
  * The rule lives here, out of a 5000-line component, so that the thing that
- * went wrong — a phase quietly dropped from the list in a refactor about
- * something else — is now a line in a test rather than a line in a `filter`.
+ * once went wrong — a phase quietly dropped from the list in a refactor about
+ * something else — is a line in a test rather than a line in a `filter`.
+ *
+ * The Plate tab is gone, and gone properly rather than switched off. It was
+ * previously disabled in code while the standard curve still read its layout to
+ * decide which wells were standards, so the curve panel pointed at a tab
+ * nothing could reach. Removing the view therefore meant removing the
+ * dependency: the curve now takes its standards from the sheet's columns and
+ * only from there. A capability went with it — painting well roles onto a plate
+ * map — and that is a deliberate trade, not an oversight.
  */
 
-export type PhaseId = "chart" | "stats" | "curve" | "plate" | "workspace"
+export type PhaseId = "chart" | "stats" | "curve" | "workspace"
 
 export interface PhaseVisibilityInput {
   /** `detectDataKind`'s read of the sheet. */
-  detected: { standardCurve?: boolean; plate?: boolean }
+  detected: { standardCurve?: boolean }
   /** The figure kind the spec currently names, when there is a spec. */
   figureKind?: string | null
   /** The test the spec currently names, when there is a spec. */
@@ -39,9 +40,8 @@ export interface PhaseVisibilityInput {
  *               performs it should be reachable;
  *   memory    - pinned, and pinning sticks.
  *
- * Everything else, the plate included, is offered outright. Hiding a view you
- * have used because the next sheet looks different is worse than one tab too
- * many.
+ * Everything else is offered outright. Hiding a view you have used because the
+ * next sheet looks different is worse than one tab too many.
  */
 export function isPhaseVisible(phase: PhaseId, input: PhaseVisibilityInput): boolean {
   if (phase !== "curve") return true

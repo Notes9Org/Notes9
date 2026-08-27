@@ -188,7 +188,9 @@ describe("the analysed sheet is chosen, not assumed", () => {
     // The backward-compatibility contract for analyses saved before the picker
     // existed: they carry no pin, so they must resolve exactly as they did.
     const before = snapshotToTable(snapshot)
-    const { sheetName: _s, ...rest } = before
+    // `plan` is how the sheet was read, not what was read from it — the
+    // byte-identity contract is about the columns, values and row ids.
+    const { sheetName: _s, plan: _p, ...rest } = before
     expect(rest).toEqual({
       columns: ["Treatment", "Viability"],
       rows: [

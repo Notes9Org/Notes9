@@ -2,10 +2,15 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { ArrowCounterClockwise, CheckCircle, Warning } from "@phosphor-icons/react/ssr"
+import { ArrowCounterClockwise, CheckCircle, Crosshair, Warning, X } from "@phosphor-icons/react/ssr"
 
 import { cn } from "@/lib/utils"
-import type { Finding, FindingAction, ReceiptLine } from "@/lib/data-analysis/workspace/data-quality"
+import type {
+  Finding,
+  FindingAction,
+  FindingLocation,
+  ReceiptLine,
+} from "@/lib/data-analysis/workspace/data-quality"
 import type { SpecMutation } from "@/lib/data-analysis/spec/mutations"
 import { EASE_OUT } from "./motion"
 
@@ -35,6 +40,59 @@ export interface GateFindingState {
   chosen: number | null
 }
 
+/** How many located cells are shown before the rest are counted instead. */
+const MAX_SHOWN_LOCATIONS = 8
+
+/**
+ * One located value, as a cell you can go and look at.
+ *
+ * This is the difference between "one value in signal is a statistical outlier
+ * — Grubbs G=2.913, p=0.0121" and being shown `D14  99.5`. The first is a
+ * sentence about the data; the second is the data. A researcher deciding
+ * between excluding a point and correcting a mistyped one cannot make that call
+ * from the sentence, because the two look identical in it.
+ */
+function LocationChip({
+  location,
+  address,
+  onReveal,
+}: {
+  location: FindingLocation
+  address: string
+  onReveal?: (location: FindingLocation) => void
+}) {
+  const value =
+    location.value === null || location.value === "" ? null : String(location.value)
+  const body = (
+    <>
+      <span className="font-mono text-[11.5px] font-semibold text-foreground">{address}</span>
+      {value !== null && (
+        <span className="max-w-[14ch] truncate font-mono text-[11.5px] text-muted-foreground" title={value}>
+          {value}
+        </span>
+      )}
+    </>
+  )
+  if (!onReveal) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/30 px-1.5 py-0.5">
+        {body}
+      </span>
+    )
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => onReveal(location)}
+      title={`Select ${address} in the sheet`}
+      className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-1.5 py-0.5 transition-colors hover:border-[var(--n9-accent,#965034)]/50 hover:bg-[var(--n9-accent,#965034)]/[0.07]"
+    >
+      <Crosshair className="size-3 shrink-0 text-muted-foreground" />
+      {body}
+    </button>
+  )
+}
+
 export function DataQualityGate({
   open,
   fileName,
@@ -44,6 +102,8 @@ export function DataQualityGate({
   onUndo,
   onContinue,
   onOpenProvenance,
+  locate,
+  onReveal,
 }: {
   open: boolean
   fileName: string | null
@@ -61,6 +121,15 @@ export function DataQualityGate({
   onOpenProvenance?: () => void
   onUndo: (mutation: SpecMutation) => void
   onContinue: (declined: number) => void
+  /**
+   * Turn a location into an A1 address, using the header plan currently in
+   * force. Supplied by the caller because the plan lives with the sheet, and it
+   * can change under a finding when the data region is corrected -- so the
+   * address is resolved at render, never stored on the finding.
+   */
+  locate?: (location: FindingLocation) => string | null
+  /** Select the cell in the spreadsheet, so the researcher can look at it. */
+  onReveal?: (location: FindingLocation) => void
 }) {
   const reduce = useReducedMotion()
   const [chosen, setChosen] = useState<Record<string, number>>({})
@@ -87,6 +156,20 @@ export function DataQualityGate({
   }, [open])
 
   const onDialogKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    // Escape closes, and this is a reversal of the original decision.
+    //
+    // It used to be deliberately absent, on the reasoning that "answering the
+    // findings IS the exit". That reasoning does not survive contact with a
+    // researcher who wants to look at their sheet before answering: the gate
+    // sits over the data it is asking about, so the one thing it prevents is
+    // the thing it asks you to do. Dismissing is not the same as addressing --
+    // it is recorded as declining, exactly as Continue with undecided findings
+    // is -- and the findings stay reachable.
+    if (event.key === "Escape") {
+      event.preventDefault()
+      onContinue(undecided)
+      return
+    }
     if (event.key !== "Tab" || !dialogRef.current) return
     const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
       'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
@@ -145,24 +228,45 @@ export function DataQualityGate({
             transition={reduce ? { duration: 0.12 } : { duration: 0.24, ease: EASE_OUT }}
           >
             <div className="shrink-0 px-5 pt-5">
-              <h2
-                id="data-quality-title"
-                className="text-[15px] font-semibold text-foreground"
-              >
-                Data quality{fileName ? ` — ${fileName}` : ""}
-              </h2>
-              <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
-                Everything below is arithmetic on your columns, not a suggestion from the
-                assistant. Nothing that changes a number or a sample size happens without
-                you choosing it.
+              <div className="flex items-start gap-3">
+                <div className="min-w-0 flex-1">
+                  {/* Where this sits in the run of overlays an attach opens.
+                      Two modals in a row with no sense of progression reads as
+                      being interrogated; naming the position makes it a
+                      sequence with an end. */}
+                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--n9-accent,#965034)]">
+                    Data quality
+                  </p>
+                  <h2
+                    id="data-quality-title"
+                    className="truncate text-[15px] font-semibold tracking-[-0.01em] text-foreground"
+                  >
+                    {fileName ?? "This sheet"}
+                  </h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onContinue(undecided)}
+                  aria-label="Close data quality review"
+                  title="Close — undecided findings are recorded as reviewed and left alone"
+                  className="-mr-1 -mt-1 shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+              <p className="mt-1.5 text-[12.5px] text-muted-foreground">
+                Arithmetic on your columns — nothing changes a number without your choice.
               </p>
             </div>
 
             <div className="mt-4 min-h-0 flex-1 overflow-y-auto px-5 pb-2">
               {applied.length > 0 && (
                 <section className="mb-5">
-                  <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                  <p className="mb-2 flex items-baseline gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                     Applied automatically
+                    <span className="rounded-full bg-muted px-1.5 font-mono text-[10px] font-semibold normal-case tracking-normal">
+                      {applied.length}
+                    </span>
                   </p>
                   <ul className="overflow-hidden rounded-xl border border-border/70 bg-muted/25">
                     {applied.map((line, i) => (
@@ -211,8 +315,11 @@ export function DataQualityGate({
 
               {decisions.length > 0 && (
                 <section>
-                  <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                  <p className="mb-2 flex items-baseline gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                     Needs your decision
+                    <span className="rounded-full bg-amber-500/15 px-1.5 font-mono text-[10px] font-semibold normal-case tracking-normal text-amber-700 dark:text-amber-400">
+                      {decisions.length}
+                    </span>
                   </p>
                   <ul className="space-y-2.5">
                     {decisions.map((f) => {
@@ -228,12 +335,38 @@ export function DataQualityGate({
                               weight="fill"
                             />
                             <div className="min-w-0 flex-1">
-                              <p className="text-[13.5px] font-medium leading-snug text-foreground">
+                              {/* Three levels, three voices: the CLAIM in the
+                                  UI face at weight; the STATISTIC in mono,
+                                  because it is data; the CELLS as chips. One
+                                  size-13 grey paragraph carried all three
+                                  before, which is why it read as a wall. */}
+                              <p className="text-[14px] font-semibold leading-snug tracking-[-0.01em] text-foreground">
                                 {f.summary}
                               </p>
-                              <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
+                              <p className="mt-1 font-mono text-[11px] leading-relaxed text-muted-foreground">
                                 {f.evidence}
                               </p>
+                              {f.locations.length > 0 && (
+                                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                                  {f.locations.slice(0, MAX_SHOWN_LOCATIONS).map((loc) => {
+                                    const address = locate?.(loc) ?? null
+                                    if (!address) return null
+                                    return (
+                                      <LocationChip
+                                        key={`${loc.rowId}:${loc.column ?? ""}`}
+                                        location={loc}
+                                        address={address}
+                                        onReveal={onReveal}
+                                      />
+                                    )
+                                  })}
+                                  {f.locations.length > MAX_SHOWN_LOCATIONS && (
+                                    <span className="text-[11.5px] text-muted-foreground">
+                                      +{f.locations.length - MAX_SHOWN_LOCATIONS} more
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           </div>
                           <div className="flex flex-wrap gap-1.5 px-3.5 pb-3 pt-2.5">
@@ -244,10 +377,10 @@ export function DataQualityGate({
                                 onClick={() => choose(f, i)}
                                 aria-pressed={pick === i}
                                 className={cn(
-                                  "rounded-lg border px-2.5 py-1 text-[12.5px] transition-colors",
+                                  "rounded-lg border px-2.5 py-1 text-[12.5px] transition-all duration-150 active:scale-[0.97]",
                                   pick === i
-                                    ? "border-foreground/70 bg-foreground text-background"
-                                    : "border-border bg-background text-foreground hover:bg-muted",
+                                    ? "border-foreground/70 bg-foreground text-background shadow-sm"
+                                    : "border-border bg-background text-foreground hover:border-foreground/25 hover:bg-muted",
                                 )}
                               >
                                 {action.label}
@@ -278,9 +411,7 @@ export function DataQualityGate({
 
             <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border/60 px-5 py-3.5">
               <p className="text-[12px] text-muted-foreground">
-                {undecided > 0
-                  ? `${undecided} left undecided will be recorded as reviewed and left alone.`
-                  : "All findings addressed."}
+                {undecided > 0 ? `${undecided} undecided — left alone if you continue` : "All addressed"}
               </p>
               <button
                 type="button"

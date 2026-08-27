@@ -137,6 +137,23 @@ export function folderFromFileList(list: FileList | File[]): ConnectedFolder {
   return { name: root, files, truncated: all.length > MAX_FILES }
 }
 
+/**
+ * One class list for both variants.
+ *
+ * The two branches below render a `<button>` and a `<label>` that must look
+ * identical -- which browser you are in is not something the control should
+ * advertise -- and they had drifted: only one centred its text, and neither
+ * carried `shrink-0`. Inside the caller's `flex items-center justify-between`
+ * row the button was free to be squeezed by a long folder name beside it, so
+ * the label wrapped inside a fixed `h-9` and was clipped.
+ *
+ * `shrink-0` and `whitespace-nowrap` are the fix; `inline-flex items-center
+ * justify-center` is what makes the `<label>` centre its text the way the
+ * `<button>` does for free.
+ */
+const CONNECT_BUTTON_CLASS =
+  "inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-border px-3 text-sm font-medium transition-colors hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
+
 export function ConnectFolderButton({
   onConnect,
   onError,
@@ -160,7 +177,7 @@ export function ConnectFolderButton({
       <button
         type="button"
         disabled={busy}
-        className="h-9 rounded-md border border-border px-3 text-sm hover:bg-muted/50 disabled:opacity-50"
+        className={CONNECT_BUTTON_CLASS}
         onClick={async () => {
           setBusy(true)
           try {
@@ -185,10 +202,7 @@ export function ConnectFolderButton({
   if (support.webkitDirectory) {
     return (
       <>
-        <label
-          htmlFor={inputId}
-          className="inline-flex h-9 cursor-pointer items-center rounded-md border border-border px-3 text-sm hover:bg-muted/50"
-        >
+        <label htmlFor={inputId} className={CONNECT_BUTTON_CLASS}>
           Connect a folder
         </label>
         <input

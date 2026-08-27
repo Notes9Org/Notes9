@@ -320,7 +320,7 @@ async function loadedWithOneApprovedEdit() {
   mockWorkbookFetch({ f1: { snapshot: snapshot("growth-curve.csv") } })
   render(<DataAnalysisWorkspace files={[file()]} />)
 
-  fireEvent.click(screen.getByRole("button", { name: /from your data files/i }))
+  fireEvent.click(screen.getByRole("button", { name: /^library/i }))
   await screen.findByRole("dialog")
   fireEvent.click(screen.getByText("growth-curve.csv"))
   await waitFor(() => expect(lastConsoleProps()?.variant).toBe("rail"))

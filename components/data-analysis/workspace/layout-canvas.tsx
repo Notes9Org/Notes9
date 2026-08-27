@@ -71,6 +71,9 @@ export function LayoutCanvas({
   onChange,
   onOpenPipeline,
   interaction,
+  onCompute,
+  computing = false,
+  activePipelineId,
   className,
 }: {
   layout: FigureLayout
@@ -80,6 +83,30 @@ export function LayoutCanvas({
   onOpenPipeline?: (pipelineId: string) => void
   /** Hover, click-to-exclude and bracket dragging, for one pipeline. */
   interaction?: FigureInteraction
+  /**
+   * Run the active analysis, for a panel whose only problem is that nothing has
+   * computed it yet.
+   *
+   * A panel here draws from an `EngineResult`, while the Chart tab draws
+   * straight from the sheet — so a freshly attached file has a chart there and
+   * empty panels here. The placeholder said so, accurately, and then offered no
+   * way to do anything about it: the control that starts a compute lives on
+   * another tab. Saying "not computed" without "compute it" is a dead end.
+   */
+  onCompute?: () => void
+  computing?: boolean
+  /**
+   * The analysis a panel falls back to when its own binding does not resolve.
+   *
+   * A fresh layout is created with its first panel bound to the sentinel
+   * `"current"`, which no pipeline has ever carried — so `byId.get()` returned
+   * undefined and the panel sat on "Choose which analysis this panel shows"
+   * forever, whether or not the analysis had been run. A saved layout can also
+   * name an analysis that has since been closed. Both are the same situation
+   * from the researcher's side: a panel showing nothing for a reason nobody
+   * stated.
+   */
+  activePipelineId?: string | null
   className?: string
 }) {
   const reduce = useReducedMotion()
@@ -142,6 +169,28 @@ export function LayoutCanvas({
           className="h-8 w-40 rounded-md border border-border/70 bg-background px-2 text-[13px] outline-none transition-colors focus:border-[var(--n9-accent)]/50"
         />
         <label className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
+          Font
+          <select
+            value={layout.fontFamily ?? "sans"}
+            onChange={(e) => onChange({ ...layout, fontFamily: e.target.value as FigureLayout["fontFamily"] })}
+            className="h-8 rounded-md border border-border/70 bg-background px-1.5 text-[12.5px] text-foreground"
+          >
+            <option value="sans">Sans</option>
+            <option value="serif">Serif</option>
+            <option value="mono">Mono</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
+          Caption
+          <select
+            value={layout.captionSize ?? 12}
+            onChange={(e) => onChange({ ...layout, captionSize: Number(e.target.value) })}
+            className="h-8 rounded-md border border-border/70 bg-background px-1.5 text-[12.5px] text-foreground"
+          >
+            {[10, 11, 12, 13, 14, 16].map((v) => <option key={v} value={v}>{v}px</option>)}
+          </select>
+        </label>
+        <label className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
           Columns
           <select
             value={layout.columns}
@@ -200,12 +249,24 @@ export function LayoutCanvas({
           gridTemplateColumns: `repeat(${layout.columns}, minmax(0, 1fr))`,
           gridTemplateRows: `repeat(${rows}, minmax(220px, 1fr))`,
           gap: layout.gap,
+          // Applied here so the DOM-capture export inherits it with no extra
+          // plumbing: what you set is what the composed PNG/PDF carries.
+          fontFamily:
+            layout.fontFamily === "serif"
+              ? "Georgia, 'Times New Roman', serif"
+              : layout.fontFamily === "mono"
+                ? "ui-monospace, 'SF Mono', Menlo, monospace"
+                : undefined,
         }}
       >
         {placements.map((placement) => {
-          const pipeline = placement.panel.pipelineId
-            ? byId.get(placement.panel.pipelineId)
-            : undefined
+          // Resolve, then fall back to the active analysis. Falling back is
+          // right rather than lax: every panel names the analysis it is showing
+          // in its own header, so a fallback is visible, whereas an empty panel
+          // is not.
+          const bound = placement.panel.pipelineId ? byId.get(placement.panel.pipelineId) : undefined
+          const pipeline =
+            bound ?? (activePipelineId ? byId.get(activePipelineId) : undefined) ?? pipelines[0]
           return (
             <motion.section
               key={placement.panel.id}
@@ -260,7 +321,55 @@ export function LayoutCanvas({
                 </PanelButton>
               </div>
 
-              <div className="flex min-h-0 flex-1 flex-col px-2 pb-2 pt-8">
+              {/*
+                Which analysis this panel shows, always visible and always
+                changeable.
+
+                It used to be a bare <select> that appeared ONLY when a panel
+                had nothing to draw — so once a panel was showing something, the
+                one control for changing what it shows disappeared. Swapping a
+                panel to a different analysis meant unbinding it first, which
+                nothing said and nothing offered.
+              */}
+              {pipelines.length > 0 && (
+                // `pl-8` leaves the panel letter its corner, and `pr-24` leaves
+                // the hover actions theirs. The row previously opened with a
+                // "Showing" label that sat exactly where the letter is drawn,
+                // so the two printed on top of each other; the select says what
+                // it is by listing analyses, and the word was never carrying
+                // anything the control did not.
+                <div className="flex items-center gap-1.5 border-b border-border/50 py-1.5 pl-8 pr-24">
+                  <select
+                    value={pipeline?.id ?? ""}
+                    onChange={(e) => onChange(assignPanel(layout, placement.panel.id, e.target.value))}
+                    aria-label={`Analysis shown in panel ${placement.label || placement.index + 1}`}
+                    className="min-w-0 max-w-[22ch] flex-1 rounded-md border border-border bg-background px-1.5 py-0.5 text-[11.5px] outline-none transition-colors hover:border-[var(--n9-accent,#965034)]/40 focus:border-[var(--n9-accent,#965034)]/50"
+                  >
+                    {pipelines.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                  {pipeline && pipeline.stale && (
+                    <span
+                      title="Drawing the data only. Significance brackets and fitted curves need the statistics computed."
+                      className="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400"
+                    >
+                      data only
+                    </span>
+                  )}
+                </div>
+              )}
+
+              <div
+                className={cn(
+                  "flex min-h-0 flex-1 flex-col px-2 pb-2",
+                  // The header row now holds the letter's line, so the content
+                  // only needs clearance when there is no header row.
+                  pipelines.length > 0 ? "pt-2" : "pt-8"
+                )}
+              >
                 {pipeline?.result ? (
                   <FigureCanvas
                     spec={pipeline.spec}
@@ -279,9 +388,20 @@ export function LayoutCanvas({
                   <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border/60 bg-muted/20 p-4 text-center">
                     <p className="text-[12.5px] text-muted-foreground">
                       {pipeline
-                        ? `"${pipeline.name}" has not been computed yet.`
+                        ? computing
+                          ? `Computing "${pipeline.name}"…`
+                          : `"${pipeline.name}" has not been computed yet.`
                         : "Choose which analysis this panel shows."}
                     </p>
+                    {pipeline && onCompute && !computing && (
+                      <button
+                        type="button"
+                        onClick={onCompute}
+                        className="rounded-lg bg-[var(--n9-accent,#965034)] px-2.5 py-1 text-[12px] font-medium text-white transition-opacity hover:opacity-90"
+                      >
+                        Run it
+                      </button>
+                    )}
                     <select
                       value={placement.panel.pipelineId ?? ""}
                       onChange={(e) =>
@@ -374,7 +494,16 @@ export function LayoutCanvas({
             rows={Math.min(6, Math.max(2, Math.ceil((layout.caption ?? caption).length / 90)))}
             aria-label="Figure caption"
             spellCheck
-            className="mt-1 w-full resize-y rounded-lg border border-transparent bg-transparent px-2 py-1.5 text-[13.5px] leading-[1.7] text-foreground/85 outline-none transition-colors hover:border-border/60 focus:border-[var(--n9-accent)]/50 focus:bg-background"
+            style={{
+              fontSize: layout.captionSize ?? 12,
+              fontFamily:
+                layout.fontFamily === "serif"
+                  ? "Georgia, 'Times New Roman', serif"
+                  : layout.fontFamily === "mono"
+                    ? "ui-monospace, 'SF Mono', Menlo, monospace"
+                    : undefined,
+            }}
+            className="mt-1 w-full resize-y rounded-lg border border-transparent bg-transparent px-2 py-1.5 leading-[1.7] text-foreground/85 outline-none transition-colors hover:border-border/60 focus:border-[var(--n9-accent)]/50 focus:bg-background"
           />
         </Reveal>
       )}

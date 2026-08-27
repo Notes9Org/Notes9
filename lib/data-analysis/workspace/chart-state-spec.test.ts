@@ -655,8 +655,43 @@ describe("the shipping rail dispatches", () => {
     expect(start).toBeGreaterThan(-1)
     const body = src.slice(start, src.indexOf("\n  )", start))
     expect(body).toMatch(/if \(applied\.some\(\(a\) => requiresRecompute\(a\.mutation\)\)\) setAnalysisApproved\(true\)/)
-    // And there is exactly one such call in the whole edit path.
-    expect(src.match(/setAnalysisApproved\(true\)/g)).toHaveLength(2)
+
+    // Every approval site is accounted for by WHAT it is, not by how many there
+    // are. A bare count made adding a legitimate one — the explicit "Run it"
+    // button in the figure layout — look identical to a style control sneaking
+    // one in, which is the failure this test exists to catch.
+    const APPROVED_BY: (string | RegExp)[] = [
+      // The rail, gated on the recompute classification.
+      "requiresRecompute(a.mutation)",
+      // Restoring a revision whose result a human already approved.
+      "human-approved analysis",
+      // The researcher pressing a control whose own label states the effect —
+      // the figure layout's empty-panel button and the toolbar's run control.
+      // Pressing a button that says it will compute IS the consent Law 5 wants;
+      // what must never appear here is a style setter.
+      "onCompute=",
+      /Compute( statistics)?|Run analysis|Run it|Run the statistics engine/,
+    ]
+    const lines = src.split("\n")
+    const sites = lines
+      .map((line, i) => ({ line: line.trim(), i }))
+      .filter((l) => l.line.includes("setAnalysisApproved(true)"))
+    expect(sites.length).toBeGreaterThan(0)
+    for (const site of sites) {
+      // The dozen lines above and the three below: a justification sits in the
+      // comment or condition above, and for a control it can be the visible
+      // label on the line after.
+      const context = lines.slice(Math.max(0, site.i - 12), site.i + 4).join("\n")
+      expect(
+        APPROVED_BY.some((marker) =>
+          typeof marker === "string" ? context.includes(marker) : marker.test(context)
+        ),
+        `unclassified approval on line ${site.i + 1}: ${site.line}`
+      ).toBe(true)
+      // And no style control is anywhere near one.
+      expect(context).not.toContain("railEdit(")
+      expect(context).not.toContain("setStyle(")
+    }
   })
 
   it("hands the AI patch the sticky set instead of an empty one", () => {

@@ -83,6 +83,25 @@ export type UniverWorkbookViewProps = {
   heightClass?: string
   /** Changes remount Univer instance */
   instanceKey?: string | number
+  /**
+   * Where the live workbook is kept across remounts.
+   *
+   * `workbookSnapshot` is read once per mount, and several things remount an
+   * already-edited instance without any new data arriving -- toggling `compact`
+   * (the maximize/restore control) is in this effect's dependency array, and
+   * the rail and the maximized editor are different positions in the tree, so
+   * React unmounts one and mounts the other. Re-reading the prop there restored
+   * whatever the parent last passed at LOAD time, silently dropping every edit
+   * and every added sheet since; the next autosave from the fresh instance then
+   * wrote that stale workbook back over the parent's live copy.
+   *
+   * A ref rather than a prop because the ordering is the whole point: the
+   * outgoing instance writes here SYNCHRONOUSLY as it tears down, while the
+   * `onPersistSnapshot` that carries the same bytes into React state is a
+   * microtask that does not land until after the incoming instance has already
+   * mounted. Only the ref is current at the moment it is read.
+   */
+  latestSnapshotRef?: { current: Record<string, unknown> | null }
   /** Fires when the active cell/selection changes (for wiring cells → chart). */
   onSelectionChange?: (sel: SheetSelection | null) => void
 }
@@ -111,6 +130,7 @@ export function UniverWorkbookView({
   heightClass = "h-[520px]",
   instanceKey = 0,
   onSelectionChange,
+  latestSnapshotRef,
 }: UniverWorkbookViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const boundaryRef = useRef<HTMLDivElement | null>(null)
@@ -133,6 +153,8 @@ export function UniverWorkbookView({
   const workbookSnapshotPropRef = useRef(workbookSnapshot)
   workbookEncodedPropRef.current = workbookEncoded
   workbookSnapshotPropRef.current = workbookSnapshot
+  const latestSnapshotRefRef = useRef(latestSnapshotRef)
+  latestSnapshotRefRef.current = latestSnapshotRef
 
   const mountedRef = useRef(false)
 
@@ -174,7 +196,30 @@ export function UniverWorkbookView({
       if (!containerRef.current) return
 
       const encProp = workbookEncodedPropRef.current
-      const snapProp = workbookSnapshotPropRef.current
+      /**
+       * The box this instance reads from and writes back to, captured ONCE here
+       * and never re-read from the prop.
+       *
+       * This is the fix for "importing a new file re-opens the old sheet".
+       * React tears the outgoing instance down AFTER the parent has already
+       * pointed at the new workbook, and the teardown saves what that instance
+       * was showing — the OLD sheet — straight over the parent's new value. The
+       * incoming instance then read it back and the import appeared to do
+       * nothing.
+       *
+       * The parent hands out a NEW box whenever it installs a different
+       * workbook, so the departing instance writes to the box it was mounted
+       * with, which by then nobody reads. Capturing it here rather than through
+       * `latestSnapshotRefRef` at write time is the whole mechanism: read late
+       * and the closure would find the new box again.
+       */
+      const box = latestSnapshotRefRef.current ?? null
+      const rememberLatest = (snapshot: Record<string, unknown> | null | undefined) => {
+        if (box && snapshot) box.current = snapshot
+      }
+      // The live workbook wins over the mount-time prop, so a remount that is
+      // not a data change (maximize, dock toggle) keeps the researcher's edits.
+      const snapProp = box?.current ?? workbookSnapshotPropRef.current
 
       let parsed: unknown
       try {
@@ -226,11 +271,20 @@ export function UniverWorkbookView({
 
         const presetConfig: Record<string, unknown> = {
           container: mountHost,
-          // Compact mode strips the ribbon/formula-bar/footer for a clean grid.
+          // Compact mode strips the ribbon and the formula bar for a clean grid.
           header: !compact,
           toolbar: !compact,
           formulaBar: !compact,
-          footer: !compact,
+          // The FOOTER IS THE SHEET BAR: the sheet tabs and the "+" that adds a
+          // sheet live there and nowhere else. Gating it on `!compact` meant the
+          // only place in data-analysis that could add a sheet was the maximized
+          // data editor -- the two rail-mounted hosts render compact, so "new
+          // sheet" was simply absent from the view users spend their time in.
+          // The ribbon is what compact exists to remove; the sheet bar is a
+          // navigation control, and hiding it removes a capability rather than
+          // chrome. `statusBarStatistic` below still goes, so compact keeps the
+          // slim tab strip without the sum/average readout beside it.
+          footer: true,
           menu: !compact,
           contextMenu: true,
           statusBarStatistic: !compact,
@@ -320,6 +374,7 @@ export function UniverWorkbookView({
               if (encoded === lastSavedEncodedRef.current && snapJson === lastSavedSnapshotJsonRef.current) return
               lastSavedEncodedRef.current = encoded
               lastSavedSnapshotJsonRef.current = snapJson
+              rememberLatest(snapshot as Record<string, unknown>)
               // Avoid setState while the user is typing, re-renders can steal focus from the cell editor.
               isHydratingRef.current = true
               scheduleMicrotask(() => {
@@ -398,6 +453,13 @@ export function UniverWorkbookView({
           try {
             const snapshot = fWorkbook?.save?.()
             if (snapshot && !readOnly) {
+              // Unconditional, and before the equality check below: the check
+              // asks "does React already know this?", which is a different
+              // question from "what does the next mount read?". A teardown whose
+              // bytes happen to match the last autosave still has to leave the
+              // ref pointing at them, or the incoming instance falls back to the
+              // load-time prop.
+              rememberLatest(snapshot as Record<string, unknown>)
               const encoded = encodeWorkbookAttr(JSON.stringify(snapshot))
               const snapJson = JSON.stringify(snapshot)
               if (encoded !== lastSavedEncodedRef.current || snapJson !== lastSavedSnapshotJsonRef.current) {

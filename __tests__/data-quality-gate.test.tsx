@@ -11,7 +11,8 @@ const outlier: Finding = {
   severity: "decision",
   column: "signal",
   summary: 'One value in "signal" is a statistical outlier',
-  evidence: "99.5 — Grubbs G=2.913, p=0.0121, alpha=0.05, n=12",
+  evidence: "Grubbs G=2.913, p=0.0121, alpha=0.05, n=12",
+  locations: [{ rowId: "row-3", column: "signal", value: 99.5 }],
   actions: [
     {
       label: "Exclude it (records the method)",

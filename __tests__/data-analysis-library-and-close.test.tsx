@@ -240,7 +240,7 @@ function mockWorkbookFetch(byFileId: Record<string, { snapshot?: unknown; reason
 }
 
 async function openLibrary() {
-  fireEvent.click(screen.getByRole("button", { name: /from your data files/i }))
+  fireEvent.click(screen.getByRole("button", { name: /^library/i }))
   await screen.findByRole("dialog")
 }
 
