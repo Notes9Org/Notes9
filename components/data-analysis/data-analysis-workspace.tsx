@@ -5899,8 +5899,14 @@ export function DataAnalysisWorkspace({
       <button
         type="button"
         onClick={() => setRegionOpen(true)}
+        aria-pressed={regionOpen}
         title="Reopen data selection — region, axes, title"
-        className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        className={cn(
+          "inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[12px] font-medium transition-all duration-150 active:scale-95",
+          regionOpen
+            ? "bg-background text-foreground shadow-sm ring-1 ring-border"
+            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+        )}
       >
         <SelectionAll className="h-4 w-4" /> Select
       </button>
@@ -5908,15 +5914,21 @@ export function DataAnalysisWorkspace({
         type="button"
         onClick={addBlankSheet}
         title="New sheet"
-        className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[12px] font-medium text-muted-foreground transition-all duration-150 hover:bg-muted hover:text-foreground active:scale-95"
       >
         <Plus className="h-4 w-4" /> Sheet
       </button>
       <button
         type="button"
         onClick={() => setSheetHistoryOpen(true)}
+        aria-pressed={sheetHistoryOpen}
         title="What has changed in this sheet"
-        className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        className={cn(
+          "inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12px] font-medium transition-all duration-150 active:scale-95",
+          sheetHistoryOpen
+            ? "bg-background text-foreground shadow-sm ring-1 ring-border"
+            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+        )}
       >
         <ClockCounterClockwise className="h-4 w-4" />
         History

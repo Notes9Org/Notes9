@@ -260,6 +260,70 @@ function ResizeHandle({
  * rule carried over from the collapsed console bar is that a pending plan must
  * never be hidden by which tab happens to be open.
  */
+/**
+ * A horizontally scrolling actions strip with EXPLICIT chevrons.
+ *
+ * The edge-fade alone was too quiet: it sat inches from the collapse button,
+ * whose caret reads as "arrows live here", so the fade's hint drowned. The
+ * chevrons render only when that direction actually has content — so their
+ * very appearance is the signal — and clicking nudges the strip along.
+ */
+function ActionStrip({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement | null>(null)
+  const [canL, setCanL] = useState(false)
+  const [canR, setCanR] = useState(false)
+  const update = useCallback(() => {
+    const el = ref.current
+    if (!el) return
+    setCanL(el.scrollLeft > 2)
+    setCanR(el.scrollLeft + el.clientWidth < el.scrollWidth - 2)
+  }, [])
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    update()
+    el.addEventListener("scroll", update, { passive: true })
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(update) : null
+    ro?.observe(el)
+    return () => {
+      el.removeEventListener("scroll", update)
+      ro?.disconnect()
+    }
+  }, [update])
+  const nudge = (dir: -1 | 1) => ref.current?.scrollBy({ left: dir * 140, behavior: "smooth" })
+  const chevron =
+    "grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+  return (
+    <div className="flex min-w-0 items-center">
+      {canL && (
+        <button type="button" onClick={() => nudge(-1)} aria-label="Scroll actions left" className={chevron}>
+          <CaretLeft className="size-3" />
+        </button>
+      )}
+      <div
+        ref={ref}
+        className={cn(
+          "flex min-w-0 items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+          canL && canR
+            ? "[mask-image:linear-gradient(to_right,transparent,black_1rem,black_calc(100%-1rem),transparent)]"
+            : canL
+              ? "[mask-image:linear-gradient(to_right,transparent,black_1rem)]"
+              : canR
+                ? "[mask-image:linear-gradient(to_right,black_calc(100%-1rem),transparent)]"
+                : undefined
+        )}
+      >
+        {children}
+      </div>
+      {canR && (
+        <button type="button" onClick={() => nudge(1)} aria-label="Scroll actions right" className={chevron}>
+          <CaretRight className="size-3" />
+        </button>
+      )}
+    </div>
+  )
+}
+
 function DockTabStrip({
   panels,
   activeId,
@@ -522,9 +586,7 @@ export function Dock({
                 collapse control is pinned outside it — the one button that
                 closes a dock must never be the one scrolled out of reach. */}
             <div className="ml-auto flex min-w-0 items-center gap-1.5">
-              <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [mask-image:linear-gradient(to_right,black_calc(100%-1rem),transparent)]">
-                {actions}
-              </div>
+              <ActionStrip>{actions}</ActionStrip>
               <Button
                 variant="ghost"
                 size="icon-sm"
