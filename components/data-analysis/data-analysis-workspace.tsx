@@ -6508,21 +6508,21 @@ export function DataAnalysisWorkspace({
             >
               {engineBusy ? (
                 <>
-                  <ArrowClockwise className="h-3.5 w-3.5 animate-spin" /> Computing
+                  <ArrowClockwise className="h-3.5 w-3.5 animate-spin" /> Statistics running…
                 </>
               ) : engineResult ? (
                 <>
-                  <CheckCircle className="h-3.5 w-3.5" weight="fill" /> Computed
+                  <Sigma className="h-3.5 w-3.5" /> Statistics ready
                 </>
               ) : (
                 <>
-                  <Warning className="h-3.5 w-3.5" weight="fill" /> Not computed
+                  <Sigma className="h-3.5 w-3.5" /> No statistics yet
                 </>
               )}
             </span>
             {!engineResult && !engineBusy && (
-              <Button size="sm" onClick={() => setAnalysisApproved(true)} title="Run the statistics engine">
-                Compute
+              <Button size="sm" onClick={() => setAnalysisApproved(true)} title="Run the statistics engine — tests, p-values, fitted curves">
+                Run statistics
               </Button>
             )}
           </div>

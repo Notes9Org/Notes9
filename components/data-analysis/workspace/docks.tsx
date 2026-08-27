@@ -27,7 +27,7 @@ import {
   type ReactNode,
 } from "react"
 import { motion, useReducedMotion } from "framer-motion"
-import { CaretDown, CaretLeft, CaretRight, CaretUp } from "@phosphor-icons/react/ssr"
+import { CaretDown, CaretLeft, CaretRight, CaretUp, DotsThree } from "@phosphor-icons/react/ssr"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -261,17 +261,21 @@ function ResizeHandle({
  * never be hidden by which tab happens to be open.
  */
 /**
- * A horizontally scrolling actions strip with EXPLICIT chevrons.
+ * A horizontally scrolling actions strip whose overflow affordance is a
+ * MORE menu, not arrows.
  *
- * The edge-fade alone was too quiet: it sat inches from the collapse button,
- * whose caret reads as "arrows live here", so the fade's hint drowned. The
- * chevrons render only when that direction actually has content — so their
- * very appearance is the signal — and clicking nudges the strip along.
+ * Chevrons were tried and read as siblings of the collapse caret a few pixels
+ * away — two arrow vocabularies in one header. The toolbar-overflow idiom has
+ * no such collision: when content overflows, a ⋯ button appears and opens
+ * every action in a vertical menu, so nothing is ever reachable only by
+ * discovering a scroll. The strip still pans naturally (trackpad, touch) with
+ * edge fades tracking the overflowing sides.
  */
 function ActionStrip({ children }: { children: ReactNode }) {
   const ref = useRef<HTMLDivElement | null>(null)
   const [canL, setCanL] = useState(false)
   const [canR, setCanR] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
   const update = useCallback(() => {
     const el = ref.current
     if (!el) return
@@ -290,16 +294,9 @@ function ActionStrip({ children }: { children: ReactNode }) {
       ro?.disconnect()
     }
   }, [update])
-  const nudge = (dir: -1 | 1) => ref.current?.scrollBy({ left: dir * 140, behavior: "smooth" })
-  const chevron =
-    "grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+  const overflowing = canL || canR
   return (
-    <div className="flex min-w-0 items-center">
-      {canL && (
-        <button type="button" onClick={() => nudge(-1)} aria-label="Scroll actions left" className={chevron}>
-          <CaretLeft className="size-3" />
-        </button>
-      )}
+    <div className="relative flex min-w-0 items-center">
       <div
         ref={ref}
         className={cn(
@@ -315,10 +312,35 @@ function ActionStrip({ children }: { children: ReactNode }) {
       >
         {children}
       </div>
-      {canR && (
-        <button type="button" onClick={() => nudge(1)} aria-label="Scroll actions right" className={chevron}>
-          <CaretRight className="size-3" />
-        </button>
+      {overflowing && (
+        <>
+          <button
+            type="button"
+            onClick={() => setMoreOpen((v) => !v)}
+            aria-expanded={moreOpen}
+            aria-label="All actions"
+            title="All actions"
+            className={cn(
+              "grid size-6 shrink-0 place-items-center rounded-md transition-colors",
+              moreOpen
+                ? "bg-background text-foreground shadow-sm ring-1 ring-border"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            )}
+          >
+            <DotsThree className="size-4" weight="bold" />
+          </button>
+          {moreOpen && (
+            <>
+              <div aria-hidden onClick={() => setMoreOpen(false)} className="fixed inset-0 z-40" />
+              <div
+                onClick={() => setMoreOpen(false)}
+                className="absolute right-0 top-full z-50 mt-1.5 flex min-w-40 flex-col items-stretch gap-1 rounded-xl border border-border bg-card/95 p-1.5 shadow-[0_14px_40px_-14px_rgba(20,14,8,0.45)] backdrop-blur-xl [&_button]:justify-start [&_label]:justify-start"
+              >
+                {children}
+              </div>
+            </>
+          )}
+        </>
       )}
     </div>
   )
