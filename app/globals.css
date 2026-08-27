@@ -2058,3 +2058,12 @@ body > [data-radix-popper-content-wrapper] {
     animation: none;
   }
 }
+
+/* Data-analysis sheets: hide Univer's own footer "+" — the pane header's
+   "+ Sheet" is the one add-sheet control there (the footer one misbehaved
+   inside the fullscreen scroll container). Scoped to [data-n9-sheet] hosts so
+   notes embeds keep Univer's button; the sheet-LIST button beside it (same
+   data-u-comp, convert icon) stays everywhere. */
+[data-n9-sheet] [data-u-comp="sheet-bar-append-button"]:has(.univerjs-icon-increase-icon) {
+  display: none;
+}

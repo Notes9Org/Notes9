@@ -76,7 +76,12 @@ export async function updateSession(request: NextRequest) {
   // page receives HTML where it expected Python and fails with a parse error
   // rather than an auth error. The file is static, contains no secrets, and no
   // user data passes through it, so it is served like any other public asset.
-  const publicPrefixes = ["/data-analysis-engine/"]
+  const publicPrefixes = [
+    "/data-analysis-engine/",
+    // Dev-only repro harnesses (app/dev/*). The pages themselves 404 in
+    // production; this line just keeps dev debugging out of the auth loop.
+    ...(process.env.NODE_ENV === "development" ? ["/dev/"] : []),
+  ]
   const isPublicRoute =
     publicRoutes.some(route => request.nextUrl.pathname === route) ||
     publicPrefixes.some(prefix => request.nextUrl.pathname.startsWith(prefix))
