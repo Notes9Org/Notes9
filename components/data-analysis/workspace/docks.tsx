@@ -52,6 +52,8 @@ export type DockLayout = Record<DockSide, DockConfig>
 export type DockPanel = {
   id: string
   label: string
+  /** Leading icon — the lab-notes toolbar is icon-led, and the rail follows it. */
+  icon?: ReactNode
   /** A positive count renders a badge, visible even while another tab is active. */
   badge?: number | null
   content: ReactNode
@@ -269,6 +271,7 @@ function DockTabStrip({
   onChange: (id: string) => void
   label: string
 }) {
+  const reduce = useReducedMotion()
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({})
 
   const move = (id: string) => {
@@ -309,8 +312,21 @@ function DockTabStrip({
     <div
       role="tablist"
       aria-label={label}
-      className="flex min-w-0 items-center gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      // `flex-1` is the load-bearing part, and its absence is why tabs were
+      // unreachable. Without it the strip is sized by its CONTENT: three labels
+      // in a rail this narrow measure wider than the header, so the strip
+      // pushed the collapse button out of the row and its own `overflow-x-auto`
+      // never engaged — there was nothing constraining it to scroll within.
+      // With `flex-1` it takes exactly the space left over and scrolls inside
+      // it. The fade on the right edge is what says there is more.
+      className="min-w-0 flex-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [mask-image:linear-gradient(to_right,black_calc(100%-1.25rem),transparent)]"
     >
+      {/* The same segmented control the lab-notes editor uses for its ribbon
+          tabs — muted well, active pill on `bg-background` with a shadow — so
+          the two surfaces read as one product. The active pill slides between
+          tabs (`layoutId`) instead of teleporting; reduced motion gets the
+          plain swap. */}
+      <div className="flex w-max items-center gap-0.5 rounded-lg bg-muted/50 p-0.5">
       {panels.map((panel, index) => {
         const selected = panel.id === activeId
         const badgeCount =
@@ -330,17 +346,26 @@ function DockTabStrip({
             onClick={() => move(panel.id)}
             onKeyDown={(e) => onKeyDown(e, index)}
             className={cn(
-              "relative flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-[13px] font-medium transition-colors",
-              selected
-                ? "bg-muted text-foreground"
-                : "text-muted-foreground hover:text-foreground"
+              "relative flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors duration-150",
+              selected ? "text-foreground" : "text-muted-foreground hover:text-foreground"
             )}
           >
-            {panel.label}
+            {selected &&
+              (reduce ? (
+                <span className="absolute inset-0 rounded-md bg-background shadow-sm" />
+              ) : (
+                <motion.span
+                  layoutId={`dock-pill-${label}`}
+                  className="absolute inset-0 rounded-md bg-background shadow-sm"
+                  transition={{ type: "spring", stiffness: 500, damping: 40, mass: 0.7 }}
+                />
+              ))}
+            {panel.icon && <span className="relative z-10 [&>svg]:size-3.5">{panel.icon}</span>}
+            <span className="relative z-10">{panel.label}</span>
             {badgeCount !== null && (
               <span
                 aria-label={`${badgeCount} pending`}
-                className="inline-flex min-w-[16px] items-center justify-center rounded-full bg-[var(--n9-accent)] px-1 text-[10px] font-semibold leading-4 text-white"
+                className="relative z-10 inline-flex min-w-[16px] items-center justify-center rounded-full bg-[var(--n9-accent)] px-1 text-[10px] font-semibold leading-4 text-white"
               >
                 {badgeCount}
               </span>
@@ -348,6 +373,7 @@ function DockTabStrip({
           </button>
         )
       })}
+      </div>
     </div>
   )
 }
@@ -473,12 +499,14 @@ export function Dock({
         <div
           style={vertical ? { width: size } : { height: size }}
           className={cn(
-            "flex h-full flex-col overflow-hidden rounded-2xl border border-border/50 bg-card",
+            // The lab-notes editor's floating-card chrome, so the rail and the
+            // notes toolbar read as one family of surfaces.
+            "flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-[0_10px_34px_-18px_rgba(20,14,8,0.4)] dark:shadow-[0_12px_38px_-16px_rgba(0,0,0,0.6)]",
             vertical ? "min-w-0" : "w-full"
           )}
         >
           <header className="flex items-center gap-2 border-b border-border/40 px-4 py-2.5">
-            {icon}
+            <span className="shrink-0">{icon}</span>
             {showTabs && panels ? (
               <DockTabStrip
                 panels={panels}
@@ -489,7 +517,9 @@ export function Dock({
             ) : (
               <h2 className="text-[13px] font-medium text-muted-foreground">{title}</h2>
             )}
-            <div className="ml-auto flex items-center gap-1.5">
+            {/* `shrink-0`: the collapse control is how a dock is closed, so it
+                must never be the thing squeezed out when the tabs are wide. */}
+            <div className="ml-auto flex shrink-0 items-center gap-1.5">
               {actions}
               <Button
                 variant="ghost"

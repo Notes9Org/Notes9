@@ -46,6 +46,7 @@ export function PlotlyChart({
   className,
   onEdit,
   onEditElement,
+  pointMenuItems,
   extraGroups = [],
   exportApiRef,
   renderApiRef,
@@ -55,6 +56,12 @@ export function PlotlyChart({
   className?: string
   onEdit?: (edits: PlotlyEdits) => void
   onEditElement?: (el: ChartElement, detail?: { series?: string }) => void
+  /**
+   * Menu items for the data point under the cursor when the menu opened.
+   * Right-click cannot ask Plotly "which point?", but hover can and does — the
+   * last hovered point is what a right-click is on top of.
+   */
+  pointMenuItems?: (pt: { x: number | string; y: number; series?: string }) => ChartMenuItem[]
   extraGroups?: ChartMenuGroup[]
   exportApiRef?: MutableRefObject<ChartExportFn | null>
   /** Exposes a PNG data-URL getter (for saving the chart into the library). */
@@ -117,6 +124,20 @@ export function PlotlyChart({
           if (Object.keys(edits).length) onEditRef.current(edits)
         })
         gd.on("plotly_afterplot", () => setReady(true))
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        gd.on("plotly_hover", (e: any) => {
+          const pt = e?.points?.[0]
+          if (!pt) return
+          hoverPointRef.current = {
+            x: pt.x as number | string,
+            y: Number(pt.y),
+            series: typeof pt.data?.name === "string" ? pt.data.name : undefined,
+          }
+        })
+        gd.on("plotly_unhover", () => {
+          // Kept briefly: the pointer leaves the mark en route to the menu.
+          window.setTimeout(() => { hoverPointRef.current = null }, 600)
+        })
         // Double-click a data point/series → open its inspector (Plotly's own
         // editable already handles double-click on title / axis / legend /
         // annotation text in place; this extends it to the plotted data).
@@ -237,7 +258,10 @@ export function PlotlyChart({
     if (gd && plotlyRef.current) void exportChartImage(plotlyRef.current, gd, { format, dpi: 300, filename: "notes9-chart" })
   }
 
+  const hoverPointRef = useRef<{ x: number | string; y: number; series?: string } | null>(null)
+  const menuPointRef = useRef<{ x: number | string; y: number; series?: string } | null>(null)
   const onContextMenu = (e: React.MouseEvent) => {
+    menuPointRef.current = hoverPointRef.current
     e.preventDefault()
     setOpenSub(null)
     // Viewport coordinates: the menu renders in a portal on <body> so it's never
@@ -283,6 +307,16 @@ export function PlotlyChart({
             style={{ left: menu.x, top: menu.y, maxHeight: menu.maxHeight }}
             onContextMenu={(e) => e.preventDefault()}
           >
+            {menuPointRef.current && pointMenuItems && (
+              <>
+                {pointMenuItems(menuPointRef.current).map((it) => (
+                  <MenuItem key={it.label} onClick={() => { it.onClick(); setMenu(null); setOpenSub(null) }}>
+                    {it.label}
+                  </MenuItem>
+                ))}
+                <div className="my-1 h-px bg-border/70" />
+              </>
+            )}
             {extraGroups.map((g) => (
               <SubMenu key={g.label} label={g.label} open={openSub === g.label} onToggle={() => setOpenSub((s) => (s === g.label ? null : g.label))}>
                 {g.items.map((it, i) => (

@@ -303,8 +303,8 @@ export function FigureCanvas({
     return (
       <Placeholder className={className}>
         <span className="block max-w-[46ch]">
-          This figure draws from the computed analysis, and it has not been run yet. The Chart tab
-          draws straight from the sheet, which is why a chart appears there first.
+          Nothing resolved to plot. Check that the X and Y columns are set and that the filters have
+          not excluded every row.
         </span>
         {onRun && (
           <button
@@ -312,7 +312,7 @@ export function FigureCanvas({
             onClick={onRun}
             className="mt-3 rounded-lg bg-[var(--n9-accent,#965034)] px-3 py-1.5 text-[12.5px] font-medium text-white transition-opacity hover:opacity-90"
           >
-            Run the analysis
+            Compute statistics
           </button>
         )}
       </Placeholder>

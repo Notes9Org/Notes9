@@ -234,12 +234,12 @@ export function DataQualityGate({
                       Two modals in a row with no sense of progression reads as
                       being interrogated; naming the position makes it a
                       sequence with an end. */}
-                  <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                    Step 2 of 2 · Data quality
+                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--n9-accent,#965034)]">
+                    Data quality
                   </p>
                   <h2
                     id="data-quality-title"
-                    className="truncate text-[15px] font-semibold text-foreground"
+                    className="truncate text-[15px] font-semibold tracking-[-0.01em] text-foreground"
                   >
                     {fileName ?? "This sheet"}
                   </h2>
@@ -254,18 +254,19 @@ export function DataQualityGate({
                   <X className="size-4" />
                 </button>
               </div>
-              <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
-                Everything below is arithmetic on your columns, not a suggestion from the
-                assistant. Nothing that changes a number or a sample size happens without
-                you choosing it.
+              <p className="mt-1.5 text-[12.5px] text-muted-foreground">
+                Arithmetic on your columns — nothing changes a number without your choice.
               </p>
             </div>
 
             <div className="mt-4 min-h-0 flex-1 overflow-y-auto px-5 pb-2">
               {applied.length > 0 && (
                 <section className="mb-5">
-                  <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                  <p className="mb-2 flex items-baseline gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                     Applied automatically
+                    <span className="rounded-full bg-muted px-1.5 font-mono text-[10px] font-semibold normal-case tracking-normal">
+                      {applied.length}
+                    </span>
                   </p>
                   <ul className="overflow-hidden rounded-xl border border-border/70 bg-muted/25">
                     {applied.map((line, i) => (
@@ -314,8 +315,11 @@ export function DataQualityGate({
 
               {decisions.length > 0 && (
                 <section>
-                  <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                  <p className="mb-2 flex items-baseline gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                     Needs your decision
+                    <span className="rounded-full bg-amber-500/15 px-1.5 font-mono text-[10px] font-semibold normal-case tracking-normal text-amber-700 dark:text-amber-400">
+                      {decisions.length}
+                    </span>
                   </p>
                   <ul className="space-y-2.5">
                     {decisions.map((f) => {
@@ -331,10 +335,15 @@ export function DataQualityGate({
                               weight="fill"
                             />
                             <div className="min-w-0 flex-1">
-                              <p className="text-[13.5px] font-medium leading-snug text-foreground">
+                              {/* Three levels, three voices: the CLAIM in the
+                                  UI face at weight; the STATISTIC in mono,
+                                  because it is data; the CELLS as chips. One
+                                  size-13 grey paragraph carried all three
+                                  before, which is why it read as a wall. */}
+                              <p className="text-[14px] font-semibold leading-snug tracking-[-0.01em] text-foreground">
                                 {f.summary}
                               </p>
-                              <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
+                              <p className="mt-1 font-mono text-[11px] leading-relaxed text-muted-foreground">
                                 {f.evidence}
                               </p>
                               {f.locations.length > 0 && (
@@ -368,10 +377,10 @@ export function DataQualityGate({
                                 onClick={() => choose(f, i)}
                                 aria-pressed={pick === i}
                                 className={cn(
-                                  "rounded-lg border px-2.5 py-1 text-[12.5px] transition-colors",
+                                  "rounded-lg border px-2.5 py-1 text-[12.5px] transition-all duration-150 active:scale-[0.97]",
                                   pick === i
-                                    ? "border-foreground/70 bg-foreground text-background"
-                                    : "border-border bg-background text-foreground hover:bg-muted",
+                                    ? "border-foreground/70 bg-foreground text-background shadow-sm"
+                                    : "border-border bg-background text-foreground hover:border-foreground/25 hover:bg-muted",
                                 )}
                               >
                                 {action.label}
@@ -402,9 +411,7 @@ export function DataQualityGate({
 
             <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border/60 px-5 py-3.5">
               <p className="text-[12px] text-muted-foreground">
-                {undecided > 0
-                  ? `${undecided} left undecided will be recorded as reviewed and left alone.`
-                  : "All findings addressed."}
+                {undecided > 0 ? `${undecided} undecided — left alone if you continue` : "All addressed"}
               </p>
               <button
                 type="button"

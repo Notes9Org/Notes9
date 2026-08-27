@@ -158,17 +158,17 @@ function mockWorkbookFetch(snapshot: unknown) {
 async function openTwoSheetWorkbook() {
   mockWorkbookFetch(twoSheetSnapshot())
   render(<DataAnalysisWorkspace files={[file()]} />)
-  fireEvent.click(screen.getByRole("button", { name: /from your data files/i }))
+  fireEvent.click(screen.getByRole("button", { name: /^library/i }))
   await screen.findByRole("dialog")
   fireEvent.click(screen.getByText("two-sheets.xlsx"))
-  await waitFor(() => expect(screen.getByText(/rows · .* cols/)).toBeInTheDocument())
+  await waitFor(() => expect(screen.getByText(/\d+ × \d+/)).toBeInTheDocument())
 }
 
 describe("the analysed sheet is chosen and shown", () => {
   it("names the analysed sheet and switches what is analysed when it changes", async () => {
     await openTwoSheetWorkbook()
 
-    const picker = screen.getByRole("combobox", { name: /analysing/i })
+    const picker = screen.getByRole("combobox", { name: /sheet/i })
     // Both sheets are offered, plus the "however it read before" default that
     // every analysis saved before this picker existed still resolves through.
     expect(
@@ -176,18 +176,18 @@ describe("the analysed sheet is chosen and shown", () => {
     ).toEqual(["Auto (Screen A)", "Screen A", "Screen B"])
 
     // Sheet 1 by default: 2 rows, 2 columns.
-    expect(screen.getByText("2 rows · 2 cols")).toBeInTheDocument()
+    expect(screen.getByText("2 × 2")).toBeInTheDocument()
 
     fireEvent.change(picker, { target: { value: "Screen B" } })
 
     // The numbers move with the choice. This is the assertion that fails if
     // the picker is cosmetic and `snapshotToTable` still reads sheet 1.
-    await waitFor(() => expect(screen.getByText("4 rows · 3 cols")).toBeInTheDocument())
-    expect(screen.queryByText("2 rows · 2 cols")).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText("4 × 3")).toBeInTheDocument())
+    expect(screen.queryByText("2 × 2")).not.toBeInTheDocument()
 
     // And back, so the default is a real value rather than a one-way door.
     fireEvent.change(picker, { target: { value: "" } })
-    await waitFor(() => expect(screen.getByText("2 rows · 2 cols")).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText("2 × 2")).toBeInTheDocument())
   })
 
   it("offers no picker for a single-sheet workbook, where nothing can diverge", async () => {
@@ -202,12 +202,12 @@ describe("the analysed sheet is chosen and shown", () => {
     )
     mockWorkbookFetch(buildSpreadsheetWorkbookSnapshot("one-sheet.xlsx", wb))
     render(<DataAnalysisWorkspace files={[file({ file_name: "one-sheet.xlsx" })]} />)
-    fireEvent.click(screen.getByRole("button", { name: /from your data files/i }))
+    fireEvent.click(screen.getByRole("button", { name: /^library/i }))
     await screen.findByRole("dialog")
     fireEvent.click(screen.getByText("one-sheet.xlsx"))
 
-    await waitFor(() => expect(screen.getByText("1 rows · 2 cols")).toBeInTheDocument())
-    expect(screen.queryByRole("combobox", { name: /analysing/i })).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText("1 × 2")).toBeInTheDocument())
+    expect(screen.queryByRole("combobox", { name: /sheet/i })).not.toBeInTheDocument()
   })
 })
 

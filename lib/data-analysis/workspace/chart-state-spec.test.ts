@@ -670,7 +670,7 @@ describe("the shipping rail dispatches", () => {
       // Pressing a button that says it will compute IS the consent Law 5 wants;
       // what must never appear here is a style setter.
       "onCompute=",
-      /Compute statistics|Run analysis|Run it/,
+      /Compute( statistics)?|Run analysis|Run it|Run the statistics engine/,
     ]
     const lines = src.split("\n")
     const sites = lines

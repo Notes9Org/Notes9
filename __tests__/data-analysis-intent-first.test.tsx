@@ -167,7 +167,7 @@ function mockWorkbookFetch(byFileId: Record<string, { snapshot?: unknown; reason
 }
 
 async function openLibrary() {
-  fireEvent.click(screen.getByRole("button", { name: /from your data files/i }))
+  fireEvent.click(screen.getByRole("button", { name: /^library/i }))
   await screen.findByRole("dialog")
 }
 
@@ -389,18 +389,15 @@ describe("data-analysis intent-first (ADR-024)", () => {
     fireEvent.click(screen.getByText("rail-a.csv"))
     await waitFor(() => expect(lastConsoleProps?.variant).toBe("rail"))
 
-    expect(screen.getByRole("button", { name: "Ask Notes9" })).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Chart settings" })).toBeInTheDocument()
-    // Ask is the default tab, so the console is already mounted.
+    // The rail is the Ask console alone now — no tab strip to switch. The
+    // settings live behind a toolbar toggle, and opening them must not
+    // unmount the conversation.
+    expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument()
+    expect(screen.getByTestId("mock-console")).toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }))
     expect(screen.getByTestId("mock-console")).toBeInTheDocument()
 
-    // Chart settings replaces the panel content — the console is not a
-    // permanently-mounted sibling, it lives only under the Ask tab.
-    fireEvent.click(screen.getByRole("button", { name: "Chart settings" }))
-    expect(screen.queryByTestId("mock-console")).not.toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole("button", { name: "Ask Notes9" }))
-    expect(screen.getByTestId("mock-console")).toBeInTheDocument()
+        expect(screen.getByTestId("mock-console")).toBeInTheDocument()
   })
 
   // ── AC-7: the conversation survives a tab switch ───────────────────────────
@@ -423,10 +420,11 @@ describe("data-analysis intent-first (ADR-024)", () => {
     const turnsBeforeSwitch = lastConsoleProps!.turns.length
     expect(turnsBeforeSwitch).toBeGreaterThan(0)
 
-    fireEvent.click(screen.getByRole("button", { name: "Chart settings" }))
-    expect(screen.queryByTestId("mock-console")).not.toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole("button", { name: "Ask Notes9" }))
+    // Settings is a strip above the canvas now, so opening and closing it must
+    // leave the rail conversation mounted and its request in flight.
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }))
+    expect(screen.getByTestId("mock-console")).toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }))
     expect(lastConsoleProps?.turns.length).toBe(turnsBeforeSwitch)
     expect(lastConsoleProps?.busy).toBe(true)
     expect(lastConsoleProps?.turns.some((t) => t.role === "user")).toBe(true)

@@ -95,7 +95,7 @@ export function AutoChoicesPanel({
                   className="rounded-lg border border-border/70 bg-background px-2.5 py-2"
                 >
                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                    <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                       {c.what}
                     </span>
                     <span className="text-[12.5px] font-semibold">{c.choice}</span>
@@ -120,10 +120,7 @@ export function AutoChoicesPanel({
               ))}
             </ul>
             <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
-              <p className="flex-1 text-[11.5px] leading-relaxed text-muted-foreground">
-                Every one of these can be changed — the roles panel, the axis controls and the
-                test picker all override what was inferred.
-              </p>
+              <p className="flex-1 text-[11.5px] text-muted-foreground">All overridable.</p>
               {onOpenHelp && (
                 <button
                   type="button"
@@ -131,7 +128,7 @@ export function AutoChoicesPanel({
                   className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-[11.5px] font-medium transition-colors hover:bg-muted"
                 >
                   <Question className="h-3.5 w-3.5" />
-                  What do these mean?
+                  Explain
                 </button>
               )}
             </div>

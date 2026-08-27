@@ -228,7 +228,7 @@ function Entry({ entry }: { entry: HelpEntry }) {
         <dl className="mt-3 grid gap-x-4 gap-y-1 rounded-lg border border-border/70 bg-muted/25 p-2.5 sm:grid-cols-[auto_1fr]">
           {entry.facts.map((f) => (
             <div key={f.label} className="contents">
-              <dt className="text-[11px] font-medium uppercase tracking-[0.06em] text-muted-foreground">
+              <dt className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                 {f.label}
               </dt>
               <dd className="mb-1 text-[12px] text-foreground/90 sm:mb-0">{f.value}</dd>

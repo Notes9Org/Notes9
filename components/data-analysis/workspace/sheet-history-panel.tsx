@@ -82,7 +82,7 @@ export function SheetHistoryPanel({
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-2 border-b border-border px-3.5 py-2">
-        <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
           Sheet history
         </span>
         <Button variant="outline" size="sm" className="ml-auto h-7" onClick={exportCsv}>
@@ -95,7 +95,7 @@ export function SheetHistoryPanel({
           {entries.map((entry) => (
             <li key={entry.id} className="overflow-hidden rounded-xl border border-border/70">
               <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 border-b border-border/60 bg-muted/25 px-3 py-2">
-                <span className="text-[12.5px] font-semibold text-foreground">{entry.label}</span>
+                <span className="text-[13px] font-semibold tracking-[-0.01em] text-foreground">{entry.label}</span>
                 <span className="rounded bg-background px-1.5 py-0.5 text-[10.5px] font-medium text-muted-foreground">
                   {BOUNDARY_LABEL[entry.boundary]}
                 </span>

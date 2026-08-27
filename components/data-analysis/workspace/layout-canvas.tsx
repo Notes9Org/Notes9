@@ -169,6 +169,28 @@ export function LayoutCanvas({
           className="h-8 w-40 rounded-md border border-border/70 bg-background px-2 text-[13px] outline-none transition-colors focus:border-[var(--n9-accent)]/50"
         />
         <label className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
+          Font
+          <select
+            value={layout.fontFamily ?? "sans"}
+            onChange={(e) => onChange({ ...layout, fontFamily: e.target.value as FigureLayout["fontFamily"] })}
+            className="h-8 rounded-md border border-border/70 bg-background px-1.5 text-[12.5px] text-foreground"
+          >
+            <option value="sans">Sans</option>
+            <option value="serif">Serif</option>
+            <option value="mono">Mono</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
+          Caption
+          <select
+            value={layout.captionSize ?? 12}
+            onChange={(e) => onChange({ ...layout, captionSize: Number(e.target.value) })}
+            className="h-8 rounded-md border border-border/70 bg-background px-1.5 text-[12.5px] text-foreground"
+          >
+            {[10, 11, 12, 13, 14, 16].map((v) => <option key={v} value={v}>{v}px</option>)}
+          </select>
+        </label>
+        <label className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
           Columns
           <select
             value={layout.columns}
@@ -227,6 +249,14 @@ export function LayoutCanvas({
           gridTemplateColumns: `repeat(${layout.columns}, minmax(0, 1fr))`,
           gridTemplateRows: `repeat(${rows}, minmax(220px, 1fr))`,
           gap: layout.gap,
+          // Applied here so the DOM-capture export inherits it with no extra
+          // plumbing: what you set is what the composed PNG/PDF carries.
+          fontFamily:
+            layout.fontFamily === "serif"
+              ? "Georgia, 'Times New Roman', serif"
+              : layout.fontFamily === "mono"
+                ? "ui-monospace, 'SF Mono', Menlo, monospace"
+                : undefined,
         }}
       >
         {placements.map((placement) => {
@@ -291,7 +321,55 @@ export function LayoutCanvas({
                 </PanelButton>
               </div>
 
-              <div className="flex min-h-0 flex-1 flex-col px-2 pb-2 pt-8">
+              {/*
+                Which analysis this panel shows, always visible and always
+                changeable.
+
+                It used to be a bare <select> that appeared ONLY when a panel
+                had nothing to draw — so once a panel was showing something, the
+                one control for changing what it shows disappeared. Swapping a
+                panel to a different analysis meant unbinding it first, which
+                nothing said and nothing offered.
+              */}
+              {pipelines.length > 0 && (
+                // `pl-8` leaves the panel letter its corner, and `pr-24` leaves
+                // the hover actions theirs. The row previously opened with a
+                // "Showing" label that sat exactly where the letter is drawn,
+                // so the two printed on top of each other; the select says what
+                // it is by listing analyses, and the word was never carrying
+                // anything the control did not.
+                <div className="flex items-center gap-1.5 border-b border-border/50 py-1.5 pl-8 pr-24">
+                  <select
+                    value={pipeline?.id ?? ""}
+                    onChange={(e) => onChange(assignPanel(layout, placement.panel.id, e.target.value))}
+                    aria-label={`Analysis shown in panel ${placement.label || placement.index + 1}`}
+                    className="min-w-0 max-w-[22ch] flex-1 rounded-md border border-border bg-background px-1.5 py-0.5 text-[11.5px] outline-none transition-colors hover:border-[var(--n9-accent,#965034)]/40 focus:border-[var(--n9-accent,#965034)]/50"
+                  >
+                    {pipelines.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                  {pipeline && pipeline.stale && (
+                    <span
+                      title="Drawing the data only. Significance brackets and fitted curves need the statistics computed."
+                      className="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400"
+                    >
+                      data only
+                    </span>
+                  )}
+                </div>
+              )}
+
+              <div
+                className={cn(
+                  "flex min-h-0 flex-1 flex-col px-2 pb-2",
+                  // The header row now holds the letter's line, so the content
+                  // only needs clearance when there is no header row.
+                  pipelines.length > 0 ? "pt-2" : "pt-8"
+                )}
+              >
                 {pipeline?.result ? (
                   <FigureCanvas
                     spec={pipeline.spec}
@@ -416,7 +494,16 @@ export function LayoutCanvas({
             rows={Math.min(6, Math.max(2, Math.ceil((layout.caption ?? caption).length / 90)))}
             aria-label="Figure caption"
             spellCheck
-            className="mt-1 w-full resize-y rounded-lg border border-transparent bg-transparent px-2 py-1.5 text-[13.5px] leading-[1.7] text-foreground/85 outline-none transition-colors hover:border-border/60 focus:border-[var(--n9-accent)]/50 focus:bg-background"
+            style={{
+              fontSize: layout.captionSize ?? 12,
+              fontFamily:
+                layout.fontFamily === "serif"
+                  ? "Georgia, 'Times New Roman', serif"
+                  : layout.fontFamily === "mono"
+                    ? "ui-monospace, 'SF Mono', Menlo, monospace"
+                    : undefined,
+            }}
+            className="mt-1 w-full resize-y rounded-lg border border-transparent bg-transparent px-2 py-1.5 leading-[1.7] text-foreground/85 outline-none transition-colors hover:border-border/60 focus:border-[var(--n9-accent)]/50 focus:bg-background"
           />
         </Reveal>
       )}

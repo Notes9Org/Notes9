@@ -1,7 +1,8 @@
 "use client"
 
 import { useRef, useState, type RefObject } from "react"
-import { Sparkle } from "@phosphor-icons/react"
+import { FlareIcon } from "@/components/ui/flare-icon"
+import { ArrowUp, CircleNotch } from "@phosphor-icons/react/ssr"
 
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -307,15 +308,18 @@ export function AnalysisComposer({
     <form
       onSubmit={handleSubmit}
       aria-label="Ask about this data"
+      // The modern composer idiom: one soft pill that lifts and rings on
+      // focus, the send control a filled circle inside it. `focus-within`
+      // does the lifting so the plain textarea keeps its no-ring styling.
       className={cn(
-        "rounded-2xl border border-border bg-card/80 shadow-sm backdrop-blur-sm",
+        "group/composer rounded-2xl border border-border bg-card/90 shadow-sm backdrop-blur-md transition-all duration-200",
+        "focus-within:border-[var(--n9-accent,#965034)]/45 focus-within:shadow-[0_10px_34px_-18px_rgba(20,14,8,0.45)] focus-within:ring-2 focus-within:ring-[var(--n9-accent,#965034)]/15",
         variant === "empty" && "shadow-md",
       )}
     >
-      <div className="flex items-end gap-2 px-3 py-2">
-        <Sparkle
-          className="mb-1.5 h-4 w-4 shrink-0 text-[var(--n9-accent,#965034)]"
-          weight="fill"
+      <div className="flex items-end gap-2 py-2 pl-3.5 pr-2">
+        <FlareIcon
+          className="mb-2 h-4 w-4 shrink-0 text-[var(--n9-accent,#965034)] transition-transform duration-200 group-focus-within/composer:scale-110"
           aria-hidden
         />
         <Textarea
@@ -343,10 +347,28 @@ export function AnalysisComposer({
             {SPEC_AUTHOR_PROMPT_MAX_CHARS - prompt.length}
           </span>
         )}
-        {/* "Ask", not "Apply": this asks. Applying happens on Approve. */}
-        <Button type="submit" variant="outline" size="sm" disabled={!canSend} className="shrink-0">
-          {busy ? "Thinking…" : "Ask"}
-        </Button>
+        {/* "Ask", not "Apply": this asks. Applying happens on Approve. A
+            filled circle rather than an outline chip — the send affordance
+            every modern composer trains, with press feedback and a spinner
+            that replaces the arrow rather than sitting beside a word. */}
+        <button
+          type="submit"
+          disabled={!canSend}
+          aria-label={busy ? "Thinking" : "Ask"}
+          title="Ask (Enter)"
+          className={cn(
+            "mb-0.5 grid size-8 shrink-0 place-items-center rounded-full transition-all duration-150",
+            canSend
+              ? "bg-[var(--n9-accent,#965034)] text-white shadow-sm hover:opacity-90 active:scale-90"
+              : "bg-muted text-muted-foreground/50"
+          )}
+        >
+          {busy ? (
+            <CircleNotch className="size-4 animate-spin" />
+          ) : (
+            <ArrowUp className="size-4" weight="bold" />
+          )}
+        </button>
       </div>
 
       {(attachSlot || datasetName || gate.reason) && (

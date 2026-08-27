@@ -118,7 +118,7 @@ export function LibraryDialog({
       <DialogContent className="flex max-h-[85vh] flex-col gap-3 overflow-hidden sm:max-w-lg">
         <DialogHeader className="shrink-0">
           <DialogTitle>Import from your data files</DialogTitle>
-          <DialogDescription>Load a file you&rsquo;ve uploaded to an experiment, or connect a folder on this computer.</DialogDescription>
+          <DialogDescription>Your uploaded files, or a folder on this computer.</DialogDescription>
         </DialogHeader>
         {onOpenLocalFile && (
           <div className="shrink-0 space-y-2 rounded-lg border border-border p-3">
@@ -127,8 +127,8 @@ export function LibraryDialog({
                 <p className="text-sm font-medium">This computer</p>
                 <p className="truncate text-xs text-muted-foreground">
                   {folder
-                    ? `${folder.name} — ${folder.files.length} data file${folder.files.length === 1 ? "" : "s"}${folder.truncated ? " (list truncated)" : ""}`
-                    : "A plate reader writes a folder per run. Connect one and open any file in it."}
+                    ? `${folder.name} · ${folder.files.length} file${folder.files.length === 1 ? "" : "s"}${folder.truncated ? " (truncated)" : ""}`
+                    : "e.g. a plate reader's run folder"}
                 </p>
               </div>
               <ConnectFolderButton

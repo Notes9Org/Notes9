@@ -146,10 +146,7 @@ export function IngestJourney({
             </ul>
 
             <div className="border-t border-border px-5 py-2.5">
-              <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-                Next you&rsquo;ll confirm where the data is, then review anything that needs a
-                decision. Nothing is charted until you do.
-              </p>
+              <p className="text-[11.5px] text-muted-foreground">Next: one check — where your data is, and anything worth a look.</p>
             </div>
           </motion.div>
         </>

@@ -1,6 +1,7 @@
 "use client"
 
-import { X, Sparkle, User } from "@phosphor-icons/react/ssr"
+import { X, User } from "@phosphor-icons/react/ssr"
+import { FlareIcon } from "@/components/ui/flare-icon"
 import { motion, useReducedMotion } from "framer-motion"
 
 import { cn } from "@/lib/utils"
@@ -178,7 +179,7 @@ export function ProvenancePanel({
               {[...card.history].reverse().map((h, i) => (
                 <li key={`${h.at}-${i}`} className="flex items-start gap-2">
                   {h.origin === "ai" ? (
-                    <Sparkle
+                    <FlareIcon
                       className="mt-0.5 size-3 shrink-0 text-[var(--n9-accent)]"
                       weight="fill"
                     />

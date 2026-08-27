@@ -1,4 +1,5 @@
 import { bracketId, effectiveScale, type AnalysisSpec } from "@/lib/data-analysis/spec/analysis-spec"
+import { errorBarSpan } from "@/lib/data-analysis/error-bars"
 import type { DescriptiveRow, EngineResult } from "@/lib/data-analysis/engine/contract"
 import { PALETTE_DEFINITIONS, paletteColours, toColorscale } from "./palettes"
 import { rocCurve } from "@/lib/data-analysis/chart-transforms"
@@ -67,6 +68,15 @@ const FONT_STACK: Record<AnalysisSpec["figure"]["fontFamily"], string> = {
  * unstated centre is ambiguous, and a bar chart whose error bars are unlabelled
  * cannot be interpreted at all.
  */
+// Re-exported so callers that already import from the renderer keep working;
+// the implementation now lives in one place for every surface that draws bars.
+export {
+  errorBarSpan,
+  errorBarsSupported,
+  errorBarsUnsupportedReason,
+  type ErrorBarSpan,
+} from "@/lib/data-analysis/error-bars"
+
 export const ERROR_BAR_LABEL: Record<AnalysisSpec["figure"]["errorBars"], string> = {
   sd: "mean ± SD",
   sem: "mean ± SEM",
@@ -760,96 +770,6 @@ function descriptiveFor(result: EngineResult, key: string): DescriptiveRow | und
   return result.descriptives.find((d) => d.group === key || d.column === key)
 }
 
-/**
- * Where a group's bar sits and how far its whiskers reach, as the ASYMMETRIC
- * pair Plotly's `error_y` wants.
- *
- * A single scalar is drawn symmetrically about the trace's own y, which for a
- * bar is the mean, so three of the eight modes drew a figure that contradicted
- * the label printed beside it: `iqr` was centred on the mean and spanned
- * 2×(Q3−Q1) under a label reading "median, IQR"; `mad` was centred on the mean
- * under "median ± MAD"; `range` mirrored the maximum, so the lower whisker was
- * not the minimum. The label is rendered into the figure and survives export,
- * so the centre and the span have to agree with it exactly: iqr and mad centre
- * on the median, everything else on the mean.
- *
- * `d` is the engine's descriptive row for the group. It is preferred over
- * recomputation so the bar and the results table cannot drift apart — exclude
- * an outlier and both move together. `DescriptiveRow` carries no MAD and only
- * a 95% interval, so `mad`, `ci90` and `ci99` are still derived here, from the
- * INCLUDED values only.
- */
-function errorSpan(
-  values: number[],
-  kind: AnalysisSpec["figure"]["errorBars"],
-  d?: DescriptiveRow
-): { centre: number; minus: number; plus: number } {
-  const n = values.length
-  const sorted = [...values].sort((a, b) => a - b)
-  const quantile = (p: number) => {
-    if (sorted.length === 0) return Number.NaN
-    const idx = (sorted.length - 1) * p
-    const lo = Math.floor(idx)
-    const hi = Math.ceil(idx)
-    return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo)
-  }
-  const mean = d?.mean ?? (n > 0 ? values.reduce((a, b) => a + b, 0) / n : 0)
-  const flat = { centre: mean, minus: 0, plus: 0 }
-  if (kind === "none" || (n === 0 && !d)) return flat
-
-  if (kind === "iqr") {
-    const median = d?.median ?? quantile(0.5)
-    const q1 = d?.q1 ?? quantile(0.25)
-    const q3 = d?.q3 ?? quantile(0.75)
-    return Number.isFinite(median) && Number.isFinite(q1) && Number.isFinite(q3)
-      ? { centre: median, minus: median - q1, plus: q3 - median }
-      : flat
-  }
-  if (kind === "mad") {
-    // Median absolute deviation, scaled to be comparable with an SD on normal
-    // data. Reported unscaled would make a robust bar look artificially small
-    // beside the SD bars it is meant to replace.
-    const median = d?.median ?? quantile(0.5)
-    if (n === 0 || !Number.isFinite(median)) return flat
-    const deviations = values.map((v) => Math.abs(v - median)).sort((a, b) => a - b)
-    const mid = (deviations.length - 1) / 2
-    const mad =
-      deviations.length % 2
-        ? deviations[mid]
-        : (deviations[Math.floor(mid)] + deviations[Math.ceil(mid)]) / 2
-    return { centre: median, minus: mad * 1.4826, plus: mad * 1.4826 }
-  }
-  if (kind === "range") {
-    const lo = d?.min ?? sorted[0]
-    const hi = d?.max ?? sorted[sorted.length - 1]
-    return Number.isFinite(lo) && Number.isFinite(hi)
-      ? { centre: mean, minus: mean - lo, plus: hi - mean }
-      : flat
-  }
-  // The engine's interval, when it is the one being asked for. Recomputing a
-  // 95% CI the engine already reported is how the figure and the table come to
-  // disagree about the same number.
-  if (kind === "ci95" && d?.ci95Low != null && d?.ci95High != null) {
-    return { centre: mean, minus: mean - d.ci95Low, plus: d.ci95High - mean }
-  }
-
-  const count = d?.n ?? n
-  if (count < 2) return flat
-  const sd =
-    d?.sd ?? Math.sqrt(values.reduce((acc, v) => acc + (v - mean) ** 2, 0) / (n - 1))
-  if (kind === "sd") return { centre: mean, minus: sd, plus: sd }
-  const sem = d?.sem ?? sd / Math.sqrt(count)
-  if (kind === "sem") return { centre: mean, minus: sem, plus: sem }
-
-  // Confidence intervals use the t distribution, not 1.96. At bench n the
-  // normal approximation is materially too narrow, with n = 3 the true
-  // multiplier is 4.30, so a "95% CI" drawn at 1.96 would be less than half
-  // the interval it claims to be.
-  const level = kind === "ci90" ? 0.9 : kind === "ci99" ? 0.99 : 0.95
-  const half = sem * tCritical(count - 1, level)
-  return { centre: mean, minus: half, plus: half }
-}
-
 /** Plotly's asymmetric `error_y`/`error_x` object, or nothing when flat. */
 function errorBarProps(
   spans: { minus: number; plus: number }[],
@@ -869,74 +789,6 @@ function errorBarProps(
   }
 }
 
-/**
- * Two-sided t critical value.
- *
- * Newton refinement on the incomplete-beta CDF: exact to well under a drawing
- * pixel, and self-contained so a figure can be drawn without a round trip to
- * the engine. The engine still owns the intervals it REPORTS; this is only for
- * the marks when a descriptive row is not to hand.
- */
-function tCritical(df: number, level: number): number {
-  if (df <= 0) return Number.NaN
-  const target = 1 - (1 - level) / 2
-  let lo = 0
-  let hi = 100
-  for (let i = 0; i < 200; i++) {
-    const mid = (lo + hi) / 2
-    if (studentCdf(mid, df) < target) lo = mid
-    else hi = mid
-  }
-  return (lo + hi) / 2
-}
-
-function studentCdf(t: number, df: number): number {
-  const x = df / (df + t * t)
-  const p = 0.5 * incompleteBeta(df / 2, 0.5, x)
-  return t > 0 ? 1 - p : p
-}
-
-/** Regularised incomplete beta, by the standard continued fraction. */
-function incompleteBeta(a: number, b: number, x: number): number {
-  if (x <= 0) return 0
-  if (x >= 1) return 1
-  const lbeta = logGamma(a + b) - logGamma(a) - logGamma(b)
-  const front = Math.exp(lbeta + a * Math.log(x) + b * Math.log(1 - x)) / a
-  // Lentz's algorithm; converges in a few dozen terms for our range.
-  let f = 1
-  let c = 1
-  let d = 0
-  for (let i = 0; i <= 300; i++) {
-    const m = Math.floor(i / 2)
-    let numerator: number
-    if (i === 0) numerator = 1
-    else if (i % 2 === 0) numerator = (m * (b - m) * x) / ((a + 2 * m - 1) * (a + 2 * m))
-    else numerator = -((a + m) * (a + b + m) * x) / ((a + 2 * m) * (a + 2 * m + 1))
-    d = 1 + numerator * d
-    if (Math.abs(d) < 1e-30) d = 1e-30
-    d = 1 / d
-    c = 1 + numerator / c
-    if (Math.abs(c) < 1e-30) c = 1e-30
-    const delta = c * d
-    f *= delta
-    if (Math.abs(1 - delta) < 1e-12) break
-  }
-  const result = front * (f - 1)
-  return x < (a + 1) / (a + b + 2) ? result : 1 - incompleteBeta(b, a, 1 - x)
-}
-
-function logGamma(z: number): number {
-  const g = [
-    676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059,
-    12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7,
-  ]
-  if (z < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * z)) - logGamma(1 - z)
-  const zz = z - 1
-  let x = 0.99999999999980993
-  for (let i = 0; i < g.length; i++) x += g[i] / (zz + i + 1)
-  const t = zz + g.length - 0.5
-  return 0.5 * Math.log(2 * Math.PI) + (zz + 0.5) * Math.log(t) - t + Math.log(x)
-}
 
 function barWithPoints(spec: AnalysisSpec, result: EngineResult): Record<string, unknown>[] {
   const figure = spec.figure
@@ -948,7 +800,7 @@ function barWithPoints(spec: AnalysisSpec, result: EngineResult): Record<string,
   // was how excluding an outlier moved the results table without moving the
   // bar the table sits beside.
   const spans = keys.map((k) =>
-    errorSpan(includedValues(groups.get(k)!), figure.errorBars, descriptiveFor(result, k))
+    errorBarSpan(includedValues(groups.get(k)!), figure.errorBars, descriptiveFor(result, k))
   )
 
   const barStyle = styleFor(figure, keys[0] ?? "Series", 0)
@@ -1072,7 +924,7 @@ function groupedBar(spec: AnalysisSpec, result: EngineResult): Record<string, un
     const spans = groupKeys.map((g) => {
       const cell = cells.get(`${g}\x00${level}`)
       return cell
-        ? errorSpan(includedValues(cell), figure.errorBars)
+        ? errorBarSpan(includedValues(cell), figure.errorBars)
         : { centre: Number.NaN, minus: 0, plus: 0 }
     })
     traces.push({
@@ -1513,7 +1365,7 @@ function lineTimecourse(spec: AnalysisSpec, result: EngineResult) {
     if (points.every((p) => typeof p.x === "number")) {
       points.sort((a, b) => (a.x as number) - (b.x as number))
     }
-    const spans = points.map((p) => errorSpan(p.ys, figure.errorBars))
+    const spans = points.map((p) => errorBarSpan(p.ys, figure.errorBars))
     return {
       type: "scatter",
       mode: style.lineStyle === "none" ? "markers" : "lines+markers",
@@ -1988,7 +1840,7 @@ function horizontalBar(spec: AnalysisSpec, result: EngineResult) {
   // Same source of truth as `barWithPoints`: the engine's descriptives first,
   // the included values otherwise. Never the raw group, exclusions and all.
   const spans = keys.map((k) =>
-    errorSpan(includedValues(groups.get(k)!), figure.errorBars, descriptiveFor(result, k))
+    errorBarSpan(includedValues(groups.get(k)!), figure.errorBars, descriptiveFor(result, k))
   )
   return [
     {

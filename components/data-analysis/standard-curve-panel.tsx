@@ -363,22 +363,18 @@ export function useStandardCurve(
             <Button variant="outline" size="sm" onClick={downloadCurveCsv}>
               <DownloadSimple className="mr-1.5 h-4 w-4" /> Export (.csv)
             </Button>
-            <span className="text-[11.5px] text-muted-foreground/70">
-              Fit, standards and every back-calculated sample, at full precision.
-            </span>
           </div>
         )}
         <div className="p-2">
           <div className={cn("w-full", options.overlaidOnChart && fit ? "" : "h-[420px]")}>
             {options.overlaidOnChart && fit ? (
-              <div className="flex flex-col items-start gap-2 rounded-lg border border-dashed border-border px-4 py-3.5 text-sm">
+              <div className="flex items-center gap-3 rounded-lg border border-dashed border-border px-4 py-3 text-sm">
                 <span className="text-muted-foreground">
-                  This fit is drawn on the <span className="font-medium text-foreground">Chart</span> tab, over the
-                  points it was fitted to. The controls, samples and exports below apply to it.
+                  Drawn on the <span className="font-medium text-foreground">Chart</span> tab.
                 </span>
                 {options.onGoToChart && (
                   <Button variant="outline" size="sm" onClick={options.onGoToChart}>
-                    Show it on the chart
+                    View
                   </Button>
                 )}
               </div>
@@ -386,7 +382,7 @@ export function useStandardCurve(
               <PlotlyChart data={plot} layout={layout} className="h-full w-full" />
             ) : (
               <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-border px-6 text-center text-sm text-muted-foreground">
-                Pick a concentration column (known standard values) and a signal column. Rows with a concentration become standards; rows with a blank concentration but a signal become unknowns.
+                Pick a concentration and a signal column to fit.
               </div>
             )}
           </div>
@@ -458,10 +454,9 @@ export function useStandardCurve(
         shows up immediately as "0 standards" instead of as an empty chart.
       */}
       <div className="rounded-xl border border-border bg-muted/20 p-3">
-        <p className="mb-2.5 text-[11.5px] leading-relaxed text-muted-foreground">
-          Rows with a concentration are the <span className="font-medium text-foreground">standards</span> the curve is
-          fitted to. Rows with a signal but no concentration are the{" "}
-          <span className="font-medium text-foreground">unknowns</span> quantified from it.
+        <p className="mb-2.5 text-[11.5px] text-muted-foreground">
+          Concentration filled → <span className="font-medium text-foreground">standard</span> · empty →{" "}
+          <span className="font-medium text-foreground">unknown</span>
         </p>
         <div className="space-y-2.5">
           <Labeled label="Concentration column">
