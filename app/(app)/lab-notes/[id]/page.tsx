@@ -22,16 +22,16 @@ export default async function LabNoteRedirectPage({
 
   const { data } = await supabase
     .from("lab_notes")
-    .select("experiment_id")
+    .select("experiment_id, project_id")
     .eq("id", id)
     .maybeSingle()
 
-  if (!data?.experiment_id) {
-    redirect("/experiments")
+  // Note missing (deleted, or RLS denies access): the list is the best landing.
+  if (!data) {
+    redirect("/lab-notes")
   }
 
   const qs = new URLSearchParams()
-  qs.set("tab", "notes")
   qs.set("noteId", id)
 
   for (const [key, value] of Object.entries(sp)) {
@@ -40,5 +40,13 @@ export default async function LabNoteRedirectPage({
     else if (Array.isArray(value)) value.forEach((v) => qs.append(key, v))
   }
 
-  redirect(`/experiments/${data.experiment_id}?${qs.toString()}`)
+  if (data.experiment_id) {
+    qs.set("tab", "notes")
+    redirect(`/experiments/${data.experiment_id}?${qs.toString()}`)
+  }
+
+  // Project-level note (no parent experiment, possible since the project-tree
+  // restructure): open it in the lab-notes list, scoped to its project.
+  if (data.project_id) qs.set("project", data.project_id)
+  redirect(`/lab-notes?${qs.toString()}`)
 }
