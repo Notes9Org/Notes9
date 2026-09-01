@@ -15,6 +15,7 @@ import {
   type Table,
 } from "./resolver"
 import type { WorkerRequest, WorkerResponse } from "./worker"
+import { isDesktop, runAnalysis as runAnalysisNative } from "@/lib/desktop/bridge"
 
 /**
  * The engine's client-side face.
@@ -90,7 +91,52 @@ function ensureWorker(): Worker {
  */
 export const ENGINE_TIMEOUT_MS = 120_000
 
+/**
+ * Route one engine request to whichever runtime should compute it.
+ *
+ * Inside the desktop shell, a compute goes to the native CPython sidecar
+ * first: `run_analysis` takes the identical request JSON the Pyodide worker
+ * does and returns the identical raw result, so nothing downstream can tell
+ * which runtime answered. On ANY native failure — sidecar missing, shell
+ * error, timeout — the same request falls back to the Pyodide worker, which
+ * keeps the web path the invariant and the sidecar a pure fast-path. On the
+ * web, `isDesktop()` is false and this function is a pass-through.
+ */
 function send(request: WorkerRequest, onProgress?: (p: EngineProgress) => void, warmup = false) {
+  if (request.type === "compute" && isDesktop()) {
+    return withDeadline(runAnalysisNative(request.payload)).catch(() =>
+      sendToWorker(request, onProgress, warmup)
+    )
+  }
+  return sendToWorker(request, onProgress, warmup)
+}
+
+/**
+ * The worker path settles or rejects on its own deadline below; the native
+ * path needs the same guarantee, or a hung sidecar strands the caller's
+ * promise exactly the way a silent worker would (see ENGINE_TIMEOUT_MS).
+ * Here the deadline does not fail the analysis — it triggers the fallback.
+ */
+function withDeadline<T>(promise: Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error("The native statistics engine stopped responding.")),
+      ENGINE_TIMEOUT_MS
+    )
+    promise.then(
+      (value) => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      (error) => {
+        clearTimeout(timer)
+        reject(error)
+      }
+    )
+  })
+}
+
+function sendToWorker(request: WorkerRequest, onProgress?: (p: EngineProgress) => void, warmup = false) {
   const w = ensureWorker()
   return new Promise<unknown>((resolve, reject) => {
     const timer = setTimeout(() => {
